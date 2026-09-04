@@ -6,7 +6,7 @@ import { PayMethod } from '../constants/enums';
 import { haptic } from '../lib/haptics';
 import { requestNotificationPermission } from '../lib/notifications';
 import { setReminderPrefs } from '../lib/reminders';
-import { finalizeOnboarding } from '../lib/onboarding';
+import { finalizeOnboarding, type OnboardingPerson } from '../lib/onboarding';
 // Re-exported so callers keep one import site; the logic is pure and lives in lib.
 export { NUMBERED_STEPS, numberedSteps, stepPosition, type OnboardingStage } from '../lib/onboardingSteps';
 import type { OnboardingStage } from '../lib/onboardingSteps';
@@ -49,11 +49,38 @@ export function useOnboardingForm({ onDone }: { onDone: () => void }) {
   const [creditLimitText, setCreditLimitText] = useState('');  // credit card limit (rupees)
   const [creditUsedText, setCreditUsedText] = useState('');    // credit already used (rupees)
   const [payMethod, setPayMethod] = useState<PayMethod>(PayMethod.Upi);
-  const [people, setPeople] = useState<string[]>([]);          // contacts added during onboarding
+  const [people, setPeople] = useState<OnboardingPerson[]>([]); // contacts added during onboarding
   const [personDraft, setPersonDraft] = useState('');
-  const [groupName, setGroupName] = useState('Friends');       // the group the contacts land in
+  const [personEmailDraft, setPersonEmailDraft] = useState('');
   const [notifPerm, setNotifPerm] = useState(false);
   const [locPerm, setLocPerm] = useState(false);
+
+  /**
+   * Which of the optional money figures the user actually has.
+   *
+   * The money step used to show all four fields to everyone, so somebody with no
+   * credit card had to either type a zero into two of them or skip the screen
+   * whole — including the parts that did apply to them. **A question that is
+   * never asked cannot be answered wrong**, so the fields are revealed by these,
+   * and un-ticking clears the figure rather than leaving it to be committed by a
+   * control the user can no longer see.
+   */
+  const [hasInvest, setHasInvest] = useState(false);
+  const [hasCredit, setHasCredit] = useState(false);
+
+  // Plain reads, not `setX(on => …)` updaters: clearing the text is a second state
+  // write, and a React updater must be pure — StrictMode invokes it twice.
+  function toggleInvest() {
+    haptic.selection();
+    if (hasInvest) setInvestText('');
+    setHasInvest(!hasInvest);
+  }
+
+  function toggleCredit() {
+    haptic.selection();
+    if (hasCredit) { setCreditLimitText(''); setCreditUsedText(''); }
+    setHasCredit(!hasCredit);
+  }
 
   // Parsed numeric views of the free-text amounts (0 when blank/invalid).
   const incomeNum = toRupees(incomeText);
@@ -72,7 +99,6 @@ export function useOnboardingForm({ onDone }: { onDone: () => void }) {
     setSaving(true);
     const ok = await finalizeOnboarding(db, {
       intent, name, incomeNum, payday, budgetNum, people, payMethod,
-      groupName: people.length > 0 ? groupName : null,
       addFirst: false, // the summary's own CTA arms this explicitly
       money: {
         openingBank: toPaise(cashText),
@@ -108,12 +134,24 @@ export function useOnboardingForm({ onDone }: { onDone: () => void }) {
     onDone();
   }
 
+  /** A name is required; the email is optional and only matters for linking later. */
   function addPerson() {
     const t = personDraft.trim();
     if (!t) return;
+    const email = personEmailDraft.trim();
     haptic.selection();
-    setPeople(prev => (prev.some(p => p.toLowerCase() === t.toLowerCase()) ? prev : [...prev, t]));
+    setPeople(prev => (
+      prev.some(p => p.name.toLowerCase() === t.toLowerCase())
+        ? prev
+        : [...prev, email ? { name: t, email } : { name: t }]
+    ));
     setPersonDraft('');
+    setPersonEmailDraft('');
+  }
+
+  function removePerson(index: number) {
+    haptic.selection();
+    setPeople(prev => prev.filter((_, i) => i !== index));
   }
 
   async function allowNotifications() {
@@ -141,9 +179,10 @@ export function useOnboardingForm({ onDone }: { onDone: () => void }) {
     budgetText, setBudgetText, budgetNum,
     cashText, setCashText, investText, setInvestText,
     creditLimitText, setCreditLimitText, creditUsedText, setCreditUsedText,
+    hasInvest, hasCredit, toggleInvest, toggleCredit,
     payMethod, setPayMethod,
-    people, setPeople, personDraft, setPersonDraft, addPerson, skipPeople,
-    groupName, setGroupName,
+    people, personDraft, setPersonDraft, personEmailDraft, setPersonEmailDraft,
+    addPerson, removePerson, skipPeople,
     // permissions
     notifPerm, locPerm, allowNotifications, allowLocation,
     // commit + summary

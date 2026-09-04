@@ -8,7 +8,15 @@ import { alpha } from '../../theme';
 type Props = {
   label: string;
   description?: string;
-  selected: boolean;
+  /**
+   * Omit for a row that **opens** something rather than holding a state: it draws a
+   * chevron instead of a radio, per AGENTS §9's one-affordance rule.
+   *
+   * Onboarding's "set up Siri" row passed a hard-coded `selected={false}`, which
+   * painted a radio that could never fill on a row whose tap leaves the app — the
+   * control claimed to answer a question it wasn't asking.
+   */
+  selected?: boolean;
   onPress: () => void;
   /** Leading node — an emoji disc, an `IconCircle`, an avatar. */
   leading?: React.ReactNode;
@@ -38,7 +46,7 @@ export function OptionRow({
     <PressableScale
       onPress={onPress}
       accessibilityLabel={label}
-      accessibilityState={{ selected }}
+      accessibilityState={selected == null ? undefined : { selected }}
     >
       <View style={[styles.row, selected && { borderColor: accent, backgroundColor: alpha(accent, 8) }]}>
         {leading}
@@ -46,9 +54,13 @@ export function OptionRow({
           <Text style={styles.label}>{label}</Text>
           {!!description && <Text style={styles.description}>{description}</Text>}
         </View>
-        <View style={[styles.radio, selected ? { backgroundColor: accent, borderColor: accent } : null]}>
-          {selected && <Feather name="check" size={13} color={colors.bg} />}
-        </View>
+        {selected == null ? (
+          <Feather name="chevron-right" size={16} color={colors.textMuted} />
+        ) : (
+          <View style={[styles.radio, selected ? { backgroundColor: accent, borderColor: accent } : null]}>
+            {selected && <Feather name="check" size={13} color={colors.bg} />}
+          </View>
+        )}
       </View>
     </PressableScale>
   );

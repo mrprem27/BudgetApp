@@ -247,10 +247,26 @@ skips the whole screen including the parts that did apply.
 | 8 | people | *"don't offer group creation here — just add people you generally transact with; name and email if they want to link a real user"* | `W1-08` — group creation **is** offered here, and the step collects **name only**. `person` already has `email`, `mobile` and `upi_vpa` columns that nothing in onboarding writes. |
 | 9 | permissions + summary | *"remove the Shortcut thing once Siri Intents land; summary should be more sensible; I skipped people and it still asked me to create a group"* | The group re-ask is **on Home**, not the summary — `W1-09`, a plain condition bug. The Shortcut row is `DQ-22`, which already says the apparatus is deletable when App Intents arrive. |
 
+> **Resolved in P5.** The table above is the walk as it was recorded and is left in the tense it was
+> written in; §6 carries the status. Seven of the nine steps changed: the hero reveal now derives
+> from one constant, the name step's footer rides the keyboard, payday is all 31 days behind an
+> income, the money step asks for the optional figures only when you tick them, the budget presets
+> go blank without an income, the people step drops group creation and gains an email, and the pay
+> method is asked once. `W1-02` and `W1-06` were asks rather than defects and are unchanged.
+
 Plus the flow-level note: **the salary rule is created and shown nowhere** (`W1-10`). Two candidate
 fixes, and they are not exclusive — surface active rules on `SC-14`, and/or materialise the first
 occurrence so there is a real income row on day one. The second changes numbers, so it is a
 decision; the first is not.
+
+> **Neither was needed.** Traced in P5: the rule *is* created, and `/plan/recurring` already lists
+> it under "Money in" — the screen's own comment says it was put there because recurring income
+> "was invisible everywhere until it first materialized, which made onboarding's income answer look
+> like it did nothing". The afford engine reads it too, in preference to the 30-day sum. What was
+> actually missing was the **door**: the summary closes by naming "Recurring · Plan", and that
+> destination was one unlabelled glyph in a rail of four. Fixed as `OV-16`. Materialising an
+> occurrence stays rejected — you have not been paid yet, and `paydayAnchor` anchors forward on
+> purpose so the rule cannot back-fill.
 
 And *"income should have a dropdown — additional income, a smaller version of Add Income, but
 interactive"* (`W1-11`). That is a second income surface, and it should be weighed against
@@ -388,18 +404,18 @@ Every note from the walk, once. `Filed` names the durable id where one exists.
 
 | id | What the note said | What is true | Filed |
 |---|---|---|---|
-| `W1-01` | hero text precedes the animation | Fixed `FadeIn` delays vs a ~4.2 s assembly | — |
+| `W1-01` ✅ | hero text precedes the animation | Delays were 1400/1550/1700 against a mark that forms at ~2850 ms — the text arrived before the physics loop started. One `HERO_REVEAL_MS`, derived and guarded | — |
 | `W1-02` | features should adapt to intent | Partly true already; an ask | — |
-| `W1-03` | name field under the keyboard | Body is centred; keyboard only insets | — |
-| `W1-04` | payday should be a date, not chips | Seven option chips | — |
+| `W1-03` ✅ | name field under the keyboard | The footer sat outside the scroll view, so the keyboard covered field *and* CTA. `KeyboardStickyView` + a measured `bottomOffset`; the page still never resizes | — |
+| `W1-04` ✅ | payday should be a date, not chips | All 31 days, as `ui/DayOfMonthGrid`. Revealed only once an income is given — the help line promised a salary entry that is written only for `incomeNum > 0` | — |
 | `W1-05` ✅ | money step footer reads cut off | Horizontal selector, 16pt to the footer, no trailing line | — |
 | `W1-06` | more pay methods, better icons | Layout | — |
-| `W1-07` | budget presets should be blank without income | Falls back to flat presets | — |
-| `W1-08` | people step shouldn't create groups; want name + email | Group creation is here; name only is collected; `email` column unused | — |
+| `W1-07` ✅ | budget presets should be blank without income | Blank now. Also deduped: rounding collapsed 50/60/70% into three identical chips on duplicate keys at low incomes | — |
+| `W1-08` ✅ | people step shouldn't create groups; want name + email | Group creation deleted (it bypassed `GroupForm`); the step collects name + optional email, and `person.email` finally has a writer | — |
 | `W1-09` | asked to create a group after skipping people | The prompt is on Home, keyed on the flag alone | — |
-| `W1-10` | onboarding income never became a recurring transaction | The rule is created; nothing surfaces it | — |
+| `W1-10` ✅ | onboarding income never became a recurring transaction | Not a plumbing gap: the rule is created *and* listed under Plan → Recurring's "Money in". It was invisible because that destination was an unlabelled glyph — fixed as `OV-16` | `OV-16` |
 | `W1-11` | want a light "additional income" entry | Weigh against `OV-08` | — |
-| — | onboarding asks pay method twice | Two steps, one state, different sets | `OV-29` |
+| — ✅ | onboarding asks pay method twice | Two steps, one state, different sets | `OV-29` |
 | — | remove the Siri Shortcut row | Already the plan | `DQ-22` |
 
 ### From the empty-state sweep

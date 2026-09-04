@@ -19,7 +19,6 @@ const data = (over: Partial<OnboardingData> = {}): OnboardingData => ({
   payday: 5,
   budgetNum: 30000,
   people: [],
-  groupName: null,
   addFirst: false,
   payMethod: PayMethod.Upi,
   money: { openingBank: 5000000, investments: 0, creditLimit: 10000000, creditUsed: 200000 },
@@ -58,28 +57,40 @@ describe('finalizeOnboarding — every answer lands somewhere', () => {
     expect(money.creditUsed).toBe(200000);
   });
 
-  // The people step used to insert contacts and stop, so the Groups tab still
-  // said "No groups yet" to the user who had just listed their flatmates.
-  it('turns the people answer into a real group with those members', async () => {
+  it('turns the people answer into contacts, with the email when one was given', async () => {
     const db = await seedFresh();
-    await finalizeOnboarding(db, data({ people: ['Aarav', 'Riya'], groupName: 'Home' }));
+    await finalizeOnboarding(db, data({
+      people: [{ name: 'Aarav', email: 'aarav@example.com' }, { name: 'Riya' }],
+    }));
 
-    const groups = await getAllGroups(db);
-    const created = groups.find(g => g.is_personal !== 1);
-    expect(created?.name).toBe('Home');
-
-    const members = await db.getAllAsync<{ person_id: string }>(
-      'SELECT person_id FROM group_member WHERE group_id = ?', [created!.id],
-    );
-    expect(members).toHaveLength(3); // me + two contacts
     const persons = await getAllPersons(db);
     expect(persons.map(p => p.name).sort()).toEqual(['Aarav', 'Prem', 'Riya']);
+    // The email is the only identifier that is the same string on both phones, so
+    // it is what a friend request is addressed to later.
+    expect(persons.find(p => p.name === 'Aarav')?.email).toBe('aarav@example.com');
+    // Optional means optional: no email must leave the column null, not ''.
+    expect(persons.find(p => p.name === 'Riya')?.email ?? null).toBeNull();
   });
 
-  it('creates no group when nobody was added', async () => {
+  /**
+   * Onboarding no longer builds a group. It used to — name from three chips, icon
+   * inferred from that name string, colour hard-coded — which bypassed `GroupForm`
+   * and made this the one place a group could be created wrong. The step asks who
+   * you split with; which groups they belong in is asked where groups are made.
+   */
+  it('creates no group, even when people were added', async () => {
     const db = await seedFresh();
-    await finalizeOnboarding(db, data({ people: [], groupName: 'Home' }));
+    await finalizeOnboarding(db, data({ people: [{ name: 'Aarav' }, { name: 'Riya' }] }));
+
     expect((await getAllGroups(db)).filter(g => g.is_personal !== 1)).toHaveLength(0);
+    // …and the contacts still exist. Dropping the group must not drop the people.
+    expect((await getAllPersons(db)).map(p => p.name).sort()).toEqual(['Aarav', 'Prem', 'Riya']);
+  });
+
+  it('skips blank names and de-duplicates nothing it was not given', async () => {
+    const db = await seedFresh();
+    await finalizeOnboarding(db, data({ people: [{ name: '  ' }, { name: ' Riya ' }] }));
+    expect((await getAllPersons(db)).map(p => p.name).sort()).toEqual(['Prem', 'Riya']);
   });
 
   // V2-02: with no sync, a lost phone is total data loss and the backup nudge is

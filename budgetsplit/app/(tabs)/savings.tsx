@@ -105,18 +105,38 @@ export default function SavingsScreen() {
         title="Plan"
         large
         right={
+          /*
+           * OV-16 — the labels are the fix, and where they sit is why there are any.
+           *
+           * This was four bare glyphs. A rail of icons is only readable when each one
+           * is a convention (✕, ⋯, ＋); `bar-chart-2` against `pie-chart` is not, and
+           * two of these four are the ONLY door to their screen — `/plan/recurring`
+           * and `/afford` are linked from nowhere else in the app. Onboarding's
+           * summary closes by telling the user their salary now lives in
+           * "Recurring · Plan", and the thing it names was an unlabelled squiggle.
+           *
+           * The label goes UNDER the glyph, not beside it: beside it, four labels
+           * plus a 28pt "Plan" overflow the row on a small phone. Under it, the
+           * header grows by one caption line — about 16pt, once — and no content
+           * moves. A chip row below the header would have cost a whole band above
+           * the Total Money hero, which is the one number this screen exists for.
+           *
+           * `caption`-short, so the widest label is `Recurring` rather than
+           * `Can I afford?` — the accessibility label keeps the full question.
+           */
           <View style={styles.headerRight}>
             {[
-              { key: 'insights', icon: 'bar-chart-2' as const, label: 'Insights', show: flags.insights, to: '/insights' as Href },
+              { key: 'insights', icon: 'bar-chart-2' as const, label: 'Insights', a11y: 'Insights', show: flags.insights, to: '/insights' as Href },
               // V2-08: Reports was reachable only from Settings › Data & Help, which is
               // where you look for an export, not for last month's numbers.
-              { key: 'reports', icon: 'pie-chart' as const, label: 'Reports', show: flags.reports, to: '/reports' as Href },
-              { key: 'subs', icon: 'refresh-cw' as const, label: 'Recurring', show: flags.recurring, to: '/plan/recurring' as Href },
+              { key: 'reports', icon: 'pie-chart' as const, label: 'Reports', a11y: 'Reports', show: flags.reports, to: '/reports' as Href },
+              { key: 'subs', icon: 'refresh-cw' as const, label: 'Recurring', a11y: 'Recurring', show: flags.recurring, to: '/plan/recurring' as Href },
               // Reminders is notification config — lives in Settings › Notifications & Reminders, not here.
-              { key: 'afford', icon: 'help-circle' as const, label: 'Can I afford?', show: flags.affordCheck, to: '/afford' as Href },
+              { key: 'afford', icon: 'help-circle' as const, label: 'Afford', a11y: 'Can I afford?', show: flags.affordCheck, to: '/afford' as Href },
             ].filter(m => m.show).map(m => (
-              <TouchableOpacity hitSlop={8} key={m.key} style={styles.headerIconBtn} onPress={() => router.push(m.to)} accessibilityRole="button" accessibilityLabel={m.label}>
+              <TouchableOpacity hitSlop={8} key={m.key} style={styles.headerIconBtn} onPress={() => router.push(m.to)} accessibilityRole="button" accessibilityLabel={m.a11y}>
                 <Feather name={m.icon} size={18} color={colors.accent} />
+                <Text style={styles.headerIconLabel} numberOfLines={1}>{m.label}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -426,7 +446,12 @@ const styles = StyleSheet.create({
   newPillText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
 
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
-  headerIconBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
+  // A labelled column, not a disc: the tinted circle was carrying the whole burden
+  // of "this is tappable", which is why four of them read as decoration. The label
+  // does that job now, so the button is the icon over its name — and `touchMin`
+  // keeps the target at §6's floor even though the painted glyph is 18pt.
+  headerIconBtn: { minWidth: layout.touchMin, minHeight: layout.touchMin, alignItems: 'center', justifyContent: 'center', gap: space.xs, paddingHorizontal: space.xs },
+  headerIconLabel: { ...type.caption, color: colors.accent },
   amountInput: { fontFamily: 'SpaceMono_400Regular', fontSize: 32, color: colors.textPrimary, textAlign: 'center', paddingVertical: space.md },
   hint: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginBottom: space.md },
   inputGap: { marginBottom: space.sm },

@@ -1978,7 +1978,7 @@ taps are listed separately below and are not in the count.
 | `SC-21` | `/report-transactions` | Month-scoped drill-down | 1 | Tabs `All · Expenses · Income · Transfers` |
 | `SC-22` | `/insights` | The single narrative home | 3 | |
 | `SC-32` | `/plan/recurring` | Every active rule, by next occurrence | 2 | No per-row actions — it taps through |
-| `SC-33` | `/afford` | Can I afford this | **1** | Sole entry is an unlabeled icon. `OV-16` |
+| `SC-33` | `/afford` | Can I afford this | **1** | Sole entry, now a **labelled** icon on `SC-05` (`OV-16`) |
 | `SC-41` | `/recurring/[id]` | **One** rule, with all the actions | 5 | Replaced `group/[id]/recurring` |
 | `SC-42` | `/assets` | The asset register | 3 | **New ID.** Undocumented until now |
 
@@ -2077,9 +2077,9 @@ nowhere to go.
 
 - **Zero in-app entries:** `SC-37` `/auth` and `SC-39` `/link` — correct, both are deep-link landing
   pads. They can cold-start with an empty stack and both use `replace`, which is right.
-- **One entry, and it is an unlabeled icon:** `SC-33` `/afford`. `featureFlags.ts` says of its flag,
-  "a real feature since the engine grew; off is why nobody found it" — it is on now, and still
-  behind one icon in a rail of four (`OV-16`).
+- **One entry, and it was an unlabeled icon:** `SC-33` `/afford`. `featureFlags.ts` says of its
+  flag, "a real feature since the engine grew; off is why nobody found it". The rail is labelled now
+  (`OV-16`), so the entry count is unchanged and the entry is findable.
 - **One entry, buried:** `SC-23` `/search`, `SC-30` `/reminders`, `SC-21` `/report-transactions`,
   `SC-27` `/storage` (a 7-tap gesture).
 - **The hub:** `SC-07` `/add/quick`, at 24 in-app call sites plus three external entries. It is the
@@ -3502,8 +3502,9 @@ Numbers.     · seven axes: cash, buffer, category budget, category norm, income
                must never override the cash answer
 Exit.        Stays, or "Log it" hands you to Add with the amount prefilled.
 Branches.    .B1 the same engine writes the one-line nudge inside Add
-Failures.    .FM1 nobody finds this screen — its only route in is an unlabeled
-                  icon, and the flag file says so out loud (OV-16)
+Failures.    .FM1 nobody finds this screen — its only route in was an unlabeled
+                  icon, and the flag file says so out loud. Labelled 2026-09-04
+                  (OV-16); still a single entry, now a findable one
 Reversible.  Nothing written.
 Also try.    · ask about ₹500, then ₹50,000, then ₹5,00,000 and watch the verdict
                and the reasons change
@@ -4287,7 +4288,7 @@ the app finds different problems from reading it**, and the ones it finds are ch
 seven touches money, the wire, or a migration.
 
 **Tally:** 11 `COLLAPSE` · 5 `COLLAPSE-AFTER-PILOT` · 8 `RENAME-ONLY` · 4 `KEEP-DOCUMENTED` ·
-6 `NEEDS-DECISION`.
+6 `NEEDS-DECISION` (5 after `OV-16` was answered on 2026-09-04).
 
 ---
 
@@ -4392,7 +4393,12 @@ OV-29 · Onboarding asks how you pay twice, with different sets  [path-duplicati
            the reasoned option set and the explanation.
   Blast.   Two lines and a SectionHeader on one step.
   Risk.    None. The state and its writer do not change.
-  Verdict. COLLAPSE.
+  Verdict. COLLAPSE — **done 2026-09-04**. Note the sequencing: an earlier commit
+           had already deleted the `pay` step's hand-rolled list in favour of the
+           shared component, which left TWO IDENTICAL CALL SITES and a comment
+           claiming "this is now the only version". Collapsing N implementations
+           into one component does nothing about calling it twice, so the guard
+           counts call sites, not implementations (onboardingConsistency.test.ts).
   Trigger. Now — it is among the first things a new user sees.
 
 OV-30 · Add detects an investment and cannot record one                 [phantom]
@@ -4711,12 +4717,21 @@ OV-16 · Four features behind unlabeled icons             [path-duplication]
            of chrome on the Plan screen.
   But.     featureFlags.ts says of affordCheck: "a real feature since the engine
            grew; off is why nobody found it". It is on now, and still nobody finds it.
-  Verdict. KEEP-DOCUMENTED → **NEEDS-DECISION**, because whether to spend Plan's
-           vertical space on labels is a layout question, not a correctness one.
-           Deferred to you: see the note at the end of this section.
+  Correction. The four are not equivalent, which is what made this look like a
+           pure taste question. /insights has two more entries on SC-01 and
+           /reports has a named Settings row; /plan/recurring and /afford have
+           NO other entry anywhere. The rail hid the two sole doors behind two
+           shortcuts — and onboarding's summary sends the user to one of them
+           by name ("Recurring · Plan").
+  Verdict. LABELLED — **done 2026-09-04**. Caption under each glyph, not beside
+           it: beside it, four labels plus a 28pt "Plan" overflow the row on a
+           small phone. Costs ~16pt of header height once; no content moves, and
+           no vertical band is spent above the Total Money hero.
 ```
 
-### The six that need a decision first
+### The five that need a decision first
+
+*(Six until `OV-16` was answered on 2026-09-04 — see its entry above.)*
 
 ```
 OV-06 · Categories are referenced by NAME, not by id            [split-storage]
@@ -4767,14 +4782,17 @@ OV-23 · Dead and near-dead columns                           [dead-alternative]
 
 ### One layout question for you
 
-`OV-16` is the only item in this register whose resolution is a matter of taste rather than
-correctness, and per standing practice it is yours rather than mine. Three features
-(`/afford`, `/plan/recurring`, `/insights`) are reachable only through unlabeled icons in one rail,
-and the flag file itself records that this is why nobody found `/afford`.
+**Answered, and the premise was wrong in a useful way.** The four were treated as equivalent; they
+are not. `/insights` has two other entry points on `SC-01` and `/reports` has a named row in
+Settings — but **`/plan/recurring` and `/afford` are linked from nowhere else in the app**, so the
+rail was hiding the two sole doors behind two shortcuts. Onboarding's summary closes by telling the
+user their salary now lives in "Recurring · Plan", and that was one of the unlabelled ones.
 
-The options are: label the rail (costs a row of vertical space on Plan), move one or two of them
-into Settings as named rows (costs discoverability for the others), or leave it and accept that
-these are power-user surfaces. I have not changed anything here.
+The rail is labelled in place: the caption sits **under** each glyph, not beside it, because beside
+it four labels plus a 28pt "Plan" overflow the row on a small phone. It costs about 16pt of header
+height once and moves no content — where the option I had been weighing, a chip row below the
+header, would have cost a whole band above the Total Money hero. `Can I afford?` shortens to
+`Afford` on screen and keeps the full question as its accessibility label.
 ---
 
 ## §11 · Open decisions

@@ -1,6 +1,6 @@
 import type * as SQLite from 'expo-sqlite';
-import { getMe, updatePersonName, insertPerson } from '../db/queries/persons';
-import { getAllGroups, personalGroupOf, insertGroup } from '../db/queries/groups';
+import { getMe, updatePersonName, insertPerson, setPersonContact } from '../db/queries/persons';
+import { getAllGroups, personalGroupOf } from '../db/queries/groups';
 import { insertTxn } from '../db/queries/transactions';
 import { setMoneyProfile } from '../db/queries/moneyProfile';
 import { parseToPaise } from './money';
@@ -11,6 +11,13 @@ import { applyPersona, type OnboardingIntent } from './personaDefaults';
 import { GROUP_COLORS } from '../constants/palette';
 import { insertAsset } from '../db/queries/assets';
 
+/**
+ * Someone you split with. The email is optional and is the only field here that
+ * is the same string on both phones — it is how a friend request is addressed,
+ * so it is what turns a local contact into a linkable account later.
+ */
+export type OnboardingPerson = { name: string; email?: string };
+
 /** Everything the onboarding questionnaire collects, ready to persist. */
 export type OnboardingData = {
   intent: OnboardingIntent;
@@ -18,11 +25,19 @@ export type OnboardingData = {
   incomeNum: number;
   payday: number;
   budgetNum: number;
-  people: string[];
-  /** Group to create from `people` (name chosen on the people step). Null/empty
-   *  people → no group. This is what makes the Groups tab non-empty on landing
-   *  instead of "No groups yet" for the very persona that added flatmates. */
-  groupName: string | null;
+  /**
+   * Contacts to create. **No group is made from them.**
+   *
+   * Onboarding used to build one here — name chosen from three chips, icon
+   * inferred from that name string, colour hard-coded — which meant a group
+   * called "Flat" got the generic `users` glyph and no way to change it without
+   * leaving the flow. It also bypassed `GroupForm`, the app's real group form,
+   * so onboarding was the one place a group could be created wrong.
+   *
+   * The step asks who you split with, and that answer is a set of people. Which
+   * groups they belong in is a second question, asked where groups are made.
+   */
+  people: OnboardingPerson[];
   addFirst: boolean;
   /** How this user usually pays — seeds the Add screen's chip. */
   payMethod: PayMethod;
@@ -116,26 +131,20 @@ export async function finalizeOnboarding(
       try { await settings.setBudgetTarget(parseToPaise(String(data.budgetNum))); } catch { /* best-effort */ }
     }
 
-    // People to split with → contacts, then a REAL group holding them. The old
-    // flow inserted persons and stopped, so the Groups tab still said "No
-    // groups yet" to the very user who just listed their flatmates.
+    // People to split with → contacts. No group: see `OnboardingData.people`.
     let ci = 0;
-    const personIds: string[] = [];
-    for (const nm of data.people) {
-      const t = nm.trim();
+    for (const person of data.people) {
+      const t = person.name.trim();
       if (!t) continue;
       try {
         const p = await insertPerson(db, t, GROUP_COLORS[ci % GROUP_COLORS.length]);
-        personIds.push(p.id);
         ci++;
+        // Its own try: an email that fails to save must not lose the contact.
+        const email = person.email?.trim();
+        if (email) {
+          try { await setPersonContact(db, p.id, { email }); } catch { /* best-effort */ }
+        }
       } catch { /* skip one bad contact */ }
-    }
-    if (personIds.length > 0 && me) {
-      const gname = (data.groupName ?? '').trim() || 'Friends';
-      const icon = gname === 'Home' ? 'home' : gname === 'Trip' ? 'map' : 'users';
-      try {
-        await insertGroup(db, gname, icon, GROUP_COLORS[0], [me.id, ...personIds]);
-      } catch { /* contacts still exist; a group can be made later */ }
     }
 
     // The backup nudge defaults ON (V2-02): with no sync, a lost phone is total

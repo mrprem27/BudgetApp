@@ -1,6 +1,6 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
-import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, type LayoutChangeEvent } from 'react-native';
+import { KeyboardAwareScrollView, KeyboardStickyView } from 'react-native-keyboard-controller';
 import { FadeIn } from '../../ui/FadeIn';
 import { StepBack } from './StepBack';
 import { StepProgress } from './StepProgress';
@@ -47,6 +47,10 @@ export function StepScaffold({
   stageKey, onBack, step, total, title, subtitle,
   titlePosition = 'top', children, footer, art,
 }: Props) {
+  // Measured, not guessed: it is what keeps the focused field clear of the CTA.
+  const [footerH, setFooterH] = useState(0);
+  const onFooterLayout = (e: LayoutChangeEvent) => setFooterH(e.nativeEvent.layout.height);
+
   const heading = (
     <View style={styles.heading}>
       <Text style={styles.title}>{title}</Text>
@@ -75,7 +79,10 @@ export function StepScaffold({
         style={styles.fill}
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
-       
+        // Keep the focused field clear of the CTA, not merely clear of the keyboard.
+        // Without this the field scrolls to the top of the keyboard and the footer
+        // — which is lifted to sit exactly there — covers it again.
+        bottomOffset={footerH}
         showsVerticalScrollIndicator={false}
       >
         {!!art && <View style={styles.art}>{art}</View>}
@@ -84,7 +91,22 @@ export function StepScaffold({
         {titlePosition === 'bottom' && heading}
       </KeyboardAwareScrollView>
 
-      {footer}
+      {/*
+        The footer RIDES the keyboard instead of hiding behind it.
+
+        It sits outside the scroll view so it cannot scroll away, which is right —
+        but that also meant the keyboard covered it outright. The name step is the
+        worst case and the reported one: a single `autoFocus` field, centred, with
+        the keyboard up from the moment the step mounts, so both the field and the
+        "Continue" button were underneath it.
+
+        `KeyboardStickyView` translates its children by the keyboard height on the
+        UI thread. It is the missing half of the argument above, not a retreat from
+        it: the page still never resizes, so nothing re-centres and nothing jumps.
+      */}
+      <KeyboardStickyView onLayout={onFooterLayout}>
+        {footer}
+      </KeyboardStickyView>
     </FadeIn>
   );
 }

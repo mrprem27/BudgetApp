@@ -22,13 +22,13 @@ function ordinal(n: number): string {
  * of a celebration.
  */
 export function SummaryStage({
-  incomeNum, payday, budgetNum, people, groupName, notifPerm,
+  incomeNum, payday, budgetNum, people, notifPerm,
 }: {
   incomeNum: number;
   payday: number;
   budgetNum: number;
+  /** Names of the contacts added on the people step. */
   people: string[];
-  groupName: string;
   notifPerm: boolean;
 }) {
   const rows: Row[] = [];
@@ -47,10 +47,12 @@ export function SummaryStage({
     });
   }
   if (people.length > 0) {
+    // Named as people, and pointed at Friends — onboarding no longer makes a group
+    // from them, so a row promising one would send the user to an empty tab.
     rows.push({
       icon: 'users', tint: colors.settle,
-      title: `“${groupName}” with ${people.slice(0, 3).join(', ')}${people.length > 3 ? '…' : ''}`,
-      where: 'Groups',
+      title: `${people.length} ${people.length === 1 ? 'person' : 'people'} to split with — ${people.slice(0, 3).join(', ')}${people.length > 3 ? '…' : ''}`,
+      where: 'Friends',
     });
   }
   if (notifPerm) {

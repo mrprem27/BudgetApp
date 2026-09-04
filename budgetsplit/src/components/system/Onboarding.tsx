@@ -1,8 +1,5 @@
 import React from 'react';
-import {
-  View, Text, StyleSheet, TextInput, TouchableOpacity,
-  useWindowDimensions, Linking,
-} from 'react-native';
+import { View, Text, StyleSheet, useWindowDimensions, Linking } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
@@ -11,15 +8,19 @@ import { PERSONA_OPTIONS, personaTrims, type OnboardingIntent } from '../../lib/
 import { useOnboardingForm, stepPosition } from '../../hooks/useOnboardingForm';
 import { GROUP_COLORS } from '../../constants/palette';
 import { PrimaryButton } from '../ui/PrimaryButton';
+import { SecondaryButton } from '../ui/SecondaryButton';
 import { FadeIn } from '../ui/FadeIn';
+import { Collapse } from '../ui/anim/Collapse';
 import { Card } from '../ui/Card';
 import { Chip } from '../ui/Chip';
 import { Divider } from '../ui/Divider';
+import { Input } from '../ui/Input';
 import { ListRow } from '../ui/ListRow';
-import { PayMethod, PAY_METHOD_LABEL, PAY_METHOD_ICON } from '../../constants/enums';
+import { DayOfMonthGrid } from '../ui/DayOfMonthGrid';
 import { IconCircle } from '../ui/IconCircle';
 import { OptionRow } from '../ui/OptionRow';
 import { SectionHeader } from '../ui/SectionHeader';
+import { MemberAvatar } from '../finance/MemberAvatar';
 import { PayMethodSelector } from '../finance/PayMethodSelector';
 import { StepScaffold } from './onboarding/StepScaffold';
 import { StepFooter } from './onboarding/StepFooter';
@@ -44,10 +45,28 @@ const INCOME_PRESETS = [
   { label: '₹1L', value: 100000 },
 ];
 
-/** Fallback budget presets when no income was given (nothing to derive from). */
-const BUDGET_PRESETS_FLAT = [20000, 30000, 40000, 50000];
-const PAYDAY_OPTIONS = [1, 5, 7, 10, 15, 25, 30];
-const GROUP_NAME_OPTIONS = ['Home', 'Trip', 'Friends'];
+/**
+ * When the hero's words appear, and the gap between them.
+ *
+ * ⛔ `LogoAssembly` is off limits (`AGENTS.md` §11) — this is the only knob, and
+ * it is **derived from** the animation rather than guessed at, which is why it is
+ * one named constant and not three literals buried in the JSX.
+ *
+ * The mark's timeline, read off `LogoAssembly.tsx`: the ring holds, the wedges
+ * start flying at `startDelay = 1850`, and they snap to centre one second later
+ * (`TENSION_S`) — so **the mark is formed at ~2850ms**. The fan spin that follows
+ * (150 + 1250ms, ending ~4.25s) is a flourish on a finished logo, not assembly,
+ * so there is nothing to wait for past the snap.
+ *
+ * Three sets of numbers have been in this file, and none of them was this one.
+ * `2400/2550/2700` came with a comment claiming the mark was legible by then; a
+ * later commit dropped them to `1400/1550/1700` and updated no comment — which
+ * put the brand name on screen **450ms before the physics loop even started**,
+ * the exact overlap the earlier change existed to remove. A comment in
+ * `StepFooter` cited a fourth set, `4300/4520/4760`, that never ran at all.
+ */
+const HERO_REVEAL_MS = 2900;
+const HERO_STEP_MS = 150;
 
 function ordinal(n: number): string {
   const s = ['th', 'st', 'nd', 'rd'], v = n % 100;
@@ -87,18 +106,30 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
     budgetText, setBudgetText, budgetNum,
     cashText, setCashText, investText, setInvestText,
     creditLimitText, setCreditLimitText, creditUsedText, setCreditUsedText,
+    hasInvest, hasCredit, toggleInvest, toggleCredit,
     payMethod, setPayMethod,
-    people, setPeople, personDraft, setPersonDraft, addPerson, skipPeople,
-    groupName, setGroupName,
+    people, personDraft, setPersonDraft, personEmailDraft, setPersonEmailDraft,
+    addPerson, removePerson, skipPeople,
     notifPerm, locPerm, allowNotifications, allowLocation,
     saving, finalize, finishAndAddFirst, onDone: done,
   } = useOnboardingForm({ onDone });
 
-  // Budget chips derive from the income just given (50/60/70% of take-home) so
-  // the suggestion is about THIS user, not four round numbers.
+  /**
+   * Budget suggestions, 50/60/70% of the take-home just given.
+   *
+   * **No income, no chips.** There used to be a flat fallback —
+   * `[20000, 30000, 40000, 50000]` — sitting four lines below a comment promising
+   * the suggestion was "about THIS user, not four round numbers". Four numbers
+   * invented from nothing are not a suggestion; presented as chips next to the
+   * field, they read as a recommendation the app is in no position to make.
+   *
+   * Deduped, and not only for tidiness: rounding to the nearest ₹1,000 collapses
+   * the three fractions into one value at low incomes (₹2,000 → `1000, 1000,
+   * 1000`), which rendered three identical "₹1k" chips on duplicate React keys.
+   */
   const budgetPresets = incomeNum > 0
-    ? [0.5, 0.6, 0.7].map(f => Math.round((incomeNum * f) / 1000) * 1000).filter(v => v > 0)
-    : BUDGET_PRESETS_FLAT;
+    ? [...new Set([0.5, 0.6, 0.7].map(f => Math.round((incomeNum * f) / 1000) * 1000))].filter(v => v > 0)
+    : [];
 
   const trims = personaTrims(intent);
 
@@ -112,25 +143,11 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
           <View style={StyleSheet.absoluteFill} pointerEvents="none">
             <LogoAssembly width={width} height={height} cy={height * 0.38} />
           </View>
-          {/* Reveals once the mark has visibly FORMED — not over it, and not after
-              the whole physics run.
-
-              Three positions have been tried here. Waiting for the full ~3.7s
-              assembly put the first tap 4.8s away, which is why it was moved to
-              900ms. But at 900ms the words arrive on top of a logo still visibly
-              assembling, and it reads as a mistake rather than as a sequence.
-
-              2.4s is where the mark is legible and the animation is only settling.
-              The name lands on a finished logo, and the first tap is ~2.8s — most
-              of the speed, none of the overlap.
-
-              ⛔ LogoAssembly itself is untouched, as it always must be. Only these
-              three delays moved. */}
           <View style={[styles.heroBottom, { paddingBottom: bottomPad }]}>
-            <FadeIn delay={1400} offset={14}>
+            <FadeIn delay={HERO_REVEAL_MS} offset={14}>
               <Text style={styles.brand}>BudgetSplit</Text>
             </FadeIn>
-            <FadeIn delay={1550} offset={10} style={styles.taglineWrap}>
+            <FadeIn delay={HERO_REVEAL_MS + HERO_STEP_MS} offset={10} style={styles.taglineWrap}>
               {/* "No bank login" leads, ahead of "nothing in the cloud". It is the
                   concrete, checkable version of the same promise — every competitor
                   in this market either asks for a bank connection or reads your SMS,
@@ -138,7 +155,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
                   vaguer cloud claim follows it rather than standing alone. */}
               <Text style={styles.tagline}>Budget your money and split bills — no bank login, no sign-up, and nothing is uploaded unless you ask.</Text>
             </FadeIn>
-            <FadeIn delay={1700} style={styles.footer}>
+            <FadeIn delay={HERO_REVEAL_MS + 2 * HERO_STEP_MS} style={styles.footer}>
               <PrimaryButton label="Get Started" onPress={() => setStage('intent')} />
               <Text style={styles.footNote}>Takes 20 seconds · no sign-up</Text>
             </FadeIn>
@@ -201,12 +218,12 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
             />
           }
         >
-          <TextInput
-            style={styles.nameInput}
+          <Input
             value={name}
             onChangeText={setName}
             placeholder="Your name"
-            placeholderTextColor={colors.textMuted}
+            icon="user"
+            autoCapitalize="words"
             returnKeyType="done"
             maxLength={30}
             autoFocus
@@ -251,22 +268,30 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
             ))}
           </View>
 
-          <SectionHeader title="When do you get paid?" />
-          <View style={styles.chipRowLeft}>
-            {PAYDAY_OPTIONS.map(d => (
-              <Chip
-                key={d}
-                label={String(d)}
-                selected={payday === d}
-                onPress={() => { haptic.selection(); setPayday(d); }}
-                accessibilityLabel={`Paid on the ${ordinal(d)}`}
-              />
-            ))}
-          </View>
-          {/* What the answer DOES — not a vague promise. */}
-          <Text style={styles.helpLine}>
-            Becomes a salary entry on the {ordinal(payday)} of each month — you&apos;ll see it under Plan → Recurring, and it powers &quot;Can I afford this?&quot;.
-          </Text>
+          {/* Pay-day is a sub-question of the amount, and it only appears once there
+              is an amount for it to be about.
+
+              It used to render unconditionally, under a help line promising "a
+              salary entry on the 1st of each month" — which is false when no income
+              was given: `finalizeOnboarding` writes the rule only for
+              `incomeNum > 0`, and the figure is stored nowhere else. Asking, and
+              then describing what the answer will do, when the answer will in fact
+              do nothing, is the worst version of this screen. */}
+          <Collapse visible={incomeNum > 0}>
+            <SectionHeader title="When do you get paid?" />
+            {/* All 31, not the seven someone thought to list — a person paid on the
+                28th could not say so, and had to name a day their salary doesn't
+                land on. `paydayAnchor` clamps 29–31 to the length of a short month. */}
+            <DayOfMonthGrid
+              value={payday}
+              onChange={(d) => { haptic.selection(); setPayday(d); }}
+              labelFor={(d) => `Paid on the ${ordinal(d)}`}
+            />
+            {/* What the answer DOES — not a vague promise. */}
+            <Text style={styles.helpLine}>
+              Becomes a salary entry on the {ordinal(payday)} of each month — you&apos;ll see it under Plan → Recurring, and it powers &quot;Can I afford this?&quot;.
+            </Text>
+          </Collapse>
         </StepScaffold>
       )}
 
@@ -296,28 +321,52 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
             accessibilityLabel="Cash available"
           />
 
-          <SectionHeader title="Anything else?" />
-          <Card clip>
-            <MoneyRow icon="trending-up" label="Investments" value={investText} onChangeText={(t) => setInvestText(t.replace(/[^0-9]/g, ''))} tint={colors.income} accessibilityLabel="Investments" />
-            <Divider indent="text" />
-            <MoneyRow icon="credit-card" label="Credit limit" value={creditLimitText} onChangeText={(t) => setCreditLimitText(t.replace(/[^0-9]/g, ''))} tint={colors.settle} accessibilityLabel="Credit card limit" />
-            <Divider indent="text" />
-            <MoneyRow icon="activity" label="Credit used" value={creditUsedText} onChangeText={(t) => setCreditUsedText(t.replace(/[^0-9]/g, ''))} tint={colors.expense} accessibilityLabel="Credit already used" />
-          </Card>
-          <Text style={styles.helpLine}>Leave any of these at zero if they don&apos;t apply.</Text>
+          {/* PICK, THEN FILL.
 
-          {/* One extra question rather than a tenth step: it belongs with "what do
-              you have", and it is the only answer here that changes what the Add
-              screen opens on. Purely a capture default — it never moves money. */}
-          <SectionHeader title="How do you usually pay?" />
-          <PayMethodSelector value={payMethod} onChange={setPayMethod} />
+              These three fields used to sit here open, so everyone was asked for a
+              credit limit and a balance whether or not they hold a card — and the
+              honest answer to a question that doesn't apply is not zero, it's
+              nothing. What actually happened was either a typed 0 (a claim the app
+              then treats as real) or a skip of the entire screen, including the cash
+              figure that did apply.
+
+              The cash figure above stays open because everybody has one; only the
+              optional half is behind a pick. Un-ticking clears what was typed
+              (`toggleInvest` / `toggleCredit`), so a figure can never be committed
+              by a control the user can no longer see. */}
+          <SectionHeader title="Anything else?" />
+          <View style={styles.chipRowLeft}>
+            {/* Toggles, so no trailing affordance — AGENTS §9. This is the one chip
+                row in the flow that is genuinely multi-select. */}
+            <Chip label="Investments" icon="trending-up" selected={hasInvest} accent={colors.income} onPress={toggleInvest} />
+            <Chip label="Credit card" icon="credit-card" selected={hasCredit} accent={colors.settle} onPress={toggleCredit} />
+          </View>
+
+          {/* One `Collapse` around the whole card rather than one per row: the card
+              appearing and disappearing is the visible event, and per-row wrapping
+              would break the divider interleaving below. */}
+          <Collapse visible={hasInvest || hasCredit}>
+            <Card clip style={styles.moneyCard}>
+              {hasInvest && (
+                <MoneyRow icon="trending-up" label="Investments" value={investText} onChangeText={(t) => setInvestText(t.replace(/[^0-9]/g, ''))} tint={colors.income} accessibilityLabel="Investments" />
+              )}
+              {hasInvest && hasCredit && <Divider indent="text" />}
+              {hasCredit && (
+                <>
+                  <MoneyRow icon="credit-card" label="Credit limit" value={creditLimitText} onChangeText={(t) => setCreditLimitText(t.replace(/[^0-9]/g, ''))} tint={colors.settle} accessibilityLabel="Credit card limit" />
+                  <Divider indent="text" />
+                  <MoneyRow icon="activity" label="Credit used" value={creditUsedText} onChangeText={(t) => setCreditUsedText(t.replace(/[^0-9]/g, ''))} tint={colors.expense} accessibilityLabel="Credit already used" />
+                </>
+              )}
+            </Card>
+          </Collapse>
+          <Text style={styles.helpLine}>Tick only what you have — anything you skip can be added later in Plan → Your money.</Text>
         </StepScaffold>
       )}
 
-      {/* BUDGET STEP — presets derive from the income just entered. */}
       {/*
-        How you usually pay.
-        
+        PAY STEP — how you usually pay.
+
         This was already being SAVED — defaulted to UPI, never asked — so every
         transaction carried a payment method the user had not chosen and would
         have no reason to suspect. Asking makes the default theirs, and it is the
@@ -343,15 +392,21 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
             />
           }
         >
-          {/* The shared picker, not a private copy of it. This step hand-rolled
-              the same list for months while `PayMethodSelector` scrolled tiles
-              sideways elsewhere — one question, two designs. The list won, so the
-              component became the list and this is now the only version. */}
+          {/* The shared picker, and — now — the only place the question is asked.
+              Two rounds of collapsing got here. This step hand-rolled its own list
+              while `PayMethodSelector` scrolled tiles sideways elsewhere, so the
+              component became the list; but the *money* step had been rendering the
+              picker too, one screen earlier, under the identical heading. Deleting
+              one hand-roll left two identical call sites, which is a duplication the
+              first fix could not see. `payMethod.test.ts` covers the enum half of
+              this; `onboardingConsistency.test.ts` covers this half. */}
           <PayMethodSelector value={payMethod} onChange={setPayMethod} />
           <Text style={styles.helpLine}>You can change this on any transaction.</Text>
         </StepScaffold>
       )}
 
+      {/* BUDGET STEP — presets derive from the income just entered, or there are
+          none at all. */}
       {stage === 'budget' && (
         <StepScaffold
           stageKey="budget"
@@ -396,18 +451,30 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
         </StepScaffold>
       )}
 
-      {/* PEOPLE STEP — contacts AND the group they live in, so the Groups tab is
-          real on landing instead of "No groups yet". */}
+      {/* PEOPLE STEP — contacts, and only contacts.
+
+          It used to build a group here too: name picked from three chips *and* a
+          free-text field editing the same value, icon inferred from that name
+          string (`'Flat'` → the generic `users` glyph), colour hard-coded to
+          `GROUP_COLORS[0]`. That bypassed `GroupForm`, which is the app's real
+          group form, so onboarding was the one place a group could be made wrong
+          and then not fixed without leaving the flow.
+
+          The question this step asks is who you split with, and the answer to that
+          is people. Which groups they belong in is a different question, asked
+          where groups are made. What the step gains instead is the **email**:
+          `person.email` is the only identifier that is the same string on both
+          phones, so it is what lets a contact become a linked account later. */}
       {stage === 'people' && (
         <StepScaffold
           stageKey="people"
           onBack={() => setStage('budget')}
           {...(stepPosition('people', intent) ?? {})}
           title="Anyone you split with?"
-          subtitle="Add flatmates, friends or family — they become a group you can bill straight away."
+          subtitle="Add flatmates, friends or family. An email is optional — it's what lets you link up with them later, if they use the app too."
           footer={
             <StepFooter
-              primaryLabel={people.length > 0 ? `Create “${groupName}” with ${people.length}` : 'Continue'}
+              primaryLabel={people.length > 0 ? `Continue with ${people.length}` : 'Continue'}
               onPrimary={() => setStage('permissions')}
               skipLabel="Skip"
               // Records the decision as well as advancing — see `skipPeople`.
@@ -415,62 +482,54 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
             />
           }
         >
-          <View style={styles.personAddRow}>
-            <TextInput
-              style={styles.personInput}
+          <View style={styles.personForm}>
+            <Input
               value={personDraft}
               onChangeText={setPersonDraft}
               placeholder="Name"
-              placeholderTextColor={colors.textMuted}
+              icon="user"
               autoCapitalize="words"
               maxLength={30}
-              returnKeyType="done"
-              onSubmitEditing={addPerson}
+              returnKeyType="next"
               accessibilityLabel="Person name"
             />
-            <TouchableOpacity style={[styles.personAddBtn, !personDraft.trim() && styles.personAddOff]} onPress={addPerson} disabled={!personDraft.trim()} accessibilityRole="button" accessibilityLabel="Add person">
-              <Feather name="plus" size={20} color={colors.bg} />
-            </TouchableOpacity>
+            <Input
+              value={personEmailDraft}
+              onChangeText={setPersonEmailDraft}
+              placeholder="Email (optional)"
+              icon="mail"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              // Off for identifiers: autocorrect will happily rewrite an address.
+              autoCorrect={false}
+              maxLength={60}
+              returnKeyType="done"
+              onSubmitEditing={addPerson}
+              accessibilityLabel="Person email, optional"
+            />
+            <SecondaryButton label="Add person" onPress={addPerson} disabled={!personDraft.trim()} />
           </View>
 
           {people.length > 0 && (
-            <>
-              <Card clip style={styles.peopleCard}>
-                {people.map((pn, i) => (
-                  <View key={`${pn}-${i}`}>
-                    {i > 0 && <Divider indent="text" />}
-                    <View style={styles.personRow}>
-                      <IconCircle icon="user" size={layout.avatarSize} color={GROUP_COLORS[i % GROUP_COLORS.length]} />
-                      <Text style={styles.personName} numberOfLines={1}>{pn}</Text>
-                      <TouchableOpacity onPress={() => { haptic.selection(); setPeople(prev => prev.filter((_, j) => j !== i)); }} hitSlop={10} accessibilityRole="button" accessibilityLabel={`Remove ${pn}`}>
-                        <Feather name="x" size={18} color={colors.textMuted} />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                ))}
-              </Card>
-
-              <SectionHeader title="Call the group" />
-              <View style={styles.chipRowLeft}>
-                {GROUP_NAME_OPTIONS.map(g => (
-                  <Chip
-                    key={g}
-                    label={g}
-                    selected={groupName === g}
-                    onPress={() => { haptic.selection(); setGroupName(g); }}
+            <Card clip style={styles.peopleCard}>
+              {people.map((p, i) => (
+                <React.Fragment key={`${p.name}-${i}`}>
+                  {i > 0 && <Divider indent="text" />}
+                  {/* `MemberAvatar`, like every other person row in the app — the
+                      generic `user` glyph here was the only one that didn't show
+                      whose row it was. */}
+                  <ListRow
+                    leading={<MemberAvatar name={p.name} color={GROUP_COLORS[i % GROUP_COLORS.length]} size={layout.iconCircle} />}
+                    title={p.name}
+                    subtitle={p.email}
+                    chevron={false}
+                    value={<Feather name="x" size={18} color={colors.textMuted} />}
+                    onPress={() => removePerson(i)}
+                    accessibilityLabel={`Remove ${p.name}`}
                   />
-                ))}
-              </View>
-              <TextInput
-                style={styles.groupNameInput}
-                value={GROUP_NAME_OPTIONS.includes(groupName) ? '' : groupName}
-                onChangeText={(t) => setGroupName(t || 'Friends')}
-                placeholder="…or type a name"
-                placeholderTextColor={colors.textMuted}
-                maxLength={30}
-                accessibilityLabel="Group name"
-              />
-            </>
+                </React.Fragment>
+              ))}
+            </Card>
           )}
         </StepScaffold>
       )}
@@ -516,13 +575,15 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
                 Apple's Shortcuts app — so it must be trivially skippable and must come after
                 the flow has already shown its value. Tapping it leaves the app; onboarding
                 state survives the trip because nothing is committed until "Finish setup". */}
+            {/* No `selected`, so this draws a chevron rather than a radio. It was
+                hard-coded `selected={false}` — a radio that could never fill, on the
+                one row here whose tap leaves the app for Shortcuts. The two rows
+                above are states; this is a door. */}
             {flags.voiceEntry && (
               <OptionRow
                 label="Log spends by talking to Siri"
                 description={`Say "Hey Siri, ${VOICE_ONE_WAY_NAME}", then how much and what for — it opens here with everything filled in. Set up now or later in Settings.`}
-                selected={false}
                 onPress={openVoiceSetup}
-                accent={colors.income}
                 leading={<IconCircle icon="mic" size={layout.avatarSize} color={colors.accent} />}
               />
             )}
@@ -559,8 +620,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
             incomeNum={incomeNum}
             payday={payday}
             budgetNum={budgetNum}
-            people={people}
-            groupName={groupName}
+            people={people.map(p => p.name)}
             notifPerm={notifPerm}
           />
         </StepScaffold>
@@ -593,17 +653,6 @@ const styles = StyleSheet.create({
   chipRow: { flexDirection: 'row', gap: space.sm, flexWrap: 'wrap', justifyContent: 'center' },
   chipRowLeft: { flexDirection: 'row', gap: space.sm, flexWrap: 'wrap' },
 
-  nameInput: {
-    ...type.heading,
-    color: colors.textPrimary,
-    backgroundColor: colors.bgInput,
-    borderRadius: radius.md,
-    paddingHorizontal: space.md, paddingVertical: space.md,
-    borderWidth: 1, borderColor: colors.border,
-    alignSelf: 'stretch',
-    textAlign: 'center',
-  },
-
   // Intent stage
   intentLogo: { width: 64, height: 64, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center' },
   intentRupee: { ...type.amountLG, color: colors.bg },
@@ -613,15 +662,12 @@ const styles = StyleSheet.create({
   // Budget stage
   budgetPct: { ...type.label, color: colors.income, textAlign: 'center', marginTop: space.md },
 
+  // Money step
+  moneyCard: { marginTop: space.md },
+
   // People step
-  personAddRow: { flexDirection: 'row', gap: space.sm, alignSelf: 'stretch' },
-  personInput: { flex: 1, ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: space.md, borderWidth: 1, borderColor: colors.border },
-  personAddBtn: { width: 52, height: 52, borderRadius: radius.md, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
-  personAddOff: { opacity: 0.4 },
-  peopleCard: { marginTop: space.md },
-  personRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: space.md, paddingVertical: space.smd },
-  personName: { ...type.body, color: colors.textPrimary, flex: 1 },
-  groupNameInput: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: space.smd, borderWidth: 1, borderColor: colors.border, alignSelf: 'stretch', marginTop: space.sm },
+  personForm: { gap: space.sm, alignSelf: 'stretch' },
+  peopleCard: { marginTop: space.lg },
 
   // Permissions step
   permList: { gap: space.sm },

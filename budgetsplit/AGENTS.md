@@ -283,6 +283,16 @@ the animation primitives in §11, and now mechanical rather than remembered.
 cannot reach. `StepTransition`, `AnimatedNumber`, `Stagger` and `ContextPill` all shipped
 unused; the first two were caught by eye, months late, and the last two by the test.
 
+**Collapsing N implementations into one component does nothing about calling it twice.**
+Onboarding's `pay` step hand-rolled its own pay-method list while `PayMethodSelector`
+existed; deleting the hand-roll left `<PayMethodSelector value={payMethod}
+onChange={setPayMethod} />` rendered on *two consecutive steps* under the identical
+heading, with a fresh comment above one of them claiming "this is now the only version".
+One question, one component, two call sites, same state — a duplication the de-duplication
+created. So when you collapse a duplication, **the guard counts call sites, not
+implementations** (`onboardingConsistency.test.ts`), and you re-read the screen afterwards
+rather than the component.
+
 ---
 
 ## 10. Color Discipline

@@ -1,19 +1,11 @@
 import React from 'react';
-import { View, Text, StyleSheet, Animated } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { colors, type, space, radius } from '../../tokens';
 
 type Props = {
   /** 1-based position. */
   step: number;
   total: number;
-  /**
-   * Drive the fill from an existing `Animated.Value` instead of `step/total` — the
-   * feature carousel already animates one as you swipe, and re-deriving it from the
-   * page index would lose the mid-swipe position.
-   */
-  animated?: Animated.AnimatedInterpolation<string | number>;
-  /** Hide "Step N of M" when the fraction isn't meaningful (the carousel). */
-  showCount?: boolean;
 };
 
 /**
@@ -27,20 +19,22 @@ type Props = {
  * It shows the bar **and** the count. A bar alone hides how much is left, which is
  * most of what makes a questionnaire feel long — the reference app shows only a bar
  * and is weaker for it.
+ *
+ * It carried two more props — `animated` (drive the fill from an existing
+ * `Animated.Value`) and `showCount` — for the feature carousel, which was deleted.
+ * Neither ever had a second caller. §9's dead-component rule applies to props too:
+ * a prop with no caller is an untested branch that documents a feature that is not
+ * there.
  */
-export function StepProgress({ step, total, animated, showCount = true }: Props) {
+export function StepProgress({ step, total }: Props) {
   const pct = total > 0 ? Math.max(0, Math.min(1, step / total)) : 0;
 
   return (
     <View style={styles.wrap}>
       <View style={styles.track}>
-        {animated ? (
-          <Animated.View style={[styles.fill, { width: animated }]} />
-        ) : (
-          <View style={[styles.fill, { width: `${pct * 100}%` }]} />
-        )}
+        <View style={[styles.fill, { width: `${pct * 100}%` }]} />
       </View>
-      {showCount && <Text style={styles.count}>{step} of {total}</Text>}
+      <Text style={styles.count}>{step} of {total}</Text>
     </View>
   );
 }
