@@ -709,8 +709,12 @@ Needs the rebuild: npx expo prebuild --clean && npx expo run:ios
 
 ### 3.1 Identity / sync pre-mortem — hold these lines in S2/S3
 
-Nine ways the design goes wrong. Only **SYNC-F5 is a live defect today**; the rest are
-constraints to design against.
+Ways the design goes wrong. The first twelve were written while designing, and of those only
+**SYNC-F5 is a live defect** — the rest are constraints that were designed against and held.
+`SYNC-F13` onward came later, from tracing the built code rather than the design, and that
+difference shows: **four of the twelve below are live defects that move numbers or lose data**
+(`F13`, `F14`, `F16`, `F18`). The scenarios they fall out of are catalogued in `SYNC-MODEL.md`
+Parts 4 and 5.
 
 | | Failure | The wall that stops it |
 |---|---|---|
@@ -726,6 +730,27 @@ constraints to design against.
 | SYNC-F10 | **Rejecting an entry diverges the two devices.** Reject soft-deletes locally; their copy survives, so their group balance stops matching mine and neither is told | Named, not solved. The honest fix is a rejection that travels back as a *dispute* the author sees — sync-phase work. Until then, the reject copy says plainly that it stays on theirs |
 | SYNC-F11 ⚠️ | **Deleting a shared group hard-deletes every transaction in it** (`groups.ts` `deleteGroup`), which under sync would either destroy shared history or diverge silently | Under sync, deleting a group you did not create becomes **leave**, locally. Only the creator can delete, and only for everyone |
 | SYNC-F12 ✅ | **Losing the per-group key loses that group's history** — the same class of loss as a forgotten backup passphrase, but it takes the group down with you | **Built.** The key is wrapped once per DEVICE and stored server-side, so any member who still holds it can reissue a wrap. It is never derived from one device's secret — which is also why reinstalling mints a new device key rather than resurrecting the old one |
+
+### Twelve more, found by tracing the model — `SYNC-MODEL.md`, 2026-09-04
+
+The first nine above were written while designing. These came out of reading the built code against
+the question *"what am I exposed to if I trust someone?"* — so unlike `SYNC-F1`–`F12`, **four of
+them are live defects rather than constraints**. Each cites the scenario it falls out of.
+
+| | Failure | The wall that stops it |
+|---|---|---|
+| SYNC-F13 ✅ | **A trusted peer moves my cash with no prompt.** An expense asserting *"you paid ₹4,000"* is an ordinary entry, so from a trusted author it applies on arrival — and because the payment names me, `CASH_TOTALS_SQL` counts it. `requiresMyApproval` force-confirms only *settlements* that touch me (`trust.ts:102`); the expense-names-me-as-payer case is not considered. `MW-08` | **Done 2026-09-04.** `IncomingEntry.assertsIPaid`, read from the payment rows at the loader and gated ahead of trust. Carried as its own field rather than by widening `touchesMe`, which legitimately means payer-or-sharer. `trust.test.ts` covers the three rules. |
+| SYNC-F14 ✅ | **A peer can delete an entry I already approved, with no gate at all.** `is_deleted` is written in both the INSERT and UPDATE branches independent of `applied` (`peerIngest.ts:249, :265, :288`), and every reader filters deleted rows. My numbers move back silently. `peerApproval.test.ts:606-624` asserts this as correct behaviour — its title is the bug report. `MW-24` | **Done 2026-09-04.** `txn_approval.pending_delete` — deliberately not `state='pending'`, which would have made the retraction take effect on arrival. The entry keeps counting until I decide; approving applies the delete, refusing keeps the entry. A retraction of something still waiting still applies at once, because nothing of mine had moved. |
+| SYNC-F15 ⚠️ | **Any approved member can push a new version of an entry I authored.** `existing` is looked up by **id alone** — no group check, no authorship check (`peerIngest.ts:184-186`) — so the edit branch rewrites `author_person_id` to them and replaces my payment and share rows. The server authorises *membership*, not authorship, and the pusher overwrites `author_user`. `MW-25` | Bind the lookup to `(id, group_id)` and refuse a version bump on an entry whose author is me. Server-side, authorise the pusher against the stored author |
+| SYNC-F16 ⚠️ | **Removing a member is local only.** `removeMemberFromGroup` makes no server call: their `sync_member` row stays approved and their key wraps stay, so they keep pulling every future entry. My device refuses their writes; the server was never told. `MW-34` | Removal must call the server, the way leaving already does. Open with re-keying: §4.5 |
+| SYNC-F17 | **The group key is never rotated** — not on leave, not on removal, not on account deletion. Only the leaver's own wraps are dropped. Anyone who ever held the key holds it forever. `MW-39` | A rotation design has to answer what happens to entries already published under the old key — which is exactly why `shareGroup` refuses to re-key today. §4.5 |
+| SYNC-F18 ✅ | **Outbox head-of-line starvation.** `pendingUploads` takes the oldest 50; the drain skips a row whose group has no key but does not remove it. More than 50 queued rows in a never-shared group means every drain fetches the same unsendable 50 forever, and a shared group's newer entries are never reached | **Done 2026-09-04.** `pendingUploads` takes the sendable group ids and filters in SQL, so an unshared backlog can no longer fill the page. |
+| SYNC-F19 | **A peer's roster can promote its author and overwrite `created_by`.** Roles are applied from the wire (`role = excluded.role`) with no immutability guard, and a second roster naming a different resolvable creator would overwrite the creator. Role is never enforced across the wire — ingest checks membership, authorship and balance, never rank. `MW-40` | `created_by` is set once and never overwritten. Treat an inbound role change as a claim, not a fact |
+| SYNC-F20 | **A group with no admin is reachable by adoption and unrepairable.** `adoptGroup` inserts with `created_by` absent → NULL, and fills it only if the creator resolves locally; if the roster also carries no `admin`, nobody on that device can ever edit the budget, membership, roles, the name, or delete it. The launch invariants deliberately never guess a creator. `MW-38` | Either a repair path, or the egalitarian mode that makes "no admin" a supported state rather than an accident. §4.6 |
+| SYNC-F21 | **Approval and trust decisions are not audited.** `approveTxn`, `rejectTxn`, `reopenApproval`, `setTrustState` and `setGroupTrust` write no `audit_log` row — so *"I rejected Aarav's ₹4,000"* appears nowhere in the log a dispute is meant to be settled from | Audit the decision, not just the entry. These are the rows a disagreement is resolved with |
+| SYNC-F22 | **`audit_log` has no structured author.** The one sync-aware call bakes the name into a free-text summary, so it is unqueryable and drifts on a rename or a merge. Peer origin is recoverable only indirectly, via `txn.source` / `txn.author_person_id` | An author column. The summary is for reading, not for identity |
+| SYNC-F23 | **`is_shared` is a dead column** — hard-coded `0` on create, `1` only on adoption, never updated. The destination picker's "Shared" label therefore appears only on groups you *received*, and is wrong for every group you shared yourself. `MW-19` | Either maintain it at share time or delete it and derive the label from the roster |
+| SYNC-F24 | **Sharing is admin-gated on the client and member-gated on the server** — so the strict rule is the advisory one, and a modified client could invite as a plain member | Whichever rule is right, the server has to be the one enforcing it |
 
 ---
 

@@ -276,7 +276,7 @@ const AREAS = [
     fl:  ['FL-04','FL-05','FL-12','FL-13','FL-14','FL-17','FL-18','FL-40','FL-41','FL-53'],
     sc:  ['SC-07','SC-08','SC-14','SC-15','SC-16','SC-23','SC-25','SC-35'],
     fe:  ['FE-01','FE-02','FE-03','FE-04','FE-05','FE-06','FE-07','FE-08','FE-09','FE-10','FE-38','FE-40'],
-    ov:  ['OV-01','OV-06','OV-08','OV-18'],
+    ov:  ['OV-01','OV-06','OV-08','OV-18','OV-28','OV-34'],
     dq:  ['DQ-16','DQ-18','DQ-20','DQ-22'],
   },
   {
@@ -287,7 +287,7 @@ const AREAS = [
     sc:  ['SC-04','SC-09','SC-11','SC-13','SC-26','SC-26a'],
     fe:  ['FE-11','FE-12','FE-13','FE-14','FE-15','FE-17','FE-18','FE-19','FE-20','FE-21','FE-22'],
     ov:  ['OV-02','OV-04','OV-05','OV-11','OV-14','OV-27'],
-    dq:  ['DQ-09','DQ-10','DQ-11','DQ-13','DQ-84'],
+    dq:  ['DQ-09','DQ-10','DQ-11','DQ-13','DQ-25','DQ-30','DQ-33','DQ-84'],
   },
   {
     key: 'budget', name: 'Budgets and insight',
@@ -297,7 +297,7 @@ const AREAS = [
     sc:  ['SC-03','SC-10','SC-10b','SC-20','SC-21','SC-22','SC-33'],
     fe:  ['FE-25','FE-26','FE-32','FE-33','FE-34','FE-35','FE-36','FE-37','FE-42'],
     ov:  ['OV-07','OV-19'],
-    dq:  ['DQ-02','DQ-12'],
+    dq:  ['DQ-02','DQ-12','DQ-26'],
   },
   {
     key: 'savings', name: 'Savings and assets',
@@ -306,8 +306,8 @@ const AREAS = [
     fl:  ['FL-10','FL-33','FL-34','FL-35','FL-36','FL-37','FL-45'],
     sc:  ['SC-05','SC-17','SC-42'],
     fe:  ['FE-27','FE-28','FE-29','FE-30','FE-31'],
-    ov:  ['OV-20'],
-    dq:  ['DQ-14','DQ-15'],
+    ov:  ['OV-20','OV-30','OV-33'],
+    dq:  ['DQ-14','DQ-15','DQ-24','DQ-27'],
   },
   {
     key: 'recurring', name: 'Recurring and reminders',
@@ -337,7 +337,7 @@ const AREAS = [
     sc:  ['SC-34','SC-36','SC-37','SC-38','SC-39','SC-40','SC-43','SC-44'],
     fe:  ['FE-16','FE-52','FE-53','FE-54','FE-55','FE-56','FE-57','FE-58','FE-59'],
     ov:  [],
-    dq:  ['DQ-04','DQ-05','DQ-07','DQ-08','DQ-85','DQ-86'],
+    dq:  ['DQ-04','DQ-05','DQ-07','DQ-08','DQ-28','DQ-29','DQ-31','DQ-32','DQ-85','DQ-86'],
   },
   {
     key: 'shell', name: 'The app itself',
@@ -346,7 +346,7 @@ const AREAS = [
     fl:  ['FL-01','FL-02','FL-03','FL-50','FL-51','FL-54'],
     sc:  ['SC-01','SC-02','SC-06','SC-24','SC-27','SC-27a','SC-28','SC-29'],
     fe:  ['FE-39','FE-41','FE-61','FE-62','FE-63','FE-64','FE-65','FE-66','FE-67','FE-68','FE-69','FE-70'],
-    ov:  ['OV-09','OV-10','OV-13','OV-15','OV-16','OV-17','OV-23','OV-25','OV-26'],
+    ov:  ['OV-09','OV-10','OV-13','OV-15','OV-16','OV-17','OV-23','OV-25','OV-26','OV-29','OV-31','OV-32'],
     dq:  ['DQ-01','DQ-03','DQ-06','DQ-17','DQ-19','DQ-21','DQ-23','DQ-80'],
   },
 ];

@@ -116,8 +116,8 @@ through. They are assembled by `scripts/build-system-map.js`, not written by han
 | *`<area>` · doing it* | The tasks in §8 — where to start, the steps, what should happen |
 | First run and empty states | The one booklet needing a wiped app |
 | Rules that must hold | The 22 in §5, as cross-screen checks |
-| Known problems | The 27 in §10 — is each still true? |
-| Open questions | The 30 in §11 — your opinion is the answer |
+| Known problems | The 34 in §10 — is each still true? |
+| Open questions | The 34 in §11 — your opinion is the answer |
 
 **Every screen, task, component, rule, finding and open question is in exactly one booklet**, and
 `coverage.test.ts` fails if any falls out. That test builds the booklets with the real builder
@@ -175,7 +175,7 @@ heading is how a document starts lying.
 ### What it is
 
 A **personal-finance app and a bill-splitting app in one**, local-first, for the India pilot.
-44 screens, 22 SQLite tables, 111 `src/lib` modules, 16 feature flags.
+44 screens, 22 SQLite tables, 112 `src/lib` modules, 16 feature flags.
 
 The two halves are not bolted together — they share one ledger and are kept honest by one rule
 (§5 `IV-08`): **the group ledger records what happened; your personal ledger records what it cost
@@ -222,7 +222,7 @@ photos never sync (`SYNC-F4`); balances never travel (`E-50`).
 
 One SQLite database, `budgetsplit.db`, opened by `SQLiteProvider` at the root. It is the single
 source of truth — there is no Redux, no React Query, no in-memory mirror. Reads go through
-`src/db/queries/` (23 modules); pure logic lives in `src/lib/` (111 modules) and touches neither
+`src/db/queries/` (23 modules); pure logic lives in `src/lib/` (112 modules) and touches neither
 React nor the database.
 
 **Foreign keys are OFF** on every connection (`applyConnectionPragmas`). Every `REFERENCES` clause
@@ -1680,8 +1680,13 @@ Rules that must never be false. Each is short on purpose and points at `AGENTS.m
 — restating that reasoning here would create a second source of truth for build rules, which is the
 failure this whole document exists to end.
 
-**Read the Held-by column carefully.** Nine of these are enforced by a test that reads the real
+**Read the Held-by column carefully.** Ten of these are enforced by a test that reads the real
 source. The rest are enforced by people remembering, and that is worth knowing before relying on one.
+
+`IV-08` was the tenth, added 2026-09-04. It had been the most-cited rule in the document and one of
+the least held — "single-sourced" is a reason to *expect* agreement between surfaces, not a mechanism
+that produces it. `crossSurfaceConsistency.test.ts` is the mechanism, and it passed on the first run:
+the four surfaces already agreed. See `SYNC-MODEL.md` §6.
 
 | ID | Rule | Held by | Constrains |
 |---|---|---|---|
@@ -1692,7 +1697,7 @@ source. The rest are enforced by people remembering, and that is worth knowing b
 | `IV-05` | An entry awaiting approval is shown in the ledger and excluded from every money figure, via the one constant `NOT_AWAITING_APPROVAL`. | **`approvalInvariant.test.ts`** — fails when a new statement over `txn` neither carries it nor says why | `E-04` `E-20` |
 | `IV-06` | Settlements are excluded from analysis and shown in the ledger. Settling a debt is not consumption; the purchase was already booked. `lib/cash.ts` is the deliberate exception, because cash genuinely moved. | unenforced | `E-04` `E-50` `E-63` |
 | `IV-07` | A balance is never shown without its scope being determinate. | unenforced | `E-50` `E-51` |
-| `IV-08` | **Your share is your spending**, the moment it happens. Who fronted the cash is irrelevant. Implemented in `myShareOf` and nowhere else. | unenforced — but single-sourced | `E-07` `E-56` `E-60` `E-63` |
+| `IV-08` | **Your share is your spending**, the moment it happens. Who fronted the cash is irrelevant. Implemented in `myShareOf` and nowhere else. | **`crossSurfaceConsistency.test.ts`** — one split expense, four surfaces, one figure | `E-07` `E-56` `E-60` `E-63` |
 | `IV-09` | An entry takes effect immediately for whoever created it and waits for approval from everyone else it touches. **You can always make yourself worse off, never someone else.** | `peerApproval.test.ts` | `E-04` `E-20` `E-52` |
 | `IV-10` | Trust is per person, never per group. A group is only a set of humans, so a group-level switch would silently extend trust to whoever is added next. The per-group *override* is still keyed on a human, which is why it is allowed. | `trust.test.ts` | `E-01` `E-21` `E-65` |
 | `IV-11` | A person with no `remote_uid` has no write path, so their trust value is inert. That check runs first. | `trust.test.ts` | `E-01` `E-65` `E-87` |
@@ -4252,7 +4257,7 @@ that actually bite** — the axis pairs where that flow is known or suspected to
 
 ## §10 · Complexity and overlap register
 
-`Last verified: 2026-09-01 · Guarded by: docIdGraph.test.ts (IDs only)`
+`Last verified: 2026-09-04 · Guarded by: docIdGraph.test.ts (IDs only)`
 
 This is the section for "we have created too many and unnecessarily complex flows". Each entry names
 the duplication, counts it, prices the fix, and **commits to a verdict**.
@@ -4272,12 +4277,14 @@ the duplication, counts it, prices the fix, and **commits to a verdict**.
 | `NEEDS-DECISION` | Cannot be resolved without answering a `DQ-`. |
 
 **`RENAME-ONLY` and `KEEP-DOCUMENTED` are wins, not deferrals.** They close an item at zero risk.
-Of the 27 below, **12 close that way** — which is the most useful thing this section says. The app is
-not as over-built as it feels; it is *under-named*. Most of the confusion is vocabulary, and
-vocabulary is cheap to fix. Six items are genuine structural duplication worth code, and five of
-those can wait for the pilot.
+Of the 34 below, **12 close that way**. That was the most useful thing this section said when it held
+27 entries: the app is not as over-built as it feels, it is *under-named*, and vocabulary is cheap to
+fix. Walk 1 has since qualified it. All seven of its findings are structural rather than vocabulary,
+and all seven are `COLLAPSE` — which is the second useful thing this section says. **Actually walking
+the app finds different problems from reading it**, and the ones it finds are cheaper: not one of the
+seven touches money, the wire, or a migration.
 
-**Tally:** 4 `COLLAPSE` · 5 `COLLAPSE-AFTER-PILOT` · 8 `RENAME-ONLY` · 4 `KEEP-DOCUMENTED` ·
+**Tally:** 11 `COLLAPSE` · 5 `COLLAPSE-AFTER-PILOT` · 8 `RENAME-ONLY` · 4 `KEEP-DOCUMENTED` ·
 6 `NEEDS-DECISION`.
 
 ---
@@ -4335,6 +4342,177 @@ OV-27 · Three buttons to one destination on one screen        [path-duplication
   Risk.    Low, but it is a layout change — worth confirming before doing.
   Verdict. COLLAPSE.
   Trigger. Now.
+```
+
+### The seven Walk 1 found
+
+`WALK-01.md` is the record of the cold sweep — a wiped app walked through first run and every
+empty state on 2026-09-04. These seven came out of it. Six are things the walk hit directly; the
+seventh (`OV-33`) came out of reading the asset register while writing up `OV-30`.
+
+```
+OV-28 · Autopay is both a chosen method and a detected fact            [overload]
+  The N.   `PayMethod.Autopay` is offered in the pay-method picker
+           (enums.ts:75) and means the same thing as `RECUR_MODE = 'auto'`
+           (enums.ts:205), which sits on the same Add screen as the "When it's
+           due" control. It even carries the `repeat` glyph (enums.ts:92).
+  Evidence Nothing that reads money treats it as a method: cashQuery.ts:93 folds
+           it into `bank`, and so does payMethodBucket (enums.ts:145). The
+           onboarding pay step already leaves it out and says why
+           (Onboarding.tsx:587). The Add screen's sheet does not.
+  Cost.    Two controls on one screen claim the same fact, and the one reached
+           first changes nothing. "Autopay" answers *how it was paid*, and a
+           mandate is not a how — it is a schedule.
+  Collapse Give the picker its own set the way onboarding already does
+           (PAY_CHOICES, Onboarding.tsx:592) and leave Autopay out of it. It
+           stays in the enum, in detection and in the cash fold, because it is
+           the right answer for an imported row (payMethodDetect.ts:31,
+           paytmParse.ts:145) where no rule exists to carry `recurMode`.
+  Blast.   One array, plus a fallback for rows already carrying the value —
+           which already render through PAY_METHOD_LABEL.
+  Risk.    Low. Detection, storage and the cash fold are untouched.
+  Verdict. COLLAPSE.
+  Trigger. Now — it is one array, on the busiest screen in the app.
+
+OV-29 · Onboarding asks how you pay twice, with different sets  [path-duplication]
+  The N.   2 steps, one state. The `money` step renders PayMethodSelector over
+           all 7 methods (Onboarding.tsx:312); the `pay` step asks again one
+           screen later over 5 (:330-365). Both write the same `payMethod`.
+  Evidence useOnboardingForm.ts:51 holds a single value, so whichever screen is
+           touched second wins — and the second cannot express two of the
+           first's answers.
+  Cost.    A first-run user is asked one question twice, given a different menu
+           each time, and then told on the second screen that the missing
+           options are "still available on each transaction" (:363).
+  Collapse Delete the section on the `money` step. The `pay` step is the one with
+           the reasoned option set and the explanation.
+  Blast.   Two lines and a SectionHeader on one step.
+  Risk.    None. The state and its writer do not change.
+  Verdict. COLLAPSE.
+  Trigger. Now — it is among the first things a new user sees.
+
+OV-30 · Add detects an investment and cannot record one                 [phantom]
+  The N.   1 banner pointing at another screen. add/quick.tsx:203-212 offers
+           /assets when category = 'Investments / SIP', because Add's own
+           transfer path is person-to-person only (useAddTxnForm.ts:534-590)
+           and never writes `asset_id`.
+  Evidence The write it would need exists and is already correct: transferToAsset
+           (assets.ts:206) writes the settlement row, the asset_id and the
+           balance in one transaction. Only the entry point is missing.
+  Cost.    The highest-fan-in screen in the app (24 entries, OV-08) recognises
+           what you are doing and hands you elsewhere to finish it. Walk 1
+           recorded this from the outside as "I lost Invest" — the concept is
+           intact everywhere except where money is actually entered.
+  Collapse A fourth Add pill, Invest, pre-scoped to the asset register and saving
+           through transferToAsset. Storage does not change: `asset_id` already
+           separates it from a debt settlement, which is the discriminator OV-02
+           proposes to formalise.
+  Blast.   ADD_KIND and its labels, one branch in useAddTxnForm's save, and the
+           banner is deleted rather than kept.
+  Risk.    Low, and it does not wait on OV-02 — it is what makes OV-02 worth
+           doing rather than a bookkeeping tidy-up.
+  Verdict. COLLAPSE.
+  Trigger. Now. WALK-01 §2 has the three layers this separates.
+
+OV-31 · Two designed empty states nothing can reach               [dead-alternative]
+  The N.   2. reports.tsx:319-328 is guarded `summaries.length === 0`, never
+           true: reportsData.ts:80-83 builds one summary per group and
+           seed.ts:28-33 creates a Personal group on every device. review.tsx:414
+           has two entry points and both require rows — import.tsx:176 replaces
+           only after a successful parse, and Home's inbox badge is gated
+           `reviewCount > 0` ((tabs)/index.tsx:170-177).
+  Evidence Walk 1 hit the second one and recorded it as "it doesn't come if
+           nothing to review". That is exactly right, and the state was built.
+  Cost.    Two screens designed for their empty case show something else: Reports
+           shows zero-value cards and a bare "No transactions this month" string
+           (:395); Review shows nothing, because you cannot get in.
+  Collapse Reports: guard on whether any group has activity, not on how many
+           groups exist. Review: link it from Settings beside /import, which is
+           the only place that currently offers one and not the other.
+  Blast.   One condition, one settings row.
+  Risk.    None.
+  Verdict. COLLAPSE — **done 2026-09-04**. Reports now guards on
+           monthSpent/monthEarned, the same figures its own hero renders;
+           Settings carries a "Review inbox" row beside Import.
+  Trigger. —
+
+OV-32 · One empty state, four renderings                           [alias-sprawl]
+  The N.   4. EmptyState.tsx is the component; Home hand-rolls its own hero and
+           never imports it ((tabs)/index.tsx:253-260, including the accent
+           TouchableOpacity AGENTS §5 forbids); ShareGroupRow:127-138
+           re-implements the layout at space.lg rather than space.xxl; and
+           settings/linked.tsx:346 is the only site that wraps it in a Card.
+  Evidence It also renders at three heights, because it top-aligns and exposes no
+           position prop: 48pt under Personal→Activity (personal.tsx:343,
+           `paddingHorizontal`), 64pt under Personal→Budget (BudgetList.tsx:231,
+           `padding`), and lower again on a filter miss, where FilterBar renders
+           above it (personal.tsx:238). Every group tab uses `padding`, so
+           personal.tsx:343 is the outlier.
+  Cost.    Switching tabs moves the illustration. This was Walk 1's opening note
+           and the only finding in it that is systemic rather than local.
+  Collapse Let EmptyState own its anchor instead of inheriting one, then delete
+           the three hand-rolls. AGENTS §2 specifies the anatomy and says nothing
+           about where it sits, which is how they drifted.
+  Blast.   One component, one style line, three call sites.
+  Risk.    Low, but it changes what four screens look like. WALK-01 §4 has the
+           options.
+  Verdict. COLLAPSE.
+  Trigger. Now.
+
+OV-33 · Restating an asset leaves no record, and two comments say it does [phantom]
+  The N.   2 comments referring to a row that is never written. schema.ts:207-209
+           says balance moves "only by transfers in/out and by the user restating
+           it, both of which write a transaction row so the change is explainable
+           afterwards"; assets.ts:117-118 says the same in different words. The
+           function's own docblock (assets.ts:300-307) correctly says the
+           opposite — "deliberately does NOT write a transaction… the one path
+           that changes a balance without a row".
+  Evidence restateAssetBalance is one UPDATE (assets.ts:317). The audit log has
+           no asset entity at all — AuditEntityType is txn | group | member |
+           budget | recurring | settlement (audit.ts, rendered at
+           history.tsx:33-40). So a restatement is invisible in both places a
+           user would look.
+  Cost.    `asset.balance` is one overwritten number. There is no way to see what
+           an asset was worth last month, to chart it, or to tell a market move
+           from a typo — and net worth moves silently when it changes. The code
+           is right and the comments are wrong, which is the failure mode this
+           whole document exists to end, committed inside the source.
+  Collapse Fix the two comments now: they cost nothing and mislead continuously,
+           exactly as OV-25. Whether to keep a valuation history is a separate
+           question and is DQ-27, not a rewrite of this entry.
+  Blast.   Two comments.
+  Risk.    None.
+  Verdict. COLLAPSE — **done 2026-09-04**. Both now say a transfer writes a row
+           and a restatement writes nothing, and schema.ts names DQ-27 as the
+           open half rather than implying a history already exists.
+  Trigger. — (DQ-27 still open for the history itself.)
+
+OV-34 · Four filter surfaces, three implementations                [alias-sprawl]
+  The N.   3 implementations over 4 surfaces. ui/FilterBar.tsx is the shared one
+           and has exactly two consumers, personal.tsx:240 and the group ledger
+           (TransactionsTab.tsx:78). search.tsx hand-rolls its own chip row
+           (styles.chip / chipActive over TouchableOpacity) and does not import
+           FilterBar at all. review/FilterForm.tsx is a third.
+  Evidence AGENTS §9 says the pill shape is ui/Chip and is never hand-rolled;
+           FilterBar hand-rolls its own chips too (FilterBar.tsx:89, :131), so
+           the shared component is itself one of the variants that rule exists to
+           remove. The capability sets differ as well: the group ledger filters
+           on kind and free text only, in memory over already-loaded rows
+           (TransactionsTab.tsx:35-42), while search adds `source` and folds tags
+           into the haystack (search.tsx:45, :78).
+  Cost.    The ledger you are most likely to need a filter in — a shared group
+           with months of entries — has the weakest one, and no two of the four
+           behave the same way. Reported in Walk 1 twice, on the group ledger and
+           on SC-23.
+  Collapse One FilterBar, built on ui/Chip, carrying the union of the fields that
+           are already implemented somewhere: kind, source, free text, and the
+           date range the group ledger has no way to express. Adopt it in SC-23
+           and SC-19 rather than keeping their own.
+  Blast.   One component rewritten on an existing primitive, plus three call
+           sites. No query changes — all four filter in memory today.
+  Risk.    Low. Behaviour is additive per surface; nothing loses a filter.
+  Verdict. COLLAPSE.
+  Trigger. Now — SC-23 is a ledger and finding a row is its whole job.
 ```
 
 ### The five worth code, after the pilot
@@ -4590,10 +4768,20 @@ these are power-user surfaces. I have not changed anything here.
 
 ## §11 · Open decisions
 
-`Last verified: 2026-09-01 · Guarded by: docIdGraph.test.ts (IDs only)`
+`Last verified: 2026-09-04 · Guarded by: docIdGraph.test.ts (IDs only)`
 
-30 entries: **29 still open**, one closed and kept. Each names **the default if nobody ever
+40 entries: **39 still open**, one closed and kept. Each names **the default if nobody ever
 decides** — because most of these will not be decided, and the default is what actually ships.
+
+`DQ-24` to `DQ-27` came out of Walk 1 (`WALK-01.md`) and share a shape worth naming: each is a
+question the app currently answers by **omission**, and in every case the omission is invisible.
+Nothing on screen says income was counted as spendable, that a person cannot be removed, that the
+budget ignores an SIP, or that an asset's previous value is gone.
+
+`DQ-28` to `DQ-33` come from `SYNC-MODEL.md` and share a different shape: each is a question about
+**what someone else may do to my numbers**, and the default answer to all six is more permissive
+than it reads. They are the reason that document exists, and each cites the scenario (`MW-nn`) it
+falls out of.
 
 A decided `DQ-` is struck through in place with the date and the answer, **never deleted**: the id
 has to stay resolvable, or every citation of it rots. `DQ-07` is the first, and writing this section
@@ -4612,6 +4800,7 @@ above the entry recording that it was closed.
 | `DQ-06` | **Widget scope** — balance? today's spend? quick-add? Genuinely undecided. | No widget. | `DQ-80` (a paid Apple account) unblocking. |
 | `DQ-07` | ~~**Rejecting a peer entry diverges the two devices silently.**~~ **Closed 2026-08.** A rejection now travels back to the author as an objection on the entry (`E-22`), and withdrawing it travels too — `pushSyncDispute` on push, `recordDispute` on pull, round-tripped in `peerApproval.test.ts`. The two devices still hold different rows; the difference is now **visible to both**, which was the actual defect. | — | — |
 | `DQ-08` | **Email is the only identity**, unchangeable and unmergeable. A typo at sign-in creates a second account holding none of your backups. | The typo wins. | The first support message that starts "I can't find my backup". |
+| `DQ-26` | **Does investing belong in Budget, and as what?** A ₹10,000 monthly SIP is invisible to the plan today. `IV-17` forbids folding it into a spend total, so it needs its own line or nothing at all — and "nothing" means the budget describes consumption while under-stating committed outflow. Raised by Walk 1 on `SC-10` and again on `SC-25`. | Absent. The budget answers "what did I consume" and stays silent on "what did I commit". | `OV-30`'s Invest pill landing, which makes the omission visible in one tap. |
 
 `DQ-08` has a cheap partial answer nobody has taken: **show the signed-in email wherever restore is
 offered.** That does not solve identity; it turns a silent loss into a visible one.
@@ -4635,6 +4824,15 @@ offered.** That does not solve identity; it turns a silent loss into a visible o
 | `DQ-21` | **`DEV_TOOLS_ENABLED = true`** ships a load-demo-data / erase-everything screen in a release build. This is **deliberate for the pilot** so testers can reset the same build they were given, and `devToolsGate.test.ts` fails the suite while it is true unless `RELEASE_CHECKLIST` carries the matching unchecked blocker. | It stays true and the guard keeps complaining, which is the design. | App Store upload. Flip one constant. |
 | `DQ-22` | **`VOICE_SHORTCUT_URL` is `null`**, so a flagged-on feature's one-tap install is dead and only the four-step manual setup works. This needs a *hosted file*, not a code change. | Manual setup only, for a feature most people will not find. | Hosting the `.shortcut`, or App Intents making the whole apparatus deletable. |
 | `DQ-23` | **`expo-file-system` legacy API** — the suite proves nothing either way, because jest stubs it. Downgraded from a blocker, not closed. | Keep using it until it breaks. | An Expo upgrade that removes it. |
+| `DQ-28` | **Which peer entries must wait for me.** Today only a *transfer* touching me is force-confirmed; an expense asserting "you paid ₹4,000" from a trusted author applies on arrival and moves my cash. The candidate rule is one predicate — gate on whether a payment names me, not on the entry's kind. `SYNC-MODEL.md` §4.1, `MW-08`, `SYNC-F13`. | Transfers only. A trusted peer moves my cash with no prompt. | Anyone trusting anyone, on two real phones. |
+| `DQ-29` | **Partial acceptance.** Approval is binary; there is no way to accept ₹3,000 of a claimed ₹5,000, which is the multi-payer case where a person has no move but reject. `SYNC-MODEL.md` §4.2, `MW-29`. | Binary. The only route to a corrected figure is reject → objection → their edit. | The first shared bill nobody can agree on. |
+| `DQ-30` | **A tracking-only group mode.** A group whose entries move balances and nothing else — no budget, no spending, no cash. It is the second axis that lets `IV-10` stay intact while still giving one switch that makes a whole group inert. `SYNC-MODEL.md` §4.3, `MW-19`. | No such mode. Every shared group is live, and the only inert group is one nobody has been invited to. | Anyone wanting to keep score without it counting as their spending. |
+| `DQ-31` | **Should a peer's deletion re-open an approval?** An *edit* already can only ever re-open one; a *deletion* has no gate at all and moves my numbers back silently. `SYNC-MODEL.md` §4.4, `MW-24`, `SYNC-F14`. | No gate. A peer retracts an entry I accepted and nothing asks or tells. | One retraction anybody notices. |
+| `DQ-32` | **Revocation and re-keying.** Removing a member is local only — they keep their server membership, their wraps and their pulls — and no group key is ever rotated. Re-keying orphans every entry already published under the old key, which is why `shareGroup` refuses to; a rotation design has to answer that first. `SYNC-MODEL.md` §4.5, `MW-34`, `MW-39`. | Removal is local. Anyone who ever held a group key holds it forever. | Removing someone you actually wanted to cut off. |
+| `DQ-33` | **Ownership: handover, and the group with no admin.** There is no way to hand a group over, and a group adopted without a resolvable creator can never have its budget, membership, roles or name changed by anyone. The egalitarian group where nobody is admin is reachable today only by accident, and in that state nothing can be administered rather than everyone being equal. `SYNC-MODEL.md` §4.6, `MW-36`, `MW-38`, `SYNC-F20`. | Neither exists. Every group has a permanent, un-removable, un-demotable owner — or none at all, permanently. | The first group whose creator stops using the app. |
+| `DQ-24` | **Income that lands in an asset is not spendable.** A reinvested dividend or interest capitalised into an FD raises net worth without raising what you can spend, and `lib/safeToSpend.ts` cannot tell either from salary. Entangled with `DQ-14`: the landing bucket is `INCOME_LANDING`, a view over `PAY_METHOD`, so there is no account for it to land *in*. Walk 1 asked for it as an "expendable income" tag. | Every rupee of income counts as spendable. Safe-to-Spend overstates for anyone with a reinvestment flow, quietly and by exactly the reinvested amount. | The first user with an SIP or dividend flow, or `DQ-14` closing. |
+| `DQ-25` | **A person can never be removed, and cannot be archived either.** `deletePerson` refuses on any reference across ten columns *including bare `group_member`* (`persons.ts:102-116`), so someone added to a group and never involved in an expense is permanent. `person` has no `is_archived` — unlike `budget_group` — and `mergePerson` is reachable only from the sync duplicate prompt. Settling in full changes nothing: the check is referential, never net. | The roster only grows. "Take them out of a group instead" stays the only answer, and it does not remove them from People. | A roster somebody finds unusable, or the first person asking why a settled friend cannot be filed away. |
+| `DQ-27` | **Should an asset keep a valuation history?** `restateAssetBalance` overwrites one number (`assets.ts:317`) and the audit log has no asset entity, so there is no way to see what something was worth last month, chart it, or tell a market move from a typo — while net worth moves each time. `OV-33` is only the wrong comments; this is the feature. | One current value per asset. Net worth is a snapshot with no past, and a mistyped restatement is indistinguishable from a real gain. | Any asset chart, any net-worth-over-time surface, or the first mistyped restatement. |
 
 ### Externally blocked — not ours to decide
 
