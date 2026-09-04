@@ -28,7 +28,7 @@
 > is `fundGoal` with **no pool**. Every route now carries a documented state set (§20).
 >
 > **Revised 2026-08-18** (pre-pilot consistency pass — see `RELEASE_CHECKLIST.md`):
-> onboarding is now **9 stages**, of which one (`summary`) asks nothing; the feature
+> onboarding is now **10 stages** (8 numbered — `hero` and `summary` ask nothing); the feature
 > carousel, the `payoff` beat and the `committing` stage are gone.
 
 ---
@@ -69,7 +69,7 @@
 
 ## 1. First run & onboarding
 
-`OnboardingGate` checks AsyncStorage `onboarding_done`. If unset, it renders the **9-stage**
+`OnboardingGate` checks AsyncStorage `onboarding_done`. If unset, it renders the **10-stage** (8 numbered)
 `Onboarding` flow (`src/hooks/useOnboardingForm.ts` owns the stage machine; `OnboardingStage`
 is the authoritative list): `hero → intent → name → income → money → budget → people →
 permissions → summary`. A single DB commit (`finalizeOnboarding`) happens at the very end —
@@ -92,17 +92,17 @@ equivalent styling rather than sharing theirs.
 
 | # | Stage | What the user does | Persisted |
 |---|---|---|---|
-| 0 | **Hero** | `LogoAssembly` brand animation plays (⛔ off-limits), wordmark + tagline + **Get Started** fade in together from `HERO_REVEAL_MS` (2900 ms), 150 ms apart. That is the mark's *snap* — `startDelay` 1850 + `TENSION_S` 1000 — so the words land on a formed logo; the fan spin that runs on to ~4.25 s is a flourish, not assembly, and is not waited for. There is **no "Skip intro"**: this row claimed one for months and none has ever existed. First tap is ~3.2 s. | nothing |
+| 0 | **Hero** | `LogoAssembly` brand animation plays (⛔ off-limits), wordmark + tagline + **Get Started** fade in together from `HERO_REVEAL_MS` (3300 ms), 150 ms apart. That is when the mark has **finished** — `startDelay` 1850 + `TENSION_S` 1000 + `SNAP_S` 400; the snap is where the wedges *start* landing, and reading it as the finish is how an earlier value came out 350 ms early. The fan spin that runs on to ~4.25 s is a flourish over a finished mark, not assembly, and is not waited for. There is **no "Skip intro"** today — it was real (added `c9c29dd`, removed `c8676c9` four days later, when the hero text itself moved earlier), and this row was written after the removal and described a control that had already gone. First tap is ~3.6 s. | nothing |
 | 1 | **Intent** | "What brings you here?" — pick *personal* / *split* / *household* / *both* (default both). The note beneath lists exactly what the choice **trims**, derived live from `personaTrims()`, so the copy can't drift from the flags. | `onboarding_intent` **and the flag defaults it implies** (`personaFlags` / `personaChangedKeys` in `src/lib/personaDefaults.ts`) |
 | 2 | **Name** | Type your name (≤30). **Continue** or **Skip**. | committed in `finalize` |
-| 3 | **Income + pay-day** | Take-home `₹` field + preset chips (30k/45k/60k/1L). Pay-day appears **only once an income is entered** — as `ui/DayOfMonthGrid`, all 31 days, not the seven someone thought to list. Sub-copy states what the answer does: a salary entry on that day, visible under Plan → Recurring, powering "Can I afford this?". Gated because `finalize` writes that rule only for `incomeNum > 0`, so with no income the sub-copy was describing something that would not happen. **Skip**. | committed in `finalize` |
+| 3 | **Income + pay-day** | Take-home `₹` field + preset chips (30k/45k/60k/1L). Pay-day is `ui/DayOfMonthGrid` — all 31 days, not the seven someone thought to list — and is **always shown**. It was briefly revealed on typing, which took the step across the height where `StepScaffold` stops centring and jumped the whole page ~140pt on the first digit. The **sub-copy** is what is conditional: it promises a salary entry, and `finalize` writes that rule only for `incomeNum > 0`. **Skip**. | committed in `finalize` |
 | 4 | **Money** | Cash on hand leads and is always shown. The optional three are **pick-then-fill**: two toggle chips — *Investments* · *Credit card* — reveal their `MoneyRow`s in a `Collapse` beneath. Un-ticking clears what was typed, so nothing can be committed by a control you can no longer see. Everyone used to be shown all four fields, so a person with no card typed a zero (a claim the app then treats as real) or skipped the whole screen. **Skip**. | committed in `finalize` |
 | 5 | **Budget** | Monthly cap field + presets **derived from the income just entered** (50/60/70% of take-home, deduped — rounding collapses them into one value at low incomes); shows "X% of your take-home — it shows as the pace bar on Home". **No income → no presets at all**, where four flat round numbers used to stand in. **Skip**. | `budget_target`, read by Home's pace bar and the health engine when no category budgets exist |
 | 6 | **People** | Name + **optional email**, added inline (dedup by name), listed as `ListRow`s with `MemberAvatar`. **No group is created** — that bypassed `GroupForm`, inferred the icon from the name string and hard-coded the colour, so it was the one place a group could be made wrong. `person.email` is the only identifier that is the same string on both phones, and this is its first writer. **Skipped entirely when intent is *personal***. | contacts, in `finalize` |
 | 7 | **Permissions** | Prime **Notifications** (→ renewal reminders on grant) and **Location** (→ `save_location='true'`), plus the flag-gated Siri shortcut hand-off. States the local-only reality and the monthly backup nudge. | `save_location` on grant |
 | 8 | **Summary** | Reads back what the answers actually created — each row names the artifact and where it now lives — then **Log your first expense** (arms `pending_first_add`) or **Go to Home**. Asks nothing. | `pending_first_add` on the primary CTA |
 
-**Stage order** comes from `NUMBERED_STEPS = ['intent','name','income','money','pay','budget','people','permissions']` (8 — this list omitted `pay` for as long as that step has existed),
+**Stage order** comes from `NUMBERED_STEPS = ['intent','name','income','money','pay','budget','people','permissions']` (8 — **this document** omitted `pay` from its transcription; the constant itself has included it since the step was created),
 filtered by intent (`numberedSteps()`); `summary` is a result, not a numbered question. Back
 navigation uses `afterBudget` / `beforePermissions`, which skip `people` for the personal
 persona in both directions. The progress indicator is known from the **first** question rather
@@ -308,7 +308,7 @@ outside the loader: reads AsyncStorage `hide_amounts` (obfuscates the hero), `ap
 ### States
 - **Loading:** none — renders stale store data until the reload lands.
 - **Error:** `ErrorState` + retry.
-- **Empty:** `EmptyState` "No groups yet" + New Group CTA; a **separate** `EmptyState`
+- **Empty:** `EmptyState` "No groups yet" + New Group CTA, rendered in the list **footer** under the always-present Personal card — `ListEmptyComponent` cannot fire, because the seed guarantees Personal; a **separate** `EmptyState`
   "No archived groups" for the archived view.
 - **Full:** FlatList of group cards + a People balances footer.
 
@@ -486,7 +486,7 @@ off** (`dimWhenOff: false`): dimming would read as "scanning is disabled", which
 - **Full:** money card + insights + goals + upcoming + forecast. Pull-to-refresh throughout.
 
 1. **ScreenHeader** "Plan" (large) + month pill.
-2. **Header actions** (top-right, **not pills**) — a glyph with its **label underneath**: `Insights` *(flag `insights`, `/insights`)* · `Reports` *(flag `reports`, `/reports`)* · `Recurring` *(flag `recurring`, `/plan/recurring`)* · `Afford` *(flag `affordCheck`, `/afford`; the accessibility label keeps the full "Can I afford?")*. They were bare icons until `OV-16`: two of the four — `/plan/recurring` and `/afford` — have **no other entry point anywhere in the app**, and onboarding's summary closes by sending the user to one of them by name ("Recurring · Plan"). The label sits under the glyph rather than beside it because four labels plus a 28pt "Plan" overflow the row on a small phone; it costs ~16pt of header height once and moves no content. Reminders lives in Settings. Reports is **also** still in Settings → Reports & export; it was reachable *only* from there, which is where you look for an export, not for last month's numbers (`V2-08`).
+2. **Header actions** (top-right, **not pills**) — a glyph with its **label underneath**: `Insights` *(flag `insights`, `/insights`)* · `Reports` *(flag `reports`, `/reports`)* · `Recurring` *(flag `recurring`, `/plan/recurring`)* · `Afford` *(flag `affordCheck`, `/afford`; the accessibility label keeps the full "Can I afford?")*. They were bare icons until `OV-16`. `/insights` and `/reports` have labelled entries elsewhere (Home ×2, and a Settings row); `/afford` has **none**, and `/plan/recurring`'s only other entry is a recovery link on `SC-41`'s not-found state — so the rail was the discovery path for both, and onboarding's summary closes by sending the user to one of them by name ("Recurring · Plan"). The label sits under the glyph rather than beside it because four labels plus a 28pt "Plan" overflow the row on a small phone; it costs ~16pt of header height once and moves no content. Reminders lives in Settings. Reports is **also** still in Settings → Reports & export; it was reachable *only* from there, which is where you look for an export, not for last month's numbers (`V2-08`).
 3. **TotalMoneyCard** (`getTotalMoney`/`getMoneyProfile`) — hero is **Available Money** = spendable cash only. Below it: **Net worth** (cash + investments − credit *used*) and **Credit headroom**, labelled *"borrowing, not money"*. Tap **edit** → **MoneyEditorSheet**. (`V2-12`: the hero used to be one figure adding cash + investments + *unused credit*, so a ₹2L card limit read as ₹2L of money. Unused limit is neither an asset nor a debt, so it is now in neither figure.)
 4. **Overspend consent prompt** — when cash is negative, `proposeOverspendRaid` names which unlocked goals *could* cover it and asks: **Use savings** / **Keep goals**. Nothing moves until you agree; `applyOverspendRaid` then writes exactly the withdrawals shown (never a recomputed plan), and a confirmation offers **Undo** → `undoOverspendRaid`. Declining leaves cash negative, which is the honest picture. (`V2-10`: this used to happen automatically during app boot with an after-the-fact notice.)
 5. **Savings insights** card: opportunity-cost / habit nudges.
@@ -1667,9 +1667,9 @@ Absorbed from `AUDIT.md` §3. Each step names the code that does it.
 | 3 | `materializeDueOccurrences` → `runSavingsMaintenance` → `rescheduleReminders` | `app/_layout.tsx:48-50` |
 | 4 | `BrandedLoader` until fonts + DB ready; DB failure → retryable `ErrorState` | `app/_layout.tsx:71-88` |
 | 5 | `LockGate` (biometric, default off) then `OnboardingGate` reads `onboarding_done` | `components/system/{LockGate,OnboardingGate}.tsx` |
-| 6 | 9-stage questionnaire (§1) | `components/system/Onboarding.tsx`, `src/hooks/useOnboardingForm.ts` |
+| 6 | 10-stage questionnaire, 8 numbered (§1) | `components/system/Onboarding.tsx`, `src/hooks/useOnboardingForm.ts` |
 | 7 | Intent → `onboarding_intent` **and the feature flags it implies** | `lib/personaDefaults.ts`, `lib/onboarding.ts` |
-| 8 | `finalizeOnboarding` writes name, the monthly `Salary` rule anchored by `paydayAnchor`, the `budget_target` preference, contacts **and the group holding them**, the money profile, and turns the backup reminder on — each step individually try/caught | `src/lib/onboarding.ts` |
+| 8 | `finalizeOnboarding` writes name, the monthly `Salary` rule anchored by `paydayAnchor`, the `budget_target` preference, **contacts** (no group — see §1 step 6), the money profile, and turns the backup reminder on — each step individually try/caught | `src/lib/onboarding.ts` |
 | 9 | *(folded into step 8 — `setMoneyProfile` is part of the single commit)* | `src/lib/onboarding.ts` |
 | 10 | `onDone()` → `settings.setOnboardingDone(true)` in a `try/finally`; the gate opens regardless | `OnboardingGate.tsx:19-25` |
 | 11 | If the user chose "add my first expense", Home fires a one-shot push to Quick Add and clears the flag | `app/(tabs)/index.tsx:101-108` |
@@ -2252,7 +2252,7 @@ widgets; `system/` = onboarding, gates, privacy. `ui/` never imports from `finan
 | `FeatureFlagsProvider` (+ `useFeatureFlags`, `FlagsGate`) | Feature-flag context (AsyncStorage-backed). |
 | `LockGate` | Biometric lock on background, with the not-enrolled escape hatches (§17). |
 | `LogoAssembly` | Brand assembly animation — ⛔ **never modify**. |
-| `Onboarding` (+ `onboarding/*` step chrome) | The **9-stage** onboarding flow (§1). |
+| `Onboarding` (+ `onboarding/*` step chrome) | The **10-stage** onboarding flow, 8 of them numbered (§1). |
 | `OnboardingGate` | Gates onboarding via AsyncStorage `onboarding_done`. |
 | `PdfTextExtractor` | Off-screen WebView running pdf.js for PDF import. |
 | `PrivacyScreen` | App-switcher privacy cover. |

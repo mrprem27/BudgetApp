@@ -13,8 +13,10 @@ export async function seedIfNeeded(db: SQLite.SQLiteDatabase): Promise<void> {
   const deviceName = Device.deviceName ?? 'Me';
 
   await db.withTransactionAsync(async () => {
-    // email stays NULL: there are no accounts and nothing reads it. It used to be
-    // seeded with a hardcoded placeholder address, which read like real data.
+    // email stays NULL: a seeded row is this device's own user, and their address
+    // is not knowable until they sign in (`claimMyAccount` writes it from the
+    // verified session). It used to be seeded with a hardcoded placeholder
+    // address, which read like real data.
     await db.runAsync(
       'INSERT INTO person (id, name, avatar_color, is_me) VALUES (?, ?, ?, ?)',
       [meId, deviceName, '#4F46E5', 1],

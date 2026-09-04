@@ -24,9 +24,11 @@ type Props = {
  * it for a style object is how that rule gets eroded. The geometry is identical and
  * intended to stay identical — the two are one screen apart in the same flow.
  *
- * (An earlier version of this note cited the hero's `FadeIn` delays as
- * `4300/4520/4760`. No such values have ever run; see `HERO_REVEAL_MS`, which is
- * now the single place the hero's timing is stated.)
+ * (This note originally cited the hero's delays as `4300/4520/4760`, which was
+ * accurate when it was written — those values ran from June to August 2026. A later
+ * edit "corrected" it to say they had never run, which was itself wrong. The timing
+ * is stated in exactly one place now, `HERO_REVEAL_MS`, so this note no longer
+ * quotes it at all.)
  */
 export function StepFooter({
   primaryLabel, onPrimary, disabled, loading, skipLabel, onSkip, skipDisabled,

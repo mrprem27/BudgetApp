@@ -47,12 +47,16 @@ export function SummaryStage({
     });
   }
   if (people.length > 0) {
-    // Named as people, and pointed at Friends — onboarding no longer makes a group
-    // from them, so a row promising one would send the user to an empty tab.
+    // Named as people, not as a group — onboarding no longer makes one from them,
+    // so a row promising one would send the user to a tab that doesn't have it.
+    //
+    // `Settings · People`, not `Friends`. The route is `/friends`, but that word
+    // appears on no screen in the app: the header says "People", so does the
+    // Settings row. Every other `where` here names something the user can read.
     rows.push({
       icon: 'users', tint: colors.settle,
       title: `${people.length} ${people.length === 1 ? 'person' : 'people'} to split with — ${people.slice(0, 3).join(', ')}${people.length > 3 ? '…' : ''}`,
-      where: 'Friends',
+      where: 'Settings · People',
     });
   }
   if (notifPerm) {

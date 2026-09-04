@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, useWindowDimensions, Linking } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, useWindowDimensions, Linking } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
@@ -52,20 +52,31 @@ const INCOME_PRESETS = [
  * it is **derived from** the animation rather than guessed at, which is why it is
  * one named constant and not three literals buried in the JSX.
  *
- * The mark's timeline, read off `LogoAssembly.tsx`: the ring holds, the wedges
- * start flying at `startDelay = 1850`, and they snap to centre one second later
- * (`TENSION_S`) — so **the mark is formed at ~2850ms**. The fan spin that follows
- * (150 + 1250ms, ending ~4.25s) is a flourish on a finished logo, not assembly,
- * so there is nothing to wait for past the snap.
+ * The mark's timeline, read off `LogoAssembly.tsx`: the ring holds, the physics
+ * loop starts at `startDelay = 1850`, the wedges begin snapping to centre one
+ * second in (`TENSION_S = 1.0`) and the loop runs until `TENSION_S + SNAP_S`
+ * (`SNAP_S = 0.4`), where it hard-sets the final positions. So **the mark is
+ * formed at 1850 + 1000 + 400 = 3250ms** — the snap is where it *starts* landing,
+ * not where it has landed. The fan spin (150 + 1250ms, ending ~4.25s) carries on
+ * over a finished mark and is not waited for.
  *
- * Three sets of numbers have been in this file, and none of them was this one.
- * `2400/2550/2700` came with a comment claiming the mark was legible by then; a
- * later commit dropped them to `1400/1550/1700` and updated no comment — which
- * put the brand name on screen **450ms before the physics loop even started**,
- * the exact overlap the earlier change existed to remove. A comment in
- * `StepFooter` cited a fourth set, `4300/4520/4760`, that never ran at all.
+ * ### Six sets of numbers, every one of which shipped
+ *
+ * `1900/2120/2360` → `4300/4520/4760` → `900/1050/1200` → `2400/2550/2700` →
+ * `1400/1550/1700` → this one. The literals kept moving while the prose explaining
+ * them stayed put: `2400` arrived with a comment claiming the mark was legible by
+ * then, and the drop to `1400` updated nothing — which put the brand name on
+ * screen **450ms before the physics loop even started**, the overlap the earlier
+ * change existed to remove.
+ *
+ * The first version of *this* comment continued the tradition twice over: it said
+ * three sets had existed when there were five, and it used the snap (2850) as the
+ * formation time, which put `HERO_REVEAL_MS = 2900` a further 350ms early. The
+ * guard in `onboardingConsistency.test.ts` now reads `startDelay`, `TENSION_S` and
+ * `SNAP_S` out of `LogoAssembly.tsx` and checks the arithmetic, so a number here
+ * can no longer disagree with the animation it claims to follow.
  */
-const HERO_REVEAL_MS = 2900;
+const HERO_REVEAL_MS = 3300;
 const HERO_STEP_MS = 150;
 
 function ordinal(n: number): string {
@@ -268,30 +279,40 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
             ))}
           </View>
 
-          {/* Pay-day is a sub-question of the amount, and it only appears once there
-              is an amount for it to be about.
+          {/* ⚠️ The grid renders UNCONDITIONALLY, and that is load-bearing.
 
-              It used to render unconditionally, under a help line promising "a
-              salary entry on the 1st of each month" — which is false when no income
-              was given: `finalizeOnboarding` writes the rule only for
-              `incomeNum > 0`, and the figure is stored nowhere else. Asking, and
-              then describing what the answer will do, when the answer will in fact
-              do nothing, is the worst version of this screen. */}
-          <Collapse visible={incomeNum > 0}>
-            <SectionHeader title="When do you get paid?" />
-            {/* All 31, not the seven someone thought to list — a person paid on the
-                28th could not say so, and had to name a day their salary doesn't
-                land on. `paydayAnchor` clamps 29–31 to the length of a short month. */}
-            <DayOfMonthGrid
-              value={payday}
-              onChange={(d) => { haptic.selection(); setPayday(d); }}
-              labelFor={(d) => `Paid on the ${ordinal(d)}`}
-            />
-            {/* What the answer DOES — not a vague promise. */}
+              It was briefly wrapped in a `Collapse` keyed on `incomeNum > 0`, so it
+              appeared when you typed. That reveal takes this step's content from
+              ~298pt to ~651pt against a ~576pt viewport — across the threshold where
+              `StepScaffold`'s `flexGrow: 1` + `justifyContent: 'center'` stops
+              centring. The title, the ₹ field and the caret all jumped ~140pt on the
+              FIRST DIGIT TYPED: exactly the failure `StepScaffold` removed the
+              `KeyboardAvoidingView` to prevent, re-introduced from the content side
+              instead of the container side.
+
+              Always-on keeps the step taller than the viewport at all times, so it
+              never centres and never moves. Asking before there is an income costs
+              nothing — with no income no rule is written, so the answer is simply
+              unused. The half that was genuinely lying is the help line, and that
+              is what stays conditional. */}
+          <SectionHeader title="When do you get paid?" />
+          {/* All 31, not the seven someone thought to list — a person paid on the
+              28th could not say so, and had to name a day their salary doesn't
+              land on. `paydayAnchor` clamps 29–31 to the length of a short month. */}
+          <DayOfMonthGrid
+            value={payday}
+            onChange={(d) => { haptic.selection(); setPayday(d); }}
+            labelFor={(d) => `Paid on the ${ordinal(d)}`}
+          />
+          {/* What the answer DOES — and only once it will actually do it.
+              `finalizeOnboarding` writes the salary rule for `incomeNum > 0` only,
+              so with no amount this sentence would describe an entry that is never
+              created. One line appearing under a grid does not move the grid. */}
+          {incomeNum > 0 && (
             <Text style={styles.helpLine}>
               Becomes a salary entry on the {ordinal(payday)} of each month — you&apos;ll see it under Plan → Recurring, and it powers &quot;Can I afford this?&quot;.
             </Text>
-          </Collapse>
+          )}
         </StepScaffold>
       )}
 
@@ -475,7 +496,11 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
           footer={
             <StepFooter
               primaryLabel={people.length > 0 ? `Continue with ${people.length}` : 'Continue'}
-              onPrimary={() => setStage('permissions')}
+              // Flush the draft before advancing. Someone who types a name and taps
+              // Continue plainly means "and this one" — without this, the person
+              // they just typed is discarded silently, with the button even
+              // counting the ones that did make it.
+              onPrimary={() => { addPerson(); setStage('permissions'); }}
               skipLabel="Skip"
               // Records the decision as well as advancing — see `skipPeople`.
               onSkip={skipPeople}
@@ -490,7 +515,12 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
               icon="user"
               autoCapitalize="words"
               maxLength={30}
-              returnKeyType="next"
+              // `done` + submit, not `next`: `ui/Input` exposes no ref, so nothing
+              // can move focus to the email field and a key labelled "next" would
+              // do nothing at all. Return adds the person, which is the fast path
+              // for the common case of a name and no address.
+              returnKeyType="done"
+              onSubmitEditing={addPerson}
               accessibilityLabel="Person name"
             />
             <Input
@@ -502,12 +532,19 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
               autoCapitalize="none"
               // Off for identifiers: autocorrect will happily rewrite an address.
               autoCorrect={false}
-              maxLength={60}
+              // 254, the RFC ceiling — and what `PersonNameSheet` uses for the same
+              // field. 60 was mine and truncates legal addresses.
+              maxLength={254}
               returnKeyType="done"
               onSubmitEditing={addPerson}
               accessibilityLabel="Person email, optional"
             />
-            <SecondaryButton label="Add person" onPress={addPerson} disabled={!personDraft.trim()} />
+            {/* `md`, not the default `lg`. At `lg` this is 52pt and full-width —
+                the same weight as the "Continue" CTA pinned in the footer, so the
+                step showed two equally loud accent buttons and no hierarchy
+                (AGENTS §1/§5). It replaced a 52pt square `+`, which was subordinate
+                by construction; this keeps that relationship with a real label. */}
+            <SecondaryButton label="Add person" icon="plus" size="md" onPress={addPerson} disabled={!personDraft.trim()} />
           </View>
 
           {people.length > 0 && (
@@ -517,15 +554,30 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
                   {i > 0 && <Divider indent="text" />}
                   {/* `MemberAvatar`, like every other person row in the app — the
                       generic `user` glyph here was the only one that didn't show
-                      whose row it was. */}
+                      whose row it was.
+
+                      ⚠️ NO `onPress` on the row. It briefly had one, wired straight
+                      to `removePerson` — so tapping anywhere on a 64pt row that
+                      shows a name over an email deleted the contact instantly, with
+                      no confirm and no undo, while the ✕ beside it was decorative.
+                      A row with a subtitle reads as "open this", and every other
+                      removal in the app (`friends.tsx`, `group/[id]/members.tsx`)
+                      goes through a destructive confirm. Only the ✕ removes. */}
                   <ListRow
                     leading={<MemberAvatar name={p.name} color={GROUP_COLORS[i % GROUP_COLORS.length]} size={layout.iconCircle} />}
                     title={p.name}
                     subtitle={p.email}
                     chevron={false}
-                    value={<Feather name="x" size={18} color={colors.textMuted} />}
-                    onPress={() => removePerson(i)}
-                    accessibilityLabel={`Remove ${p.name}`}
+                    value={
+                      <TouchableOpacity
+                        onPress={() => removePerson(i)}
+                        hitSlop={10}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Remove ${p.name}`}
+                      >
+                        <Feather name="x" size={18} color={colors.textMuted} />
+                      </TouchableOpacity>
+                    }
                   />
                 </React.Fragment>
               ))}
@@ -634,10 +686,11 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
 
-  // ⛔ HERO ONLY — do not touch these styles. The FadeIn delays in the hero block
-  // are tuned to LogoAssembly's ~3.7s physics run (they reveal at 2.4s, once the
-  // mark has formed); `footer` and `bottomPad` are shared with it, which is why
-  // the step components fork their own rather than reusing these.
+  // ⛔ HERO ONLY — do not touch these styles. `footer` and `bottomPad` are shared
+  // with the hero block, which is why the step components fork their own rather
+  // than reusing these. (The reveal timing lives at `HERO_REVEAL_MS` and is stated
+  // there only — this comment used to carry its own copy of the numbers, and was
+  // still quoting 2.4s two changes after that stopped being true.)
   heroRoot: { flex: 1 },
   heroBottom: { flex: 1, justifyContent: 'flex-end', alignItems: 'center', paddingHorizontal: layout.screenPaddingH, gap: space.md },
   brand: { ...type.title, fontSize: 36, color: colors.textPrimary, textAlign: 'center' },

@@ -335,9 +335,14 @@ Run it in two once-per-session passes as well: **Reduce Motion on**, and
 - [ ] **Health scores changed for everyone.** Four equal-weighted pillars
       (Spend / Save / Borrow / Plan), tiers Vulnerable / Coping / Healthy. A new
       user must see a **locked ring + unlock checklist**, never a number.
-- [ ] **Onboarding, end to end** — 9 stages, "Skip intro" ~1s in, real group
-      creation on the people step, honest summary at the end. Confirm the logo
-      animation is untouched and the skip doesn't fight it.
+- [ ] **Onboarding, end to end** — 10 stages, 8 numbered. There is **no "Skip
+      intro"**: the hero's words appear at `HERO_REVEAL_MS` (3300 ms), once the
+      mark has finished, so the first tap is ~3.6 s and that is deliberate.
+      The people step collects **name + optional email and creates no group**
+      (`W1-08`). Confirm: the logo animation is untouched; the income step does
+      not move when you type the first digit; the money step asks only for what
+      you ticked; tapping a person's row does **not** delete them; the summary's
+      destinations ("Recurring · Plan", "Settings · People") are findable.
 - [ ] **Group recurring totals switched basis** — whole bill with "your share ₹X"
       beneath, my-share on personal surfaces.
 - [ ] **Two tabs on Personal, not three.** The Recurring tab is gone: it listed
@@ -846,8 +851,12 @@ build assistant + developer-facing features → publish.
       `behavior={Platform.OS === 'ios' ? 'padding' : undefined}` — i.e. on Android a
       KAV is a plain `View` and does nothing (the one exception, `add/quick.tsx`,
       uses `'height'`, the jankiest RN behavior, with a magic 24pt offset). And
-      `automaticallyAdjustKeyboardInsets` — the fix used on onboarding, Review,
-      Categories, the account screen and `BudgetEditor` — is **iOS-only**. Expo
+      `automaticallyAdjustKeyboardInsets` — the fix used on Review, Categories,
+      the account screen and `BudgetEditor` — is **iOS-only**. (Onboarding no
+      longer uses it: `StepScaffold` is on `react-native-keyboard-controller`'s
+      `KeyboardAwareScrollView` + `KeyboardStickyView`, which is the fix this
+      paragraph recommends — so it is the reference, not an example of the
+      hazard.) Expo
       SDK 54+ also makes edge-to-edge mandatory, under which `adjustResize` no longer
       resizes the window, so the platform fallback is a no-op too.
       Worst case: `DraggableSheet` is the single KAV behind ~24 sheets that contain a

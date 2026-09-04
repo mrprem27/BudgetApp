@@ -4,6 +4,7 @@ import { getAllGroups, personalGroupOf } from '../db/queries/groups';
 import { insertTxn } from '../db/queries/transactions';
 import { setMoneyProfile } from '../db/queries/moneyProfile';
 import { parseToPaise } from './money';
+import { EMAIL_RE, normalizeEmail } from './email';
 import { settings } from './settings';
 import type { PayMethod } from '../constants/enums';
 import { setReminderPrefs } from './reminderPrefsStore';
@@ -139,9 +140,20 @@ export async function finalizeOnboarding(
       try {
         const p = await insertPerson(db, t, GROUP_COLORS[ci % GROUP_COLORS.length]);
         ci++;
-        // Its own try: an email that fails to save must not lose the contact.
-        const email = person.email?.trim();
-        if (email) {
+        /*
+         * Normalised, and only when it looks like an address.
+         *
+         * Both halves matter. Stored as typed, `Aarav@Example.com` differs from the
+         * lower-cased value `friends.tsx` computes when you open that contact's
+         * rename sheet — so opening it and saving without editing anything reads as
+         * "the email changed" and can fire an unrequested friend request. And an
+         * unchecked typo is stored silently here and only surfaces much later, as a
+         * failed invite with no obvious cause.
+         *
+         * Its own try: an email that fails to save must not lose the contact.
+         */
+        const email = normalizeEmail(person.email);
+        if (email && EMAIL_RE.test(email)) {
           try { await setPersonContact(db, p.id, { email }); } catch { /* best-effort */ }
         }
       } catch { /* skip one bad contact */ }

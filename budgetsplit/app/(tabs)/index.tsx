@@ -280,9 +280,14 @@ export default function DashboardScreen() {
                 </View>
 
                 {/* Only what's genuinely still missing. Onboarding can set a
-                    budget, create a group and add people — re-offering those to
-                    the user who just did them is why the flow read as "nothing
-                    happened". */}
+                    budget and add people — re-offering those to the user who just
+                    did them is why the flow read as "nothing happened".
+
+                    It no longer creates a group (`W1-08`), so the group tile now
+                    fires for someone who completed the people step. That is
+                    correct, not a regression: they have contacts and no group, and
+                    the Groups tab shows them the same prompt. The skip case is
+                    still suppressed, which is what `W1-09` was about. */}
                 {(showBudgetTile || showGroupTile || showPeopleTile) && (
                   <>
                     <Text style={styles.getStartedLabel}>GET STARTED</Text>

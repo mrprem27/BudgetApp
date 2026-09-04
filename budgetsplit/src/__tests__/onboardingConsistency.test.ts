@@ -3,11 +3,12 @@ import { join } from 'path';
 
 /**
  * Onboarding is the first screen anyone sees, and it is the one furthest from the
- * rest of the app — nine stages, no shared route chrome, its own scaffold. That
+ * rest of the app — ten stages, no shared route chrome, its own scaffold. That
  * distance is why it quietly grew a private design system: an accent-filled
- * `TouchableOpacity` for "add person" (AGENTS §5's literal WRONG example), three
- * bare `TextInput`s while `ui/Input` existed, a hand-rolled row whose icon disc was
- * 8pt wider than `layout.dividerIndent` so its dividers started under the discs.
+ * `TouchableOpacity` for "add person" (the shape AGENTS §5 prints as its WRONG
+ * example), three bare `TextInput`s while `ui/Input` existed, and a hand-rolled
+ * person row whose 40pt disc did not match the 32pt one `layout.dividerIndent`
+ * assumes — so its hairline stopped 8pt short of the label it should have met.
  *
  * None of that is visible from a screenshot and none of it is caught by tsc, so it
  * gets a source guard — the same shape as `emptyState.test.ts`, `payMethod.test.ts`
@@ -67,8 +68,32 @@ describe('onboarding uses the design system, not a copy of it', () => {
     const offenders = ONBOARDING
       .filter(f => /<TouchableOpacity\b/.test(read(f)))
       .map(label)
-      .filter(n => !TOUCHABLE_OK[n]);
+      .filter(n => !TOUCHABLE_OK[n] && n !== 'Onboarding.tsx');
     expect(offenders).toEqual([]);
+  });
+
+  /**
+   * `Onboarding.tsx` is exempted above **by shape, not by name**, because a blanket
+   * pass on the biggest file in the flow would gut the rule it is enforcing.
+   *
+   * The one control it is allowed is an icon-only button: the remove ✕ on a person
+   * row. That has to be its own target — the press was briefly on the `ListRow`
+   * itself, so tapping anywhere on a 64pt row showing a name over an email deleted
+   * the contact with no confirm and no undo. §6 blesses an icon button with
+   * `hitSlop`; §5 is about hand-rolling a CTA, which needs a label.
+   *
+   * So: a `TouchableOpacity` here may contain an icon and must not contain text.
+   * The moment one wraps a `<Text>`, it is a button the design system already owns.
+   */
+  it('allows onboarding only icon-only TouchableOpacitys', () => {
+    const src = read(ONBOARDING.find(f => label(f) === 'Onboarding.tsx')!);
+    const blocks = src.match(/<TouchableOpacity[\s\S]*?<\/TouchableOpacity>/g) ?? [];
+    for (const b of blocks) {
+      expect({ hasIcon: /<Feather\b/.test(b), hasText: /<Text\b/.test(b) })
+        .toEqual({ hasIcon: true, hasText: false });
+    }
+    // And it stays a handful, not a habit.
+    expect(blocks.length).toBeLessThanOrEqual(2);
   });
 
   /**
@@ -76,8 +101,9 @@ describe('onboarding uses the design system, not a copy of it', () => {
    *
    * `Divider indent="text"` is `layout.dividerIndent` — 64 = 16 gutter + 32 disc +
    * 16 gap. A divided row that leads with the 40pt `layout.avatarSize` disc instead
-   * is 8pt out, so the hairline starts *under* the discs rather than clearing them.
-   * The old people list did exactly that.
+   * pushes its label to 72 while the hairline stays at 64, so the divider stops 8pt
+   * short of the text it is supposed to line up with. The old people list did
+   * exactly that. (`MoneyRow` did not — its disc was always `layout.iconCircle`.)
    *
    * Hand-rolled rows are already gone (the guard above), so the only remaining way
    * in is a `ListRow`'s own `leading` slot — which is the caller's node and the
@@ -117,11 +143,15 @@ describe('each question is asked exactly once', () => {
 });
 
 /**
- * The hero's `FadeIn` delays are the one part of the animation that may be
- * changed (`LogoAssembly` itself is off limits — AGENTS §11), and they have been
- * wrong three separate times because the numbers were literals in the JSX while
- * the reasoning lived in comments that nobody updated with them. Four different
- * sets have been asserted in this codebase; only one ever ran.
+ * The hero's `FadeIn` delays are the one part of the animation that may be changed
+ * (`LogoAssembly` itself is off limits — AGENTS §11), and they have been wrong
+ * repeatedly because the numbers were literals in the JSX while the reasoning lived
+ * in comments nobody updated with them. **Six sets have shipped**, and the prose
+ * beside them has been out of date for most of that.
+ *
+ * So this does not check a number against another number. It reads the animation's
+ * own constants out of `LogoAssembly.tsx` and checks the reveal against the time
+ * the mark is actually finished — which is the thing the comment was getting wrong.
  */
 describe('the hero reveal is stated once', () => {
   const src = read(ONBOARDING.find(f => label(f) === 'Onboarding.tsx')!);
@@ -132,19 +162,31 @@ describe('the hero reveal is stated once', () => {
     for (const d of delays) expect(d).toMatch(/HERO_REVEAL_MS/);
   });
 
-  it('waits for the mark to form', () => {
-    // LogoAssembly: startDelay 1850 + TENSION_S 1000 = the snap, at ~2850ms. A
-    // reveal before that lands the brand name on a logo still flying — which is
-    // exactly what shipped when the delays were dropped to 1400 and no comment
-    // moved with them.
+  it('waits for the mark to actually finish, per LogoAssembly itself', () => {
+    // Derived, not copied. `startDelay` is when the physics loop begins, TENSION_S
+    // is when the wedges START snapping to centre, and the loop runs on to
+    // TENSION_S + SNAP_S before hard-setting the final positions. The mark is
+    // formed at the END of that, and reading the snap as the finish is precisely
+    // how a reveal 350ms too early got written down as correct.
+    const logo = readFileSync(join(ROOT, 'src', 'components', 'system', 'LogoAssembly.tsx'), 'utf8');
+    const num = (re: RegExp) => {
+      const m = logo.match(re);
+      expect(m).toBeTruthy();
+      return Number(m![1]);
+    };
+    const formedAt =
+      num(/const startDelay = (\d+)/) +
+      num(/const TENSION_S = ([\d.]+)/) * 1000 +
+      num(/const SNAP_S = ([\d.]+)/) * 1000;
+
     const m = src.match(/const HERO_REVEAL_MS = (\d+)/);
     expect(m).toBeTruthy();
-    expect(Number(m![1])).toBeGreaterThanOrEqual(2850);
+    expect(Number(m![1])).toBeGreaterThanOrEqual(formedAt);
   });
 
-  // Deliberately NOT asserted: that the old numbers appear nowhere in the file.
-  // `HERO_REVEAL_MS` quotes all three superseded sets, because "these values were
-  // tried and here is why they were wrong" is the most useful thing that comment
-  // can say. The invariant is that no delay is *driven* by a literal — which the
-  // two tests above already hold — not that history goes unmentioned.
+  // Deliberately NOT asserted: that the superseded numbers appear nowhere in the
+  // file. `HERO_REVEAL_MS` lists them on purpose — "these were tried, and here is
+  // why each was wrong" is the most useful thing that comment can say. The
+  // invariant is that no delay is *driven* by a literal, which the tests above
+  // hold, not that the history goes unmentioned.
 });

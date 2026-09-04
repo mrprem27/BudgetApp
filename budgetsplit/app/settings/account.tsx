@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, Alert, ActivityIndicator } from 're
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useRouter } from 'expo-router';
 import { fullDate } from '../../src/lib/dateFormat';
+import { EMAIL_RE } from '../../src/lib/email';
 import { colors, type, space, layout } from '../../src/theme';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { Card } from '../../src/components/ui/Card';
@@ -25,8 +26,9 @@ import {
   extractAuthToken, deviceLabel,
 } from '../../src/lib/serverApi';
 
-/** Same permissive shape the server uses — the real proof is that the email arrives. */
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// EMAIL_RE moved to `src/lib/email.ts` — onboarding needed the same check, and a
+// second copy of a validation pattern is how two screens end up disagreeing about
+// what a valid address is.
 
 /**
  * The account screen: sign in by email link, see what the server holds about

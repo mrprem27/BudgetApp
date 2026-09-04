@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, type LayoutChangeEvent } from 'react-native';
 import { KeyboardAwareScrollView, KeyboardStickyView } from 'react-native-keyboard-controller';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FadeIn } from '../../ui/FadeIn';
 import { StepBack } from './StepBack';
 import { StepProgress } from './StepProgress';
@@ -47,6 +48,7 @@ export function StepScaffold({
   stageKey, onBack, step, total, title, subtitle,
   titlePosition = 'top', children, footer, art,
 }: Props) {
+  const insets = useSafeAreaInsets();
   // Measured, not guessed: it is what keeps the focused field clear of the CTA.
   const [footerH, setFooterH] = useState(0);
   const onFooterLayout = (e: LayoutChangeEvent) => setFooterH(e.nativeEvent.layout.height);
@@ -103,8 +105,14 @@ export function StepScaffold({
         `KeyboardStickyView` translates its children by the keyboard height on the
         UI thread. It is the missing half of the argument above, not a retreat from
         it: the page still never resizes, so nothing re-centres and nothing jumps.
+
+        `offset.opened` gives back the safe-area inset. The footer pads its bottom
+        by `insets.bottom + space.md` (`useContentInset`), and the iOS keyboard
+        frame ALREADY spans the home-indicator area — so lifting by the full frame
+        height leaves that whole padding as dead space between the button and the
+        keys, most of it reserving room for an indicator the keyboard is covering.
       */}
-      <KeyboardStickyView onLayout={onFooterLayout}>
+      <KeyboardStickyView offset={{ opened: insets.bottom }} onLayout={onFooterLayout}>
         {footer}
       </KeyboardStickyView>
     </FadeIn>

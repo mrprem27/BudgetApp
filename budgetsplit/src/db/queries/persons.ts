@@ -190,8 +190,10 @@ export type ClaimResult =
  * 1. Refuse if there is not exactly one `is_me`. A wrong answer re-authors history.
  * 2. Merge any other row already holding this uid into `is_me` — before the bind,
  *    or the unique index rejects it.
- * 3. Write `remote_uid`, and `email` from the verified session. This is the only
- *    thing that has ever written `person.email`.
+ * 3. Write `remote_uid`, and `email` from the verified session — the only writer
+ *    of `person.email` for the `is_me` row. Contacts get theirs from onboarding's
+ *    people step or the People screen; this one comes from the server, because it
+ *    is the address that was actually proved.
  * 4. Mark every shared roster dirty: my uid just became knowable, and the roster
  *    is what tells the other phones.
  *

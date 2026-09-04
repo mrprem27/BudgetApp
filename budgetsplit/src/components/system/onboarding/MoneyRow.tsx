@@ -25,11 +25,18 @@ type Props = {
  * The input has no border of its own (AGENTS.md §4: an inline field inside a card row
  * never gets a second box), and it's right-aligned so the digits line up down the card.
  *
- * It is a `ListRow` with a field in its value slot, not a private row shape. It used
- * to redeclare `ListRow`'s geometry by hand and got one number different — a 40pt
- * `IconCircle` where `ListRow` uses 32 — which put the icon 8pt wider than
- * `layout.dividerIndent`, so the dividers between these rows started under the discs
- * instead of clearing them. That is the whole reason §4 says not to hand-roll a row.
+ * It is a `ListRow` with a field in its value slot, not a private row shape. What it
+ * had been was a hand-written copy of `ListRow`'s geometry that agreed on every
+ * number except one: `paddingVertical: space.sm` where `ListRow` uses `space.md`.
+ * So these rows sat 12pt shorter than every other row in the app — not wrong on its
+ * own, but a second row height nobody chose, which is the drift §4 exists to stop.
+ * The discs and dividers were always correct here (`layout.iconCircle`, 16 + 32 + 16
+ * = `layout.dividerIndent`); delegating keeps them correct by construction.
+ *
+ * (An earlier version of this note blamed a 40pt disc and misaligned dividers. That
+ * was the hand-rolled **person row** on the people step, a different component,
+ * deleted in the same change — and even there the divider cleared the disc and fell
+ * short of the label, rather than running underneath it.)
  */
 export function MoneyRow({ icon, label, value, onChangeText, tint = colors.accent, accessibilityLabel }: Props) {
   return (

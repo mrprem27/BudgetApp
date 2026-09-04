@@ -712,10 +712,12 @@ export const ONE_TIME_FIXES: { key: string; sql: string[] }[] = [
     sql: ['UPDATE budget_group SET is_personal=1 WHERE id=(SELECT id FROM budget_group ORDER BY created_at ASC LIMIT 1)'],
   },
   // NOTE: a fix here used to stamp a hardcoded placeholder address
-  // ('hello123@vortiqal.com') onto the local user. Nothing reads person.email —
-  // the app has no accounts — so it was a stray literal in a shipping data path.
-  // Removed, along with the matching write in seed.ts. The column stays for the
-  // day identity is real; it is simply left NULL. Do not reuse this key.
+  // ('hello123@vortiqal.com') onto the local user, at a time when nothing read
+  // person.email at all — so it was a stray literal in a shipping data path.
+  // Removed, along with the matching write in seed.ts. Do not reuse this key.
+  // (The column is no longer inert: onboarding's people step and the People
+  // screen both write it now, and it is what a friend request is addressed to.
+  // It is still left NULL by seeding, which is what this note is about.)
   // Reclassify legacy income-named categories before the global dedupe, so a
   // legacy 'Salary' (seeded as expense) merges into the income catalog. Guarded
   // both because it is a one-time repair and because re-running it would flip a

@@ -222,7 +222,7 @@ photos never sync (`SYNC-F4`); balances never travel (`E-50`).
 
 One SQLite database, `budgetsplit.db`, opened by `SQLiteProvider` at the root. It is the single
 source of truth — there is no Redux, no React Query, no in-memory mirror. Reads go through
-`src/db/queries/` (23 modules); pure logic lives in `src/lib/` (113 modules) and touches neither
+`src/db/queries/` (23 modules); pure logic lives in `src/lib/` (114 modules) and touches neither
 React nor the database.
 
 **Foreign keys are OFF** on every connection (`applyConnectionPragmas`). Every `REFERENCES` clause
@@ -1879,7 +1879,7 @@ started this document.
 | ID | Feature | State | Where |
 |---|---|---|---|
 | `FE-61` | Biometric lock, privacy screen, hide amounts | live, all off by default | `SC-06` |
-| `FE-62` | Onboarding — 9 stages, persona → sparse flag patch | live | replaces the navigator |
+| `FE-62` | Onboarding — 10 stages (8 numbered), persona → sparse flag patch | live | replaces the navigator |
 | `FE-63` | Undo — 5 s toast, survives back navigation | live | everywhere |
 | `FE-64` | Storage (user-facing) — free space, clear caches, delete receipts. Nothing here can lose a transaction | live | `SC-27a` |
 | `FE-65` | Dev storage — load demo data, **erase all data** | live **in release builds today** — deliberate for the pilot (`DQ-21`) | `SC-27`, 7 taps on the version |
@@ -4288,7 +4288,7 @@ the app finds different problems from reading it**, and the ones it finds are ch
 seven touches money, the wire, or a migration.
 
 **Tally:** 11 `COLLAPSE` · 5 `COLLAPSE-AFTER-PILOT` · 8 `RENAME-ONLY` · 4 `KEEP-DOCUMENTED` ·
-6 `NEEDS-DECISION` (5 after `OV-16` was answered on 2026-09-04).
+6 `NEEDS-DECISION`.
 
 ---
 
@@ -4718,20 +4718,23 @@ OV-16 · Four features behind unlabeled icons             [path-duplication]
   But.     featureFlags.ts says of affordCheck: "a real feature since the engine
            grew; off is why nobody found it". It is on now, and still nobody finds it.
   Correction. The four are not equivalent, which is what made this look like a
-           pure taste question. /insights has two more entries on SC-01 and
-           /reports has a named Settings row; /plan/recurring and /afford have
-           NO other entry anywhere. The rail hid the two sole doors behind two
-           shortcuts — and onboarding's summary sends the user to one of them
-           by name ("Recurring · Plan").
+           pure taste question. /insights has two more entries on SC-03 (Home) and
+           /reports has a named Settings row; /afford has NO other entry, and
+           /plan/recurring's only other one is a recovery link on SC-41's
+           not-found state. So the rail was the discovery path for both — and
+           onboarding's summary sends the user to one of them by name
+           ("Recurring · Plan").
+  Verdict. LABELLED is not one of the five verdicts in the legend above, and this
+           entry stays filed under "only look like duplication" where it has
+           always been — answering it decremented KEEP-DOCUMENTED, not
+           NEEDS-DECISION, which an earlier edit got backwards.
   Verdict. LABELLED — **done 2026-09-04**. Caption under each glyph, not beside
            it: beside it, four labels plus a 28pt "Plan" overflow the row on a
            small phone. Costs ~16pt of header height once; no content moves, and
            no vertical band is spent above the Total Money hero.
 ```
 
-### The five that need a decision first
-
-*(Six until `OV-16` was answered on 2026-09-04 — see its entry above.)*
+### The six that need a decision first
 
 ```
 OV-06 · Categories are referenced by NAME, not by id            [split-storage]
@@ -4783,10 +4786,13 @@ OV-23 · Dead and near-dead columns                           [dead-alternative]
 ### One layout question for you
 
 **Answered, and the premise was wrong in a useful way.** The four were treated as equivalent; they
-are not. `/insights` has two other entry points on `SC-01` and `/reports` has a named row in
-Settings — but **`/plan/recurring` and `/afford` are linked from nowhere else in the app**, so the
-rail was hiding the two sole doors behind two shortcuts. Onboarding's summary closes by telling the
-user their salary now lives in "Recurring · Plan", and that was one of the unlabelled ones.
+are not. `/insights` has two other entry points on `SC-03` (Home) and `/reports` has a named row in
+Settings. **`/afford` is linked from nowhere else at all**, and **`/plan/recurring`'s only other
+link is a recovery action on `SC-41`'s not-found state** — which appears when a rule is missing, so
+it is a way back rather than a way in. `SYSTEM.md`'s own route table records that second entry
+(`SC-32`, In = 2); an earlier version of this paragraph said "nowhere else in the app" for both and
+contradicted it. Either way the rail was the discovery path, and onboarding's summary closes by
+telling the user their salary now lives in "Recurring · Plan".
 
 The rail is labelled in place: the caption sits **under** each glyph, not beside it, because beside
 it four labels plus a 28pt "Plan" overflow the row on a small phone. It costs about 16pt of header

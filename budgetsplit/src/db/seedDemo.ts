@@ -84,7 +84,7 @@ async function createMeAndPersonal(
 ): Promise<string> {
   const now = Date.now();
   const personalId = uuid();
-  // email stays NULL — nothing reads person.email (see seed.ts).
+  // email stays NULL — a demo row has no address to hold (see seed.ts).
   await db.runAsync(
     'INSERT INTO person (id, name, avatar_color, is_me, image_uri) VALUES (?, ?, ?, 1, ?)',
     [meId, meName, meColor, meImage],

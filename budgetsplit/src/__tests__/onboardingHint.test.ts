@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { finalizeOnboarding } from '../lib/onboarding';
+import { finalizeOnboarding, type OnboardingData } from '../lib/onboarding';
+import { PayMethod } from '../constants/enums';
 import { settings } from '../lib/settings';
 
 const store = AsyncStorage as unknown as { __reset: () => void };
@@ -17,11 +18,20 @@ beforeEach(() => store.__reset());
  * one here; the flag is written before any DB call and in its own try, so the later
  * failure is expected and irrelevant to what's under test.
  */
-const data = {
-  intent: 'both' as const,
+/**
+ * Annotated `OnboardingData` on purpose. `tsconfig` excludes `src/__tests__`, so a
+ * test file is never typechecked — this object had drifted to a shape the type has
+ * not accepted for some time (a `money.openingCash` that no longer exists, and no
+ * `payMethod`), and nothing anywhere could say so. The annotation does not restore
+ * typechecking, but it does mean the drift shows up the moment anyone runs `tsc`
+ * over this directory.
+ */
+const data: OnboardingData = {
+  intent: 'both',
   name: 'Asha', incomeNum: 0, payday: 1, budgetNum: 0,
   people: [], addFirst: false,
-  money: { openingCash: 0, investments: 0, creditLimit: 0, creditUsed: 0 },
+  payMethod: PayMethod.Upi,
+  money: { openingBank: 0, investments: 0, creditLimit: 0, creditUsed: 0 },
 };
 
 describe('the coach mark is onboarding-only', () => {

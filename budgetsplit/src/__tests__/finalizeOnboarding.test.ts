@@ -87,6 +87,35 @@ describe('finalizeOnboarding — every answer lands somewhere', () => {
     expect((await getAllPersons(db)).map(p => p.name).sort()).toEqual(['Aarav', 'Prem', 'Riya']);
   });
 
+  /**
+   * The stored form has to BE the compared form.
+   *
+   * `friends.tsx` lower-cases an address on save and then asks "did the email
+   * change?" to decide whether to send a friend request. An onboarding contact
+   * stored as typed therefore compares unequal to itself: open that person's rename
+   * sheet, change nothing, tap Save, and the app decides the address is new and
+   * fires an invite nobody asked for.
+   */
+  it('stores the email lower-cased, so it compares equal to itself later', async () => {
+    const db = await seedFresh();
+    await finalizeOnboarding(db, data({
+      people: [{ name: 'Aarav', email: '  Aarav@Example.COM ' }],
+    }));
+    expect((await getAllPersons(db)).find(p => p.name === 'Aarav')?.email)
+      .toBe('aarav@example.com');
+  });
+
+  it('drops an address that is not one, rather than storing the typo', async () => {
+    // Unvalidated, it sits in the DB until it is handed to sendFriendRequest much
+    // later and fails there, with nothing pointing back at the typo.
+    const db = await seedFresh();
+    await finalizeOnboarding(db, data({ people: [{ name: 'Riya', email: 'riya at gmail' }] }));
+
+    const riya = (await getAllPersons(db)).find(p => p.name === 'Riya');
+    expect(riya).toBeTruthy();          // the contact still lands
+    expect(riya?.email ?? null).toBeNull();
+  });
+
   it('skips blank names and de-duplicates nothing it was not given', async () => {
     const db = await seedFresh();
     await finalizeOnboarding(db, data({ people: [{ name: '  ' }, { name: ' Riya ' }] }));

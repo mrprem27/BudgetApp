@@ -45,8 +45,26 @@ const DAYS = Array.from({ length: 31 }, (_, i) => i + 1);
  * The colours are the chip vocabulary — `bgMuted` unset, accent-tinted when chosen —
  * so it still belongs to the same system.
  *
- * Cells are `layout.touchMin` tall and a seventh of the row wide (≈49pt on the
- * narrowest supported phone), so §6's 44pt minimum holds without a `hitSlop`.
+ * ## The gutter is a margin, not padding, and that is a §6 requirement
+ *
+ * The tappable box is the `PressableScale`, so whichever way the gutter is
+ * expressed decides whether §6's 44pt is met:
+ *
+ * - `padding` on the wrapper puts the gutter **inside** the column, so the
+ *   pressable is `column − 2 × space.xs`. On a 375pt phone that is **41pt** — under
+ *   the minimum, on all 31 targets.
+ * - `margin` on the cell puts it **outside**, so the pressable spans the whole
+ *   column and only the paint is inset. Same picture, a compliant target.
+ *
+ * Column width is `(screen − 2 × layout.screenPaddingH) / 7` = **49pt** on the
+ * narrowest phone this app supports (SE 2/3 at 375pt; the deployment target is iOS
+ * 16.4, which the 320pt SE 1st gen cannot run). Height is `layout.touchMin`
+ * outright. So 49 × 44, unaided — no `hitSlop`, and none that would work: the
+ * columns are adjacent, so horizontal slop would overlap the neighbouring day.
+ *
+ * The first version of this comment quoted the 49pt figure while the code used
+ * `padding`, and concluded §6 held. The number was the column; the target was the
+ * column minus its gutters.
  */
 export function DayOfMonthGrid({ value, onChange, accent = colors.accent, labelFor }: Props) {
   return (
@@ -79,11 +97,13 @@ const styles = StyleSheet.create({
   // width and left-aligned — which is what the end of a month looks like.
   //
   // No `gap` here on purpose: with percentage widths summing to exactly 100%, any
-  // gap pushes the seventh cell onto its own line. The gutters come from `space.xs`
-  // of padding on each wrapper instead, which meets in the middle at `space.sm`.
+  // gap pushes the seventh cell onto its own line. The gutters are a margin on the
+  // cell instead, which meets its neighbour's at `space.sm` — and, unlike padding
+  // on the wrapper, leaves the whole column tappable (see the note above).
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
-  cellWrap: { width: `${100 / 7}%`, padding: space.xs },
+  cellWrap: { width: `${100 / 7}%` },
   cell: {
+    margin: space.xs,
     height: layout.touchMin,
     alignItems: 'center',
     justifyContent: 'center',
