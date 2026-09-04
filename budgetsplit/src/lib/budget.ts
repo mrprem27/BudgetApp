@@ -7,7 +7,7 @@ import { getAllGroups, sharedGroupsOf, type BudgetGroup } from '../db/queries/gr
 import { getTransactionsInRange } from '../db/queries/transactions';
 import { getCategoryBudgets, getMyGlobalBudgetRows } from '../db/queries/categoryBudgets';
 import { OTHERS_LABEL } from './categoryFold';
-import { myShareOf } from './splitMath';
+import { myShareOf, investedOf } from './splitMath';
 import type { BudgetCadence, CategoryBudget } from '../db/queries/categoryBudgets';
 
 /**
@@ -241,6 +241,18 @@ export type CategorySpendDetail = {
   byCategory: Record<string, number>;
   /** The same paise again, category → the group the entry lives in. */
   byCategoryGroup: Record<string, Record<string, number>>;
+  /**
+   * Paise moved into assets over the same window (`DQ-26`).
+   *
+   * ⚠️ **Not** part of any figure above it, and it must never become one. It is
+   * not a category, it never enters `byCategory`, and it reaches no budget's
+   * `allocated`/`spent`/`pct` — `AGENTS.md` §12 excludes settlements from every
+   * *analysis* surface and that is unchanged. It rides along here for one reason:
+   * so the invested figure a screen prints is computed from **the same rows, the
+   * same window and the same approval filter** as the spend figure beside it. A
+   * separate query could drift; this cannot.
+   */
+  invested: number;
 };
 
 /**
@@ -263,7 +275,11 @@ export async function getCategorySpendingDetail(
   const txns = await getTransactionsInRange(db, groupId, fromMs, toMs);
   const byCategory: Record<string, number> = {};
   const byCategoryGroup: Record<string, Record<string, number>> = {};
+  let invested = 0;
   for (const t of txns) {
+    // Accumulated in the loop that was already running, before the expense gate —
+    // same rows, same window, so the two figures cannot disagree.
+    invested += investedOf(t);
     if (t.kind !== 'expense') continue;
     const amt = meId
       ? myShareOf(t, meId)
@@ -273,7 +289,7 @@ export async function getCategorySpendingDetail(
     const g = (byCategoryGroup[t.category] ??= {});
     g[t.group_id] = (g[t.group_id] ?? 0) + amt;
   }
-  return { byCategory, byCategoryGroup };
+  return { byCategory, byCategoryGroup, invested };
 }
 
 export type CategoryBudgetStatus = {
@@ -448,6 +464,8 @@ export type GlobalBudgetSummary = {
   health: BudgetHealth;
   /** How many categories I have budgeted (rate + pool). */
   categoryCount: number;
+  /** Moved into assets over the same window — reported beside, never added in. */
+  invested: number;
   rows: CategoryBudgetStatus[];
 };
 
@@ -472,7 +490,7 @@ export async function getMyGlobalBudgetSummary(
   const budgets = await getMyGlobalBudgetRows(db, meId);
   const empty: GlobalBudgetSummary = {
     allocated: 0, pooled: 0, pooledCount: 0, spent: 0, spentShared: 0, remaining: 0,
-    pct: null, health: 'none', categoryCount: 0, rows: [],
+    pct: null, health: 'none', categoryCount: 0, invested: 0, rows: [],
   };
   if (budgets.length === 0) return empty;
 
@@ -506,6 +524,8 @@ export async function getMyGlobalBudgetSummary(
     pct,
     health: budgetHealth(pct),
     categoryCount: new Set(budgets.map(b => b.category)).size,
+    // Straight from the same `detail` the spend figure came from.
+    invested: detail.invested,
     rows: await globalStatusRows(db, meId, budgets, now),
   };
 }

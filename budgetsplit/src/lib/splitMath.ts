@@ -76,6 +76,41 @@ export function myIncomeOf(txn: { payments: readonly Share[] }, meId: string): n
 }
 
 /**
+ * What this row put **into** an asset, in paise. Zero for everything else.
+ *
+ * The figure behind "plus ₹10,000 invested this month". It is a scalar per row so
+ * the surfaces that already loop over transactions can accumulate it in the loop
+ * they already run — `budget.ts`, `homeData`, `insightsData`, `reportsData` and
+ * `savingsTabData` all fetch the same rows and then drop everything that is not an
+ * expense. Adding one accumulator there means five surfaces read the **same window,
+ * the same rows and the same approval filter** as the spend figure beside them, so
+ * the two cannot disagree. A separate query could, which is the class
+ * `crossSurfaceConsistency.test.ts` exists to catch.
+ *
+ * ⚠️ **This is not a loosening of `AGENTS.md` §12.** Settlements stay excluded from
+ * every *analysis* surface — this never enters a category, `byCategory`, a budget's
+ * `allocated`/`spent`/`pct`, or the Reports donut. It is a second figure printed
+ * beside those, never inside them (`IV-17`).
+ *
+ * Three things must NOT count, and each has bitten somewhere:
+ * - **A redemption.** `transferFromAsset` also writes `asset_id`, on the `shares`
+ *   side. Counting it would make selling gold read as investing in it.
+ * - **A card repayment.** A settlement with no `asset_id`.
+ * - **A person-to-person transfer.** Likewise.
+ */
+export function investedOf(txn: {
+  kind: string;
+  asset_id?: string | null;
+  payments: readonly Share[];
+  shares: readonly Share[];
+}): number {
+  if (txn.kind !== 'settlement' || !txn.asset_id) return 0;
+  // Payments-only is the outbound shape; the presence of a payment row IS the
+  // direction (see `lib/settlementView.ts`).
+  return txn.payments.reduce((s, p) => s + p.amount, 0);
+}
+
+/**
  * Which way this row moved MY cash: `'debit'` out, `'credit'` in.
  *
  * Only a settlement genuinely needs asking — an expense always leaves and income

@@ -9,6 +9,14 @@ export type TxnDetailData = {
   members: Person[];
   me: Person | null;
   groupName: string;
+  /**
+   * The asset this row touched, when it touched one.
+   *
+   * Resolved here because no ledger loader joins `asset`, so the name reached the
+   * screen only as the DEFAULT note (`Moved to Gold`) — and a user-written note
+   * erased it. `groupName` above is loaded exactly this way, for the same reason.
+   */
+  assetName: string | null;
   isPersonal: boolean;
   history: AuditLog[];
   items: LineItem[];

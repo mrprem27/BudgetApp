@@ -159,6 +159,73 @@ describe('one split expense, four surfaces', () => {
     expect(b.owed).toBe(0);
   });
 
+  /**
+   * `DQ-26`. Investing is committed, spending is capped, and the two are two lines
+   * that never add up into one number (`IV-17`).
+   *
+   * The invested figure is accumulated in the same loop as the spend figure —
+   * `getCategorySpendingDetail` — precisely so they read the same rows over the
+   * same window with the same approval filter. A separate query could include a
+   * pending peer row that the spend figure excluded, and the Budget card would
+   * then contradict itself with no way to tell which half was wrong.
+   */
+  describe('an investment sits beside the spend figure, never inside it', () => {
+    const INVESTED = 10_000_00;
+
+    async function withSip() {
+      const { db, me, flat } = await setup();
+      const personal = (await getAllGroups(asDb(db))).find(g => g.is_personal === 1)!;
+      // The shape `transferToAsset` writes: settlement, payments-only, asset_id set.
+      addTxn(db, {
+        groupId: personal.id, kind: 'settlement', date: today(),
+        category: 'Investment', assetId: 'gold',
+        payments: [{ personId: me, amount: INVESTED }],
+      });
+      return { db, me, flat };
+    }
+
+    it('moves no spend figure on any surface', async () => {
+      const { db, me } = await withSip();
+      // Not consumption: it must reach no budget, no pace bar and no report total.
+      expect(await surfaces(db, me)).toMatchObject({
+        home: 0, reports: 0, budgetBar: 0, myBudget: 0,
+      });
+    });
+
+    it('is reported, rather than silently omitted', async () => {
+      const { db, me } = await withSip();
+      const budget = await getMyGlobalBudgetSummary(asDb(db), me);
+      expect(budget.invested).toBe(INVESTED);
+      // …and is not folded into the figure it sits beside.
+      expect(budget.spent).toBe(0);
+    });
+
+    it('does not count a redemption — selling is not investing', async () => {
+      const { db, me } = await setup();
+      const personal = (await getAllGroups(asDb(db))).find(g => g.is_personal === 1)!;
+      // `transferFromAsset`'s shape: same asset_id, shares-only.
+      addTxn(db, {
+        groupId: personal.id, kind: 'settlement', date: today(),
+        category: 'Investment', assetId: 'gold',
+        shares: [{ personId: me, amount: INVESTED }],
+      });
+      const budget = await getMyGlobalBudgetSummary(asDb(db), me);
+      expect(budget.invested).toBe(0);
+    });
+
+    it('does not count a person-to-person settlement', async () => {
+      const { db, me, aarav, flat } = await setup();
+      addTxn(db, {
+        groupId: flat, kind: 'settlement', date: today(), category: 'Settlement',
+        payments: [{ personId: me, amount: INVESTED }],
+        shares: [{ personId: aarav, amount: INVESTED }],
+      });
+      // No `asset_id`, so nothing went into anything you own — paying Aarav back
+      // is not investing, however much it looks like a settlement in the ledger.
+      expect((await getMyGlobalBudgetSummary(asDb(db), me)).invested).toBe(0);
+    });
+  });
+
   it('keeps the four in step when the entry is soft-deleted', async () => {
     const { db, me, aarav, priya, flat } = await setup();
     const id = threeWaySplit(db, flat, [me, aarav, priya], me);

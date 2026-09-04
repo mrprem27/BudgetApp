@@ -318,6 +318,7 @@ export default function PersonalScreen() {
               pct={budget?.pct ?? null}
               pooledAllocated={budget?.pooled ?? 0}
               pooledCount={budget?.pooledCount ?? 0}
+              invested={budget?.invested ?? 0}
               caption={budgetCaption({ scope: 'global', allocated: formatCompact(budget?.allocated ?? 0) })}
               onEdit={openBudgetEditor}
               refreshing={refreshing}

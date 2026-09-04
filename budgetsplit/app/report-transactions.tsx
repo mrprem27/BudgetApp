@@ -5,6 +5,7 @@ import { Feather } from '@expo/vector-icons';
 import { startOfMonth, endOfMonth, addMonths, subMonths, format } from 'date-fns';
 import { monthLabel } from '../src/lib/dateFormat';
 import { colors, type, space, layout } from '../src/theme';
+import { isInvestment } from '../src/lib/settlementView';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { EmptyState } from '../src/components/ui/EmptyState';
 import { ErrorState } from '../src/components/ui/ErrorState';
@@ -37,11 +38,21 @@ type SortKey = 'date' | 'amount';
  * consumption — the original purchase was already expensed, so counting both double-counts.
  * Analysis is two-sided; the ledger is three-sided.)
  */
+/*
+ * Five tabs, not four. `settlement` covered both a debt settle-up and an asset
+ * movement, so an SIP was filed under "Transfers" — and the count line beneath it
+ * then said "settled between people, not spending", which is false on both halves:
+ * no second person, and nothing was settled.
+ *
+ * `invest` is not a `txn.kind`; it is a settlement whose `asset_id` is set. The
+ * filter below reads `isInvestment` for exactly that reason.
+ */
 const TYPE_TABS = [
   { key: 'all', label: 'All' },
   { key: 'expense', label: 'Expenses' },
   { key: 'income', label: 'Income' },
   { key: 'settlement', label: 'Transfers' },
+  { key: 'invest', label: 'Invested' },
 ];
 
 // Full transaction magnitude via the canonical txnTotal, used for the
@@ -125,7 +136,13 @@ export default function ReportTransactionsScreen() {
 
   const { rows, byKind } = useMemo(() => {
     const filtered = txns.filter(t => {
-      if (typeFilter !== 'all' && t.kind !== typeFilter) return false;
+      if (typeFilter === 'invest') {
+        if (!isInvestment(t)) return false;
+      } else if (typeFilter === 'settlement') {
+        // "Transfers" now means between PEOPLE. An asset movement has its own tab,
+        // so leaving it here would double-count it across two tabs.
+        if (t.kind !== 'settlement' || isInvestment(t)) return false;
+      } else if (typeFilter !== 'all' && t.kind !== typeFilter) return false;
       if (group !== 'all' && t.group_id !== group) return false;
       if (!matchesCat(t, cat)) return false;
       return true;
@@ -135,8 +152,14 @@ export default function ReportTransactionsScreen() {
     // question anyone has: money in and money out don't belong in one figure, and a
     // settlement is neither. This is the crux of "should the three kinds be treated
     // differently" — in a total, yes, always.
-    const by = { expense: 0, income: 0, settlement: 0 } as Record<string, number>;
-    for (const t of filtered) by[t.kind] = (by[t.kind] ?? 0) + txnAmount(t);
+    const by = { expense: 0, income: 0, settlement: 0, invest: 0 } as Record<string, number>;
+    for (const t of filtered) {
+      // Investments are counted apart from person-to-person settlements, so the
+      // "Moved" figure means what it says. `IV-17` — one total across kinds
+      // answers no question, and that includes lumping an SIP with a repayment.
+      const bucket = isInvestment(t) ? 'invest' : t.kind;
+      by[bucket] = (by[bucket] ?? 0) + txnAmount(t);
+    }
     return { rows: filtered, byKind: by };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [txns, cat, typeFilter, group, sort, known]);
@@ -215,17 +238,24 @@ export default function ReportTransactionsScreen() {
                       <AmountText paise={byKind.settlement} size="lg" forceColor={colors.settle} />
                     </View>
                   )}
+                  {byKind.invest > 0 && (
+                    <View>
+                      <Text style={styles.sideLabel}>Invested</Text>
+                      <AmountText paise={byKind.invest} size="lg" forceColor={colors.settle} />
+                    </View>
+                  )}
                 </View>
               ) : (
                 <AmountText
                   paise={byKind[typeFilter] ?? 0}
                   size="xl"
-                  forceColor={typeFilter === 'income' ? colors.income : typeFilter === 'settlement' ? colors.settle : colors.textPrimary}
+                  forceColor={typeFilter === 'income' ? colors.income : (typeFilter === 'settlement' || typeFilter === 'invest') ? colors.settle : colors.textPrimary}
                 />
               )}
               <Text style={styles.countLine}>
                 {rows.length} {rows.length === 1 ? 'transaction' : 'transactions'}
                 {typeFilter === 'settlement' ? ' · settled between people, not spending' : ''}
+                {typeFilter === 'invest' ? ' · moved into what you own, not spending' : ''}
               </Text>
             </Card>
 

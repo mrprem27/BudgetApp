@@ -6,7 +6,7 @@ import {
 import type { BudgetGroup } from '../db/queries/groups';
 import type { BudgetCadence } from '../db/queries/categoryBudgets';
 import { getCategoryBudgets } from '../db/queries/categoryBudgets';
-import { getCategorySpending, utilLabel, budgetHealth, rollUpBudgets, budgetKind, windowForCadence, type Period } from './budget';
+import { getCategorySpending, getCategorySpendingDetail, utilLabel, budgetHealth, rollUpBudgets, budgetKind, windowForCadence, type Period } from './budget';
 import { OTHERS_LABEL } from './categoryFold';
 import { forecastMonthEnd } from './forecast';
 import { formatCompact, formatComparison } from './money';
@@ -59,6 +59,9 @@ export type BudgetAnalytics = {
   /** Pool lines excluded from the figures above — surface them, never drop them. */
   pooledAllocated: number;
   pooledCount: number;
+  /** Moved into assets over the same window. Same terms as the pool lines: named
+   *  beside the figures above, never added into them (`DQ-26`, `IV-17`). */
+  invested: number;
   overBudget: CategoryTrend[];
   nearLimit: CategoryTrend[];
   underBudget: CategoryTrend[];
@@ -117,7 +120,7 @@ export async function getBudgetAnalytics(
   if (budgets.length === 0) {
     return {
       totalAllocated: 0, totalSpent: 0, remaining: 0, utilizationPct: null,
-      pooledAllocated: 0, pooledCount: 0,
+      pooledAllocated: 0, pooledCount: 0, invested: 0,
       overBudget: [], nearLimit: [], underBudget: [], onTrackCount: 0,
       topCategories: [], highest: null, lowest: null, biggestIncrease: null, biggestDecrease: null,
       projectedMonthEnd: 0, monthlyBudgetTotal: 0, recommendations: [],
@@ -211,7 +214,10 @@ export async function getBudgetAnalytics(
     budgets.filter(b => budgetKind(b.cadence, target) === 'rate').map(b => b.category),
   );
   const tw = windowForCadence(target, now);
-  const targetSpendByCat = await getCategorySpending(db, group.id, tw.from, tw.to, meId);
+  // The detail form, for `invested` — same call, same window, same rows as the
+  // spend figure it is printed beside, so the two cannot disagree.
+  const targetDetail = await getCategorySpendingDetail(db, group.id, tw.from, tw.to, meId);
+  const targetSpendByCat = targetDetail.byCategory;
   const totalAllocated = roll.amount;
   const totalSpent = Object.entries(targetSpendByCat)
     .reduce((s, [cat, amt]) => (rateCategories.has(cat) ? s + amt : s), 0);
@@ -308,6 +314,7 @@ export async function getBudgetAnalytics(
   return {
     totalAllocated, totalSpent, remaining: totalAllocated - totalSpent, utilizationPct,
     pooledAllocated: roll.pooled, pooledCount: roll.pooledCount,
+    invested: targetDetail.invested,
     overBudget, nearLimit, underBudget,
     onTrackCount: underBudget.length,
     topCategories, highest, lowest, biggestIncrease, biggestDecrease,

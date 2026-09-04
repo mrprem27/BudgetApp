@@ -57,6 +57,7 @@ export function BudgetTab({
       pct={analytics?.utilizationPct ?? null}
       pooledAllocated={analytics?.pooledAllocated ?? 0}
       pooledCount={analytics?.pooledCount ?? 0}
+      invested={analytics?.invested ?? 0}
       caption={budgetCaption({
         scope: 'group',
         allocated: formatCompact(analytics?.totalAllocated ?? 0),

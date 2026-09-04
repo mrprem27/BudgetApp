@@ -7,6 +7,7 @@ import { useScreenData } from '../../src/hooks/useScreenData';
 import { dateTime, fullDate } from '../../src/lib/dateFormat';
 import { PAY_METHOD_LABEL } from '../../src/constants/enums';
 import { myShareOf, myPaidOf, txnTotal } from '../../src/lib/splitMath';
+import { settlementView } from '../../src/lib/settlementView';
 import { colors, type, space, radius, layout, shadow, alpha } from '../../src/theme';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { Banner } from '../../src/components/ui/Banner';
@@ -43,7 +44,7 @@ export default function TxnDetailScreen() {
   const { width: winW, height: winH } = useWindowDimensions();
 
   const {
-    txn, members, me, groupName, isPersonal, history, items, parentRule, author, disputes,
+    txn, members, me, groupName, assetName, isPersonal, history, items, parentRule, author, disputes,
     loading, error, reload,
     showAttachment, setShowAttachment,
     chooseReceiptSource, removeReceipt, onDelete,
@@ -107,16 +108,35 @@ export default function TxnDetailScreen() {
    * screen instead, where the choice is Approve or Not mine.
    */
   const isPendingPeer = txn.pendingApproval;
-  const canEdit = !txn.parent_recur_id && !isPendingPeer;
+
+  /*
+   * What kind of settlement this is — decided in one place for the whole app
+   * (`lib/settlementView.ts`). This screen used to answer it with
+   * `txn.category === 'Transfer' ? 'Transfer' : 'Settlement'`, so an investment's
+   * badge read **"Settlement"** directly beside its category "Investment": two
+   * words for one row, and neither of them "Invest".
+   */
+  const settle = isSettlement ? settlementView(txn, assetName) : null;
+
+  /*
+   * ⚠️ An asset movement is CREATE-ONLY, and this screen did not know it.
+   *
+   * `updateTxn` refuses an asset-linked row outright (`AssetTransferError`) because
+   * `queries/assets.ts` owns both halves of the movement and reconciling a changed
+   * amount here would be a second implementation of the transfer rule. But the edit
+   * pencil was offered anyway, and it opened the PERSON-TO-PERSON transfer form —
+   * a form with no asset in it — where Save then threw. The register has the real
+   * actions; the row is a record of one.
+   */
+  const isAssetMove = settle?.kind === 'invest' || settle?.kind === 'redeem';
+  const canEdit = !txn.parent_recur_id && !isPendingPeer && !isAssetMove;
   const editHref = isItemized
     ? `/add/itemized?editId=${id}`
     : isSettlement
     ? `/add/quick?kind=transfer&editId=${id}`
     : `/add/quick?editId=${id}&groupId=${txn.group_id}`;
   const kindColor = isIncome ? colors.income : isSettlement ? colors.settle : colors.expense;
-  const kindLabel = isSettlement
-    ? (txn.category === 'Transfer' ? 'Transfer' : 'Settlement')
-    : isIncome ? 'Income' : 'Expense';
+  const kindLabel = settle ? settle.label : isIncome ? 'Income' : 'Expense';
 
   return (
     <View style={styles.container}>
@@ -165,7 +185,10 @@ export default function TxnDetailScreen() {
             <View style={[styles.kindBadge, { backgroundColor: alpha(kindColor, 13) }]}>
               <Text style={[styles.kindText, { color: kindColor }]}>{kindLabel}</Text>
             </View>
-            <Text style={styles.heroCat}>{txn.category}</Text>
+            {/* The asset, not the category. "Investment" said neither what happened
+                nor where the money went, and an asset movement's category is fixed
+                so it carries no information the badge does not already have. */}
+            <Text style={styles.heroCat}>{settle?.destination ?? txn.category}</Text>
           </View>
           {!!txn.note && <Text style={styles.heroNote}>{txn.note}</Text>}
           {/* Read-only here: tags are edited on the Add/Edit screen, and this is a detail
@@ -415,7 +438,11 @@ export default function TxnDetailScreen() {
         {!isPendingPeer && (
         <TouchableOpacity style={styles.deleteBtn} onPress={onDelete} accessibilityRole="button">
           <Feather name="trash-2" size={16} color={colors.expense} />
-          <Text style={styles.deleteText}>Delete {isSettlement ? 'settlement' : 'transaction'}</Text>
+          {/* Names what it is. Deleting an invest reverses the asset side too
+              (`reverseAssetSide`), so calling it "settlement" understated it. */}
+          <Text style={styles.deleteText}>
+            Delete {settle ? settle.label.toLowerCase().replace(/s$/, '') : 'transaction'}
+          </Text>
         </TouchableOpacity>
         )}
       </ScrollView>

@@ -9,6 +9,7 @@ import { MemberAvatar } from './MemberAvatar';
 import { colors, type, space, layout } from '../tokens';
 import { formatRupees, formatCompact } from '../../lib/money';
 import { myShareOf, myPaidOf } from '../../lib/splitMath';
+import { settlementView } from '../../lib/settlementView';
 import { categoryVisual } from '../../constants/categories';
 import type { TxnWithSplits } from '../../db/queries/transactions';
 import type { Person } from '../../db/queries/persons';
@@ -26,6 +27,14 @@ type Props = {
   groupName?: string;
   /** Highlight this substring (case-insensitive) inside the primary text. */
   highlight?: string;
+  /**
+   * `asset_id` → asset name, for the rows that touch the register.
+   *
+   * Passed in the way `groupName` is, because the loaders do not join `asset`. The
+   * name survived only as the DEFAULT note (`Moved to Gold`), so typing your own
+   * note erased the destination from every surface in the app.
+   */
+  assetNames?: Record<string, string>;
 };
 
 function highlightParts(title: string, term: string): { text: string; hit: boolean }[] {
@@ -47,6 +56,7 @@ function highlightParts(title: string, term: string): { text: string; hit: boole
 
 export const TransactionRow = React.memo(function TransactionRow({
   txn, myId, onPress, onDelete, showDate = false, members, isPersonal, groupName, highlight,
+  assetNames,
 }: Props) {
   const myShare = myShareOf(txn, myId);
   const personOf = (pid?: string) => members?.find(m => m.id === pid);
@@ -58,6 +68,12 @@ export const TransactionRow = React.memo(function TransactionRow({
   // For settlements: the two people the money moved between (payer → payee),
   // rendered as overlapping avatars in place of the category icon.
   let settlementPair: { from?: Person; to?: Person } | null = null;
+  // What kind of settlement this is, decided in one place for the whole app
+  // (`lib/settlementView.ts`). Null for expenses and income.
+  const settle = txn.kind === 'settlement'
+    ? settlementView(txn, txn.asset_id ? assetNames?.[txn.asset_id] : null)
+    : null;
+
   if (txn.kind === 'income') {
     displayAmount = myPaidOf(txn, myId);
   } else if (txn.kind === 'settlement') {
@@ -68,7 +84,13 @@ export const TransactionRow = React.memo(function TransactionRow({
     const amount = txn.payments[0]?.amount ?? txn.shares[0]?.amount ?? 0;
     const iPaid = fromId === myId;
     const iGot = toId === myId;
-    displayAmount = iPaid ? -amount : amount;
+    // The sign comes from the presenter. `iPaid` alone got the ASSET cases wrong:
+    // a personal asset movement has no counterparty, so `fromId` was undefined,
+    // `iPaid` was false, and a redemption rendered POSITIVE — green, in a list,
+    // indistinguishable from income, which §12 forbids in as many words.
+    displayAmount = settle
+      ? (settle.outbound ? -amount : amount)
+      : (iPaid ? -amount : amount);
     if (members && !isPersonal) {
       settlementTitle = iPaid
         ? `You paid ${nameOf(toId)}`
@@ -83,11 +105,23 @@ export const TransactionRow = React.memo(function TransactionRow({
     displayAmount = -myShare;
   }
 
+  // Every settlement wore the same `check-circle` tick — the debt-settled glyph —
+  // so an SIP and paying back a friend were one symbol. The presenter gives each
+  // its own, and keeps them all in the settlement colour so none of them can read
+  // as spending or as income.
   const visual = txn.kind === 'income'
     ? { icon: 'trending-up' as const, color: colors.income }
-    : txn.kind === 'settlement'
-    ? { icon: 'check-circle' as const, color: colors.settle }
+    : settle
+    ? { icon: settle.icon, color: settle.tint }
     : categoryVisual(txn.category);
+
+  // "Invested · Gold" rather than a bare category. The asset was reachable only as
+  // the default note, so a user-written note erased it everywhere.
+  const settleLine = settle && settle.destination
+    ? `${settle.verb} · ${settle.destination}`
+    : settle && settle.kind !== 'transfer'
+    ? settle.verb
+    : null;
 
   // Attribution — shown on the RIGHT side below the amount.
   let attribution: { text: string; color: string } | null = null;
@@ -108,9 +142,14 @@ export const TransactionRow = React.memo(function TransactionRow({
   // Category goes below as secondary — helps scan by recognizable names.
   // Settlements always show the directional sentence as primary.
   // If no note, category is primary (nothing below).
+  //
+  // An asset movement uses `settleLine` as its secondary — "Invested · Gold" —
+  // rather than the bare category "Investment", which said neither what happened
+  // nor where the money went. With no note it becomes the primary, so the row
+  // still names itself.
   const note = txn.note?.trim();
-  const primaryText = settlementTitle ?? (note || txn.category);
-  const secondaryText = !settlementTitle && note ? txn.category : null;
+  const primaryText = settlementTitle ?? (note || settleLine || txn.category);
+  const secondaryText = !settlementTitle && note ? (settleLine ?? txn.category) : null;
 
   return (
     <PressableScale

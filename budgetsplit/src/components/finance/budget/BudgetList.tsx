@@ -4,6 +4,7 @@ import { colors, type, space, layout } from '../../tokens';
 import { healthColor } from '../group/helpers';
 import { budgetHealth, utilLabel, type CategoryBudgetStatus } from '../../../lib/budget';
 import { formatCompact } from '../../../lib/money';
+import { budgetInvestedCaption } from '../../../lib/budgetCopy';
 import { categorySection, SECTION_ORDER } from '../../../constants/categories';
 import { BudgetBar } from '../BudgetBar';
 import { BudgetCategoryRow } from '../BudgetCategoryRow';
@@ -28,6 +29,8 @@ type Props = {
   /** Yearly/one-time lines — named, never folded into the figures above. */
   pooledAllocated?: number;
   pooledCount?: number;
+  /** Moved into assets this month — named on the same terms (`DQ-26`). */
+  invested?: number;
   /** The one line that genuinely differs between the two callers. */
   caption: string;
   onEdit: () => void;
@@ -72,7 +75,7 @@ type Props = {
  * computations, one label, free to disagree about a number you can count on screen.
  */
 export function BudgetList({
-  rows, spent, allocated, pct, pooledAllocated = 0, pooledCount = 0,
+  rows, spent, allocated, pct, pooledAllocated = 0, pooledCount = 0, invested = 0,
   caption, onEdit, empty, rowExtra, refreshing, onRefresh, bottomPad,
 }: Props) {
   const [filter, setFilter] = useState<StatusFilter>('all');
@@ -147,6 +150,14 @@ export function BudgetList({
             plus {formatCompact(pooledAllocated)} in {pooledCount} yearly/one-time{' '}
             {pooledCount === 1 ? 'budget' : 'budgets'}
           </Text>
+        )}
+
+        {/* Same terms, same style, one line down: an amount that genuinely left
+            and is deliberately not in the figure above. Investing is committed,
+            spending is capped, and the two never add up into one number
+            (`DQ-26`, `IV-17`). */}
+        {invested > 0 && (
+          <Text style={styles.caption}>{budgetInvestedCaption(formatCompact(invested))}</Text>
         )}
 
         <View style={styles.bar}>

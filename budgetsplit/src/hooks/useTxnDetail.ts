@@ -16,6 +16,7 @@ import { getGroupMembers, getMe, getPersonById } from '../db/queries/persons';
 import { getAuditLog } from '../db/queries/audit';
 import { useToast } from '../components/system/Toast';
 import { useDataRefresh } from '../components/system/DataRefreshProvider';
+import { getAssetById } from '../db/queries/assets';
 import { useScreenData } from './useScreenData';
 import type { TxnDetailData } from '../lib/txnDetail';
 
@@ -34,7 +35,7 @@ export function useTxnDetail(id: string) {
   const { data, loading, error, reload } = useScreenData(async (database): Promise<TxnDetailData> => {
     const t = await getTxnById(database, id);
     if (!t) {
-      return { txn: null, members: [], me: null, groupName: '', isPersonal: false, history: [], items: [], parentRule: null, author: null, disputes: [] };
+      return { txn: null, members: [], me: null, groupName: '', assetName: null, isPersonal: false, history: [], items: [], parentRule: null, author: null, disputes: [] };
     }
     const [grp, mems, meRow, hist, li, disputes] = await Promise.all([
       getGroupById(database, t.group_id),
@@ -45,6 +46,8 @@ export function useTxnDetail(id: string) {
       disputesFor(database, id),
     ]);
     const parentRule = t.parent_recur_id ? await getTxnById(database, t.parent_recur_id) : null;
+    // Only for a row that touched the register; every other row skips the read.
+    const asset = t.asset_id ? await getAssetById(database, t.asset_id) : null;
     // Null for my own entries, which is what `author_person_id IS NULL` means.
     const author = t.author_person_id ? await getPersonById(database, t.author_person_id) : null;
     return {
@@ -52,6 +55,7 @@ export function useTxnDetail(id: string) {
       members: mems,
       me: meRow,
       groupName: grp?.name ?? '',
+      assetName: asset?.name ?? null,
       isPersonal: grp?.is_personal === 1,
       history: hist,
       items: li,
@@ -65,6 +69,7 @@ export function useTxnDetail(id: string) {
   const members = data?.members ?? [];
   const me = data?.me ?? null;
   const groupName = data?.groupName ?? '';
+  const assetName = data?.assetName ?? null;
   const isPersonal = data?.isPersonal ?? false;
   const history = data?.history ?? [];
   const items = data?.items ?? [];
@@ -162,7 +167,7 @@ export function useTxnDetail(id: string) {
   }
 
   return {
-    txn, members, me, groupName, isPersonal, history, items, parentRule, author,
+    txn, members, me, groupName, assetName, isPersonal, history, items, parentRule, author,
     disputes: data?.disputes ?? [],
     loading, error, reload,
     showAttachment, setShowAttachment,

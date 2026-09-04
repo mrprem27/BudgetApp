@@ -157,12 +157,14 @@ export function addTxn(db: TestDb, t: {
   shares?: { personId: string; amount: number }[];
   recurFreq?: string | null;
   isDeleted?: boolean;
+  /** Set for an asset movement. `payments`-only is money in, `shares`-only is out. */
+  assetId?: string | null;
 }): string {
   const tid = id('txn');
   db.raw.prepare(
-    `INSERT INTO txn (id, group_id, kind, entry_mode, date, category, recur_freq, is_deleted, created_at, updated_at)
-     VALUES (?, ?, ?, 'quick', ?, ?, ?, ?, ?, ?)`,
-  ).run(tid, t.groupId, t.kind, t.date, t.category, t.recurFreq ?? null, t.isDeleted ? 1 : 0, t.date, t.date);
+    `INSERT INTO txn (id, group_id, kind, entry_mode, date, category, recur_freq, asset_id, is_deleted, created_at, updated_at)
+     VALUES (?, ?, ?, 'quick', ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(tid, t.groupId, t.kind, t.date, t.category, t.recurFreq ?? null, t.assetId ?? null, t.isDeleted ? 1 : 0, t.date, t.date);
 
   for (const p of t.payments ?? []) {
     db.raw.prepare('INSERT INTO txn_payment (txn_id, person_id, amount) VALUES (?, ?, ?)')

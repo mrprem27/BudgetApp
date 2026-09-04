@@ -86,6 +86,22 @@ export const budgetCaption = (opts: {
     : `of ${opts.allocated} per person this month`;
 };
 
+/**
+ * The invested line, under the spend figure. `DQ-26`.
+ *
+ * A ₹10,000 SIP was invisible to the plan: cash left, net worth stayed flat, and
+ * the one screen where you look at your month said nothing. It is **not** folded
+ * into the figure above and never can be — `IV-17` forbids one total across money
+ * spent and money moved, and an SIP is not consumption.
+ *
+ * The wording is deliberately the pooled line's. **"plus"** is what carries
+ * "beside, not inside"; a `/`, a `%` or a `+` would each imply a denominator this
+ * figure does not have. `budgetCaption` is directly above it for the same reason
+ * this lives here rather than inline — one file owns the budget's sentences.
+ */
+export const budgetInvestedCaption = (amount: string): string =>
+  `plus ${amount} invested this month · kept, not spent`;
+
 /** The editor's hint line, per scope and level. */
 export const budgetEditorHint = (opts: {
   scope: 'group' | 'global';
