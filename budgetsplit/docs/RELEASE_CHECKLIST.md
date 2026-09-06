@@ -9,13 +9,14 @@ This file replaces `V2_LAUNCH_CHECKLIST.md`, `DEBT_TRACKER.md`, `V2_FIX_PLAN.md`
 deleted, not archived — git history has them if a decision's reasoning is ever
 needed.
 
-**Six live documents, one question each** (2026-09-07):
+**Seven live documents, one question each** (2026-09-07):
 
 | Doc | Answers |
 |---|---|
 | `SYSTEM.md` | **What the app is** — 53 entities, 22 invariants, 70 features, 48 screens, 54 flows, scenario ladders |
 | `SCREENS.md` | What each screen looks like — layout, copy, states, sheets. Formerly `FEATURES_AND_FLOWS.md` |
-| `TRACKER.md` | **What is left** — every open finding, decision and deferral, one status each. Absorbed nine separate registers, including most of this file |
+| `TRACKER.md` | **What is left** — one row per item: what it is, and where it stands. Absorbed nine separate registers, including most of this file |
+| `FINDINGS.md` | **Why** — the count, the cost, the blast radius and the verdict behind every tracker id |
 | `SYNC-MODEL.md` | What happens when somebody else can change your numbers |
 | **this file** | Can we ship |
 | `AGENTS.md` | How we build. Absorbed `ARCHITECTURE.md`, which is deleted |
@@ -141,7 +142,8 @@ a user does actually travel".
 ## 1 · Hard blockers → `TRACKER.md` §1
 
 **Moved.** Eighteen blockers — fourteen open, four closed and kept — in
-[`TRACKER.md`](./TRACKER.md) §1, with the order of operations they have to be done in.
+[`TRACKER.md`](./TRACKER.md) §1, with the reasoning and the order of operations in
+[`FINDINGS.md`](./FINDINGS.md) §1.
 
 The closed ones are kept deliberately: three of them closed by discovering the claim was **false**
 rather than by being fixed, and that is worth exactly one read to avoid rediscovering.
@@ -535,7 +537,7 @@ Needs the rebuild: npx expo prebuild --clean && npx expo run:ios
 
 **Moved.** The open product and business decisions are `DQ-01`–`DQ-06` in
 [`TRACKER.md`](./TRACKER.md) §3; the 24 `SYNC-F` failures — the twelve written while designing and
-the twelve found by tracing the built code — are in §5, merged into one list with one status each.
+the twelve found by tracing the built code — are in §5 of both, merged into one list with one status each.
 
 They were merged because this section and `SYNC-MODEL.md` Part 6 tracked the same failures and
 **disagreed about four of them in both directions**. Three carried a ✅ here that was correct and an
@@ -686,7 +688,7 @@ build assistant + developer-facing features → publish.
 ## 5 · Open debt → `TRACKER.md` §6
 
 **Moved.** Real, evidenced, not blocking the pilot — twelve items in
-[`TRACKER.md`](./TRACKER.md) §6, plus the restore defects that closed while sync was being designed.
+[`TRACKER.md`](./TRACKER.md) §6 and explained in [`FINDINGS.md`](./FINDINGS.md) §6, plus the restore defects that closed while sync was being designed.
 
 The standing rule that governed this list travels with it: **an open-debt list that overstates
 itself costs more than it saves.** Verify a bullet against the tree before acting on it, and delete

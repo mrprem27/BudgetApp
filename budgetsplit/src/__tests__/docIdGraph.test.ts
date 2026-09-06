@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { ROOT, doc, tracker, testFileNames } from './helpers/systemDoc';
+import { ROOT, doc, tracker, findings, testFileNames } from './helpers/systemDoc';
 
 /**
  * Two things, both about a document pointing at something that is not there.
@@ -21,14 +21,16 @@ const defined = new Set<string>();
 
 /**
  * Definitions come from every live register, not just `SYSTEM.md`. `OV-` and `DQ-`
- * moved to `TRACKER.md`, which owns every open finding; `MW-` has always been
+ * moved out to the register pair — `TRACKER.md` for the row, `FINDINGS.md` for the
+ * evidence, which is where the fenced `OV-nn ·` blocks live; `MW-` has always been
  * defined in `SYNC-MODEL.md` Part 4, where it labels the rows of the "who can change
  * your numbers" table so other documents can point at one. Reading a single file
  * would dangle 89 ids the day the split landed, which is the failure this exists for.
  */
 const REGISTERS = [
   doc,
-  tracker,
+  findings,   // where OV-/DQ-/W1-/SYNC-F entries are defined
+  tracker,    // one row each; a row is a definition too
   fs.readFileSync(path.join(ROOT, 'docs/SYNC-MODEL.md'), 'utf8'),
 ];
 

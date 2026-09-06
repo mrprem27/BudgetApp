@@ -776,7 +776,7 @@ BudgetApp/
 **Component layering, enforced:** `ui/` must not import from `finance/` or `system/`;
 `finance/` and `system/` may import from `ui/`.
 
-### The six live documents
+### The seven live documents
 
 One question each. Anything else in `docs/` is frozen history and must not be edited to stay green.
 
@@ -784,16 +784,24 @@ One question each. Anything else in `docs/` is frozen history and must not be ed
 |---|---|
 | `docs/SYSTEM.md` | **What the app is** — entities, invariants, features, screens, flows, scenarios. Cite its ids when filing anything |
 | `docs/SCREENS.md` | What each screen looks like — layout, copy, states, sheets |
-| `docs/TRACKER.md` | **What is left** — every open finding, decision and deferral, one status each |
+| `docs/TRACKER.md` | **What is left** — one row per item: what it is, and where it stands |
+| `docs/FINDINGS.md` | **Why** — the count, the cost, the blast radius and the verdict behind every tracker id |
 | `docs/SYNC-MODEL.md` | What happens when somebody else can change your numbers |
 | `docs/RELEASE_CHECKLIST.md` | Can we ship |
 | `AGENTS.md` | How we build |
 
 It said **four** until 2026-09-07, and had for a while: `SYNC-MODEL.md` was already live and already
 guarded — the code's own `HISTORICAL` regex excludes only the dated analyses — so the rule was prose
-that three documents repeated and none enforced. `TRACKER.md` is the sixth, and it exists because
-findings were being tracked in **nine** registers that had drifted into contradicting each other.
+that three documents repeated and none enforced. `TRACKER.md` and `FINDINGS.md` are the additions,
+and they exist because findings were being tracked in **nine** registers that had drifted into
+contradicting each other.
 
-**One register, one id.** An `OV-`, `DQ-`, `W1-` or `SYNC-F` id is *defined* in `TRACKER.md` and
-cited anywhere. Never maintain a status in two files — `trackerIntegrity.test.ts` fails if you do,
-because every contradiction that forced this rule came from exactly that.
+**Register and evidence are separate on purpose.** A tracker is read to pick something and has to be
+scannable; the argument behind an item is read after you have picked it. Held together they made one
+996-line file that was neither. So: **status goes in `TRACKER.md` and nowhere else, reasoning goes in
+`FINDINGS.md` and nowhere else.**
+
+**One register, one id.** An `OV-`, `DQ-`, `W1-`, `SYNC-F`, `B-`, `D-` or `A-` id gets exactly one
+row in `TRACKER.md` and exactly one entry in `FINDINGS.md`, and may be *cited* anywhere.
+`trackerIntegrity.test.ts` fails if an id has one without the other, or if a third document defines
+one — every contradiction that forced this rule came from exactly that.

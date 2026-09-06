@@ -17,12 +17,13 @@
 const fs = require('fs');
 const doc = fs.readFileSync('docs/SYSTEM.md', 'utf8');
 /**
- * The overlap register and the open decisions moved to `TRACKER.md`, which owns
- * every open finding. `SYSTEM.md` kept the reference half — the dictionary, the
- * flows, the invariants — so the map now reads two files and `section()` has to
- * be told which.
+ * The overlap register and the open decisions moved out of `SYSTEM.md`, which kept
+ * the reference half — the dictionary, the flows, the invariants. Their DETAIL —
+ * the counts, the evidence, the blast radius, the verdicts, which is what this map
+ * renders — is in `FINDINGS.md`; `TRACKER.md` carries only the one-line status of
+ * each, which the map does not need. So `section()` has to be told which file.
  */
-const tracker = fs.readFileSync('docs/TRACKER.md', 'utf8');
+const findings = fs.readFileSync('docs/FINDINGS.md', 'utf8');
 
 function section(n, src = doc) {
   const re = new RegExp(`^## §${n} · [\\s\\S]*?(?=^## §|(?![\\s\\S]))`, 'm');
@@ -235,7 +236,7 @@ const crossings = [...s9.matchAll(/^\| `(SN-\d+)`(?:\/`(SN-\d+)`)? \| ([^|]*)\| 
 
 // ---- §10 complexity ---------------------------------------------------------
 const ovs = [];
-for (const st of section(2, tracker).split(/\n(?=OV-\d+ · )/)) {
+for (const st of section(2, findings).split(/\n(?=OV-\d+ · )/)) {
   const m = st.match(/^(OV-\d+) · ([^\n]+)\n([\s\S]*)/);
   if (!m) continue;
   const f = fields('```\n' + m[3] + '\n```');
@@ -259,7 +260,7 @@ for (const st of section(2, tracker).split(/\n(?=OV-\d+ · )/)) {
 
 // ---- §11 decisions ----------------------------------------------------------
 const dqs = [];
-for (const m of section(3, tracker).matchAll(/^\| `(DQ-\d+)` \| ([\s\S]*?) \| ([\s\S]*?) \| ([\s\S]*?) \|$/gm)) {
+for (const m of section(3, findings).matchAll(/^\| `(DQ-\d+)` \| ([\s\S]*?) \| ([\s\S]*?) \| ([\s\S]*?) \|$/gm)) {
   const q = clean(m[2]);
   dqs.push({
     id: m[1], q,

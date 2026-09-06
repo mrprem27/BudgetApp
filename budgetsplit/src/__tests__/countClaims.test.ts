@@ -180,13 +180,14 @@ describe('the complexity register agrees with its own headings', () => {
   };
 
   it('has a heading count matching the entries beneath it', () => {
-    // TRACKER.md, not SYSTEM.md: the register moved there when nine of them had
-    // drifted into contradicting each other. Repointing this mattered more than it
-    // looks — with no `### The N that…` heading left to find, the check below went
-    // VACUOUSLY GREEN rather than failing, which is why `headings` is now asserted
-    // non-empty first. A guard that passes by reading nothing is worse than no
-    // guard, because it also reports success.
-    const src = fs.readFileSync(path.join(DOCS, 'TRACKER.md'), 'utf8');
+    // FINDINGS.md, not SYSTEM.md: the register moved when nine of them had drifted
+    // into contradicting each other, and its DETAIL — the counting headings this
+    // check is about — landed here rather than in TRACKER.md. Repointing mattered
+    // more than it looks: with no `### The N …` heading left to find, the check
+    // below went VACUOUSLY GREEN rather than failing, which is why `headings` is
+    // now asserted non-empty first. A guard that passes by reading nothing is worse
+    // than no guard, because it also reports success.
+    const src = fs.readFileSync(path.join(DOCS, 'FINDINGS.md'), 'utf8');
     // Scoped to the register's own section. Unscoped, this matched prose headings
     // elsewhere in the file ("The three guards…") and demanded OV- entries under
     // them — a guard firing on something it was never about.
@@ -213,7 +214,7 @@ describe('the complexity register agrees with its own headings', () => {
         if (/^(OV|DQ|E|IV|FE)-\d+\s+·/.test(lines[k])) found++;
       }
       if (found !== claimed) {
-        wrong.push(`TRACKER.md:${i + 1} "${line.trim()}" — ${found} entries beneath it`);
+        wrong.push(`FINDINGS.md:${i + 1} "${line.trim()}" — ${found} entries beneath it`);
       }
     });
 

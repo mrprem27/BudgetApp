@@ -4262,8 +4262,8 @@ that actually bite** — the axis pairs where that flow is known or suspected to
 
 ## §10 · Complexity and overlap register → `TRACKER.md` §2
 
-**Moved.** The 34 `OV-` entries live in [`TRACKER.md`](./TRACKER.md) §2, unchanged and with their
-ids intact — every citation of an `OV-` id in this document still resolves.
+**Moved.** The 34 `OV-` entries live in [`FINDINGS.md`](./FINDINGS.md) §2, unchanged and with their
+ids intact — with their one-line status in [`TRACKER.md`](./TRACKER.md) §2 — every citation of an `OV-` id in this document still resolves.
 
 They moved because they are *work*, and this document is *reference*. `SYSTEM.md` answers "what is
 the app"; a register of duplications to collapse answers "what is left to do about it", and keeping
@@ -4271,8 +4271,8 @@ both here meant the second kept being recounted independently of every other lis
 
 ## §11 · Open decisions → `TRACKER.md` §3
 
-**Moved**, for the same reason. The 40 `DQ-` entries live in [`TRACKER.md`](./TRACKER.md) §3, each
-still carrying **the default if nobody ever decides** — which is the part that actually ships.
+**Moved**, for the same reason. The 40 `DQ-` entries live in [`FINDINGS.md`](./FINDINGS.md) §3 and are tracked in
+[`TRACKER.md`](./TRACKER.md) §3, each still carrying **the default if nobody ever decides** — which is the part that actually ships.
 
 Twenty-five of them had a second copy in `RELEASE_CHECKLIST.md` before the move, one of them a
 fourth; that duplication is what `trackerIntegrity.test.ts` now makes impossible.
@@ -4348,10 +4348,10 @@ rewritten.
 | `AUDIT.md`, `AUDIT_DOC_DRIFT.md`, `V2_PRODUCT_REVIEW.md`, `COMPETITIVE_ANALYSIS.md`, `PERSONAL_REDESIGN.md`, `SYNC_CONTEXT.md` | **→ `docs/history/`**, each with a frozen banner naming its live successor. |
 | `STORE_LISTING.md` | Untouched. |
 
-Six live documents, one question each: **what it is** (`SYSTEM.md`) · **what each screen looks
-like** (`SCREENS.md`) · **what is left** (`TRACKER.md`) · **what happens when somebody else can
-change your numbers** (`SYNC-MODEL.md`) · **can we ship** (`RELEASE_CHECKLIST.md`) · **how we
-build** (`AGENTS.md`).
+Seven live documents, one question each: **what it is** (`SYSTEM.md`) · **what each screen looks
+like** (`SCREENS.md`) · **what is left** (`TRACKER.md`) · **why each item is what it is**
+(`FINDINGS.md`) · **what happens when somebody else can change your numbers** (`SYNC-MODEL.md`) ·
+**can we ship** (`RELEASE_CHECKLIST.md`) · **how we build** (`AGENTS.md`).
 
 ### The guards
 

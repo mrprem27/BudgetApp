@@ -296,8 +296,9 @@ applies at once, because nothing of yours had moved, so nothing of yours moves b
 
 ## Part 6 · Ten more things that can go wrong → `TRACKER.md` §5
 
-**Moved.** All 24 `SYNC-F` failures now live in one place, in
-[`TRACKER.md`](./TRACKER.md) §5, with their status re-verified against the source tree.
+**Moved.** All 24 `SYNC-F` failures now live in one place: the status in
+[`TRACKER.md`](./TRACKER.md) §5, the evidence in [`FINDINGS.md`](./FINDINGS.md) §5, each
+re-verified against the source tree.
 
 That re-verification is the reason for the move. This section and `RELEASE_CHECKLIST.md` §3.1 both
 tracked the same failures and **disagreed about four of them, in both directions**: `SYNC-F19`,
@@ -364,7 +365,8 @@ written down:
 
 ## Part 9 · The questions only you can answer → `TRACKER.md` §3
 
-**Moved.** `DQ-28` to `DQ-33` are in [`TRACKER.md`](./TRACKER.md) §3, each still stating **what
+**Moved.** `DQ-28` to `DQ-33` are in [`TRACKER.md`](./TRACKER.md) §3, with their reasoning in
+[`FINDINGS.md`](./FINDINGS.md) §3 — each still stating **what
 happens if you never decide** — because that is what ships.
 
 Two have since been answered, both on 2026-09-04 and both verified against the code rather than a
@@ -402,7 +404,7 @@ touch a network.
 ## Appendix · For whoever is fixing these → `TRACKER.md` §5
 
 **Moved.** Where each failure lives — the file and line to open — is now carried on the entry
-itself in [`TRACKER.md`](./TRACKER.md) §5, rather than in a second table keyed by the same ids.
+itself in [`FINDINGS.md`](./FINDINGS.md) §5, rather than in a second table keyed by the same ids.
 
 Splitting the location from the status is what let the two drift: this appendix stayed accurate
 about *where* `SYNC-F19` lived long after it stopped being true that it was broken.
