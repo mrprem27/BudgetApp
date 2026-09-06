@@ -9,12 +9,14 @@ This file replaces `V2_LAUNCH_CHECKLIST.md`, `DEBT_TRACKER.md`, `V2_FIX_PLAN.md`
 deleted, not archived — git history has them if a decision's reasoning is ever
 needed.
 
-**Four live documents, one question each** (2026-09-01):
+**Six live documents, one question each** (2026-09-07):
 
 | Doc | Answers |
 |---|---|
-| `SYSTEM.md` | **What the app is** — 53 entities, 22 invariants, 70 features, 44 screens, 54 flows, scenario ladders, the complexity register (`OV-`) and the open decisions (`DQ-`) |
+| `SYSTEM.md` | **What the app is** — 53 entities, 22 invariants, 70 features, 48 screens, 54 flows, scenario ladders |
 | `SCREENS.md` | What each screen looks like — layout, copy, states, sheets. Formerly `FEATURES_AND_FLOWS.md` |
+| `TRACKER.md` | **What is left** — every open finding, decision and deferral, one status each. Absorbed nine separate registers, including most of this file |
+| `SYNC-MODEL.md` | What happens when somebody else can change your numbers |
 | **this file** | Can we ship |
 | `AGENTS.md` | How we build. Absorbed `ARCHITECTURE.md`, which is deleted |
 
@@ -35,10 +37,10 @@ claim cites `file:line` or it gets deleted rather than debated.
 
 - **Target:** limited TestFlight pilot to friends. Not a public App Store launch.
 - **App version:** 2.0.0 · bundle `com.prem.budgetsplit`
-- **Code state:** `feat/sync-s2` — **45 commits unpushed**, nothing backed up off
+- **Code state:** `feat/sync-s2` — **36 commits unpushed**, nothing backed up off
   this machine. (Pushing needs a deliberate `gh` account switch: this repo is
   personal `mrprem27` only, and `gh`'s active account is the company one.)
-- **Suite:** 153 suites / 2117 tests green · `tsc --noEmit` clean in app *and* Worker.
+- **Suite:** 181 suites / 2388 tests green · `tsc --noEmit` clean in app *and* Worker.
 - **Worker:** deployed 2026-09-01, version `0c1a54e0`. Migrations `0007`–`0010`
   applied to D1 — three of them had never been applied, so the friend-request
   routes had been shipped with no tables behind them.
@@ -46,66 +48,14 @@ claim cites `file:line` or it gets deleted rather than debated.
 
 ---
 
-## 0 · What is left, in order
+## 0 · What is left, in order → `TRACKER.md` §1
 
-Code is done. Everything below needs a **phone**, and nothing below can be done
-from a machine. Stop at the first thing that fails — each step assumes the one
-above it worked.
+**Moved.** The ordered list of what is left, and what each step assumes, is in
+[`TRACKER.md`](./TRACKER.md) §1. The one thing worth repeating here, because it changes what you do
+next: **the paid Apple account blocks less than it looks.** A free Apple ID signs a build onto your
+own phone for 7 days, which is everything the device pass in §2 needs. The paid account is only for
+handing the build to somebody else. Test now, distribute later.
 
-### 1. Get it on a device
-**The paid Apple account is deferred (2026-09-01), and that blocks LESS than it
-looks.** A free Apple ID signs a build onto your own phone for 7 days, which is
-everything steps 1–4 need. The paid account is only for handing it to somebody
-else — TestFlight, the friend pilot, the store. So: test now, distribute later.
-
-- [ ] `npx expo run:ios --device` with your own free Apple ID in Xcode's signing
-      tab. If it opens, the 49 commits are real; the bundle is proven to build
-      but has never launched.
-- [ ] Walk the app cold, signed out, no data. It must never show
-      "Couldn't start BudgetSplit".
-- [ ] Re-sign when it expires (7 days) — same command. Nothing is lost; the
-      database is untouched by a re-install of the same bundle id.
-
-### 2. Prove the asset register (new, and the most likely to be wrong)
-- [ ] Plan → Available money → **Assets**. Add "Gold", worth ₹40,000.
-- [ ] **Add** ₹5,000 from Bank → *Available* drops ₹5,000, **net worth does not move.**
-- [ ] **Take out** ₹5,000 to Bank → both return exactly to where they started.
-- [ ] **Worth now** → ₹50,000 → net worth rises ₹10,000, *Available* does not move,
-      and **no row appears in the ledger** (a price change is not a transfer).
-- [ ] Try taking out more than it holds → refused, nothing moves.
-- [ ] Delete an asset transfer from the ledger → **net worth must not jump.**
-      Undo it → both halves come back. *(This was broken; it is the single most
-      important line on this page.)*
-- [ ] Type "SIP 5000" into Add → it offers the register instead of saving as spending.
-- [ ] Stop counting an asset → net worth drops by its balance, its transfers stay
-      in history.
-
-### 3. Prove sync, on TWO phones with TWO accounts
-This has never run. Everything about it is verified by tests only.
-- [ ] Sign in on both (email magic link).
-- [ ] Phone A: add Phone B by **email** → B accepts → A's "Invited · waiting"
-      clears and the two are connected.
-- [ ] A adds an expense in a shared group → it reaches B.
-- [ ] B adds one → it reaches A.
-- [ ] Remove a member → their history stays, the balance still shows.
-- [ ] Delete a group → it closes on both, past months still add up.
-- [ ] **Reinstall A**, sign in, restore → the groups come back readable.
-
-### 4. Restore, specifically
-- [ ] Back up, wipe, restore → **investments/assets come back at the right value**
-      (a pre-register backup converts on restore; this path was silently losing
-      the whole figure).
-
-### 5. Only when the paid account arrives (deferred)
-Nothing here can start until it does, and nothing above waits for it.
-- [ ] Paid Apple Developer account active.
-- [ ] TestFlight build → the friend pilot.
-- [ ] Run §0a's no-enumeration curl diff — it needs a real session, so it can only
-      be done once you can sign in.
-- [ ] Answer the App Store privacy question about account deletion
-      (`DELETE /me` exists and is live).
-
----
 
 ## 0a · The no-enumeration check — run this before every deploy
 
@@ -149,7 +99,7 @@ diff /tmp/has.json /tmp/none.json
 
 ---
 
-## 0 · Is the app actually workable? — the sync ledger
+## 0b · Is the app actually workable? — the sync ledger
 
 Checked against the code, not remembered. This is the answer to "does everything
 a user does actually travel".
@@ -188,106 +138,13 @@ a user does actually travel".
       `drainRosters` runs before the entry drain in the same sync. Recorded because
       it is the only shape that could stall.
 
-## 1 · Hard blockers — nothing ships until every box is ticked
+## 1 · Hard blockers → `TRACKER.md` §1
 
-- [x] **`KDF_ITERATIONS`, and getting the cost off the drawing thread.** ✅ Both
-      halves done. 50,000 rounds, and `lib/pbkdf2.ts` unrolls the loop so it yields
-      to the event loop rather than holding the thread for the whole derivation —
-      backup and restore now show a moving percentage instead of freezing. Output
-      is byte-identical to `CryptoJS.PBKDF2`, asserted against CryptoJS itself
-      rather than a fixture, because a one-byte difference would make every backup
-      already written permanently unopenable.
-- [ ] **Set `DEV_TOOLS_ENABLED` to `false`** (`src/constants/devTools.ts`) before
-      the App Store upload. It is deliberately `true` for the pilot so a tester
-      build can be erased and re-seeded, which means the shipped app currently
-      contains a screen that **deletes every transaction, group, person, budget
-      and goal** with no backup and no undo, reachable by tapping the version 7×
-      in Settings → About. One edit closes every entry point.
-      `devToolsGate.test.ts` fails the suite if this line and the constant ever
-      disagree, so neither can drift — but the *decision* is still yours to make.
+**Moved.** Eighteen blockers — fourteen open, four closed and kept — in
+[`TRACKER.md`](./TRACKER.md) §1, with the order of operations they have to be done in.
 
-- [ ] **Buy the Apple Developer Program** ($99/yr). Gate 0: TestFlight external
-      testing, push, App Intents and the widget all sit behind it. This is why
-      `plugins/withoutPushEntitlement.js` exists.
-- [ ] **Native rebuild** — `npx expo prebuild --clean && npx expo run:ios`.
-      `expo-secure-store` is a new native module; the current binary crashes at
-      launch without it (degraded gracefully in `src/lib/serverApi.ts`, but the
-      feature needs the rebuild). Gates the entire device pass in §2.
-- [ ] **`EXPO_PUBLIC_API_URL` present wherever release builds run.** Without it
-      there is no account UI at all.
-- [ ] **`EXPO_PUBLIC_RECEIPT_OCR_PROXY_URL` likewise** — otherwise Scan degrades
-      **silently**. `EXPO_PUBLIC_*` bakes into the bundle at build time, so a
-      clean checkout, a stale Metro cache or an EAS build without `.env` gets
-      `undefined`. See `.env.example`.
-- [x] ~~**Rehearse `category_global_v1` against a populated database.**~~
-      **Closed 2026-08-19 — the rehearsal exists as a test.**
-      `src/__tests__/categoryGlobalMigration.test.ts` builds the *actual*
-      pre-migration shape a real device has on disk (per-group rows,
-      `group_id NOT NULL`, no `UNIQUE(name, kind)`) and runs the real migration SQL
-      against it via `node:sqlite`, covering dedupe by `(name, kind)`, kind
-      separation, idempotency on a second launch, a safe no-op on an
-      already-migrated DB, and data left intact when the migration throws
-      mid-flight. That is stronger than a one-off scratch-device run, because it
-      re-runs on every commit. Note also that pilot users install fresh, so this
-      migration never executes against their data at all.
-- [ ] **Confirm demo/seed data is off** in release builds. `seedDemo.ts` and the
-      CSV export's hardcoded demo-row signatures drift apart by design.
-- [ ] **Rotate the Brevo API key.** It was pasted into a chat transcript and is a
-      live credential for the deployed Worker.
-- [x] ~~**Push all 25 commits.** Two branches, neither pushed.~~
-      **Closed — the claim was false.** `HEAD` is level with `origin`, and both
-      named branches are ancestors of it, so their commits are on the remote too.
-      The only unpushed commits are three merge commits on an unrelated `Test`
-      branch. Verified with `git log --branches --not --remotes`.
-- [x] ~~**No way to delete your account.**~~ **Closed — `DELETE /me` plus a
-      Delete account row on the account screen.** App Store Review 5.1.1(v)
-      requires an app that creates an account to let the user delete it *from
-      inside the app*, so this was a rejection at submission. It destroys the
-      email, name, phone, avatar, every session, every unused magic link for that
-      address, every device key and the `sync_wrap`s sealed to them (so no future
-      device of theirs can decrypt anything), and every backup blob in R2. The
-      `users` row survives, scrubbed: six tables reference it and those rows are
-      other people's records — cascading would rewrite four ledgers because a
-      fifth person closed their account. See
-      `server/api/migrations/0010_account_deletion.sql` for the full argument.
-      **Applied and deployed 2026-08-31** — version `429c2230`. Four migrations
-      were pending, not one: `0007_link_end`, `0008_friend_requests` and
-      `0009_backup_kind` had never been applied either, so the friend-request
-      routes had no tables behind them. Verified after: `friend_request` and
-      `friend_block` exist, `users.deleted_at` exists, and `DELETE /me` answers
-      `401` unauthenticated (not `405`).
-      **Still yours to do: answer the App Store privacy question about deletion,
-      and run §0a's no-enumeration diff — it needs a real session, so it cannot
-      be done without receiving a sign-in email.**
-- [ ] **Privacy policy + App Store listing.** Required even for external
-      TestFlight, and newly sharp: a server now holds email addresses.
-- [x] **Update the store-listing copy.** ✅ Draft rewritten in `STORE_LISTING.md`
-      now that sync ships: it distinguishes personal data (which genuinely never
-      leaves the device) from shared groups (which do, sealed, with no key on the
-      server), which is both the honest version and the selling point. The last
-      flat "nothing leaves your phone" in the tree — `SETUP_DEVBUILD.md` — is
-      corrected too. **Still yours to do: paste it into App Store Connect and
-      confirm the privacy answers.** Original note: Draft ready to paste at
-      [`STORE_LISTING.md`](./STORE_LISTING.md), including the privacy-questionnaire
-      answers — receipt photos count as collected because they leave the device,
-      and they are ON by default. An undeclared data type is a rejection.
-      Original note: In-app copy was corrected on 2026-08-17
-      (`VOICE_SHORTCUT_PRIVACY`, `help.tsx`, `Onboarding.tsx`, the backup
-      explainer, and the egress table now in `SYSTEM.md` §1). The listing is not in this repo and
-      still says "nothing leaves your device", which stopped being true when
-      sign-in shipped.
-- [ ] **India DPDP posture.** The moment one real user signs in, an email address
-      is personal data on a server you operate. Being opt-in does not change this.
-- [ ] **App icon, splash, screenshots** — never audited. Needs a real asset pass.
-- [ ] **`VOICE_SHORTCUT_URL` is `null`.** Every link shared so far carried a
-      blank-condition `If`, so the shortcut could only reach its Otherwise
-      branch. Until it's re-minted a pilot user cannot install voice capture at
-      all: rebuild → import → **open in the Shortcuts editor and read the If
-      row** → share → paste the constant.
-- [ ] **Device-test Pass 4** (the persona/flag work). `src/lib/featureFlags.ts:47`
-      alters the tab bar itself, and that has never rendered on a phone.
-
----
+The closed ones are kept deliberately: three of them closed by discovering the claim was **false**
+rather than by being fixed, and that is worth exactly one read to avoid rediscovering.
 
 ## 2 · Device pass
 
@@ -674,90 +531,17 @@ Needs the rebuild: npx expo prebuild --clean && npx expo run:ios
 
 ---
 
-## 3 · Decisions still open
+## 3 · Decisions still open → `TRACKER.md` §3, and the sync failures → §5
 
-- [x] ~~**Investments as a Transfer destination.**~~ **Shipped as `moveToInvestments`** —
-      a personal-group settlement with `shares: []`, mirroring `payCardBill`, rather
-      than an Add-screen destination (`TransferBody` hard-types both endpoints as a
-      Person). Buying an SIP was logged as an *expense*, so net worth fell by the
-      amount when it should have stayed flat.
-- [ ] **Monetisation shape.** Deliberately parked until there are users — a tier
-      boundary drawn before anyone uses the app is a guess. No paywall,
-      entitlement check or purchase SDK exists anywhere, and that absence is
-      intentional. **Feature flags are user preferences, never entitlements** —
-      do not repurpose them.
-- [ ] **"Safe to Spend" is a trademark — check it before any public launch.**
-      Simple Bank registered it and enforced it (cease-and-desist to Monzo, then
-      Mondo, in 2015). Simple was shut down by PNC in 2021, so the mark may have
-      lapsed through non-use — **that is an assumption, not a finding.** Irrelevant
-      for a closed pilot. The visible copy is now "yours to spend"; the internal
-      identifiers (`safeToSpend.ts`, `SafeToSpend`, `sts`) still use the term.
-- [ ] **Ad-supported or aggregate use of spend data.** Raised, not decided. The
-      app is local-first with no account required, which is the pitch competitors
-      in this space use verbatim — and it is currently true of this codebase.
-      Ad targeting or aggregate resale would need explicit opt-in, a rewritten
-      privacy policy, and a story for demo rows, and would spend the credibility
-      the derived numbers depend on. Decide deliberately, not by drift.
-- [ ] **The non-engineering cost of running a server.** DPDP obligations, a
-      rewritten privacy policy, hosting, uptime, someone on call.
-- [ ] **Per-app UPI payload quirks do not survive the Android port.** Corrected
-      2026-08-19 — the previous wording had this backwards. **Every per-app result
-      on record is iOS** (`upiIntent.ts:20-23`): on Android `useUpiApps` returns
-      null, so `spec` is always null and no per-app prefix or `blocked` flag is ever
-      reached. PhonePe there gets the generic `upi://pay` through the OS chooser and
-      **has never been tested.** So the quirks are not "dead on Android", they are
-      *unreachable* there, and the whole per-app table is untested on the platform
-      the pilot is heading to. Also corrected: Airtel did not lose `tr` — it **paid**
-      with `mode` and `tr` both present (`upiIntent.ts:277-280`) and is the only app
-      that gets `tr` on a P2P transfer. CRED is the one pinned to no `mode` at all.
-      Needs a device pass on Android, not a patch.
+**Moved.** The open product and business decisions are `DQ-01`–`DQ-06` in
+[`TRACKER.md`](./TRACKER.md) §3; the 24 `SYNC-F` failures — the twelve written while designing and
+the twelve found by tracing the built code — are in §5, merged into one list with one status each.
 
-### 3.1 Identity / sync pre-mortem — hold these lines in S2/S3
+They were merged because this section and `SYNC-MODEL.md` Part 6 tracked the same failures and
+**disagreed about four of them in both directions**. Three carried a ✅ here that was correct and an
+"open" there that was not; one carried a ✅ here that was wrong. A reader had no way to tell which
+document was ahead, and neither reliably was.
 
-Ways the design goes wrong. The first twelve were written while designing, and of those only
-**SYNC-F5 is a live defect** — the rest are constraints that were designed against and held.
-`SYNC-F13` onward came later, from tracing the built code rather than the design, and that
-difference shows: **four of the twelve below are live defects that move numbers or lose data**
-(`F13`, `F14`, `F16`, `F18`). The scenarios they fall out of are catalogued in `SYNC-MODEL.md`
-Parts 4 and 5.
-
-| | Failure | The wall that stops it |
-|---|---|---|
-| SYNC-F1 | Invite links are made to be forwarded — first stranger to tap gets linked, and gets your number | **Sender approves the claim.** Tapping creates a pending request; nothing binds until approval |
-| SYNC-F2 | "Stop sharing my number" cannot take it back — it's already on their device | Word it as a **disclosure** ("Shared with Rohan on 12 Aug"), never a revocable permission |
-| SYNC-F3 ✅ | Document-level last-write-wins silently discards a co-editor's edit, and the shares-sum-to-payments invariant still passes | **Built.** Compare-and-set on `txn.sync_version`; `PUT /sync/entries` refuses a stale push with 409 and the current row attached. Never silent LWW on money — and never an auto-merge either |
-| SYNC-F4 | `attachment_uri` is a `file://` path from another device — "receipt attached" over nothing | Rows sync, photos never do; the receiving device nulls the URI |
-| SYNC-F5 | ⚠️ **`seed.ts` writes `is_me = 1` with a fresh `uuid()` per install** — one account can get two "me" rows, and every my-share figure silently reads one of them | Bind the local `is_me` row to `person.remote_uid` at sign-in |
-| SYNC-F6 | `category` has `UNIQUE(name, kind)`, so adding `is_deleted` makes delete-then-re-add "Groceries" fail | No `is_deleted` on `category`; sync through the existing `category_tombstone` |
-| SYNC-F7 | `settings` holds one-time migration flags (`schema.ts:771-786`) — syncing it wholesale makes a device **skip a migration and record it as done** | Explicit key allowlist. Migration flags are device state and are never synced |
-| SYNC-F8 ⚠️ | Email is the only identity and cannot be changed or merged — a typo at sign-in is a second account with none of your backups | A change-email flow; **at minimum, show the signed-in email wherever a restore is offered** (cheap, and pilot-relevant) |
-| SYNC-F9 | ~~Restore replaces everything and, with sync on, propagates. Today's alert says "this device", which stops being true~~ | **Closed.** `confirmRestore` refuses outright while `settings.syncEnabled()` is on, and offers the Sync screen. A refusal rather than a warning because the damage lands on other people's phones — where the person causing it cannot see it and the people suffering it cannot undo it |
-| SYNC-F10 | **Rejecting an entry diverges the two devices.** Reject soft-deletes locally; their copy survives, so their group balance stops matching mine and neither is told | Named, not solved. The honest fix is a rejection that travels back as a *dispute* the author sees — sync-phase work. Until then, the reject copy says plainly that it stays on theirs |
-| SYNC-F11 ⚠️ | **Deleting a shared group hard-deletes every transaction in it** (`groups.ts` `deleteGroup`), which under sync would either destroy shared history or diverge silently | Under sync, deleting a group you did not create becomes **leave**, locally. Only the creator can delete, and only for everyone |
-| SYNC-F12 ✅ | **Losing the per-group key loses that group's history** — the same class of loss as a forgotten backup passphrase, but it takes the group down with you | **Built.** The key is wrapped once per DEVICE and stored server-side, so any member who still holds it can reissue a wrap. It is never derived from one device's secret — which is also why reinstalling mints a new device key rather than resurrecting the old one |
-
-### Twelve more, found by tracing the model — `SYNC-MODEL.md`, 2026-09-04
-
-The first nine above were written while designing. These came out of reading the built code against
-the question *"what am I exposed to if I trust someone?"* — so unlike `SYNC-F1`–`F12`, **four of
-them are live defects rather than constraints**. Each cites the scenario it falls out of.
-
-| | Failure | The wall that stops it |
-|---|---|---|
-| SYNC-F13 ✅ | **A trusted peer moves my cash with no prompt.** An expense asserting *"you paid ₹4,000"* is an ordinary entry, so from a trusted author it applies on arrival — and because the payment names me, `CASH_TOTALS_SQL` counts it. `requiresMyApproval` force-confirms only *settlements* that touch me (`trust.ts:102`); the expense-names-me-as-payer case is not considered. `MW-08` | **Done 2026-09-04.** `IncomingEntry.assertsIPaid`, read from the payment rows at the loader and gated ahead of trust. Carried as its own field rather than by widening `touchesMe`, which legitimately means payer-or-sharer. `trust.test.ts` covers the three rules. |
-| SYNC-F14 ✅ | **A peer can delete an entry I already approved, with no gate at all.** `is_deleted` is written in both the INSERT and UPDATE branches independent of `applied` (`peerIngest.ts:249, :265, :288`), and every reader filters deleted rows. My numbers move back silently. `peerApproval.test.ts:606-624` asserts this as correct behaviour — its title is the bug report. `MW-24` | **Done 2026-09-04.** `txn_approval.pending_delete` — deliberately not `state='pending'`, which would have made the retraction take effect on arrival. The entry keeps counting until I decide; approving applies the delete, refusing keeps the entry. A retraction of something still waiting still applies at once, because nothing of mine had moved. |
-| SYNC-F15 ⚠️ | **Any approved member can push a new version of an entry I authored.** `existing` is looked up by **id alone** — no group check, no authorship check (`peerIngest.ts:184-186`) — so the edit branch rewrites `author_person_id` to them and replaces my payment and share rows. The server authorises *membership*, not authorship, and the pusher overwrites `author_user`. `MW-25` | Bind the lookup to `(id, group_id)` and refuse a version bump on an entry whose author is me. Server-side, authorise the pusher against the stored author |
-| SYNC-F16 ⚠️ | **Removing a member is local only.** `removeMemberFromGroup` makes no server call: their `sync_member` row stays approved and their key wraps stay, so they keep pulling every future entry. My device refuses their writes; the server was never told. `MW-34` | Removal must call the server, the way leaving already does. Open with re-keying: §4.5 |
-| SYNC-F17 | **The group key is never rotated** — not on leave, not on removal, not on account deletion. Only the leaver's own wraps are dropped. Anyone who ever held the key holds it forever. `MW-39` | A rotation design has to answer what happens to entries already published under the old key — which is exactly why `shareGroup` refuses to re-key today. §4.5 |
-| SYNC-F18 ✅ | **Outbox head-of-line starvation.** `pendingUploads` takes the oldest 50; the drain skips a row whose group has no key but does not remove it. More than 50 queued rows in a never-shared group means every drain fetches the same unsendable 50 forever, and a shared group's newer entries are never reached | **Done 2026-09-04.** `pendingUploads` takes the sendable group ids and filters in SQL, so an unshared backlog can no longer fill the page. |
-| SYNC-F19 ✅ | **A peer's roster can promote its author and overwrite `created_by`.** Roles are applied from the wire (`role = excluded.role`) with no immutability guard, and a second roster naming a different resolvable creator would overwrite the creator. Role is never enforced across the wire — ingest checks membership, authorship and balance, never rank. `MW-40` | `created_by` is set once and never overwritten. Treat an inbound role change as a claim, not a fact |
-| SYNC-F20 | **A group with no admin is reachable by adoption and unrepairable.** `adoptGroup` inserts with `created_by` absent → NULL, and fills it only if the creator resolves locally; if the roster also carries no `admin`, nobody on that device can ever edit the budget, membership, roles, the name, or delete it. The launch invariants deliberately never guess a creator. `MW-38` | Either a repair path, or the egalitarian mode that makes "no admin" a supported state rather than an accident. §4.6 |
-| SYNC-F21 ✅ | **Approval and trust decisions are not audited.** `approveTxn`, `rejectTxn`, `reopenApproval`, `setTrustState` and `setGroupTrust` write no `audit_log` row — so *"I rejected Aarav's ₹4,000"* appears nowhere in the log a dispute is meant to be settled from | Audit the decision, not just the entry. These are the rows a disagreement is resolved with |
-| SYNC-F22 ✅ | **`audit_log` has no structured author.** The one sync-aware call bakes the name into a free-text summary, so it is unqueryable and drifts on a rename or a merge. Peer origin is recoverable only indirectly, via `txn.source` / `txn.author_person_id` | An author column. The summary is for reading, not for identity |
-| SYNC-F23 ✅ | **`is_shared` is a dead column** — hard-coded `0` on create, `1` only on adoption, never updated. The destination picker's "Shared" label therefore appears only on groups you *received*, and is wrong for every group you shared yourself. `MW-19` | Either maintain it at share time or delete it and derive the label from the roster |
-| SYNC-F24 | **Sharing is admin-gated on the client and member-gated on the server** — so the strict rule is the advisory one, and a modified client could invite as a plain member | Whichever rule is right, the server has to be the one enforcing it |
-
----
 
 ## 3.1 · Sync — built, and what is not proven
 
@@ -795,27 +579,31 @@ net worth are never sent.
 - publishing and adopting a group, and accepting an invitation
 - migration `0004_sync.sql` applying cleanly
 
-**Still open, and named rather than implied to be handled:**
+**Closed since this section was written** — the heading here read "still open" over five
+bullets that were already ticked, which is the small version of the drift that moved every
+open item into [`TRACKER.md`](./TRACKER.md):
 
-- ✅ `PUT /sync/entries` is rate limited: 500 entries per account per hour, on top
-  of the 64 KiB per-request cap.
-- ✅ Wrapping is real **X25519**, ephemeral-static. Done while there were no users,
+- `PUT /sync/entries` is rate limited: 500 entries per account per hour, on top of
+  the 64 KiB per-request cap.
+- Wrapping is real **X25519**, ephemeral-static. Done while there were no users,
   which is the only moment a re-wrap costs nothing.
-- ✅ SYNC-F11 closed. `deleteGroup` is creator-only, leaving is its own route, and a
+- `SYNC-F11`. `deleteGroup` is creator-only, leaving is its own route, and a
   deletion now propagates: the server reports `deleted`/`removed` instead of
   dropping the group from the list, and the client archives it, stops syncing it,
   and says so once. **Nothing is deleted locally** — my share of every entry
   already counted as spending in closed months, and erasing it for a decision that
   was not mine has no undo.
-- ✅ SYNC-F10 closed: a rejection reaches the author as an objection on the entry, and
+- `SYNC-F10`: a rejection reaches the author as an objection on the entry, and
   withdrawing it travels too.
-- ✅ Sharing has a UI: group → Members → Share with a member, and invitations are
+- Sharing has a UI: group → Members → Share with a member, and invitations are
   answered at the top of Settings → Sync. Settings → Sync also shows when sync
   last ran and why it did nothing, which is the first thing to look at when it
   appears dead on a phone.
-- ⚠️ **Still the big one: sync has never run on a phone.** Everything is verified
-  against the deployed Worker or by tests, which is not the same thing. Two
-  installs, two accounts, linked, sharing a group — that test is the gate.
+
+**The one that is actually still open, and it is the big one: sync has never run on a
+phone.** Everything is verified against the deployed Worker or by tests, which is not the
+same thing. Two installs, two accounts, linked, sharing a group — that test is the gate.
+The seven remaining `SYNC-F` failures are in `TRACKER.md` §5.
 
 **Migrations remain forward-only, applied by hand, with no rollback and no
 staging.** `0004_sync.sql` is strictly additive and readable by the currently
@@ -890,240 +678,26 @@ build assistant + developer-facing features → publish.
 
 ---
 
-## 4 · Known and accepted for the pilot
+## 4 · Known and accepted for the pilot → `TRACKER.md` §7
 
-Recorded so nobody re-discovers them as bugs.
+**Moved.** Recorded so nobody re-discovers them as bugs: [`TRACKER.md`](./TRACKER.md) §7. These are
+**decisions, not neglect** — the distinction is the reason the list is worth keeping at all.
 
-- **Three red surfaces stack on every Home open** — the Safe-to-Spend strip
-  ("over-committed"), the pace row ("₹4,200 over") and the health ring. Retention
-  research names a "guilt cycle": two or three months of red and users conclude they
-  are bad at budgeting and leave. The 2026-08-19 pass gave each one a next action and
-  renamed the band that judged the person ("Vulnerable" → "Stretched thin"), but
-  deliberately **did not** move any threshold or de-duplicate the three. Whether
-  three at once is too many is a question only real users can settle.
+## 5 · Open debt → `TRACKER.md` §6
 
-- **`openDB()` re-runs ~40 `ALTER`s every launch.** Cold-start cost, accepted.
-- **`PRAGMA foreign_keys` is OFF** on the live connection (ON only during
-  migrations, `schema.ts:294-438`); cascades are hand-rolled. Flipping it needs
-  every delete path audited first.
-- **Voice auto-save has no off switch.** A confident phrase posts itself; the
-  guard is Undo plus the duplicate prompt. Deliberately no flag — add one only if
-  it misfires in practice.
-- **Files over the ~300-line rule**: `review.tsx` (pinned at ≤750 by
-  `sourceCounts.test.ts`, only ever lowered), `Onboarding.tsx`, `itemized.tsx`.
-  Extraction is opportunistic policy, not a backlog.
-- **Categories are stored as strings, not IDs.**
-- **Dead schema columns**: `person.remote_uid`, `budget_group.limit_daily/monthly/yearly`,
-  `budget_group.carry_over`.
-- **A mid-phrase lone numeral is ignored; a leading one is not** — "do you have
-  change" parses as ₹2. The leading rule is what makes "450 groceries" work, so
-  tightening it costs more than it saves.
-- **No background drain for voice captures** — filed at launch and on every
-  foreground. `expo-background-task` would be sooner, at the cost of a native
-  module and a silently-failing OS path.
-- **Anyone who used the app before `7b597e1` saw their health score move once**,
-  with no notice. Nothing to migrate; recorded rather than fixed.
+**Moved.** Real, evidenced, not blocking the pilot — twelve items in
+[`TRACKER.md`](./TRACKER.md) §6, plus the restore defects that closed while sync was being designed.
 
----
+The standing rule that governed this list travels with it: **an open-debt list that overstates
+itself costs more than it saves.** Verify a bullet against the tree before acting on it, and delete
+it the moment it lands. Five bullets were once removed from this list in a single pass; two of them
+had been fixed weeks earlier and never struck.
 
-## 5 · Open debt
+## 6 · After the pilot → `TRACKER.md` §8
 
-Each line is real, evidenced, and not blocking the pilot.
-
-> **Shape debt now lives in `SYSTEM.md` §10 as `OV-01…OV-27`**, with a proposed
-> collapse, a blast radius, a risk and a verdict on each. Twelve of the 27 close as
-> `RENAME-ONLY` or `KEEP-DOCUMENTED` — at zero code risk — which is the useful
-> finding: the app is less over-built than it feels and more under-named.
-> Undecided questions live in `SYSTEM.md` §11 as `DQ-01…DQ-86`, each with the
-> default that ships if nobody ever decides. This section keeps only what is
-> release-shaped.
-
-### Blocked outside the codebase
-
-- **GPay import** — blocked on the source export format.
-- **Live email ingestion** — Google OAuth for `gmail.readonly` needs a CASA
-  Tier-3 assessment. The paste path shipped as the workaround.
-- **UPI hand-off refused by PhonePe / Paytm / Amazon Pay / WhatsApp.** Closed on
-  our side: every payload lever was varied, HTTPS universal links are impossible
-  (PhonePe serves 404 at its `apple-app-site-association` path), and the
-  aggregator `sign=` is minted by the *payee's* PSP. The way round is the
-  request-QR. Reopens only with merchant/TPAP registration.
-
-### Open, small, unresolved
-
-- **CRED's `mode` vs `tr` was never isolated** — it failed once *both* were added,
-  so the payload is the cause but not which half. Both are off today, closing the
-  question by avoidance. Two attempts settle it.
-- **Amazon Pay and WhatsApp were both tested against the same `@kotak` handle** —
-  an uncontrolled variable, and Kotak is not among WhatsApp's five PSP banks.
-  Retrying against `@okhdfcbank`/`@ybl` could show it was never blocked.
-- **`help.tsx` is a third collapsible**, structurally unlike the other two (bare
-  header + card body, plus a nested item-level accordion). Converting to
-  `SectionCard` adds card chrome — a real visual change.
-- **`TransactionRow` never displays pay method.** Captured everywhere now,
-  shown only in Review and on transaction detail. A density question, not a bug.
-- **`budget_group.limit_daily/monthly/yearly` still exist as columns.** Removed
-  from the `BudgetGroup` type on 2026-08-19 — nothing ever wrote them, so the type
-  was advertising a group-level budget the app does not have. The physical columns
-  stay: dropping one in SQLite needs a table rebuild, which is not worth a
-  migration for three fields nobody reads. `person.remote_uid` is **not** dead —
-  §3.1 SYNC-F5 reserves it for the duplicate-`is_me` fix.
-- **Transfer has no `DetailChips`** — no tags, receipt, time, location or repeat;
-  its note writes `transferNote`, a *different field* from every other kind's
-  `note`. Consolidating means deciding which fields a settlement legitimately
-  has, which is a product question.
-
-> **Five bullets were deleted from this list on 2026-08-19.** Two were already
-> fixed and never struck: `TransferBody` living outside `finance/add/` and
-> `add/quick.tsx`'s container `gap`, both closed by commit `3955c36` (17 Aug),
-> which updated the §2.1 entry and left these behind. Three were closed by the
-> 2026-08-19 pass: Insights' empty-state CTA, the inline `date-fns` patterns, and
-> the 44 `src/constants/*` shim importers.
-> An open-debt list that overstates itself costs more than it saves: **verify
-> a bullet against the tree before acting on it, and delete it the moment it lands.**
-
-### Schema gap: sync prerequisites
-
-> **Narrowed 2026-08-22.** The paragraph below assumed **row-level** sync. The
-> decided design is **document-level**: the unit that travels is an *entry* — a
-> `txn` plus its payments, shares and line items — versioned by `txn.updated_at`.
-> That holds because those child tables are never mutated apart from their parent
-> (every mutation is an insert beside a new `txn`, a rewrite of the whole set
-> inside `updateTxn`, or a group cascade). It is also the only correct unit for
-> money, since shares-summing-to-payments is a property of the whole document —
-> row-level sync could transmit a half-valid state that passes every check.
->
-> With that, and with sync scoped to **shared-group data only**, the gap is **two
-> tables and four columns**, not nine tables: `budget_group` and `group_member`
-> each need `updated_at` + `deleted_at`, because both are hard-deleted today and a
-> hard delete cannot propagate. **Both landed on `feat/peer-trust-and-approval`.**
-> `person` rows never travel at all — a friend is a local record, and only the
-> account id (`remote_uid`) bridges devices.
-
-> **Superseded — read the note, not the paragraph below.** This section described
-> nine tables needing sync columns, which assumed ROW-level sync. The entry is the
-> unit: `txn_share` / `txn_payment` / `line_item` are never mutated apart from their
-> parent (every mutation is an insert with a new `txn` id, a rewrite of the whole set
-> inside `updateTxn`, or a group cascade), so they sync as part of the parent
-> document and need no columns of their own. That left **two** tables — `budget_group`
-> and `group_member` — and both have since gained `updated_at` + `deleted_at`.
-> The paragraph below is kept because it explains *why* the columns are needed.
-
-**Only `txn` carries what sync needs.** `updated_at` + `is_deleted` exist at
-`src/db/schema.ts:73-75` and nowhere else. `budget_group`, `recur_skip`,
-`savings_goal` and `savings_txn` have `created_at` alone; `person`,
-`group_member`, `category`, `category_budget` and `settings` have neither.
-Without `updated_at` last-write-wins has nothing to compare; without
-`is_deleted` a delete cannot propagate, so the other device keeps the row and
-pushes it back. This is a gap in the app as it stands today, not only a cost of
-S2. Two carve-outs already decided: `category` uses `category_tombstone`
-(its `UNIQUE(name, kind)` would block re-adding a name), and `settings` is never
-synced as a table.
-
-### Two live restore defects, found while designing sync
-
-Neither is caused by the sync work; both were found by tracing what `BACKUP_TABLES`
-actually carries.
-
-- [x] **Restore resurrects every category the user deleted.** ✅ `category_tombstone`
-      is in `BACKUP_TABLES` (index 4, right after `category`; the table has no FKs
-      so the position is safe) and in `OPTIONAL_BACKUP_TABLES`, so an older file
-      restores it empty instead of being rejected. `seedGlobalCategories` still runs
-      after the transaction commits, which is what makes the fix work — the
-      tombstones are readable by the time the seeder checks them. Covered by
-      `backupQueries.test.ts`.
-- [x] **Restore carries one-time migration flags between devices.** ✅ Closed in both
-      directions: the delete side skips `fix_%`, the insert side skips them too, and
-      `category_global_v1` is named alongside. Implemented as a **prefix rule**
-      rather than the allowlist this item prescribed — strictly safer, because a new
-      `fix_*` cannot be forgotten.
-- [x] **Restore refused every backup this build wrote.** ✅ The pick-time version
-      guard in `settings/backup.tsx` hardcoded "v1 only" and was not updated when
-      `encryptPayload` moved to v2, so both the file and server paths answered "made
-      by a newer version" to files the app had just made. The passphrase sheet never
-      opened. Now one exported `canReadCipher` used by the decryptor and both
-      guards, with a test asserting the app can always read what it writes.
-- [x] **A restore left the sync outbox pointing at deleted rows.** ✅ `sync_outbox`
-      is excluded from backups (a delivery queue is device state) but was never
-      cleared either, so every queued row survived pointing at a `txn` that had just
-      been deleted. Cleared with the rest now.
-- [x] **Restoring stamped `lastBackupAt = now`.** ✅ Restoring is not backing up.
-      Settings read "Backed up just now" when the newest backup might be six months
-      old. Stamped with the backup's own date, so the nudge fires straight away
-      after restoring something old — which is the right moment for it.
-- [x] **SYNC-F9 — restore while sync is on.** ✅ Refused, with the Sync screen one tap
-      away. A restore is wipe-and-replace, so under sync it would push a snapshot
-      other people were never part of over their copies.
-
-### Sweep has to know *where from*, and give it back to the same place
-
-A surplus sweep moves money **out of a specific asset** — bank, cash, wallet — and
-a later withdrawal has to return it **to that same one**. Sweeping ₹5,000 out of a
-bank account and handing it back as "cash" is not a round trip; it silently
-rewrites where the user's money is, and every figure built on that is then wrong.
-The same applies to a manual withdrawal from a goal: it is not a generic credit,
-it goes back where it came from.
-
-That means the sweep cannot be built on today's model, where **cash is one pooled
-figure** and the "landed in" answer is stored and never read (below). The sweep
-logic itself is small; the prerequisite is not. So it is parked *behind* the
-per-method baselines pass, not beside it — building it first would bake the pooled
-assumption into the savings ledger, which is the hardest place to unpick it.
-
-Concretely, when it is built: `savings_txn` needs the source asset on the row, a
-withdrawal must default to that asset and be unable to silently pick another, and
-an auto-sweep must refuse rather than guess when the source is ambiguous.
-
-### Money-model gap: accounts as entities
-
-> **Half closed.** Cash is now three buckets — bank / cash / wallet — with real
-> per-bucket balances (`assetOf`, `BUCKET_FLOWS_SQL`, `openingTotal`), and
-> `INCOME_LANDING`'s answer is finally read. `savings_txn.source_asset` means a
-> goal remembers which bucket funded it and a withdrawal is capped by that bucket.
->
-> What is still open is **named** accounts ("HDFC", "Paytm") with their own
-> balances, which is what bank sync would eventually need. The paragraph below
-> describes the world before the buckets landed.
-
-`INCOME_LANDING` asks "Landed in ___" and **nothing reads the answer** —
-`src/lib/cash.ts` branches on `PayMethod.Card` alone. Cash is one pooled figure,
-so choosing Bank vs Cash only labels the transaction. Real balances would reopen
-Total Money, the settlement engine and the transfer flow. Card repayment landed
-without this; the rest waits for the per-method baselines pass, which touches
-`moneyProfile.ts`, `cashQuery.ts`, `cash.ts`, `MoneyEditorSheet.tsx`,
-`TotalMoneyCard.tsx` and the onboarding money step, and adds
-`money.opening_bank` / `money.opening_wallet`.
-
----
-
-## 6 · After the pilot — parked, with the trigger
-
-| Item | Why it's parked | Un-parks when |
-|---|---|---|
-| **Multi-device sync (S2)** | The schema prep has landed (see §5's superseded note — two tables, four columns, not nine). What is left is the engine: transport, outbox, conflict handling, and an E2E crypto swap off `crypto-js` | You want it enough to spend weeks |
-| **Shared groups (S3)** | Hardest rung: identity merging + multi-writer money | S2 is running and boring |
-| **Per-method money baselines** | Money-correctness risk; deserves its own reviewed pass | The next money-model pass — accounts-as-entities and investments-as-transfer are waiting with it |
-| **Monetisation / premium tier** | A tier boundary drawn before anyone uses the app is a guess | After the pilot. Needs a new entitlement concept; nothing existing can be repurposed |
-| **Push notifications** | Only local notifications exist; `withoutPushEntitlement.js` strips the entitlement a personal team can't sign | Gate 0 clears — then delete the plugin |
-| **App Intents** | True hands-free, no app launch, Siri reading results back. Native Swift target + entitlements + App Group | Gate 0 clears. Note Apple's own forums report inline parameters falling back to a prompt |
-| **In-app mic capture** | On-device recognition, live partial transcript, insert on silence. **No first-party Expo speech-to-text exists** (`expo-speech` is TTS); needs a native module on the `modules/expo-ocr` precedent | You want the Shortcuts round trip gone |
-| **Widget** | Scope genuinely undecided — balance? today's spend? quick-add? | You answer that **and** Gate 0 clears |
-| ~~**WhatsApp reminder composer**~~ | **Shipped.** Pure builder in `lib/whatsappReminder.ts`, button on the person screen, share-sheet fallback when the number has no country code. Push only — never a collect request | — |
-| **Repayment likelihood → expected recovery** | Per-person "how likely is this to come back", turning owed-to-me from a face value into an expected one, and ordering who to chase first. Three constraints decided up front: it stays **out of Safe-to-Spend** (every term there is certain money, and a probabilistic one makes the headline a guess); the maths is **Σ(amount × probability)**, not an average or median of probabilities — a median discards the amounts, so a 20%-likely ₹40,000 would rank below a 90%-likely ₹200; and the rating **never syncs**, because at S3 it could reach the person being rated | The WhatsApp composer ships — this is what gives it an order |
-| ~~**Goals surplus sweep**~~ | **Shipped.** `planSurplusSweep` (pure, refuses rather than guesses) + `runSurplusSweep`, opt-in via `settings.autoSweep`, off by default. Records the bucket it drew from, so a withdrawal returns there | — |
-| **Scheduled reminder nudge** | Needs an overdue scan, a per-person cooldown store, notification routing, and a cadence that cannot be guessed from an empty pilot. Get it wrong and users disable notifications, losing the channel permanently | The manual composer ships first — it is a strict prerequisite |
-| ~~**Insights restructure**~~ | **Shipped 2026-09-01.** One always-present headline (it rendered *only* when overspending) over collapsible `SectionCard`s. Recommendations + Driving overspend merged — both were built from the same over-budget categories. `insightsScreen.test.ts` locks it | — |
-| **Import restructure (remainder)** | pdf.js vendoring is done; `app/import.tsx` and `paytmParse.ts` are still one long screen and one long parser | Opportunistic |
-| **R2 object storage** | Needs a dashboard opt-in that can ask for a card; KV covers it today | Backups with receipt photos exceed ~25 MiB |
-| **Cloudflare Email Sending** | Needs Workers Paid ($5/mo) + a domain you own; Brevo free tier works | Deliverability from the current sender becomes a problem |
-| **Gmail OAuth (live email import)** | `gmail.readonly` is a restricted scope → public release needs OAuth verification + **CASA Tier-3 (~$thousands, annual)** | Phase 1 needs none of it: an OAuth client in **Testing** mode allows ≤100 manually-added test users behind an "unverified app" screen. Gate the entry point behind a beta flag |
-| **Account Aggregator (AA)** | India's consent-based bank-data framework; needs a partner integration. Dropped for the pilot, not deferred | Going properly public |
-| **GPay import (Phase GP)** | Parser spec is written against a real statement (`Paid to` = expense, `Received from` = income, UPI id, amount→paise); on-device PDF text extraction is the hard part | A lib spike proves PDF extraction on-device |
-| **Unified `SplitEditor`** | One reusable component (member select + type toggle + per-mode inputs + remainder validation) for Quick Add, GPay review and Itemize — kills the last duplicated split UI | Lands with Phase GP |
-| **Global categories, full vision** | The global catalog shipped; what's left is the multi-user half — a category becomes undeletable while shared, un-adopted ones fold into Others, and budgets become per-group-as-a-whole | Real multi-user sync exists (S3) |
-| **Retire the voice Shortcuts apparatus** | When mic/App Intents land, delete `voiceDrain.ts`, `voiceShortcut.ts`, `voiceShortcutFile.ts`, `scripts/build-shortcuts.ts` and the import→share→paste round trip that has cost six passes | The replacement capture path ships |
-
----
+**Moved.** Everything parked, each with the trigger that un-parks it, is in
+[`TRACKER.md`](./TRACKER.md) §8 — including the four entries that have since shipped and are kept
+struck through, because "we decided not to, then did" is the useful half of a parked list.
 
 ## 7 · Environment and build workarounds still in place
 
@@ -1163,25 +737,17 @@ without this; the rest waits for the per-method baselines pass, which touches
 
 ---
 
-## 8 · Standing rules
+## 8 · Standing rules → `AGENTS.md`
 
-1. **A regression test is verified by reverting its fix and watching it fail.**
-   Green is not evidence unless something was capable of turning red — `f9d0e9c`
-   passed **1335 tests** over a save path that silently deleted budget lines.
-2. **A destructive replace needs a preservation assertion**, not just a
-   replacement one. Copy the shape in `txnUpdate.test.ts`.
-3. **Never show one total across kinds.** Money in, money out and money moved do
-   not belong in a single figure. Settlements are excluded from *analysis* and
-   shown in the *ledger*.
-4. **Money is always integer paise.** `parseToPaise()` in, `formatRupees()` out.
-5. **Multi-table writes go inside `db.withTransactionAsync()`.** Zero partial writes.
-6. **After a write, call `refresh()`** from `useDataRefresh()`.
-7. **`npm run test:calendar` has a known flake** — it spawns jest 7×, and three
-   times a randomly chosen suite died at *load* time (once a `SIGSEGV` with zero
-   tests failing: a native runner crash, not app code). Never reproduced in
-   isolation. **Re-run the single date directly before believing it.**
+**Moved.** They are rules for *how to build*, not answers to *can we ship*, and they now sit in
+`AGENTS.md` under **Code Quality Rules → Standing rules for changing code**.
+
+Three of the seven were dropped on the way rather than copied — integer paise, transactional
+multi-table writes, and calling `refresh()` after a write were already stated in `AGENTS.md` twice
+over. A rule maintained in two places is the failure this whole reorganisation was about.
 
 ---
+
 
 ## Appendix · What the pre-pilot consistency pass changed (2026-08-18)
 

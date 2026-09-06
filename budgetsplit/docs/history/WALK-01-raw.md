@@ -1,5 +1,12 @@
 # BudgetSplit — the walkthrough
 
+> **FROZEN 2026-09-07.** The raw, unedited notes from the cold walk — what was *seen*, before
+> anything was traced. Never edited: the value of a raw note is that it is raw, including where it
+> turned out to be wrong. Live successor: `docs/TRACKER.md` §4.
+>
+> This was the only file in `docs/history/` without a banner, which made it the only frozen file a
+> reader could mistake for a live one.
+
 Generated 2026-09-04 from `docs/SYSTEM.md`.
 55 booklets · 180 stops · 2 answered.
 Estimated 20 hours in total — a rough figure, worked out from

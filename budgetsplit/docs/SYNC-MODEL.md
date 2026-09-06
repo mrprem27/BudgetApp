@@ -153,12 +153,12 @@ Four things worth knowing:
 
 - **It is per person, never per group** (`IV-10`). If trust were a group switch, then whoever gets
   added to that group next would be trusted automatically — without you ever deciding. So a **new
-  member always starts on "check first"**, every time. (`MW-18`)
+  member always starts on "check first"**, every time.
 - **You can make an exception for one group.** "I trust Aarav about the flat bills, but not about
   the holiday." That is allowed because it is still about *a person*. And you can clear it again —
-  otherwise "trusted except here" would be a one-way door. (`MW-16`, `MW-17`)
+  otherwise "trusted except here" would be a one-way door.
 - **Someone with no account cannot reach you at all**, no matter what their trust setting says.
-  There is simply no route. (`MW-13`)
+  There is simply no route.
 - **Un-trusting someone only affects what comes next.** Things that already went in stay in. That is
   deliberate, and it is what you would want — going back and re-opening months of settled entries
   because you changed your mind about someone would be worse. (Trusting someone works the other way
@@ -294,37 +294,20 @@ applies at once, because nothing of yours had moved, so nothing of yours moves b
 
 ---
 
-## Part 6 · Ten more things that can go wrong
+## Part 6 · Ten more things that can go wrong → `TRACKER.md` §5
 
-Shorter, because they either need someone acting in bad faith, or they are about tidiness rather than
-money.
+**Moved.** All 24 `SYNC-F` failures now live in one place, in
+[`TRACKER.md`](./TRACKER.md) §5, with their status re-verified against the source tree.
 
-**These can lose data or move numbers:**
+That re-verification is the reason for the move. This section and `RELEASE_CHECKLIST.md` §3.1 both
+tracked the same failures and **disagreed about four of them, in both directions**: `SYNC-F19`,
+`SYNC-F21` and `SYNC-F23` were listed here as open and are genuinely fixed in code, while
+`SYNC-F22` was ticked as done there and is genuinely still open. Neither document was reliably
+ahead of the other, which is precisely why one of them had to stop existing.
 
-| | In plain words |
-|---|---|
-| `SYNC-F16` `MW-34` | **Removing someone only removes them from your list.** The server is never told. They keep their key and keep receiving every new entry in that group. |
-| `SYNC-F18` ✅ | ~~A stuck queue can block a working one.~~ **Fixed 2026-09-04** — the queue now asks only for groups this phone can actually send, so an unshared backlog cannot fill the page. |
-
-**These need someone deliberately misusing the app:**
-
-| | In plain words |
-|---|---|
-| `SYNC-F15` `MW-25` | Any member of a shared group can overwrite an entry **you** wrote, and the app will then say they wrote it. |
-| `SYNC-F17` `MW-39` | **A group's key is never changed.** Anyone who has ever been in the group can still read it, forever, even after leaving. |
-| `SYNC-F19` `MW-40` | Someone can send a member list that **makes themselves the admin**, and the app applies it. |
-| `SYNC-F24` | Only admins can share a group — but that rule lives on the phone, not the server, so a modified app could ignore it. |
-
-**These are correctness and clarity:**
-
-| | In plain words |
-|---|---|
-| `SYNC-F20` `MW-38` | A group can arrive with **no admin at all** — and then nobody can ever change its budget, its members, or its name. There is no way to repair it. |
-| `SYNC-F21` | **Your decisions are not written down.** "I rejected Aarav's ₹4,000" appears nowhere in the history — which is exactly the record you would want in a disagreement. |
-| `SYNC-F22` | The history stores the person's **name as text**, not as a link to them. Rename someone and the old records still say the old name. |
-| `SYNC-F23` `MW-19` | The "Shared" label is wrong. It shows only on groups you **received** — never on the ones you shared yourself. |
-
----
+**Seven are still open:** `SYNC-F8` `SYNC-F15` `SYNC-F16` `SYNC-F17` `SYNC-F20` `SYNC-F22`
+`SYNC-F24`. Of those, `SYNC-F15` and `SYNC-F16` are the two that can still move numbers or leak
+entries to someone you removed.
 
 ## Part 7 · What we can honestly promise
 
@@ -379,21 +362,14 @@ written down:
 
 ---
 
-## Part 9 · The questions only you can answer
+## Part 9 · The questions only you can answer → `TRACKER.md` §3
 
-Nobody can decide these from the code. Each one says what happens if you never decide — because that
-is what ships.
+**Moved.** `DQ-28` to `DQ-33` are in [`TRACKER.md`](./TRACKER.md) §3, each still stating **what
+happens if you never decide** — because that is what ships.
 
-| | Question | If you never decide |
-|---|---|---|
-| `DQ-28` | **Which of a friend's entries should wait for you?** Just paybacks, as today — or anything claiming *you* paid? | Just paybacks. Problem 1 stays open. |
-| `DQ-29` `MW-29` | **Aarav says you paid ₹5,000. You think it was ₹3,000. What can you do?** Today: only yes or no. There is no way to accept part of it. | Yes or no. Someone in a split bill has no move except refusing. |
-| `DQ-30` | **Should there be a "scoreboard only" group** — one that tracks who owes whom but never touches your budget or your spending? | No such thing. Every shared group counts as your spending. |
-| `DQ-31` | **Should deleting need your approval**, the way editing already does? | No. Problem 2 stays open. |
-| `DQ-32` | **Should removing someone actually cut them off** — and should the group's key change? | No. They keep the key and keep receiving. |
-| `DQ-33` `MW-36` `MW-38` | **Should you be able to hand a group over to someone else?** Whoever created a group **cannot leave it** — their only exit is deleting it for everyone. And a group that arrives with no admin can never be repaired. | Neither exists. Every group has one permanent owner — or none at all, permanently. |
-
----
+Two have since been answered, both on 2026-09-04 and both verified against the code rather than a
+changelog: `DQ-28` (anything claiming *I* paid now waits for me, not just paybacks) and `DQ-31`
+(a peer's deletion re-opens the approval). The other four are open.
 
 ## Part 10 · What is left before release
 
@@ -402,10 +378,10 @@ is what ships.
               │
    Import UPI statements (PDF / CSV)  +  make reviewing them easy
               │
-   ── answer Part 9 ──
+   ── answer the open decisions (TRACKER.md §3) ──
               │
-   Fix the four that move numbers or lose data
-        SYNC-F13 · F14 · F16 · F18
+   Fix the two left that move numbers or leak entries
+        SYNC-F15 · SYNC-F16
               │
    Apple Developer account
               │
@@ -423,23 +399,10 @@ touch a network.
 
 ---
 
-## Appendix · For whoever is fixing these
+## Appendix · For whoever is fixing these → `TRACKER.md` §5
 
-Where each problem lives, so nobody has to search.
+**Moved.** Where each failure lives — the file and line to open — is now carried on the entry
+itself in [`TRACKER.md`](./TRACKER.md) §5, rather than in a second table keyed by the same ids.
 
-| | File |
-|---|---|
-| `SYNC-F13` | `src/lib/trust.ts:76-104` decides what waits · `src/db/queries/peerIngest.ts:246` applies it |
-| `SYNC-F14` | `src/db/queries/peerIngest.ts:249, :265, :288` — the deletion is written regardless |
-| `SYNC-F15` | `src/db/queries/peerIngest.ts:184-186` — looked up by id alone, no group or author check |
-| `SYNC-F16` | `src/db/queries/persons.ts:425-462` `removeMemberFromGroup` — no server call at all, and **there is no route to remove anyone but yourself**, so this needs a new one |
-| `SYNC-F17` | `server/api/index.ts:1908-1923` — drops their wraps, never re-keys |
-| `SYNC-F18` | `src/db/queries/syncOutbox.ts:124-127` · `src/lib/syncEngine.ts:272` |
-| `SYNC-F19` | `src/db/queries/syncDoc.ts:690-713` |
-| `SYNC-F20` | `src/db/queries/syncDoc.ts:626-632, :700-714` |
-| `SYNC-F21` | `src/db/queries/approval.ts:54-144` — no history is written |
-| `SYNC-F22` | `src/db/queries/audit.ts` — no author column |
-| `SYNC-F23` | `src/db/schema.ts:48` — never updated after creation |
-
-The full failure list with proposed fixes is in `RELEASE_CHECKLIST.md` §3.1, beside the twelve found
-while the system was being designed.
+Splitting the location from the status is what let the two drift: this appendix stayed accurate
+about *where* `SYNC-F19` lived long after it stopped being true that it was broken.

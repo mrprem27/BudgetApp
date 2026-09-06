@@ -180,15 +180,31 @@ describe('the complexity register agrees with its own headings', () => {
   };
 
   it('has a heading count matching the entries beneath it', () => {
-    const src = fs.readFileSync(path.join(DOCS, 'SYSTEM.md'), 'utf8');
-    const lines = src.split('\n');
+    // TRACKER.md, not SYSTEM.md: the register moved there when nine of them had
+    // drifted into contradicting each other. Repointing this mattered more than it
+    // looks — with no `### The N that…` heading left to find, the check below went
+    // VACUOUSLY GREEN rather than failing, which is why `headings` is now asserted
+    // non-empty first. A guard that passes by reading nothing is worse than no
+    // guard, because it also reports success.
+    const src = fs.readFileSync(path.join(DOCS, 'TRACKER.md'), 'utf8');
+    // Scoped to the register's own section. Unscoped, this matched prose headings
+    // elsewhere in the file ("The three guards…") and demanded OV- entries under
+    // them — a guard firing on something it was never about.
+    const section = /^## §2 · [\s\S]*?(?=^## §)/m.exec(src);
+    expect(section).not.toBeNull();
+    const lines = section![0].split('\n');
     const wrong: string[] = [];
+    let headings = 0;
 
     lines.forEach((line, i) => {
-      const h = /^###\s+The\s+(\w+)\s+that\s+/.exec(line);
+      // Deliberately not `The (\w+) that …`: that shape matched only 3 of the
+      // register's 6 numbered headings, leaving "The four to actually do", "The
+      // seven Walk 1 found" and "The five worth code" unguarded — half the entries.
+      const h = /^###\s+The\s+(\w+)\b/.exec(line);
       if (!h) return;
       const claimed = WORDS[h[1].toLowerCase()];
       if (claimed == null) return;
+      headings++;
 
       // Entries run to the next `###`, and each is an id at the start of a line
       // inside the fenced block — `OV-06 · Categories are…`.
@@ -197,10 +213,12 @@ describe('the complexity register agrees with its own headings', () => {
         if (/^(OV|DQ|E|IV|FE)-\d+\s+·/.test(lines[k])) found++;
       }
       if (found !== claimed) {
-        wrong.push(`SYSTEM.md:${i + 1} "${line.trim()}" — ${found} entries beneath it`);
+        wrong.push(`TRACKER.md:${i + 1} "${line.trim()}" — ${found} entries beneath it`);
       }
     });
 
+    // The whole point: prove something was counted before believing the count.
+    expect(headings).toBeGreaterThan(5);
     expect(wrong).toEqual([]);
   });
 });

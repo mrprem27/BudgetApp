@@ -16,10 +16,17 @@
  */
 const fs = require('fs');
 const doc = fs.readFileSync('docs/SYSTEM.md', 'utf8');
+/**
+ * The overlap register and the open decisions moved to `TRACKER.md`, which owns
+ * every open finding. `SYSTEM.md` kept the reference half — the dictionary, the
+ * flows, the invariants — so the map now reads two files and `section()` has to
+ * be told which.
+ */
+const tracker = fs.readFileSync('docs/TRACKER.md', 'utf8');
 
-function section(n) {
+function section(n, src = doc) {
   const re = new RegExp(`^## §${n} · [\\s\\S]*?(?=^## §|(?![\\s\\S]))`, 'm');
-  const m = doc.match(re);
+  const m = src.match(re);
   return m ? m[0] : '';
 }
 const clean = s => s.replace(/\s+/g, ' ').trim();
@@ -228,7 +235,7 @@ const crossings = [...s9.matchAll(/^\| `(SN-\d+)`(?:\/`(SN-\d+)`)? \| ([^|]*)\| 
 
 // ---- §10 complexity ---------------------------------------------------------
 const ovs = [];
-for (const st of section(10).split(/\n(?=OV-\d+ · )/)) {
+for (const st of section(2, tracker).split(/\n(?=OV-\d+ · )/)) {
   const m = st.match(/^(OV-\d+) · ([^\n]+)\n([\s\S]*)/);
   if (!m) continue;
   const f = fields('```\n' + m[3] + '\n```');
@@ -252,7 +259,7 @@ for (const st of section(10).split(/\n(?=OV-\d+ · )/)) {
 
 // ---- §11 decisions ----------------------------------------------------------
 const dqs = [];
-for (const m of section(11).matchAll(/^\| `(DQ-\d+)` \| ([\s\S]*?) \| ([\s\S]*?) \| ([\s\S]*?) \|$/gm)) {
+for (const m of section(3, tracker).matchAll(/^\| `(DQ-\d+)` \| ([\s\S]*?) \| ([\s\S]*?) \| ([\s\S]*?) \|$/gm)) {
   const q = clean(m[2]);
   dqs.push({
     id: m[1], q,

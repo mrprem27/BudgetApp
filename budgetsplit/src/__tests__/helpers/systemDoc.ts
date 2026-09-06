@@ -17,6 +17,16 @@ export const APP = path.join(ROOT, 'app');
 export const DOC = path.join(ROOT, 'docs/SYSTEM.md');
 export const doc = fs.readFileSync(DOC, 'utf8');
 
+/**
+ * `docs/TRACKER.md` — every open finding, decision and deferral. Split out of
+ * SYSTEM.md §10/§11 when nine separate registers had drifted into contradicting
+ * each other. Exported beside `doc` rather than concatenated with it, because the
+ * two answer different questions: SYSTEM.md is what the app IS, TRACKER.md is what
+ * is left to do about it, and a guard usually means exactly one of them.
+ */
+export const TRACKER_DOC = path.join(ROOT, 'docs/TRACKER.md');
+export const tracker = fs.readFileSync(TRACKER_DOC, 'utf8');
+
 export function walk(dir: string, keep: (f: string) => boolean): string[] {
   const out: string[] = [];
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {

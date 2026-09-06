@@ -177,13 +177,12 @@ what the app does, a support email, and the privacy policy at a stable URL.
 
 ---
 
-## 9 · Before you submit
+## 9 · Before you submit → `TRACKER.md` §1
 
-- [ ] Listing copy replaced — the old text still claims *"nothing leaves your device"*
-- [ ] Privacy questionnaire filled from §6, including **receipt photos**
-- [ ] Privacy policy live at a stable URL
-- [ ] `DEV_TOOLS_ENABLED` set to `false` (`src/constants/devTools.ts`) — the build
-      currently contains a screen that erases all data
-- [ ] Screenshots taken on a current device (the assets have never been audited)
-- [ ] **India DPDP**: the moment one real user signs in you hold personal data on a
-      server you operate. Being opt-in does not change that.
+**Moved.** Every item that was here is a ship blocker, and all six were already in
+[`TRACKER.md`](./TRACKER.md) §1 under `B-01`, `B-08`, `B-09`, `B-10` and `B-13` — a strict subset,
+kept in two places and ticked in neither.
+
+The two that are specifically about this document: paste the copy below into App Store Connect
+(`B-13`), and answer the privacy questionnaire from §6 — **receipt photos count as collected**,
+because they leave the device, and they are ON by default. An undeclared data type is a rejection.

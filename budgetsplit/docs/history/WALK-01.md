@@ -1,5 +1,15 @@
 # WALK-01 — the cold sweep
 
+> **FROZEN 2026-09-07.** A record of one cold walk through the app, not a description of it.
+> Never edited to keep a test green — a dated finding is supposed to keep saying what it found.
+> Live successor: `docs/TRACKER.md` §4, which carries all 38 `W1-` ids with a current status each.
+>
+> **Its own §0 named this moment:** *"superseded when every row in §6 is closed or has been folded
+> in… at that point this file moves to `docs/history/` unchanged."* Every row is now filed. The one
+> thing that did **not** survive the move is this file's `✅`, which meant "traced" in §5 and "fixed"
+> in §6 with no legend — five ids were ticked in one section and listed as remaining work in the
+> next. `TRACKER.md` re-derived every status from §7 and uses one vocabulary.
+
 **A wiped app, walked from first run through every empty state. 2026-09-04.**
 
 `Sweep: 1 · Cold (empty)` · 45 notes · 17 broken · 16 fine · 1 noted

@@ -652,6 +652,28 @@ collect-request manipulation. The app is built against both. Keep it that way:
 - **No `any` types** unless wrapping an untyped third-party API.
 - **Null checks**: check results before using — DB queries can return null for missing rows.
 
+### Standing rules for changing code
+
+Absorbed from `RELEASE_CHECKLIST.md` §8, which is where they had been sitting: they are rules for
+how to build, not questions about whether we can ship.
+
+1. **A regression test is verified by reverting its fix and watching it fail.** Green is not evidence
+   unless something was capable of turning red — commit `f9d0e9c` passed **1335 tests** over a save
+   path that silently deleted budget lines.
+2. **A destructive replace needs a preservation assertion**, not just a replacement one. Copy the
+   shape in `txnUpdate.test.ts`.
+3. **Never show one total across kinds.** Money in, money out and money moved do not belong in a
+   single figure. Settlements are excluded from *analysis* and shown in the *ledger*.
+4. **`npm run test:calendar` has a known flake** — it spawns jest 7×, and three times a randomly
+   chosen suite died at *load* time (once a `SIGSEGV` with zero tests failing: a native runner crash,
+   not app code). Never reproduced in isolation. **Re-run the single date directly before believing
+   it.**
+
+Rules 4–6 of the original list — integer paise, transactional multi-table writes, and calling
+`refresh()` after a write — are not repeated here: they were already stated above and in
+**State & Data Access**, and a rule maintained in two places is the thing `docs/TRACKER.md` exists
+to stop.
+
 ---
 
 ## State & Data Access
@@ -754,13 +776,24 @@ BudgetApp/
 **Component layering, enforced:** `ui/` must not import from `finance/` or `system/`;
 `finance/` and `system/` may import from `ui/`.
 
-### The four live documents
+### The six live documents
 
 One question each. Anything else in `docs/` is frozen history and must not be edited to stay green.
 
 | Doc | Answers |
 |---|---|
-| `docs/SYSTEM.md` | **What the app is** — entities, invariants, features, screens, flows, scenarios, complexity, open decisions. Cite its ids when filing anything |
+| `docs/SYSTEM.md` | **What the app is** — entities, invariants, features, screens, flows, scenarios. Cite its ids when filing anything |
 | `docs/SCREENS.md` | What each screen looks like — layout, copy, states, sheets |
+| `docs/TRACKER.md` | **What is left** — every open finding, decision and deferral, one status each |
+| `docs/SYNC-MODEL.md` | What happens when somebody else can change your numbers |
 | `docs/RELEASE_CHECKLIST.md` | Can we ship |
 | `AGENTS.md` | How we build |
+
+It said **four** until 2026-09-07, and had for a while: `SYNC-MODEL.md` was already live and already
+guarded — the code's own `HISTORICAL` regex excludes only the dated analyses — so the rule was prose
+that three documents repeated and none enforced. `TRACKER.md` is the sixth, and it exists because
+findings were being tracked in **nine** registers that had drifted into contradicting each other.
+
+**One register, one id.** An `OV-`, `DQ-`, `W1-` or `SYNC-F` id is *defined* in `TRACKER.md` and
+cited anywhere. Never maintain a status in two files — `trackerIntegrity.test.ts` fails if you do,
+because every contradiction that forced this rule came from exactly that.
