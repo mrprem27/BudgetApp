@@ -4332,7 +4332,13 @@ OV-25 · A sheet pattern documented twice and used never      [dead-alternative]
            is why: the stage-claiming in sheetStage.ts assumes one navigator level".
   Blast.   Two comments.
   Risk.    None.
-  Verdict. COLLAPSE.
+  Verdict. COLLAPSE — **done 2026-09-06**. Both docstrings rewritten. The kept
+           half is the REASON the pattern looked attractive (nesting a Modal in a
+           transparentModal route goes black once the keyboard opens); what went is
+           the instruction to use a pattern the app has no instance of. Note the
+           line numbers here were stale by ~10 — SheetModal.tsx:30-31 and
+           DraggableSheet.tsx:49-51, and SCREENS.md:169 cites _layout.tsx:108-111
+           for options that live at :207-208.
   Trigger. Now — it costs nothing and misleads continuously.
 
 OV-27 · Three buttons to one destination on one screen        [path-duplication]
@@ -4697,10 +4703,17 @@ OV-20 · Seven near-identical investment identifiers                [alias-spraw
 OV-22 · Six vocabularies over daily/weekly/monthly/yearly          [alias-sprawl]
   BUDGET_CADENCE · Period · BUDGET_PERIOD · TabKey+TARGET_FOR_TAB · RECUR_FREQ ·
   SAVINGS_FREQUENCY.
-  Verdict. RENAME-ONLY for four of them; OV-19 handles the two that are storage.
+  Correction. "The two that are storage" undercounts. FOUR are: BUDGET_CADENCE
+           (category_budget.cadence), RECUR_FREQ (txn.recur_freq), SAVINGS_FREQUENCY
+           (savings_goal.frequency) and BUDGET_PERIOD (category_budget.period) each
+           sit behind a CHECK constraint, so changing a VALUE is a migration, not a
+           rename. Only Period (an alias of BudgetCadence) and TabKey/TARGET_FOR_TAB
+           are free. There is also a settings key `default_cadence` holding a raw
+           string.
+  Verdict. RENAME-ONLY **for the prose and the two aliases only** — done 2026-09-06.
            They are genuinely different domains — a budget cadence and a recurrence
            frequency are not the same idea — so unifying the TYPES would be wrong.
-           Unify the WORDS.
+           Unify the WORDS, and only where a word is not also a stored value.
 
 OV-11 · A group has three end states that get conflated               [overload]
   archived (hidden, still yours, reversible) · left (you are out, it continues) ·
@@ -4714,7 +4727,11 @@ OV-26 · Create-as-sheet, edit-as-route                        [path-duplication
   Creating a group is a SheetModal; editing one is a route. Adding a person is a
   sheet; adding a member is a route. Editing a budget is a route (SC-10) AND a
   sheet (OwnBudgetSheet).
-  Verdict. RENAME-ONLY — meaning: write the rule down rather than churn the UI.
+  Verdict. RENAME-ONLY — **written down 2026-09-06**, in AGENTS.md as "a sheet for
+           one field, a route for a form". Nothing renamed, nothing churned; the
+           OwnBudgetSheet violation is named there and deliberately left, because
+           the sheet edits ONE category's line from inside a list and the route
+           edits every line at once. Meaning: write the rule down rather than churn the UI.
            The rule the codebase actually follows is "a sheet for one field, a
            route for a form". SC-10 vs OwnBudgetSheet is the one real violation.
 ```
@@ -4740,7 +4757,11 @@ OV-13 · Two key-value stores both called "settings"               [split-storag
            is restored onto a DIFFERENT device, which is wrong.
   But.     The consequence is real and undocumented until now: **a restore does not
            bring your preferences back**, and nothing on screen says so.
-  Verdict. KEEP-DOCUMENTED, plus one line of UI copy on the restore screen.
+  Verdict. KEEP-DOCUMENTED — **the copy shipped 2026-09-06**. A second warning
+           line on app/settings/backup.tsx names what does NOT come back: the ~30
+           AsyncStorage preferences (features, reminders, default pay method,
+           location). The SQLite `settings` TABLE is in BACKUP_TABLES and always
+           was — the two stores share a name, which is most of why nobody noticed.
 
 OV-21 · Four things called "pending"                                   [overload]
   E-17 pending_txn (the import inbox) · E-20 txn_approval (a peer's entry, which is

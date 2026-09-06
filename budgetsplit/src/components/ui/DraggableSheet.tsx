@@ -45,12 +45,19 @@ type Props = {
 
 /**
  * The bottom-sheet body WITHOUT an RN <Modal> wrapper — it fills its parent and
- * draws its own dimmed backdrop + draggable sheet. Use this directly as the root
- * of a `transparentModal` route screen (the route is the overlay; nesting a
- * Modal there collapses to a black screen once the keyboard opens). For an
- * inline sheet over a normal screen, use {@link SheetModal}, which wraps this in
- * a Modal. Drag is powered by react-native-gesture-handler + Reanimated, so the
- * gesture and the sheet transform stay on the UI thread (no JS-thread stutter).
+ * draws its own dimmed backdrop + draggable sheet.
+ *
+ * **{@link SheetModal} is its only caller**, and that is the whole story. This
+ * previously said to use it directly as the root of a `transparentModal` route
+ * screen; no route in the app is a `transparentModal`, so that was an instruction
+ * to follow a pattern with no precedent (`OV-25`). The kept half of the old note
+ * is the reason it would be tempting: nesting a Modal inside such a route
+ * collapses to a black screen once the keyboard opens. If one is ever written,
+ * this is the piece to reach for — but it has no callers today and the docstring
+ * should not imply otherwise.
+ *
+ * Drag is powered by react-native-gesture-handler + Reanimated, so the gesture and
+ * the sheet transform stay on the UI thread (no JS-thread stutter).
  *
  * Three ways it can close, and all three animate: a drag past the threshold, a backdrop tap,
  * and the parent clearing `visible` (which arrives here as `exiting`). That last one used to

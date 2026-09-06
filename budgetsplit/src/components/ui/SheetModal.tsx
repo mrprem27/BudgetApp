@@ -27,8 +27,12 @@ type Props = {
 /**
  * Inline bottom sheet for use over a normal screen (pickers, detail sheets).
  * Wraps {@link DraggableSheet} in an RN Modal so it can be toggled with `visible`.
- * For a sheet that IS a route screen, use a `transparentModal` route with
- * DraggableSheet directly (a nested Modal there breaks with the keyboard).
+ *
+ * This used to point at a `transparentModal` route as the alternative for a sheet
+ * that IS a screen. **No such route exists** — `presentation:` is declared twice in
+ * the whole app and both are `fullScreenModal` — so the note described a pattern
+ * nobody could follow and sent readers looking for callers there are none of
+ * (`OV-25`). Every sheet in the app goes through this component.
  *
  * ### Why the child outlives `visible`
  *

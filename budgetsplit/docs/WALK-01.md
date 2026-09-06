@@ -425,7 +425,7 @@ Every note from the walk, once. `Filed` names the durable id where one exists.
 |---|---|---|---|
 | — | all | Three heights, four renderings | ✅ `OV-32` — done 2026-09-04 |
 | — | `SC-20`, `SC-19` | Two empty states nothing can reach | `OV-31` |
-| `W1-12` | `SC-22` | Forecast section vanishes with no explanation | — |
+| `W1-12` ✅ | `SC-22` | Forecast section vanished with no explanation. Fixed 2026-09-06: a `SectionCard` placeholder saying a projection this early would swing on one purchase — not un-gated | — |
 | `W1-13` | `SC-22` | Amber sample note has no zero guard | — |
 | `W1-14` | `SC-40` | Empty state has no CTA | — |
 | `W1-15` | `SC-38` | Only empty state wrapped in a `Card` | ✅ unwrapped |

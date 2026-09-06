@@ -261,6 +261,31 @@ export default function InsightsScreen() {
               </SectionCard>
             )}
 
+            {/* A forecast needs at least two days of spending to draw a line
+                through, so early in the month there is nothing honest to show.
+                The section used to VANISH — `{hasForecast && …}` with no else —
+                which reads as a feature that was removed rather than one that is
+                waiting, and is exactly what Walk 1 reported (`W1-12`).
+
+                A placeholder saying WHY, not un-gating: a projection from one
+                day's data would swing wildly and be worse than none. Built as a
+                `SectionCard` so it is the same shape as the thing it stands in
+                for — and because `insightsScreen.test.ts` counts them. */}
+            {!hasForecast && !nothingYet && (
+              <SectionCard
+                title="Month-end forecast"
+                subtitle="Needs a couple of days of spending first"
+                icon="trending-up"
+                expanded={open.has('forecast')}
+                onToggle={() => toggle('forecast')}
+              >
+                <Text style={styles.pace}>
+                  A projection this early would swing on a single purchase. Log a
+                  day or two more and this becomes a line you can plan against.
+                </Text>
+              </SectionCard>
+            )}
+
             {hasForecast && (
               <SectionCard
                 title="Month-end forecast"

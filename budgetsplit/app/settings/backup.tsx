@@ -509,7 +509,14 @@ export default function BackupScreen() {
           ) : null}
         </View>
 
+        {/* Two separate facts, and the second one has never been said anywhere
+            (`OV-13`). A backup carries the SQLite tables — including the `settings`
+            TABLE — but not the ~30 AsyncStorage preferences in `lib/settings.ts`,
+            which is where your feature flags, default pay method, reminder choices
+            and location setting live. Restoring gets your money back and leaves you
+            re-choosing your preferences, and nothing on this screen admitted it. */}
         <Text style={styles.warning}>Restoring replaces ALL current data on this device. This cannot be undone.</Text>
+        <Text style={styles.warning}>Your transactions, groups and people come back. App preferences — features, reminders, default pay method — do not, and stay as they are on this phone.</Text>
       </View>
 
       <PassphraseSheet

@@ -241,6 +241,23 @@ Sizing tokens — reach for these instead of a literal:
 
 Bottom padding for a scroll container comes from **`useContentInset({ fab, tabBar, footer })`** (`src/hooks/useContentInset.ts`) — never a literal. Hard-coded `paddingBottom: 100` is why `UX_AUDIT.md` High #3 found the FAB covering real content on six screens.
 
+### A sheet for one field, a route for a form
+
+The rule the codebase already follows, written down because it looked like drift
+(`OV-26`). Creating a group is a `SheetModal`; editing one is a route. Adding a
+person is a sheet; adding a member is a route. Those pairs are not inconsistent —
+each sheet answers **one question** and each route holds **a form with several**.
+
+- **Sheet** — one value, one decision, and you come straight back: a picker, a
+  confirm, a single amount, a trust setting.
+- **Route** — several fields that have to agree with each other, or anything with
+  its own back stack, its own scroll, or a destructive action.
+
+The one real violation is a budget, which is editable at `/budget` **and** through
+`OwnBudgetSheet` — a form in a sheet. Left alone deliberately: the sheet edits one
+category's line from inside a list, which is the sheet case, and the route edits
+every line at once. If that stops being true, the sheet is the one to go.
+
 ### Pills and chips — one component, no exceptions
 
 **The pill shape is `ui/Chip`.** Never hand-roll one. Seven near-identical variants
