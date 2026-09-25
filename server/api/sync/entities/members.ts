@@ -62,11 +62,14 @@ async function writeMember(ctx: PushContext, m: Mutation): Promise<D1PreparedSta
   // --- add, or re-add after leaving -------------------------------------------------
   if (!existing || ((existing.status === 'left' || existing.status === 'removed') && (wanted === 'invited' || wanted === 'active'))) {
     if (!gctx || !canAddMember(gctx)) throw new Rejected('forbidden', 'Only an admin can add people to this group');
-    const account = inviteeUser
+    // An account id nobody has — a link from before a server reset, or demo data —
+    // is still a real person in this group's money. Refusing them would refuse
+    // every entry that names them too, so they join as a plain name instead.
+    const realInvitee = inviteeUser
+      && (await db.prepare('SELECT 1 AS n FROM users WHERE id = ? AND deleted_at IS NULL').bind(inviteeUser).first())
+      ? inviteeUser : null;
+    const account = realInvitee
       ?? (await db.prepare('SELECT user_id FROM people WHERE id = ?').bind(personId).first<string | null>('user_id'));
-    if (inviteeUser && !(await db.prepare('SELECT 1 AS n FROM users WHERE id = ?').bind(inviteeUser).first())) {
-      throw new Rejected('not_found', 'No account with that id');
-    }
     const status = account ? 'invited' : 'active';
     const name = text(raw.display_name) ?? existing?.display_name;
     if (!name) throw new Rejected('invalid', 'group_members: display_name is required');

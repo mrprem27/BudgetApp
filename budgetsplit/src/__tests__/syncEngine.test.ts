@@ -23,12 +23,14 @@ const ME = selfPersonId(USER);
 const PERSONAL = 'g-personal';
 type Db = TestDb & Parameters<typeof syncOnce>[0];
 
-function transport(d1: TestD1, userId: string, opts: { loseReply?: () => boolean } = {}): Transport {
+function transport(d1: TestD1, userId: string, opts: { loseReply?: () => boolean; perRequest?: number } = {}): Transport {
   return {
     async push(body) {
       const now = Date.now();
       const last = (await ensureDevice(d1, userId, body.deviceId, now))!;
-      const lastMutationId = await applyPush({ db: d1, userId, deviceId: body.deviceId, now }, body.mutations, last, ENTITIES);
+      // `perRequest`: a server that stops part-way, like a Worker at its query limit.
+      const todo = opts.perRequest ? body.mutations.filter(m => m.id > last).slice(0, opts.perRequest) : body.mutations;
+      const lastMutationId = await applyPush({ db: d1, userId, deviceId: body.deviceId, now }, todo, last, ENTITIES);
       if (opts.loseReply?.()) throw new Error('network: reply lost');
       return { lastMutationId };
     },
@@ -62,6 +64,24 @@ async function phone(): Promise<Db> {
 const serverCount = (d1: TestD1, table: string) => d1.prepare(`SELECT COUNT(*) AS n FROM ${table}`).first<number>('n');
 
 describe('sync engine — the phone and the real server', () => {
+  it('a server that applies only part of each push loses nothing — the phone resends from its acknowledgement', async () => {
+    const d1 = await server();
+    const db = await phone();
+    for (let k = 0; k < 40; k++) {
+      await insertTxn(db, {
+        groupId: PERSONAL, kind: 'expense', entryMode: 'quick', date: Date.now(), category: 'Food',
+        payments: [{ personId: ME, amount: 100 + k }], shares: [{ personId: ME, amount: 100 + k }],
+      });
+    }
+    const progress: number[] = [];
+    const r = await syncOnce(db, transport(d1, USER, { perRequest: 7 }), USER, p => progress.push(p));
+    expect(r.skipped).toBeUndefined();
+    expect(await serverCount(d1, 'transactions')).toBe(40);
+    expect(await queueCount(db)).toBe(0);
+    // The upload itself moves the bar, not only the pull after it.
+    expect(progress.filter(p => p > 0 && p < 0.1).length).toBeGreaterThan(3);
+  });
+
   it('does nothing for a ledger not yet joined to this account', async () => {
     const d1 = await server();
     const db = createTestDb() as Db;

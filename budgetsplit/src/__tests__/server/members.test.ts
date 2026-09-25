@@ -77,6 +77,26 @@ describe('adding people', () => {
     expect(await db.prepare('SELECT user_id FROM people WHERE id = ?').bind('p-ghost').first('user_id')).toBeNull();
   });
 
+  it('an account id nobody has (a stale link, demo data) lands as a plain named member, not a refusal', async () => {
+    const { db, owner, idOf } = await world();
+    const ghost = 'user:gone-acct';
+    await push(db, owner.userId, [mem({ person_id: ghost, user_id: 'gone-acct', display_name: 'Aarav' }, idOf(ghost))]);
+    expect(await lastRejection(db)).toBeNull();
+    expect(await member(db, idOf(ghost))).toMatchObject({ status: 'active' });
+    expect(await db.prepare('SELECT user_id FROM people WHERE id = ?').bind(ghost).first('user_id')).toBeNull();
+    // So an expense naming them is accepted, instead of every one being refused with them.
+    await push(db, owner.userId, [{
+      entity: 'transactions', op: 'upsert', entityId: 't-1', baseVersion: 0,
+      data: {
+        group_id: G, kind: 'expense', amount: 1000, category: 'Food', date: T0,
+        payers: [{ person_id: owner.personId, amount: 1000 }],
+        splits: [{ person_id: owner.personId, amount: 500 }, { person_id: ghost, amount: 500 }],
+      },
+    }]);
+    expect(await lastRejection(db)).toBeNull();
+    expect(await db.prepare('SELECT COUNT(*) AS n FROM transactions WHERE id = ?').bind('t-1').first('n')).toBe(1);
+  });
+
   it('a plain member inviting is refused (SYNC-F24), and nothing is written', async () => {
     const { db, aarav, bina, idOf } = await withAarav();
     await push(db, aarav.userId, [mem({ user_id: bina.userId, display_name: 'Bina' }, idOf(bina.personId))]);

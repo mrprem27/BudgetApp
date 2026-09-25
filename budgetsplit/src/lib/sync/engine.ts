@@ -66,7 +66,11 @@ const RANK = [
 ];
 const rank = (e: string) => { const i = RANK.indexOf(e); return i < 0 ? RANK.length : i; };
 
-const PUSH_CHUNK = 100;
+/**
+ * Mutations per request. Each costs the server ~10 D1 queries, and a Worker gets
+ * 1000 per request on Workers Paid (50 on Free, `DQ-95`), so 25 leaves headroom.
+ */
+const PUSH_CHUNK = 25;
 const MAX_PULL_ROUNDS = 10;
 
 type Planned = { out: Outbound; rows: QueueRow[]; id?: number };
@@ -115,7 +119,9 @@ async function plan(db: SQLite.SQLiteDatabase, userId: string): Promise<Planned[
   return [...ups, ...dels];
 }
 
-async function push(db: SQLite.SQLiteDatabase, transport: Transport, device: string, userId: string): Promise<number> {
+async function push(
+  db: SQLite.SQLiteDatabase, transport: Transport, device: string, userId: string, onProgress?: SyncProgress,
+): Promise<number> {
   const planned = await plan(db, userId);
   if (planned.length === 0) return 0;
 
@@ -144,14 +150,27 @@ async function push(db: SQLite.SQLiteDatabase, transport: Transport, device: str
       ...(p.out.op === 'upsert' ? { data: p.out.data } : {}),
     });
   }
-  for (let i = 0; i < mutations.length; i += PUSH_CHUNK) {
+  /*
+   * Only ever continue from what the server ACKNOWLEDGED. It may stop part-way
+   * through a chunk (a per-request limit), and it skips any id at or below its
+   * acknowledgement — so sending the next chunk regardless would have it apply
+   * later ids and then treat the unapplied gap as done, for good.
+   */
+  let i = 0;
+  while (i < mutations.length) {
     const chunk = mutations.slice(i, i + PUSH_CHUNK);
-    await transport.push({ deviceId: device, mutations: chunk });
+    const { lastMutationId } = await transport.push({ deviceId: device, mutations: chunk });
+    const applied = chunk.filter(m => m.id <= lastMutationId);   // ids ascend, so a prefix
     // Optimistic: an accepted money write moved the server row on by one. The
     // next pull confirms it; a rejection replaces it with the server's copy.
     await db.withTransactionAsync(async () => {
-      for (const m of chunk) if (MONEY.has(m.entity)) await setServerVersion(db, m.entity, m.entityId, m.baseVersion + 1);
+      for (const m of applied) if (MONEY.has(m.entity)) await setServerVersion(db, m.entity, m.entityId, m.baseVersion + 1);
     });
+    // Nothing taken: stop sending for now. The rest stays queued for the next
+    // sync, and the pull still runs, so other people's changes still arrive.
+    if (applied.length === 0) break;
+    i += applied.length;
+    onProgress?.(0.1 * (i / mutations.length));
   }
   return mutations.length;
 }
@@ -212,7 +231,7 @@ export async function syncOnce(
   try {
     const device = await deviceId(db, uuid);
     onProgress?.(0);
-    const pushed = await push(db, transport, device, userId);
+    const pushed = await push(db, transport, device, userId, onProgress);
     onProgress?.(0.1);
     const { pulled, rejected, vanished } = await pullAll(db, transport, device, userId, onProgress);
     await setLastSyncedAt(db, Date.now());
