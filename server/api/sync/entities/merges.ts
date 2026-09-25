@@ -3,11 +3,10 @@ import { bumpScope, Rejected, SCOPE_SEQ, type CustomSpec, type Mutation, type Pu
 import { askOne } from './approvals';
 
 /**
- * A friend with no account turns out to be an account (SPEC-SERVER.md §2.2, S21).
- *
- * The placeholder was "one id per human" for as long as they had no account; now
- * they do, and the placeholder folds INTO the account's person — never the other
- * way round — with every reference re-pointed in one batch:
+ * A friend with no account turns out to be an account (SPEC-SERVER.md §2.2, S21) —
+ * OR two placeholders turn out to be the same human, picked by hand ("Same person
+ * as…", `DQ-94` part 2). Either way one person folds INTO the other, never the
+ * other way round, with every reference re-pointed in one batch:
  *
  *   * memberships move, keeping their status: the placeholder was already in the
  *     group, and the account consented to me by linking;
@@ -16,37 +15,66 @@ import { askOne } from './approvals';
  *     ghost; the account is asked about each, as for any entry that names them;
  *   * trust, budget lines and friend rows move for whoever held them.
  *
- * Who may: whoever made the placeholder, or shares a group with it — and only
- * into an account they have a live link with. Linking is the consent; without it
- * anyone could attach strangers' money to an account. A placeholder the server
- * never saw is nothing to merge: acknowledged, no write.
+ * `into_user` (a placeholder becomes an account it's linked with) and
+ * `into_person` (two placeholders picked by hand) are different consents:
+ *
+ *   * `into_user` — whoever made the placeholder, or shares a group with it — and
+ *     only into an account they have a live link with. Linking is the consent;
+ *     without it anyone could attach strangers' money to an account.
+ *   * `into_person` — both people must be mine to connect: whoever made each one,
+ *     or shares a group with each. No account is involved, so no link check —
+ *     it's still refused for a stranger's placeholder on either side.
+ *
+ * A placeholder the server never saw is nothing to merge: acknowledged, no write.
  */
 
 type Named = { transaction_id: string; group_id: string; kind: string; author_id: string; author_user: string | null };
+
+/** Whoever made this placeholder, or shares a readable group with it — the one authority check, on either side of a merge. */
+async function mayConnect(ctx: PushContext, personId: string, createdBy: string): Promise<boolean> {
+  if (createdBy === ctx.userId) return true;
+  const groups = (await ctx.db.prepare(
+    'SELECT DISTINCT group_id FROM group_members WHERE person_id = ? AND deleted_at IS NULL',
+  ).bind(personId).all<{ group_id: string }>()).results?.map(r => r.group_id) ?? [];
+  for (const g of groups) if (await canRead(ctx, g)) return true;
+  return false;
+}
 
 async function writeMerge(ctx: PushContext, m: Mutation): Promise<D1PreparedStatement[]> {
   const { db, userId, now } = ctx;
   if (m.op === 'delete') throw new Rejected('invalid', 'person_merges: a merge is never undone');
   const from = m.entityId;
   const intoUser = typeof m.data?.into_user === 'string' ? m.data.into_user : null;
-  if (!intoUser) throw new Rejected('invalid', 'person_merges: into_user is required');
+  const intoPerson = typeof m.data?.into_person === 'string' ? m.data.into_person : null;
+  if (!intoUser && !intoPerson) throw new Rejected('invalid', 'person_merges: into_user or into_person is required');
 
   const placeholder = await db.prepare('SELECT user_id, merged_into, created_by FROM people WHERE id = ?')
     .bind(from).first<{ user_id: string | null; merged_into: string | null; created_by: string }>();
   if (!placeholder) return [];
-  const into = await myPersonId(db, intoUser);
+  const into = intoUser ? await myPersonId(db, intoUser) : intoPerson!;
   if (placeholder.merged_into === into || from === into) return [];
-  if (into === (await meOf(ctx))) throw new Rejected('invalid', 'You can’t connect someone to your own account');
   if (placeholder.user_id !== null || placeholder.merged_into !== null) {
     throw new Rejected('invalid', 'That person is already someone else');
   }
-  if (!(await liveAccount(db, intoUser))) {
-    throw new Rejected('not_found', 'No account with that id');
+
+  if (intoUser) {
+    if (into === (await meOf(ctx))) throw new Rejected('invalid', 'You can’t connect someone to your own account');
+    if (!(await liveAccount(db, intoUser))) {
+      throw new Rejected('not_found', 'No account with that id');
+    }
+    const [a, b] = userId < intoUser ? [userId, intoUser] : [intoUser, userId];
+    if (!(await db.prepare('SELECT 1 AS n FROM links WHERE user_a = ? AND user_b = ? AND ended_at IS NULL').bind(a, b).first())) {
+      throw new Rejected('forbidden', 'You can only connect someone to an account you’re linked with');
+    }
+  } else {
+    const target = await db.prepare('SELECT user_id, merged_into, created_by FROM people WHERE id = ?')
+      .bind(into).first<{ user_id: string | null; merged_into: string | null; created_by: string }>();
+    if (!target) return [];
+    if (target.user_id !== null) throw new Rejected('invalid', 'person_merges: into_person names an account; use into_user');
+    if (target.merged_into !== null) throw new Rejected('invalid', 'That person is already someone else');
+    if (!(await mayConnect(ctx, into, target.created_by))) throw new Rejected('forbidden', 'That person isn’t yours to connect');
   }
-  const [a, b] = userId < intoUser ? [userId, intoUser] : [intoUser, userId];
-  if (!(await db.prepare('SELECT 1 AS n FROM links WHERE user_a = ? AND user_b = ? AND ended_at IS NULL').bind(a, b).first())) {
-    throw new Rejected('forbidden', 'You can only connect someone to an account you’re linked with');
-  }
+
   const groups = (await db.prepare(
     'SELECT DISTINCT group_id FROM group_members WHERE person_id = ? AND deleted_at IS NULL',
   ).bind(from).all<{ group_id: string }>()).results?.map(r => r.group_id) ?? [];
@@ -107,8 +135,9 @@ async function writeMerge(ctx: PushContext, m: Mutation): Promise<D1PreparedStat
       db.prepare(`UPDATE transactions SET version = version + 1, seq = ${SCOPE_SEQ}, updated_at = ? WHERE id = ?`)
         .bind(t.group_id, now, t.transaction_id),
     );
-    // Now it names them, so they're asked — unless it's theirs.
-    if (t.author_user !== intoUser) {
+    // Now it names them, so they're asked — unless it's theirs, or there's nobody
+    // to ask (into_person: two placeholders, neither with an account).
+    if (intoUser && t.author_user !== intoUser) {
       const payers = (await db.prepare('SELECT person_id, amount FROM transaction_payers WHERE transaction_id = ?')
         .bind(t.transaction_id).all<{ person_id: string; amount: number }>()).results ?? [];
       out.push(...(await askOne(ctx, {

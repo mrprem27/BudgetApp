@@ -69,10 +69,10 @@ Sync, two phones, two accounts, one group:
 
 ## Phase 2 · "Same person as…" (`DQ-94` part 2)
 
-- [ ] **P1 · Server: placeholder → placeholder (M)**
-  - Files: `server/api/sync/entities/merges.ts`, `src/__tests__/server/*` (a new merges case file)
-  - Accept: folding my own two placeholders works; a stranger's placeholder is refused; `into_user` unchanged
-  - Verify: the server suite; revert → the new cases fail; **deploy**
+- [x] **P1 · Server: placeholder → placeholder (M)**
+  - Files: `server/api/sync/entities/merges.ts`, `src/__tests__/server/merges.test.ts` (new)
+  - Accept: folding my own two placeholders works; a stranger's placeholder is refused (either side); `into_user` unchanged
+  - Verify: the server suite (7 new cases); revert → 5 of 7 fail; deployed (`02fce28e-a4f2-4c91-8f92-ac1fe4b56787`)
 - [ ] **P2 · `combinePeople` (S)**
   - Files: `src/db/queries/personRemap.ts`, a new two-phone test
   - Accept: entries, splits, item assignments and trust move; the dropped person is gone on both phones; balances unchanged; refused for "me" and for two different accounts
