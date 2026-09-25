@@ -33,13 +33,22 @@ type Props = {
  */
 export function SignInStage({ onBack, onVerified }: Props) {
   const {
-    email, setEmail, sentTo, code, setCode, sending, verifying, restoring, asking, error, setError,
+    email, setEmail, sentTo, code, setCode, sending, verifying, restoring, merging, asking, canMerge, error, setError,
     sendLink, verifyCode, answer, useDifferentEmail,
   } = useEmailSignIn({ onVerified });
 
   if (restoring !== null) return <FirstSignInStep kind="restore" progress={restoring} />;
+  if (merging !== null) return <FirstSignInStep kind="merge" progress={merging} />;
   if (asking) {
-    return <FirstSignInStep kind="ask" onUseAccount={() => answer('use-my-account')} onNotNow={() => answer('not-now')} />;
+    return (
+      <FirstSignInStep
+        kind="ask"
+        canMerge={canMerge}
+        onMerge={() => answer('merge')}
+        onUseAccount={() => answer('use-my-account')}
+        onNotNow={() => answer('not-now')}
+      />
+    );
   }
 
   return (

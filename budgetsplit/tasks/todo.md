@@ -47,19 +47,19 @@ Sync, two phones, two accounts, one group:
 
 ## Phase 1 · Merge into my account (`DQ-94`)
 
-- [ ] **M1 · `mergeIntoAccount` + tests (M)**
+- [x] **M1 · `mergeIntoAccount` + tests (M)**
   - Files: `src/lib/sync/firstSignIn.ts`, `src/db/queries/mergeLedger.ts` (exists, uncommitted), `src/db/queries/identity.ts` (`backfillQueue` exported), new `src/__tests__/mergeSignIn.test.ts`
   - Accept: 0 rejections · one Personal group on the server · same-email friend → one person, same-name friend → two · every phone transaction beside the account's · a clashing budget line keeps the account's · a third phone restores X ∪ Y exactly · failure mid-way → the phone byte-identical and unlinked
   - Verify: revert each fold (Personal, email, queue-what's-new) and watch its case fail
-- [ ] **M2 · Wiring and the third button (S)**
+- [x] **M2 · Wiring and the third button (S)**
   - Files: `src/lib/sync/run.ts`, `src/lib/sync/index.ts`, `src/hooks/useEmailSignIn.ts`, `src/components/system/FirstSignInStep.tsx`, `src/components/system/onboarding/SignInStage.tsx`, `app/auth.tsx`, `app/settings/account.tsx`
   - Accept: three call sites, identical, each passing `onMerge`; Merge hidden when the phone is joined to a different account; the copy no longer says "can't be merged"
   - Verify: a source guard counts the call sites; `tsc`
-- [ ] **M3 · Group-column guard (XS)**
+- [x] **M3 · Group-column guard (XS)**
   - Files: new `src/__tests__/groupRemapCoverage.test.ts`
   - Accept: every `schema.ts` column naming `budget_group` is either in `GROUP_REMAP_COLUMNS` or special-cased in `foldPersonalGroup`
   - Verify: a fake extra column in a schema copy fails it
-- [ ] **M4 · Possible-duplicates review (S)** — decided 2026-09-26
+- [x] **M4 · Possible-duplicates review (S)** — decided 2026-09-26
   - Merge adds everything, then lists phone expenses that match an account expense by the app's existing duplicate rule (`findRecentDuplicate`: same group, category, amount, ±24 h, expenses only) — one list, each pair side by side: **Keep both** / **Remove this phone's copy**, plus **Remove all**
   - Files: a pure matcher reusing the rule (one place for it), `mergeLedger.ts` records the candidate pairs, a review sheet shown after Merge
   - Accept: an identical expense on both sides is listed, not dropped · two identical expenses on the *same* side are never flagged · removing a copy deletes the phone's row before it uploads (or soft-deletes it after) · the rule itself is not duplicated — a guard that there is one implementation

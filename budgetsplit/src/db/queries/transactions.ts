@@ -760,6 +760,38 @@ export async function reapDeletedAttachments(
 
 /* ---- Recurring lifecycle (the parent txn row IS the recurring rule) ---- */
 
+/** ±24 h: the window a same-amount, same-category entry counts as a possible duplicate. */
+export const DUPLICATE_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Every non-recurring, non-pending entry in `groupId`/`category` within
+ * `DUPLICATE_WINDOW_MS` of `dateMs`, with its id and my-share total — the one
+ * query behind both `findRecentDuplicate` (a boolean, for Quick Add and Review
+ * commit) and `findDuplicateTxnId` (which id, for Merge's possible-duplicates
+ * review, `DQ-94`). `excludeId` drops a specific row — the entry the caller is
+ * itself about to insert or is comparing, so it never matches itself.
+ */
+async function candidateDuplicates(
+  db: SQLite.SQLiteDatabase,
+  groupId: string,
+  category: string,
+  dateMs: number,
+  /** Never returned as a match — the row(s) the caller is itself comparing. */
+  exclude: readonly string[] = [],
+): Promise<Array<{ id: string; total: number }>> {
+  const excludeClause = exclude.length ? `AND t.id NOT IN (${exclude.map(() => '?').join(',')})` : '';
+  return db.getAllAsync<{ id: string; total: number }>(
+    `SELECT t.id as id, COALESCE(SUM(p.amount),0) as total
+       FROM txn t LEFT JOIN txn_payment p ON p.txn_id = t.id
+      WHERE t.group_id=? AND t.category=? AND t.is_deleted=0 AND t.recur_freq IS NULL
+        AND t.date BETWEEN ? AND ?
+        AND ${NOT_AWAITING_APPROVAL}
+        ${excludeClause}
+      GROUP BY t.id`,
+    [groupId, category, dateMs - DUPLICATE_WINDOW_MS, dateMs + DUPLICATE_WINDOW_MS, ...exclude] as SQLite.SQLiteBindValue[],
+  );
+}
+
 export async function findRecentDuplicate(
   db: SQLite.SQLiteDatabase,
   groupId: string,
@@ -767,17 +799,27 @@ export async function findRecentDuplicate(
   amountPaise: number,
   dateMs: number,
 ): Promise<boolean> {
-  const window = 24 * 60 * 60 * 1000;
-  const rows = await db.getAllAsync<{ total: number }>(
-    `SELECT COALESCE(SUM(p.amount),0) as total
-       FROM txn t LEFT JOIN txn_payment p ON p.txn_id = t.id
-      WHERE t.group_id=? AND t.category=? AND t.is_deleted=0 AND t.recur_freq IS NULL
-        AND t.date BETWEEN ? AND ?
-        AND ${NOT_AWAITING_APPROVAL}
-      GROUP BY t.id`,
-    [groupId, category, dateMs - window, dateMs + window],
-  );
+  const rows = await candidateDuplicates(db, groupId, category, dateMs);
   return rows.some(r => r.total === amountPaise);
+}
+
+/**
+ * The id of a same-amount entry within the window, excluding the rows in
+ * `exclude` — Merge's version of the same rule (`DQ-94`'s possible-duplicates
+ * review), which needs to say WHICH row matched, not just whether one exists,
+ * and needs a whole set excluded: two of the phone's own entries must never
+ * match each other, only an account-origin one.
+ */
+export async function findDuplicateTxnId(
+  db: SQLite.SQLiteDatabase,
+  groupId: string,
+  category: string,
+  amountPaise: number,
+  dateMs: number,
+  exclude: readonly string[],
+): Promise<string | null> {
+  const rows = await candidateDuplicates(db, groupId, category, dateMs, exclude);
+  return rows.find(r => r.total === amountPaise)?.id ?? null;
 }
 
 /**

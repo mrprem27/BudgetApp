@@ -295,7 +295,7 @@ const AREAS = [
     sc:  ['SC-04','SC-09','SC-11','SC-13','SC-26','SC-26a'],
     fe:  ['FE-11','FE-12','FE-13','FE-14','FE-15','FE-17','FE-18','FE-19','FE-20','FE-21','FE-22'],
     ov:  ['OV-02','OV-04','OV-05','OV-11','OV-14','OV-27'],
-    dq:  ['DQ-09','DQ-10','DQ-11','DQ-13','DQ-25','DQ-30','DQ-33','DQ-84'],
+    dq:  ['DQ-09','DQ-10','DQ-11','DQ-13','DQ-25','DQ-30','DQ-33','DQ-84','DQ-98'],
   },
   {
     key: 'budget', name: 'Budgets and insight',
@@ -305,7 +305,7 @@ const AREAS = [
     sc:  ['SC-03','SC-10','SC-10b','SC-20','SC-21','SC-22','SC-33'],
     fe:  ['FE-25','FE-26','FE-32','FE-33','FE-34','FE-35','FE-36','FE-37','FE-42'],
     ov:  ['OV-07','OV-19'],
-    dq:  ['DQ-02','DQ-12','DQ-26'],
+    dq:  ['DQ-02','DQ-12','DQ-26','DQ-100','DQ-103'],
   },
   {
     key: 'savings', name: 'Savings and assets',
@@ -325,7 +325,7 @@ const AREAS = [
     sc:  ['SC-30','SC-31','SC-32','SC-41'],
     fe:  ['FE-23','FE-24','FE-50','FE-60'],
     ov:  ['OV-03','OV-12','OV-22'],
-    dq:  ['DQ-90', 'DQ-92'],
+    dq:  ['DQ-90', 'DQ-92', 'DQ-99'],
   },
   {
     key: 'import', name: 'Importing and review',
@@ -355,7 +355,7 @@ const AREAS = [
     sc:  ['SC-01','SC-02','SC-06','SC-24','SC-27','SC-27a','SC-28','SC-29'],
     fe:  ['FE-39','FE-41','FE-61','FE-62','FE-63','FE-64','FE-65','FE-66','FE-67','FE-68','FE-69','FE-70'],
     ov:  ['OV-09','OV-10','OV-13','OV-15','OV-16','OV-17','OV-23','OV-25','OV-26','OV-29','OV-31','OV-32'],
-    dq:  ['DQ-01','DQ-03','DQ-06','DQ-17','DQ-19','DQ-21','DQ-23','DQ-80','DQ-88'],
+    dq:  ['DQ-01','DQ-03','DQ-06','DQ-17','DQ-19','DQ-21','DQ-23','DQ-80','DQ-88','DQ-101','DQ-102'],
   },
 ];
 

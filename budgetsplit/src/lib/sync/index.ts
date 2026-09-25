@@ -17,11 +17,12 @@
  */
 
 export {
-  runSync, scheduleSync, decideFirstSignInNow, uploadNow, restoreNow, planSignOutNow, wipeForSignOutNow,
-  syncActivity, classifySyncError, type SyncActivity, type SyncFailure,
+  runSync, scheduleSync, decideFirstSignInNow, uploadNow, mergeNow, canMergeNow, restoreNow,
+  planSignOutNow, wipeForSignOutNow, syncActivity, classifySyncError, type SyncActivity, type SyncFailure,
 } from './run';
 export type { SignOutPlan } from './signOut';
 export { FirstSignInError, type FirstSignInCase, type Account } from './firstSignIn';
 export { syncOnce, hasPendingChanges, type SyncOutcome, type Transport } from './engine';
 export { selfPersonId, syncIds, isSyncedPreference } from './ids';
 export type { Vanished } from '../../db/queries/syncApply';
+export type { MergeDuplicate } from '../../db/queries/mergeLedger';

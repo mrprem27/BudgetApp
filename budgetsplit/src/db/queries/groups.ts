@@ -127,8 +127,20 @@ export async function getGroupById(db: SQLite.SQLiteDatabase, id: string): Promi
  * honest answer.
  */
 export async function getPersonalGroup(db: SQLite.SQLiteDatabase): Promise<BudgetGroup | null> {
-  return db.getFirstAsync<BudgetGroup>(
-    'SELECT * FROM budget_group WHERE is_personal = 1 ORDER BY created_at ASC LIMIT 1',
+  return (await getPersonalGroups(db))[0] ?? null;
+}
+
+/**
+ * Every `is_personal` row, oldest first — normally exactly one. The only
+ * legitimate reason there's more than one is mid-merge (`mergeLedger.ts`
+ * `foldPersonalGroup`), which needs to name BOTH the phone's and the account's
+ * before it folds them into one; that is a different question from "which
+ * group is Personal", so it gets its own function rather than a second
+ * `is_personal = 1` lookup outside this file.
+ */
+export async function getPersonalGroups(db: SQLite.SQLiteDatabase): Promise<BudgetGroup[]> {
+  return db.getAllAsync<BudgetGroup>(
+    'SELECT * FROM budget_group WHERE is_personal = 1 ORDER BY created_at ASC',
   );
 }
 

@@ -7,8 +7,10 @@ import {
 import { isRestoring } from '../restoreGuard';
 import { hasPendingChanges, syncOnce, type SyncOutcome, type Transport } from './engine';
 import {
-  decideFirstSignIn, replaceWithAccount, uploadToAccount, type Account, type FirstSignInCase,
+  canMerge, decideFirstSignIn, mergeIntoAccount, replaceWithAccount, uploadToAccount,
+  type Account, type FirstSignInCase,
 } from './firstSignIn';
+import type { MergeDuplicate } from '../../db/queries/mergeLedger';
 import { planSignOut, wipeForSignOut, type SignOutPlan } from './signOut';
 
 /**
@@ -119,6 +121,28 @@ export function decideFirstSignInNow(db: SQLite.SQLiteDatabase, userId: string):
 export async function uploadNow(db: SQLite.SQLiteDatabase, account: Account, onChanged: () => void): Promise<void> {
   await exclusive(() => uploadToAccount(db, account));
   runSync(db).then(r => { if (r?.changed) onChanged(); }).catch(() => {});
+}
+
+/** Whether the "Merge into my account" choice can be offered right now. */
+export function canMergeNow(db: SQLite.SQLiteDatabase): Promise<boolean> {
+  return exclusive(() => canMerge(db));
+}
+
+/**
+ * Merge (`DQ-94`): pull the account in and fold, reporting progress on the
+ * download; the upload of what's newly queued is the ordinary sync afterwards,
+ * left to run behind — same shape as `uploadNow`.
+ */
+export function mergeNow(
+  db: SQLite.SQLiteDatabase,
+  account: Account,
+  onChanged: () => void,
+  onProgress?: (fraction: number) => void,
+): Promise<{ pulled: number; duplicates: MergeDuplicate[] }> {
+  return exclusive(() => mergeIntoAccount(db, network, account, { onProgress })).then(r => {
+    runSync(db).then(res => { if (res?.changed) onChanged(); }).catch(() => {});
+    return r;
+  });
 }
 
 /**

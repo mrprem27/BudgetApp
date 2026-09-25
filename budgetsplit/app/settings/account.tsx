@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { KeyboardForm } from '../../src/components/ui/KeyboardForm';
 import { useRouter } from 'expo-router';
@@ -15,6 +15,9 @@ import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { SheetModal } from '../../src/components/ui/SheetModal';
 import { SyncStatus } from '../../src/components/system/SyncStatus';
 import { FirstSignInStep } from '../../src/components/system/FirstSignInStep';
+import { MergeDuplicatesSheet } from '../../src/components/finance/MergeDuplicatesSheet';
+import { getPendingMergeDuplicates } from '../../src/lib/pendingMergeDuplicates';
+import type { MergeDuplicate } from '../../src/lib/sync';
 import { useServerSession } from '../../src/hooks/useServerSession';
 import { useEmailSignIn } from '../../src/hooks/useEmailSignIn';
 import { useSignOut } from '../../src/hooks/useSignOut';
@@ -45,8 +48,22 @@ export default function AccountScreen() {
 
   const {
     email, setEmail, sentTo, code, setCode, sending, verifying, error, setError,
-    sendLink, verifyCode, useDifferentEmail, restoring, asking, answer, connect,
+    sendLink, verifyCode, useDifferentEmail, restoring, merging, asking, canMerge, answer, connect,
+    mergeDuplicates: freshMergeDuplicates, clearMergeDuplicates,
   } = useEmailSignIn({ onVerified: reload });
+  // Persisted duplicates (a merge that ran on auth.tsx or in onboarding, where
+  // the hook that found them has since unmounted) — read once on mount, then
+  // whichever list is non-null wins so a fresh find is never overwritten by
+  // a stale read.
+  const [storedMergeDuplicates, setStoredMergeDuplicates] = useState<MergeDuplicate[] | null>(null);
+  useEffect(() => {
+    getPendingMergeDuplicates().then(d => { if (d.length > 0) setStoredMergeDuplicates(d); }).catch(() => {});
+  }, []);
+  const mergeDuplicates = freshMergeDuplicates ?? storedMergeDuplicates;
+  function dismissMergeDuplicates() {
+    setStoredMergeDuplicates(null);
+    clearMergeDuplicates();
+  }
   // Upload first, then empty the phone (`DQ-97`).
   const { signOut: handleSignOut, signingOut } = useSignOut({ onSignedOut: reload });
   const [syncing, setSyncing] = useState(false);
@@ -154,12 +171,20 @@ export default function AccountScreen() {
 
   // The first sign-in's full-screen step (S15): no header, no way back — the
   // restore is atomic and short, and the choice has to be made.
-  if (restoring !== null || asking) {
+  if (restoring !== null || merging !== null || asking) {
     return (
       <View style={styles.container}>
-        {restoring !== null
-          ? <FirstSignInStep kind="restore" progress={restoring} />
-          : <FirstSignInStep kind="ask" onUseAccount={() => answer('use-my-account')} onNotNow={() => answer('not-now')} />}
+        {restoring !== null ? <FirstSignInStep kind="restore" progress={restoring} />
+          : merging !== null ? <FirstSignInStep kind="merge" progress={merging} />
+          : (
+            <FirstSignInStep
+              kind="ask"
+              canMerge={canMerge}
+              onMerge={() => answer('merge')}
+              onUseAccount={() => answer('use-my-account')}
+              onNotNow={() => answer('not-now')}
+            />
+          )}
       </View>
     );
   }
@@ -352,6 +377,10 @@ export default function AccountScreen() {
         </Text>
         <PrimaryButton label="Save" onPress={handleSavePhone} loading={savingPhone} />
       </SheetModal>
+
+      {mergeDuplicates && (
+        <MergeDuplicatesSheet visible duplicates={mergeDuplicates} onClose={dismissMergeDuplicates} />
+      )}
     </View>
   );
 }

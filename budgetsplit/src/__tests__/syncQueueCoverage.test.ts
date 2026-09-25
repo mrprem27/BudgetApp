@@ -50,6 +50,15 @@ export const EXEMPT: Record<string, string> = {
   // already on the server that still name the placeholder are the server-side
   // placeholder merge, which is S21's acceptance, not something to re-push here.
   'personRemap.ts::remapAssignedTo': 're-points local ids when a friend takes their account\'s id; the person is queued by adoptAccountId, the server\'s copy is merged in S21',
+  // Merge (DQ-94) folds the phone's Personal group and same-email people into the
+  // account's, BEFORE anything is queued (`firstSignIn.ts::mergeIntoAccount` clears
+  // the queue, links, and pulls first) — so every row these two touch is still
+  // phone-local and unsynced; there is nothing on the server yet to tell about a
+  // fold. What DOES need telling — every entry that named the folded group or
+  // person — is re-pointed by these same functions and then queued by the caller's
+  // `queueWhatsNew`, which runs after. Same shape as `identity.ts::*`, one entry
+  // for the whole file rather than two nearly-identical ones.
+  'mergeLedger.ts::*': 'folds phone-local, not-yet-queued rows into the account\'s before anything is queued; what still needs telling — every entry that named the folded group or person — is re-pointed here and queued afterwards by queueWhatsNew',
 };
 
 type Writer = { name: string; tables: string[]; queues: boolean };

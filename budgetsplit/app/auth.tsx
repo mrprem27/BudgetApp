@@ -28,7 +28,7 @@ export default function AuthCallbackScreen() {
   const params = useLocalSearchParams<{ token?: string }>();
   const [linkError, setLinkError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
-  const { signInWithToken, restoring, asking, answer, error: signInError } = useEmailSignIn();
+  const { signInWithToken, restoring, merging, asking, canMerge, answer, error: signInError } = useEmailSignIn();
   const error = linkError ?? signInError;
   const attempted = useRef(false);
 
@@ -69,12 +69,20 @@ export default function AuthCallbackScreen() {
     );
   }
 
-  if (restoring !== null || asking) {
+  if (restoring !== null || merging !== null || asking) {
     return (
       <View style={styles.page}>
-        {restoring !== null
-          ? <FirstSignInStep kind="restore" progress={restoring} />
-          : <FirstSignInStep kind="ask" onUseAccount={() => answer('use-my-account')} onNotNow={() => answer('not-now')} />}
+        {restoring !== null ? <FirstSignInStep kind="restore" progress={restoring} />
+          : merging !== null ? <FirstSignInStep kind="merge" progress={merging} />
+          : (
+            <FirstSignInStep
+              kind="ask"
+              canMerge={canMerge}
+              onMerge={() => answer('merge')}
+              onUseAccount={() => answer('use-my-account')}
+              onNotNow={() => answer('not-now')}
+            />
+          )}
       </View>
     );
   }

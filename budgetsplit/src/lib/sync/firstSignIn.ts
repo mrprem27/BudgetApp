@@ -3,6 +3,8 @@ import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
 import { deviceId, linkedUser, setLinkedUser } from '../../db/queries/syncApply';
 import { linkLedger, phoneHasData, seedAccountMe } from '../../db/queries/identity';
+import { mergeLedger, findPossibleDuplicates, type MergeDuplicate } from '../../db/queries/mergeLedger';
+import { getPersonalGroups } from '../../db/queries/groups';
 import { readAllTables, restoreAllTables } from '../../db/queries/backup';
 import { BACKUP_TABLES, buildBackupPayload, type BackupTables } from '../backup';
 import { beginRestore, endRestore } from '../restoreGuard';
@@ -122,6 +124,95 @@ export async function replaceWithAccount(
     await restoreAllTables(db, snapshot);
     await setLinkedUser(db, null);
     throw new FirstSignInError('Couldn’t bring your data back. Nothing on this phone changed — try again.');
+  } finally {
+    endRestore();
+  }
+}
+
+/**
+ * Merge is offered only when this phone is not joined to a DIFFERENT account: that
+ * phone holds another account's groups, whose ids would collide with theirs on the
+ * server. Unjoined (the usual Ask case) is fine.
+ */
+export async function canMerge(db: SQLite.SQLiteDatabase): Promise<boolean> {
+  return (await linkedUser(db)) === null;
+}
+
+/**
+ * The Ask case's "Merge into my account" (`DQ-94`): keep this phone's data AND
+ * bring the account's, as one ledger.
+ *
+ * Pull first, fold, then queue only what's new — in that order, because a push
+ * before the fold would send this phone's own Personal group, which the server
+ * refuses (one per owner), and every entry in it with it:
+ *
+ *   1. Remember who this phone's people and Personal group are, before the pull
+ *      adds the account's.
+ *   2. Forget the pre-sign-in queue: `queueWhatsNew` rebuilds it from the rows
+ *      themselves afterwards, so nothing is lost, and nothing goes up early.
+ *   3. Link without backfill ("me" becomes the account holder), then pull until
+ *      nothing new arrives — the account's data lands beside the phone's.
+ *   4. `mergeLedger`: Personal folds into the account's, same-email people fold,
+ *      and only rows the account has no version of are queued.
+ *
+ * The push is the ordinary sync afterwards (`mergeNow`), as for Upload. Any
+ * failure before that puts the snapshot back and unlinks, like
+ * `replaceWithAccount`: the phone is never left half merged.
+ */
+export async function mergeIntoAccount(
+  db: SQLite.SQLiteDatabase,
+  transport: Transport,
+  account: Account,
+  opts: { writeExport?: (json: string) => Promise<void>; onProgress?: (fraction: number) => void } = {},
+): Promise<{ pulled: number; duplicates: MergeDuplicate[] }> {
+  if (!(await canMerge(db))) throw new FirstSignInError('This phone belongs to another account, so it can’t be merged into this one.');
+  const snapshot = await readAllTables(db);
+  if (opts.writeExport) await opts.writeExport(JSON.stringify(buildBackupPayload(snapshot)));
+
+  let best = 0;
+  const forward = (f: number) => { if (f > best) { best = f; opts.onProgress?.(f); } };
+
+  beginRestore();
+  try {
+    const phonePeople = (await db.getAllAsync<{ id: string }>('SELECT id FROM person WHERE is_me = 0')).map(r => r.id);
+    const phonePersonal = (await getPersonalGroups(db))[0] ?? null;
+    // Ids only — stable through the fold, so captured here is as good as later,
+    // and this is before the account's own rows exist to confuse the count.
+    const phoneTxnIds = (await db.getAllAsync<{ id: string }>(
+      'SELECT id FROM txn WHERE is_deleted = 0 AND author_person_id IS NULL',
+    )).map(r => r.id);
+
+    await db.runAsync('DELETE FROM sync_queue');
+    await db.runAsync('DELETE FROM sync_version');
+    const linked = await linkLedger(db, account, { backfill: false });
+    if (!linked.ok) throw new FirstSignInError(`This phone's own profile could not be matched (${linked.reason}).`);
+
+    let pulled = 0;
+    for (let round = 0; round < MAX_RESTORE_ROUNDS; round++) {
+      const r = await syncOnce(db, transport, account.userId, forward);
+      if (r.skipped) throw new Error(r.skipped);
+      pulled += r.pulled;
+      if (r.pulled === 0) break;
+    }
+
+    // Every `is_personal` row now — the phone's own, still there, and the
+    // account's, just pulled in. Whichever isn't the phone's is the account's.
+    const accountPersonal = phonePersonal
+      ? (await getPersonalGroups(db)).find(g => g.id !== phonePersonal.id) ?? null
+      : null;
+    await mergeLedger(
+      db, account.userId,
+      phonePersonal && accountPersonal ? { oldId: phonePersonal.id, newId: accountPersonal.id } : null,
+      phonePeople,
+    );
+    const duplicates = await findPossibleDuplicates(db, phoneTxnIds);
+    forward(1);
+    return { pulled, duplicates };
+  } catch (e) {
+    await restoreAllTables(db, snapshot);
+    await setLinkedUser(db, null);
+    if (e instanceof FirstSignInError) throw e;
+    throw new FirstSignInError('Couldn’t merge your data. Nothing on this phone changed — try again.');
   } finally {
     endRestore();
   }

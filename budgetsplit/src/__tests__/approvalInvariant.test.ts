@@ -39,6 +39,11 @@ const ALLOWLIST: { file: string; contains: string; why: string }[] = [
     why: 'backfillQueue: author_person_id IS NULL already means "mine", and my own entries never await my approval — a peer\'s pending entry has an author and is excluded by that clause, not by the approval filter.',
   },
   {
+    file: 'mergeLedger.ts',
+    contains: 'SELECT t.id, t.group_id, t.category, t.date, t.kind, COALESCE(SUM(p.amount), 0) AS total',
+    why: 'findPossibleDuplicates (Merge’s possible-duplicates review, DQ-94) reads only the ids the caller already restricted to `author_person_id IS NULL` (mergeIntoAccount’s `phoneTxnIds`) — the same "already mine" guarantee identity.ts’s backfillQueue relies on, so there is nothing awaiting my approval to exclude.',
+  },
+  {
     file: 'assets.ts',
     contains: 'SELECT COUNT(*) AS n FROM txn WHERE asset_id = ?',
     why: 'deleteAsset\u2019s reference count. It must see EVERY row that names the asset — '

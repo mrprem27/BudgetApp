@@ -130,8 +130,12 @@ export async function linkLedger(
  * are skipped — they are theirs to send. Members go up after their group and
  * before any entry that names them (the engine's RANK), so a split never names
  * someone the server has not seen join.
+ *
+ * Exported for `mergeLedger.ts`'s `queueWhatsNew`, which runs it and then prunes
+ * what turns out to be already on the server — the same "queue everything"
+ * starting point Upload uses.
  */
-async function backfillQueue(db: SQLite.SQLiteDatabase): Promise<void> {
+export async function backfillQueue(db: SQLite.SQLiteDatabase): Promise<void> {
   const all: Array<[QueueTable, string]> = [
     ['person', 'SELECT id FROM person'],
     ['person_group_trust', "SELECT person_id || '|' || group_id AS id FROM person_group_trust"],
