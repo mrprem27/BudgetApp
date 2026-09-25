@@ -68,8 +68,13 @@ async function writeMember(ctx: PushContext, m: Mutation): Promise<D1PreparedSta
     const realInvitee = inviteeUser
       && (await db.prepare('SELECT 1 AS n FROM users WHERE id = ? AND deleted_at IS NULL').bind(inviteeUser).first())
       ? inviteeUser : null;
+    // The person's own account counts only while it exists: a deleted account's
+    // person keeps its user_id (its entries name it), but nobody can accept for it.
     const account = realInvitee
-      ?? (await db.prepare('SELECT user_id FROM people WHERE id = ?').bind(personId).first<string | null>('user_id'));
+      ?? (await db.prepare(
+        `SELECT p.user_id FROM people p JOIN users u ON u.id = p.user_id
+          WHERE p.id = ? AND u.deleted_at IS NULL`,
+      ).bind(personId).first<string | null>('user_id'));
     const status = account ? 'invited' : 'active';
     const name = text(raw.display_name) ?? existing?.display_name;
     if (!name) throw new Rejected('invalid', 'group_members: display_name is required');

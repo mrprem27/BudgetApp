@@ -7,9 +7,10 @@ import { syncOnce, type Transport } from '../lib/sync/engine';
 import { selfPersonId } from '../lib/sync/ids';
 import { applyScope, setLinkedUser, recordedRejections } from '../db/queries/syncApply';
 import { queueCount, queueUpsert } from '../db/queries/syncQueue';
-import { insertAsset, getAssets, restateAssetBalance } from '../db/queries/assets';
+import { insertAsset, getAssets, restateAssetBalance, transferToAsset, transferFromAsset } from '../db/queries/assets';
+import { payCardBill } from '../db/queries/spendPower';
 import { insertGoal, fundGoal, getGoals } from '../db/queries/savings';
-import { insertTxn } from '../db/queries/transactions';
+import { insertTxn, updateTxn } from '../db/queries/transactions';
 import { setCategoryBudgets } from '../db/queries/categoryBudgets';
 
 /**
@@ -64,6 +65,78 @@ async function phone(): Promise<Db> {
 const serverCount = (d1: TestD1, table: string) => d1.prepare(`SELECT COUNT(*) AS n FROM ${table}`).first<number>('n');
 
 describe('sync engine — the phone and the real server', () => {
+  it('a line removed (reply lost) and added back is sent under a new id, not skipped as the old one', async () => {
+    const d1 = await server();
+    const db = await phone();
+    const food = { category: 'Food', cadence: 'monthly' as const, amount: 800000 };
+    await setCategoryBudgets(db, PERSONAL, [food], { level: 'group', actorId: ME });
+    await syncOnce(db, transport(d1, USER), USER);
+    // Removed: the server applies the delete, but the phone never hears back.
+    await setCategoryBudgets(db, PERSONAL, [{ ...food, amount: 0 }], { level: 'group', actorId: ME });
+    await syncOnce(db, transport(d1, USER, { loseReply: () => true }), USER);
+    expect(await d1.prepare('SELECT deleted_at IS NOT NULL AS gone FROM budgets').first('gone')).toBe(1);
+    // Added back before the phone learns the delete landed.
+    await setCategoryBudgets(db, PERSONAL, [{ ...food, amount: 700000 }], { level: 'group', actorId: ME });
+    await syncOnce(db, transport(d1, USER), USER);
+    expect(await d1.prepare('SELECT code, message FROM sync_rejections').all().then(r => r.results)).toEqual([]);
+    expect(await d1.prepare('SELECT amount, deleted_at FROM budgets').first()).toEqual({ amount: 700000, deleted_at: null });
+    expect(await queueCount(db)).toBe(0);
+  });
+
+  it('a refused new entry, once corrected, still reaches the server — no guessed version left behind', async () => {
+    const d1 = await server();
+    const db = await phone();
+    db.raw.prepare("INSERT INTO person (id, name, avatar_color, is_me) VALUES ('p-stranger', 'Stranger', '#000000', 0)").run();
+    const id = await insertTxn(db, {
+      groupId: PERSONAL, kind: 'expense', entryMode: 'quick', date: Date.now(), category: 'Food',
+      payments: [{ personId: ME, amount: 1000 }],
+      shares: [{ personId: ME, amount: 500 }, { personId: 'p-stranger', amount: 500 }],
+    });
+    await syncOnce(db, transport(d1, USER), USER);
+    expect((await recordedRejections(db)).length).toBe(1);
+    expect(await serverCount(d1, 'transactions')).toBe(0);
+
+    await updateTxn(db, {
+      id, groupId: PERSONAL, kind: 'expense', date: Date.now(), category: 'Food',
+      payments: [{ personId: ME, amount: 1000 }], shares: [{ personId: ME, amount: 1000 }],
+    } as never);
+    await syncOnce(db, transport(d1, USER), USER);
+    expect(await d1.prepare('SELECT amount FROM transactions WHERE id = ?').bind(id).first('amount')).toBe(1000);
+    expect(await queueCount(db)).toBe(0);
+  });
+
+  it('every kind the app writes reaches the server — income, investing, redeeming, a card repayment', async () => {
+    const d1 = await server();
+    const db = await phone();
+    const salary = await insertTxn(db, {
+      groupId: PERSONAL, kind: 'income', entryMode: 'quick', date: Date.now(), category: 'Salary',
+      payments: [{ personId: ME, amount: 5000000 }], shares: [],
+    });
+    const gold = await insertAsset(db, { name: 'Gold', kind: 'gold', balance: 0 });
+    const invest = await transferToAsset(db, gold.id, 200000);
+    const redeem = await transferFromAsset(db, gold.id, 50000);
+    const repay = await payCardBill(db, 30000);
+    await syncOnce(db, transport(d1, USER), USER);
+    expect(await recordedRejections(db)).toEqual([]);
+    for (const id of [salary, invest, redeem, repay]) {
+      expect([id, await d1.prepare('SELECT amount FROM transactions WHERE id = ?').bind(id).first('amount')]).not.toEqual([id, null]);
+    }
+    expect(await d1.prepare('SELECT amount FROM transactions WHERE id = ?').bind(redeem).first('amount')).toBe(50000);
+    expect(await queueCount(db)).toBe(0);
+
+    // And back down, on a second phone: the same rows, sides and all.
+    const b = createTestDb() as Db;
+    b.raw.prepare("INSERT INTO person (id, name, avatar_color, is_me) VALUES (?, 'Me', '#000000', 1)").run(ME);
+    await setLinkedUser(b, USER);
+    await syncOnce(b, transport(d1, USER), USER);
+    const sides = (x: Db, id: string) => ({
+      paid: x.raw.prepare('SELECT COALESCE(SUM(amount), 0) AS n FROM txn_payment WHERE txn_id = ?').get(id),
+      shared: x.raw.prepare('SELECT COALESCE(SUM(amount), 0) AS n FROM txn_share WHERE txn_id = ?').get(id),
+    });
+    for (const id of [salary, invest, redeem, repay]) expect([id, sides(b, id)]).toEqual([id, sides(db, id)]);
+    expect((await getAssets(b)).map(x => [x.name, x.balance])).toEqual([['Gold', 150000]]);
+  });
+
   it('a server that applies only part of each push loses nothing — the phone resends from its acknowledgement', async () => {
     const d1 = await server();
     const db = await phone();

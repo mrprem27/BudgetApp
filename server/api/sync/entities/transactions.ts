@@ -35,7 +35,8 @@ const ITEM_COLUMNS = ['id', 'name', 'quantity', 'unit_price', 'assigned_to', 'sp
 type Share = { person_id: string; amount: number };
 
 function shares(raw: unknown, label: string): Share[] {
-  if (!Array.isArray(raw) || raw.length === 0) throw new Rejected('invalid', `transactions.${label}: at least one is required`);
+  if (raw === undefined || raw === null) return [];
+  if (!Array.isArray(raw)) throw new Rejected('invalid', `transactions.${label}: a list is required`);
   return raw.map(r => {
     const x = r as Record<string, unknown>;
     if (typeof x.person_id !== 'string' || !x.person_id) throw new Rejected('invalid', `transactions.${label}: person_id is required`);
@@ -90,8 +91,21 @@ async function writeTransaction(ctx: PushContext, m: Mutation): Promise<D1Prepar
   const amount = data.amount as number;
   const payers = shares(raw.payers, 'payers');
   const splits = shares(raw.splits, 'splits');
-  if (payers.reduce((a, p) => a + p.amount, 0) !== amount) throw new Rejected('invalid', 'transactions: payers must add up to the amount');
-  if (!validateShares(amount, splits.map(s => ({ personId: s.person_id, amount: s.amount }))).ok) {
+  /*
+   * The shapes the app writes (`DQ-26`, AGENTS §12): an expense has both sides;
+   * income is paid in and consumed by nobody, so it has no splits; a transfer can
+   * be one-sided — money into an asset has no splits, money out of one has no
+   * payers. Whichever sides exist must add up to the amount.
+   */
+  const kind = String(data.kind ?? existing?.kind ?? 'expense');
+  const required = kind === 'expense' ? ['payers', 'splits'] : kind === 'income' ? ['payers'] : [];
+  if (required.includes('payers') && payers.length === 0) throw new Rejected('invalid', 'transactions.payers: at least one is required');
+  if (required.includes('splits') && splits.length === 0) throw new Rejected('invalid', 'transactions.splits: at least one is required');
+  if (payers.length === 0 && splits.length === 0) throw new Rejected('invalid', 'transactions: a payer or a split is required');
+  if (payers.length > 0 && payers.reduce((a, p) => a + p.amount, 0) !== amount) {
+    throw new Rejected('invalid', 'transactions: payers must add up to the amount');
+  }
+  if (splits.length > 0 && !validateShares(amount, splits.map(s => ({ personId: s.person_id, amount: s.amount }))).ok) {
     throw new Rejected('invalid', 'transactions: splits must add up to the amount');
   }
   const people = [...new Set([...payers, ...splits].map(p => p.person_id))];

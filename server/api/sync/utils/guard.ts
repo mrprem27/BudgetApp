@@ -41,6 +41,17 @@ export function versionIs(db: Db, table: SyncedTable, id: string, baseVersion: n
 }
 
 /** Was this error a guard tripping, rather than anything else going wrong? */
+/**
+ * A failure about THIS MOMENT, not about the mutation: a Worker at its per-request
+ * query limit (50 on Workers Free), a dropped connection, an overloaded database.
+ * The same mutation would succeed later, so it must never be recorded as refused.
+ */
+export function isTransient(e: unknown): boolean {
+  const message = e instanceof Error ? e.message : String(e);
+  return /too many api requests|subrequest|overloaded|network connection lost|internal error|transient|timed? ?out|connection reset/i
+    .test(message);
+}
+
 export function isGuardFailure(e: unknown): boolean {
   const message = e instanceof Error ? e.message : String(e);
   return /precondition_failed/.test(message);

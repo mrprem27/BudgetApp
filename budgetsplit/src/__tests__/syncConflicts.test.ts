@@ -48,6 +48,43 @@ async function clash() {
 const serverAmount = async (d1: Awaited<ReturnType<typeof server>>, id: string) =>
   d1.prepare('SELECT SUM(amount) AS n FROM transaction_payers WHERE transaction_id = ?').bind(id).first<number>('n');
 
+describe('an edit that lands between my push and my pull', () => {
+  it('reaches my phone, and my next edit is refused as a conflict instead of overwriting it', async () => {
+    const d1 = await server();
+    const a = await freshPhone('a-me');
+    await uploadToAccount(a, ACCOUNT);
+    const personal = (a.raw.prepare('SELECT id FROM budget_group WHERE is_personal = 1').get() as { id: string }).id;
+    const id = await insertTxn(a, {
+      groupId: personal, kind: 'expense', entryMode: 'quick', date: Date.UTC(2026, 8, 2), category: 'Food',
+      payments: [{ personId: ME, amount: 40000 }], shares: [{ personId: ME, amount: 40000 }],
+    });
+    await syncOnce(a, transport(d1), USER);
+    const b = await freshPhone('b-me');
+    await replaceWithAccount(b, transport(d1), ACCOUNT);
+
+    await edit(a, id, personal, 42000);
+    const base = transport(d1);
+    // Phone B catches up and edits in the gap after A's push and before A's pull.
+    const racing: typeof base = {
+      ...base,
+      async push(body) {
+        const r = await base.push(body);
+        await syncOnce(b, transport(d1), USER);
+        await edit(b, id, personal, 45000);
+        await syncOnce(b, transport(d1), USER);
+        return r;
+      },
+    };
+    await syncOnce(a, racing, USER);
+    expect(amountOn(a, id)).toBe(45000);
+
+    // And A's next edit is judged against B's version, not waved through over it.
+    await edit(a, id, personal, 50000);
+    await syncOnce(a, transport(d1), USER);
+    expect(await d1.prepare('SELECT amount FROM transactions WHERE id = ?').bind(id).first('amount')).toBe(50000);
+  });
+});
+
 describe('a money conflict keeps both sides', () => {
   it('the slower phone takes the server\'s copy, and keeps its own beside it', async () => {
     const { d1, a, id } = await clash();

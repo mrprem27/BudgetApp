@@ -1,5 +1,5 @@
 import { canReadScope, ensurePerson, type Db } from './access';
-import { guard, isGuardFailure, versionIs, type SyncedTable } from './guard';
+import { guard, isGuardFailure, isTransient, versionIs, type SyncedTable } from './guard';
 
 /**
  * Shared shapes and helpers for writing one mutation (SPEC-SERVER.md §3.2).
@@ -201,6 +201,7 @@ export async function buildStatements(ctx: PushContext, spec: GenericSpec, m: Mu
 /** A batch failed: say why, reading the row's state now. */
 export async function diagnose(ctx: PushContext, spec: EntitySpec, m: Mutation, e: unknown): Promise<Rejected> {
   if (e instanceof Rejected) return e;
+  if (isTransient(e)) throw e;                 // not a verdict on the mutation — see `applyPush`
   const message = e instanceof Error ? e.message : String(e);
   if (!isGuardFailure(e)) return new Rejected('invalid', message.replace(/^D1_ERROR:\s*/, ''));
   if (spec.custom) {

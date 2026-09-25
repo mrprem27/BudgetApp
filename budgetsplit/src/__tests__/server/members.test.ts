@@ -97,6 +97,14 @@ describe('adding people', () => {
     expect(await db.prepare('SELECT COUNT(*) AS n FROM transactions WHERE id = ?').bind('t-1').first('n')).toBe(1);
   });
 
+  it('a deleted account\'s person, added again, is a plain name — never an invite nobody can accept', async () => {
+    const { db, owner, aarav, idOf } = await world();
+    await db.prepare('UPDATE users SET deleted_at = ? WHERE id = ?').bind(T0, aarav.userId).run();
+    await push(db, owner.userId, [mem({ person_id: aarav.personId, display_name: 'Aarav' }, idOf(aarav.personId))]);
+    expect(await lastRejection(db)).toBeNull();
+    expect(await member(db, idOf(aarav.personId))).toMatchObject({ status: 'active' });
+  });
+
   it('a plain member inviting is refused (SYNC-F24), and nothing is written', async () => {
     const { db, aarav, bina, idOf } = await withAarav();
     await push(db, aarav.userId, [mem({ user_id: bina.userId, display_name: 'Bina' }, idOf(bina.personId))]);

@@ -164,6 +164,12 @@ async function pullScope(
   const cut = merged.length > limit ? merged[limit - 1].seq : complete;
   const more = cut < serverSeq;
 
+  // No progress possible: one seq holds more rows than a page (a single write
+  // that re-stamps many rows — accepting an invite, a merge). A page never splits
+  // a seq, so read a bigger one until that seq fits whole; otherwise the phone
+  // would be handed the same empty page forever.
+  if (cut <= cursor && more) return pullScope(db, scopeId, kind, cursor, limit * 4);
+
   const rows: Record<string, Row[]> = {};
   for (const t of tables) {
     const kept = (byTable.get(t) ?? []).filter(r => r.seq <= cut);

@@ -1,5 +1,6 @@
 import type { Db } from './utils/access';
 import { buildStatements, diagnose, Rejected, type EntitySpec, type Mutation, type PushContext } from './utils/mutation';
+import { isTransient } from './utils/guard';
 
 /**
  * `POST /sync/push` (SPEC-SERVER.md §3.2).
@@ -24,7 +25,7 @@ export const MAX_MUTATIONS_PER_PUSH = 100;
 export type { EntitySpec, Mutation, PushContext } from './utils/mutation';
 
 /** Parse and validate a push body. Returns a message on failure. */
-export function parsePush(body: unknown): { deviceId: string; mutations: Mutation[] } | string {
+export function parsePush(body: unknown): { deviceId: string; mutations: Mutation[]; resumable: boolean } | string {
   if (!body || typeof body !== 'object') return 'Invalid JSON body';
   const b = body as Record<string, unknown>;
   if (typeof b.deviceId !== 'string' || !b.deviceId.trim()) return 'deviceId is required';
@@ -47,7 +48,7 @@ export function parsePush(body: unknown): { deviceId: string; mutations: Mutatio
       baseVersion: m.baseVersion as number, data: m.data as Record<string, unknown> | undefined,
     });
   }
-  return { deviceId: b.deviceId.trim(), mutations };
+  return { deviceId: b.deviceId.trim(), mutations, resumable: b.resumable === true };
 }
 
 /**
@@ -66,14 +67,28 @@ export async function ensureDevice(db: Db, userId: string, deviceId: string, now
   return device.last_mutation_id;
 }
 
-/** Apply every mutation in order. Returns the last mutation id now acknowledged. */
+/**
+ * Apply every mutation in order. Returns the last mutation id now acknowledged.
+ *
+ * A TRANSIENT failure (`isTransient`: a query limit, a dropped connection) is
+ * never recorded as a refusal — the mutation is fine, the moment is not. For a
+ * phone that says it can resume from the acknowledgement (`resumable`), the push
+ * stops there and answers what it applied; the rest comes next time. An older
+ * phone sends its next chunk regardless of the answer, which would skip the gap
+ * for good, so it gets the failure instead.
+ */
 export async function applyPush(
   ctx: PushContext,
   mutations: Mutation[],
   lastApplied: number,
   entities: Record<string, EntitySpec>,
+  opts: { resumable?: boolean } = {},
 ): Promise<number> {
   let last = lastApplied;
+  const stopHere = (e: unknown) => {
+    if (isTransient(e) && opts.resumable) return true;
+    throw e;
+  };
   for (const m of mutations) {
     if (m.id <= last) continue;                       // already applied: a retry
     try {
@@ -86,15 +101,20 @@ export async function applyPush(
         throw await diagnose(ctx, spec, m, e);
       }
     } catch (e) {
+      if (isTransient(e) && stopHere(e)) break;
       const r = e instanceof Rejected ? e : new Rejected('invalid', e instanceof Error ? e.message : String(e));
-      await ctx.db.batch([
+      try {
+        await ctx.db.batch([
         ctx.db.prepare(
           `INSERT OR REPLACE INTO sync_rejections (device_id, mutation_id, code, message, current, created_at)
            VALUES (?, ?, ?, ?, ?, ?)`,
         ).bind(ctx.deviceId, m.id, r.code, r.message.slice(0, 500),
           r.current === null ? null : JSON.stringify(r.current), ctx.now),
-        ack(ctx, m.id),
-      ]);
+          ack(ctx, m.id),
+        ]);
+      } catch (e2) {
+        if (stopHere(e2)) break;
+      }
     }
     last = m.id;
   }

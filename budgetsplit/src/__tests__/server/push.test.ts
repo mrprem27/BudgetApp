@@ -38,6 +38,44 @@ const rejections = (db: TestD1) =>
   db.prepare('SELECT mutation_id, code, message, current FROM sync_rejections ORDER BY mutation_id')
     .all<{ mutation_id: number; code: string; message: string; current: string | null }>().then(r => r.results);
 
+/** A D1 that, like a Worker on Workers Free, fails every query past a budget. */
+function limited(db: TestD1, budget: number): TestD1 {
+  let used = 0;
+  const spend = () => {
+    if (++used > budget) throw new Error('Too many API requests by single worker invocation.');
+  };
+  const wrap = (st: ReturnType<TestD1['prepare']>): ReturnType<TestD1['prepare']> => ({
+    ...st,
+    bind: (...v: unknown[]) => wrap(st.bind(...v)),
+    first: async (col?: string) => { spend(); return st.first(col as never); },
+    all: async () => { spend(); return st.all(); },
+    run: async () => { spend(); return st.run(); },
+  } as never);
+  return { ...db, prepare: sql => wrap(db.prepare(sql)), batch: async sts => { spend(); return db.batch(sts); } };
+}
+
+describe('push — a query limit mid-push is a pause, never a refusal', () => {
+  it('a resumable phone gets what was applied, and nothing is recorded as refused', async () => {
+    const { db, me, deviceId } = await setup();
+    const ms = [1, 2, 3, 4, 5, 6].map(i => asset(i, `a${i}`, 0));
+    const last = await applyPush({ db: limited(db, 5), userId: me.userId, deviceId, now: T0 }, ms, 0, ENTITIES, { resumable: true });
+    expect(last).toBeGreaterThan(0);
+    expect(last).toBeLessThan(6);
+    expect(await rejections(db)).toEqual([]);
+    // The rest lands on the next request.
+    expect(await push(db, me.userId, deviceId, ms)).toBe(6);
+    expect(await db.prepare('SELECT COUNT(*) AS n FROM assets').first('n')).toBe(6);
+    expect(await rejections(db)).toEqual([]);
+  });
+
+  it('an older phone that cannot resume gets a failure, not a partial answer it would skip past', async () => {
+    const { db, me, deviceId } = await setup();
+    const ms = [1, 2, 3, 4, 5, 6].map(i => asset(i, `a${i}`, 0));
+    await expect(applyPush({ db: limited(db, 5), userId: me.userId, deviceId, now: T0 }, ms, 0, ENTITIES)).rejects.toThrow(/Too many/);
+    expect(await rejections(db)).toEqual([]);
+  });
+});
+
 describe('push — user-scoped entities', () => {
   it('creates a row with every system column stamped by the server', async () => {
     const { db, me, deviceId } = await setup();

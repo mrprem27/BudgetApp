@@ -1,7 +1,7 @@
 import { createD1, type TestD1 } from './helpers/d1';
-import { addMember, makeUser } from './helpers/fixtures';
+import { addMember, insert, makeUser, syncCols } from './helpers/fixtures';
 import { applyPush, ensureDevice, type Mutation } from '../../../../server/api/sync/push';
-import { parsePull, pull } from '../../../../server/api/sync/pull';
+import { parsePull, pull, PULL_PAGE_ROWS } from '../../../../server/api/sync/pull';
 import { ENTITIES } from '../../../../server/api/sync/routes';
 
 /**
@@ -37,6 +37,30 @@ async function drain(db: TestD1, userId: string, cursors: Record<string, number>
 }
 const idsOf = (pages: Awaited<ReturnType<typeof pull>>[], scope: string, table: string) =>
   pages.flatMap(p => p.scopes.filter(s => s.id === scope).flatMap(s => (s.rows[table] ?? []).map(r => r.id as string)));
+
+describe('pull — one write that stamps more rows than a page', () => {
+  it('still advances past it, instead of answering the same empty page forever', async () => {
+    const db = createD1();
+    const u = await makeUser(db);
+    // 501 rows at one seq, as a single write that re-stamps many rows leaves them.
+    for (let k = 0; k < PULL_PAGE_ROWS + 1; k++) {
+      await insert(db, 'categories', { id: `c-${k}`, ...syncCols(u.userId, u.userId, 1), user_id: u.userId, kind: 'expense', name: `Cat ${k}` });
+    }
+    await insert(db, 'categories', { id: 'c-last', ...syncCols(u.userId, u.userId, 2), user_id: u.userId, kind: 'expense', name: 'Later' });
+    await db.prepare('UPDATE sync_scopes SET seq = 2 WHERE id = ?').bind(u.userId).run();
+    let cursors: Record<string, number> = {};
+    const seen = new Set<string>();
+    for (let round = 0; round < 5; round++) {
+      const res = await pull(db, u.userId, 'dev-x', cursors, 0);
+      const mine = res.scopes.find(s => s.id === u.userId)!;
+      for (const c of (mine.rows.categories ?? []) as Array<{ id: string }>) seen.add(c.id);
+      cursors = { ...cursors, [u.userId]: mine.cursor };
+      if (!mine.more) break;
+    }
+    expect(seen.size).toBe(PULL_PAGE_ROWS + 2);
+    expect(cursors[u.userId]).toBe(2);
+  });
+});
 
 describe('pull', () => {
   it('returns what was written, in seq order, and nothing more on the next pull', async () => {

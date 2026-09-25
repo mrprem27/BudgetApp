@@ -286,6 +286,12 @@ async function upsert(db: SQLite.SQLiteDatabase, table: string, key: string[], r
 }
 
 /** The pulled row's server version, remembered as the base for the next money write. */
+/**
+ * Record the server's version of a row — only once its content is APPLIED here.
+ * A row skipped because this phone still has a change waiting must keep its old
+ * version, so that change goes up against the version it was made on and a newer
+ * edit from someone else is refused as a conflict, never silently overwritten.
+ */
 async function version(db: SQLite.SQLiteDatabase, entity: string, r: Row): Promise<void> {
   if (typeof r.version === 'number') await setServerVersion(db, entity, String(r.id), r.version);
 }
@@ -400,7 +406,6 @@ export async function applyRows(db: SQLite.SQLiteDatabase, scope: PulledScope, c
     }
   }
   for (const b of rows('budgets')) {
-    await version(db, 'budgets', b);
     const personId = (b.person_id ?? null) as string | null;
     const matches = await db.getAllAsync<{ id: string }>(
       personId === null
@@ -411,6 +416,7 @@ export async function applyRows(db: SQLite.SQLiteDatabase, scope: PulledScope, c
     let pending = false;
     for (const m of matches) if (await isQueued(db, 'category_budget', m.id)) pending = true;
     if (pending) continue;
+    await version(db, 'budgets', b);
     for (const m of matches) await db.runAsync('DELETE FROM category_budget WHERE id = ?', [m.id]);
     if (b.deleted_at == null) await upsert(db, 'category_budget', ['id'], serverToBudget(b));
   }
@@ -421,8 +427,8 @@ export async function applyRows(db: SQLite.SQLiteDatabase, scope: PulledScope, c
   ];
   for (const [entity, table] of simple) {
     for (const r of rows(entity)) {
-      await version(db, entity, r);
       if (await isQueued(db, table, String(r.id))) continue;
+      await version(db, entity, r);
       if (r.deleted_at != null) {
         await db.runAsync(`DELETE FROM ${table} WHERE id = ?`, [String(r.id)]);
         continue;
@@ -431,8 +437,8 @@ export async function applyRows(db: SQLite.SQLiteDatabase, scope: PulledScope, c
     }
   }
   for (const p of rows('money_profiles')) {
-    await version(db, 'money_profiles', p);
     if (await isQueued(db, 'settings', MONEY_PROFILE_ID)) continue;
+    await version(db, 'money_profiles', p);
     const money = serverToMoneySettings(p);
     for (const key of Object.keys(MONEY_KEYS)) {
       if (key in money) await setSetting(db, key, money[key]);
@@ -443,8 +449,8 @@ export async function applyRows(db: SQLite.SQLiteDatabase, scope: PulledScope, c
 
   // --- transactions -----------------------------------------------------------------
   for (const t of rows('transactions')) {
-    await version(db, 'transactions', t);
     if (await isQueued(db, 'txn', String(t.id))) continue;
+    await version(db, 'transactions', t);
     const b = serverToTxn(t, ctx);
     await upsert(db, 'txn', ['id'], b.txn);
     await db.runAsync('DELETE FROM txn_payment WHERE txn_id = ?', [String(t.id)]);

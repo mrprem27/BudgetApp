@@ -529,7 +529,10 @@ export type LocalBundle = {
 
 export function txnToServer(b: LocalBundle, ctx: MapContext): Outgoing {
   const t = b.txn;
-  const amount = b.payments.reduce((a, p) => a + (num(p.amount) ?? 0), 0);
+  // The money that moved: what was paid, or — for a one-sided movement with no
+  // payer, like a redemption landing in cash — what was received.
+  const sum = (rows: Row[]) => rows.reduce((a, r) => a + (num(r.amount) ?? 0), 0);
+  const amount = Math.max(sum(b.payments), sum(b.shares));
   const recurrence = t.recur_freq
     ? compact({
       frequency: t.recur_freq,

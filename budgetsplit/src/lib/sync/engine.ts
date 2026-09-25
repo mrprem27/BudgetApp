@@ -8,7 +8,7 @@ import {
 import { adoptPulledAccounts } from '../../db/queries/personRemap';
 import {
   clearAcknowledged, dropQueueRow, markSent, queueCount, queuedRows, queueRowForMutation, sentOf, serverVersion,
-  setServerVersion, type QueueRow, type Sent,
+  type QueueRow, type Sent,
 } from '../../db/queries/syncQueue';
 import type { Mutation, PullResult } from '../serverApi';
 
@@ -26,7 +26,8 @@ import type { Mutation, PullResult } from '../serverApi';
  */
 
 export type Transport = {
-  push(body: { deviceId: string; mutations: Mutation[] }): Promise<{ lastMutationId: number }>;
+  /** `resumable`: this phone continues from `lastMutationId`, so the server may stop part-way. */
+  push(body: { deviceId: string; mutations: Mutation[]; resumable?: boolean }): Promise<{ lastMutationId: number }>;
   pull(body: { deviceId: string; cursors: Record<string, number>; rejectionsAfter: number }): Promise<PullResult>;
 };
 
@@ -51,9 +52,6 @@ export type SyncOutcome = {
 /** 0–1 through a sync: the push is the first tenth, the pull the rest. */
 export type SyncProgress = (fraction: number) => void;
 
-
-/** Money entities are compare-and-set; everything else is last-write-wins on the server. */
-const MONEY = new Set(['assets', 'savings_goals', 'savings_transactions', 'money_profiles', 'budgets', 'transactions']);
 
 /**
  * The order entities go up in, so every row lands after what it points at: a
@@ -99,7 +97,17 @@ async function plan(db: SQLite.SQLiteDatabase, userId: string): Promise<Planned[
       const prev = byKey.get(key);
       byKey.delete(key);                               // re-insert: order of LAST change
       const already = sentOf(row).find(x => x.e === out.entity && x.i === out.entityId)?.m;
-      byKey.set(key, { out, rows: [...(prev?.rows ?? []), row], id: already ?? prev?.id });
+      if (prev?.id !== undefined && already === undefined) {
+        // A newer change onto an older one that already went out (a line deleted,
+        // reply lost, then added back). The old one is re-sent under ITS id — a
+        // no-op if the server applied it — and the new one follows under a fresh
+        // id. Reusing the old id would have the server skip the new state as a
+        // repeat of the old.
+        byKey.set(`${key}\u0000sent:${prev.id}`, prev);
+        byKey.set(key, { out, rows: [row], id: undefined });
+      } else {
+        byKey.set(key, { out, rows: [...(prev?.rows ?? []), row], id: already ?? prev?.id });
+      }
     }
   }
   const all: Planned[] = [];
@@ -143,10 +151,16 @@ async function push(
 
   // Send in id order: the server applies each exactly once and skips what it has.
   const mutations: Mutation[] = [];
+  // Two mutations for one server row in a single push: the second is judged
+  // against the version the first leaves behind.
+  const bases = new Map<string, number>();
   for (const p of [...planned].sort((a, b) => a.id! - b.id!)) {
+    const key = `${p.out.entity}\u0000${p.out.entityId}`;
+    const base = bases.has(key) ? bases.get(key)! + 1 : await serverVersion(db, p.out.entity, p.out.entityId);
+    bases.set(key, base);
     mutations.push({
       id: p.id!, entity: p.out.entity, op: p.out.op, entityId: p.out.entityId,
-      baseVersion: await serverVersion(db, p.out.entity, p.out.entityId),
+      baseVersion: base,
       ...(p.out.op === 'upsert' ? { data: p.out.data } : {}),
     });
   }
@@ -159,13 +173,10 @@ async function push(
   let i = 0;
   while (i < mutations.length) {
     const chunk = mutations.slice(i, i + PUSH_CHUNK);
-    const { lastMutationId } = await transport.push({ deviceId: device, mutations: chunk });
+    const { lastMutationId } = await transport.push({ deviceId: device, mutations: chunk, resumable: true });
+    // No guess at the new version here: an acknowledged mutation may have been
+    // refused. The pull that follows applies the server's copy, version and all.
     const applied = chunk.filter(m => m.id <= lastMutationId);   // ids ascend, so a prefix
-    // Optimistic: an accepted money write moved the server row on by one. The
-    // next pull confirms it; a rejection replaces it with the server's copy.
-    await db.withTransactionAsync(async () => {
-      for (const m of applied) if (MONEY.has(m.entity)) await setServerVersion(db, m.entity, m.entityId, m.baseVersion + 1);
-    });
     // Nothing taken: stop sending for now. The rest stays queued for the next
     // sync, and the pull still runs, so other people's changes still arrive.
     if (applied.length === 0) break;
@@ -185,6 +196,16 @@ async function pullAll(db: SQLite.SQLiteDatabase, transport: Transport, device: 
     // Groups before my own scope: my approvals name transactions that live in a
     // group, never the other way round, so the entry lands before the question.
     const ordered = [...res.scopes].sort((x, y) => Number(x.kind === 'user') - Number(y.kind === 'user'));
+    // Refusals first — they need the queue rows they answer — then forget what
+    // the server has taken, BEFORE applying the page: my own acknowledged change
+    // is then applied like anyone's, with its version, and a row still skipped
+    // really is one with a change waiting to go up.
+    for (const r of res.rejections) {
+      await applyRejection(db, r, await queueRowForMutation(db, r.mutationId), ctx);
+      await setRejectionsAfter(db, r.mutationId);
+      rejected++;
+    }
+    await clearAcknowledged(db, res.lastMutationId);
     for (const scope of ordered) {
       pulled += Object.values(scope.rows).reduce((a, r) => a + r.length, 0);
       // Someone this phone knows under another id, now named by account: they
@@ -202,12 +223,6 @@ async function pullAll(db: SQLite.SQLiteDatabase, transport: Transport, device: 
       const v = await applyRevoked(db, groupId, res.revokedWhy?.[groupId]);
       if (v) vanished.push(v);
     }
-    for (const r of res.rejections) {
-      await applyRejection(db, r, await queueRowForMutation(db, r.mutationId), ctx);
-      await setRejectionsAfter(db, r.mutationId);
-      rejected++;
-    }
-    await clearAcknowledged(db, res.lastMutationId);
     if (!res.scopes.some(s => s.more)) break;
   }
   return { pulled, rejected, vanished };

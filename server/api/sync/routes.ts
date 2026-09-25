@@ -42,7 +42,7 @@ export async function handleSync(request: Request, env: Env, path: string): Prom
 
     const lastMutationId = await applyPush(
       { db: env.DB, userId: auth.user.id, deviceId: parsed.deviceId, now },
-      parsed.mutations, last, ENTITIES,
+      parsed.mutations, last, ENTITIES, { resumable: parsed.resumable },
     );
     // A receipt only. What happened to each mutation is read on the next pull.
     return json({ lastMutationId });

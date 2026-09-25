@@ -496,7 +496,7 @@ export type PullResult = {
 };
 
 /** A receipt only: what happened to each mutation is read on the next pull. */
-export async function pushSync(body: { deviceId: string; mutations: Mutation[] }): Promise<{ lastMutationId: number }> {
+export async function pushSync(body: { deviceId: string; mutations: Mutation[]; resumable?: boolean }): Promise<{ lastMutationId: number }> {
   const res = await sendAuthed('/sync/push', { method: 'POST', json: body });
   return (await res.json()) as { lastMutationId: number };
 }
