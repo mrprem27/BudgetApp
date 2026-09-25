@@ -52,7 +52,9 @@ async function remapAssignedTo(db: SQLite.SQLiteDatabase, oldId: string, newId: 
     let list: unknown;
     try { list = JSON.parse(row.assigned_to); } catch { continue; }
     if (!Array.isArray(list) || !list.includes(oldId)) continue;
-    const next = list.map(x => (x === oldId ? newId : x));
+    // Both ids can already be in one item (a combine's two sides were each
+    // assigned it) — dedupe, or the item ends up "assigned" to the same person twice.
+    const next = [...new Set(list.map(x => (x === oldId ? newId : x)))];
     await db.runAsync('UPDATE line_item SET assigned_to = ? WHERE id = ?', [JSON.stringify(next), row.id]);
   }
 }
@@ -184,16 +186,114 @@ async function movePersonId(
 }
 
 /**
+ * "Same person as…" (`DQ-94` part 2, task P2): two placeholders the user picked
+ * by hand are the same human. `keepId` is the one chosen to survive — its own
+ * name, contact details and trust choices win on any clash; `dropId`'s entries,
+ * splits, item assignments and trust move onto it, and its row is gone.
+ *
+ * Refused for "me" (there's only ever one), and for two people already linked to
+ * two DIFFERENT accounts — combining those would silently reassign someone
+ * else's money to an account that isn't theirs.
+ */
+export async function combinePeople(db: SQLite.SQLiteDatabase, keepId: string, dropId: string): Promise<void> {
+  if (keepId === dropId) return;
+  const [keep, drop] = await Promise.all([
+    db.getFirstAsync<{ is_me: number; remote_uid: string | null }>('SELECT is_me, remote_uid FROM person WHERE id = ?', [keepId]),
+    db.getFirstAsync<{ is_me: number; remote_uid: string | null }>('SELECT is_me, remote_uid FROM person WHERE id = ?', [dropId]),
+  ]);
+  if (!keep || !drop) throw new Error('combinePeople: both people must exist');
+  if (keep.is_me === 1 || drop.is_me === 1) throw new Error('combinePeople: "me" can\'t be combined with anyone');
+  if (keep.remote_uid && drop.remote_uid && keep.remote_uid !== drop.remote_uid) {
+    throw new Error('combinePeople: linked to two different accounts');
+  }
+
+  await withForeignKeysOff(db, () => db.withTransactionAsync(
+    () => foldPerson(db, dropId, keepId, drop.remote_uid, { queue: true }),
+  ));
+}
+
+/**
+ * The actual fold, shared by `combinePeople` (this phone is the one deciding)
+ * and `adoptPulledMerge` below (this phone has just been told). Runs inside the
+ * caller's transaction.
+ *
+ * Two tables have a PK on `(person_id, …)`, so a plain remap of `oldId` to
+ * `keepId` would collide wherever both already hold a row for the same
+ * transaction or group: `txn_payment`/`txn_share` sum instead of one side
+ * silently vanishing (the same rule the server's own placeholder fold uses,
+ * `merges.ts`); `group_member`/`person_group_trust` drop `oldId`'s row as
+ * redundant, since `keepId`'s already covers that group. Everything else is
+ * a plain re-point, via `remapPersonRows`.
+ */
+async function foldPerson(
+  db: SQLite.SQLiteDatabase, oldId: string, keepId: string, oldRemoteUid: string | null,
+  opts: { queue: boolean },
+): Promise<void> {
+  for (const table of ['txn_payment', 'txn_share'] as const) {
+    await db.runAsync(
+      `UPDATE ${table} SET amount = amount + (SELECT x.amount FROM ${table} x WHERE x.txn_id = ${table}.txn_id AND x.person_id = ?1)
+        WHERE person_id = ?2 AND txn_id IN (SELECT txn_id FROM ${table} WHERE person_id = ?1)`,
+      [oldId, keepId],
+    );
+    await db.runAsync(
+      `DELETE FROM ${table} WHERE person_id = ?1 AND txn_id IN (SELECT txn_id FROM ${table} WHERE person_id = ?2)`,
+      [oldId, keepId],
+    );
+  }
+  await db.runAsync(
+    'DELETE FROM group_member WHERE person_id = ? AND group_id IN (SELECT group_id FROM group_member WHERE person_id = ?)',
+    [oldId, keepId],
+  );
+  await db.runAsync(
+    'DELETE FROM person_group_trust WHERE person_id = ? AND group_id IN (SELECT group_id FROM person_group_trust WHERE person_id = ?)',
+    [oldId, keepId],
+  );
+  await remapPersonRows(db, oldId, keepId);
+
+  // `keepId`'s own fields win; only what it never set comes from `oldId`.
+  await db.runAsync(
+    `UPDATE person SET
+       email = COALESCE(email, (SELECT email FROM person WHERE id = ?)),
+       mobile = COALESCE(mobile, (SELECT mobile FROM person WHERE id = ?)),
+       image_uri = COALESCE(image_uri, (SELECT image_uri FROM person WHERE id = ?)),
+       upi_vpa = COALESCE(upi_vpa, (SELECT upi_vpa FROM person WHERE id = ?)),
+       remote_uid = COALESCE(remote_uid, ?)
+     WHERE id = ?`,
+    [oldId, oldId, oldId, oldId, oldRemoteUid, keepId],
+  );
+  await db.runAsync('DELETE FROM person WHERE id = ?', [oldId]);
+  await db.runAsync("UPDATE OR REPLACE sync_queue SET local_id = ? WHERE local_table = 'person' AND local_id = ?", [keepId, oldId]);
+  await db.runAsync(
+    `UPDATE OR REPLACE sync_queue SET local_id = substr(local_id, 1, instr(local_id, '|')) || ?
+      WHERE local_table = 'group_member' AND local_id LIKE '%|' || ?`, [keepId, oldId]);
+  await db.runAsync(
+    `UPDATE OR REPLACE sync_queue SET local_id = ? || substr(local_id, instr(local_id, '|'))
+      WHERE local_table = 'person_group_trust' AND local_id LIKE ? || '|%'`, [keepId, oldId]);
+
+  if (opts.queue) {
+    await queueDelete(db, 'person', oldId, { id: oldId });
+    await queueUpsert(db, 'person', keepId);
+    await queueAnswer(db, 'person_merge', oldId, { into_person: keepId });
+  }
+}
+
+/**
  * Before a pull applies a group's members: anyone it names by account whom this
  * phone knows under another id takes the account's id first — or the pull would
  * add them a second time.
  */
 export async function adoptPulledAccounts(db: SQLite.SQLiteDatabase, members: Array<Record<string, unknown>>): Promise<void> {
   for (const m of members) {
-    // The server folded a placeholder into an account (S21): so does this phone.
     const into = m.person_merged_into;
-    if (typeof into === 'string' && into.startsWith(selfPersonId('')) && typeof m.person_id === 'string') {
-      await adoptAccountId(db, m.person_id, into.slice(selfPersonId('').length), { tellServer: false });
+    if (typeof into === 'string' && typeof m.person_id === 'string') {
+      if (into.startsWith(selfPersonId(''))) {
+        // The server folded a placeholder into an account (S21): so does this phone.
+        await adoptAccountId(db, m.person_id, into.slice(selfPersonId('').length), { tellServer: false });
+      } else {
+        // Two placeholders picked by hand, already folded server-side (P2):
+        // this phone's own copy of the dropped one folds in too, if it has one.
+        await adoptPulledMerge(db, m.person_id, into);
+      }
       continue;
     }
     const uid = m.person_user_id;
@@ -203,4 +303,19 @@ export async function adoptPulledAccounts(db: SQLite.SQLiteDatabase, members: Ar
     );
     for (const l of local) await adoptAccountId(db, l.id, uid);
   }
+}
+
+/**
+ * The pulled half of `combinePeople`: the server already recorded `oldId` folding
+ * into `keepId` — nothing to send, only to mirror locally, and only if this phone
+ * happens to have its own row under `oldId` (it shared a group with whoever did
+ * the folding). "me" never moves this way; nothing else knew.
+ */
+async function adoptPulledMerge(db: SQLite.SQLiteDatabase, oldId: string, keepId: string): Promise<void> {
+  if (oldId === keepId) return;
+  const row = await db.getFirstAsync<{ is_me: number; remote_uid: string | null }>('SELECT is_me, remote_uid FROM person WHERE id = ?', [oldId]);
+  if (!row || row.is_me === 1) return;
+  await withForeignKeysOff(db, () => db.withTransactionAsync(
+    () => foldPerson(db, oldId, keepId, row.remote_uid, { queue: false }),
+  ));
 }

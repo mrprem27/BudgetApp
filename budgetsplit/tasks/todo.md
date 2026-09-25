@@ -73,10 +73,10 @@ Sync, two phones, two accounts, one group:
   - Files: `server/api/sync/entities/merges.ts`, `src/__tests__/server/merges.test.ts` (new)
   - Accept: folding my own two placeholders works; a stranger's placeholder is refused (either side); `into_user` unchanged
   - Verify: the server suite (7 new cases); revert → 5 of 7 fail; deployed (`02fce28e-a4f2-4c91-8f92-ac1fe4b56787`)
-- [ ] **P2 · `combinePeople` (S)**
-  - Files: `src/db/queries/personRemap.ts`, a new two-phone test
+- [x] **P2 · `combinePeople` (S)** — done 2026-09-25
+  - Files: `src/db/queries/personRemap.ts` (`combinePeople`, `foldPerson`, `adoptPulledMerge`), new `src/__tests__/combinePeople.test.ts`
   - Accept: entries, splits, item assignments and trust move; the dropped person is gone on both phones; balances unchanged; refused for "me" and for two different accounts
-  - Verify: the two-phone test; revert-proven
+  - Verify: 9 tests incl. a two-phone test on the real Worker; the money-sum fold, the group/trust dedupe and the pulled-side adoption are each revert-proven (temporarily removed → the expected case fails → restored, suite green)
 - [ ] **P3 · Person screen action (S)**
   - Files: `app/person/[id].tsx`, a picker sheet under `src/components/finance/`
   - Accept: only eligible pairs are offered; the confirm names both people and the number of entries that move
