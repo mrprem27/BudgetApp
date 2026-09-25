@@ -2,6 +2,17 @@ name = "budgetsplit-api"
 main = "index.ts"
 compatibility_date = "2026-07-01"
 
+# Run the Worker beside the database, not beside the phone. D1 has one primary
+# (served from HKG — `wrangler d1 execute … --json` says so in `served_by_colo`)
+# and every query is a round trip to it. A sync push makes ~5 queries per change,
+# one after another, so from a Worker in India the Hong Kong hop was paid ~1,100
+# times for one demo upload (~43 s). Placed here, it is paid once per request.
+# Smart Placement would not find this: it only picks among places the Worker has
+# already run, and with one tester that is only India. Free on every plan.
+[placement]
+mode = "targeted"
+region = "aws:ap-east-1"
+
 # Everything below runs on the Workers **Free** plan: 100k requests/day, D1
 # (5 GB total, 500 MB per database), R2 (10 GB). The one thing that is NOT free
 # is Cloudflare's own Email Sending — it requires Workers Paid ($5/mo) — so the
