@@ -151,8 +151,13 @@ describe('sync engine — the phone and the real server', () => {
     expect(r.skipped).toBeUndefined();
     expect(await serverCount(d1, 'transactions')).toBe(40);
     expect(await queueCount(db)).toBe(0);
-    // The upload itself moves the bar, not only the pull after it.
-    expect(progress.filter(p => p > 0 && p < 0.1).length).toBeGreaterThan(3);
+    // The upload moves the bar across most of its length, step by step — not a
+    // tenth of it, which left the bar parked near 10% for a whole first upload.
+    const duringPush = progress.filter(p => p > 0 && p < 0.9);
+    expect(duringPush.length).toBeGreaterThan(3);
+    expect(Math.max(...duringPush)).toBeGreaterThan(0.5);
+    expect(progress.every((p, i) => i === 0 || p >= progress[i - 1])).toBe(true);
+    expect(progress.at(-1)).toBe(1);
   });
 
   it('does nothing for a ledger not yet joined to this account', async () => {

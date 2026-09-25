@@ -49,8 +49,17 @@ export type SyncOutcome = {
   error?: unknown;
 };
 
-/** 0–1 through a sync: the push is the first tenth, the pull the rest. */
+/** 0–1 through a sync. */
 export type SyncProgress = (fraction: number) => void;
+
+/**
+ * How much of the bar the upload gets when there is one. The push is the slow
+ * part — one request per dozen or so changes, each change several queries —
+ * while the pull after it is a page or two. A fixed tenth left the bar sitting
+ * near 10% for almost the whole of a first upload. With nothing to send (a
+ * restore, an ordinary pull) the pull gets the whole bar.
+ */
+const PUSH_SHARE = 0.9;
 
 
 /**
@@ -134,6 +143,7 @@ async function push(
   const versions = await serverVersions(db);
   const planned = await plan(db, userId, versions);
   if (planned.length === 0) return 0;
+  onProgress?.(0);
 
   // Give every new mutation its id, and SAVE the ids, before anything is sent.
   const fresh = planned.filter(p => p.id === undefined);
@@ -182,12 +192,14 @@ async function push(
     // sync, and the pull still runs, so other people's changes still arrive.
     if (taken === 0) break;
     i += taken;
-    onProgress?.(0.1 * (i / mutations.length));
+    onProgress?.(PUSH_SHARE * (i / mutations.length));
   }
   return mutations.length;
 }
 
-async function pullAll(db: SQLite.SQLiteDatabase, transport: Transport, device: string, userId: string, onProgress?: SyncProgress) {
+async function pullAll(
+  db: SQLite.SQLiteDatabase, transport: Transport, device: string, userId: string, onProgress?: SyncProgress, from = 0,
+) {
   const ctx = { userId };
   let pulled = 0;
   let rejected = 0;
@@ -219,7 +231,7 @@ async function pullAll(db: SQLite.SQLiteDatabase, transport: Transport, device: 
     // denominator the server has. A scope with nothing in it counts as done.
     const head = res.scopes.reduce((a, sc) => a + (sc.head ?? sc.cursor), 0);
     const at = res.scopes.reduce((a, sc) => a + sc.cursor, 0);
-    onProgress?.(0.1 + 0.9 * (head > 0 ? Math.min(1, at / head) : 1));
+    onProgress?.(from + (1 - from) * (head > 0 ? Math.min(1, at / head) : 1));
     for (const groupId of res.revoked) {
       const v = await applyRevoked(db, groupId, res.revokedWhy?.[groupId]);
       if (v) vanished.push(v);
@@ -248,8 +260,9 @@ export async function syncOnce(
     const device = await deviceId(db, uuid);
     onProgress?.(0);
     const pushed = await push(db, transport, device, userId, onProgress);
-    onProgress?.(0.1);
-    const { pulled, rejected, vanished } = await pullAll(db, transport, device, userId, onProgress);
+    const from = pushed > 0 ? PUSH_SHARE : 0;
+    onProgress?.(from);
+    const { pulled, rejected, vanished } = await pullAll(db, transport, device, userId, onProgress, from);
     await setLastSyncedAt(db, Date.now());
     return { pushed, pulled, rejected, changed: pulled > 0 || rejected > 0 || vanished.length > 0, vanished };
   } catch (e) {
