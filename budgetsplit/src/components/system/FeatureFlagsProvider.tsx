@@ -16,15 +16,29 @@ const Ctx = createContext<ContextValue>({
   flags: defaultFlags, setFlag: () => {}, reload: async () => {}, ready: false,
 });
 
-export function FeatureFlagsProvider({ children }: { children: React.ReactNode }) {
-  const [flags, setFlags] = useState<FeatureFlags>(defaultFlags);
-  const [ready, setReady] = useState(false);
+type Props = {
+  children: React.ReactNode;
+  /**
+   * Flags already read by the root boot effect, in parallel with opening the
+   * DB (`app/_layout.tsx`). When given, this provider starts `ready` — no
+   * second AsyncStorage read stands between the root's one loader and the
+   * first real screen. Omit it (existing callers, tests) and the provider
+   * reads for itself exactly as before.
+   */
+  initialFlags?: FeatureFlags;
+};
+
+export function FeatureFlagsProvider({ children, initialFlags }: Props) {
+  const [flags, setFlags] = useState<FeatureFlags>(() => initialFlags ?? defaultFlags);
+  const [ready, setReady] = useState(() => initialFlags !== undefined);
 
   useEffect(() => {
+    // Already have a fresh read from the root boot effect — nothing to do.
+    if (initialFlags !== undefined) return;
     let alive = true;
     loadFlags().then(f => { if (alive) setFlags(f); }).catch(() => {}).finally(() => { if (alive) setReady(true); });
     return () => { alive = false; };
-  }, []);
+  }, [initialFlags]);
 
   const set = useCallback((key: FeatureKey, value: boolean) => {
     setFlags(prev => ({ ...prev, [key]: value }));
@@ -48,11 +62,14 @@ export function FeatureFlagsProvider({ children }: { children: React.ReactNode }
 /**
  * Holds the branded loader until the stored flags have actually loaded.
  *
- * Without this the tree renders once with DEFAULTS and then re-renders with the
- * user's real values, so a surface someone switched OFF flashes on every cold
- * start. `ready` existed for this and had no consumer. The wait is a single
- * AsyncStorage.multiGet, and the root is already showing this same loader for
- * fonts and the DB.
+ * In practice this never shows one: the root boot effect reads flags in
+ * parallel with opening the DB and hands them to `FeatureFlagsProvider` as
+ * `initialFlags`, so `ready` is already true by the time anything here
+ * mounts. It stays as the safety net for the one caller that doesn't pass
+ * `initialFlags` — without it the tree would render once with DEFAULTS and
+ * then re-render with the user's real values, flashing a surface someone
+ * switched off. `boot-flicker` (T1) is what moved the read up front; this
+ * gate is the fallback if that ever regresses, not the primary defence.
  */
 export function FlagsGate({ children }: { children: React.ReactNode }) {
   const { ready } = useFeatureFlags();

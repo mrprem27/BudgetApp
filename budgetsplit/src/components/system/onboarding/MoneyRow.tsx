@@ -19,8 +19,10 @@ type Props = {
  * The Money step used to ask four numbers as four 40px hero fields stacked down the
  * screen — five equally-loud numbers on one page, which `V2_PRODUCT_REVIEW.md`
  * §150-153 named as the sharpest instance of the whole flow feeling like a form. Cash
- * on hand stays the hero (`StepAmountField`); investments, credit limit and credit used
- * become these quiet rows inside one `Card`.
+ * available stays the hero (`StepAmountField`) — `SPEC-2026-09-FEEDBACK.md` §2 O5 briefly moved it in
+ * here too, behind a fifth chip, and that was cut on review as more friction than the
+ * layout it replaced, not less. Bank, wallet, investments and credit are these quiet
+ * rows inside one `Card`.
  *
  * The input has no border of its own (AGENTS.md §4: an inline field inside a card row
  * never gets a second box), and it's right-aligned so the digits line up down the card.

@@ -1,9 +1,8 @@
 import {
-  deleteGroup, leaveGroup, unarchiveGroup, stopSyncingGroup, getAllGroups, getGroupById,
+  deleteGroup, leaveGroup, unarchiveGroup, getAllGroups, getGroupById,
 } from '../db/queries/groups';
 import { getTransactionsInRange } from '../db/queries/transactions';
 import { getMyExposure } from '../db/queries/balances';
-import { readRosterDoc } from '../db/queries/syncDoc';
 import { PermissionError } from '../lib/permissions';
 import { createTestDb, addPerson, addGroup, addMember, addTxn, addCategory, asDb, type TestDb } from './helpers/testDb';
 
@@ -18,12 +17,16 @@ import { createTestDb, addPerson, addGroup, addMember, addTxn, addCategory, asDb
  * ELSE deletes a group; there was no principled reason to be harsher to the one
  * person who can do it by accident.
  *
- * And it came back. Nothing told the server, so `sync_group` was still live, and
- * the local cursor row had just been deleted — so the next pull started from
- * zero, fetched `__roster__` first, and `adoptGroup` rebuilt the group from it.
- * Empty, because the entries were gone locally, and unadministrable, because
- * adoption carried no creator. The delete produced a husk instead of nothing.
+ * And it came back. Nothing told the server, so the group was still live there,
+ * and the next pull rebuilt it — empty, because the entries were gone locally,
+ * and unadministrable, because the rebuild carried no creator. The delete
+ * produced a husk instead of nothing. Now the tombstone is itself a queued
+ * change, so the server hears that the group ended.
  */
+
+/** Is this local row waiting to go up? */
+const queued = (db: TestDb, table: string, id: string) =>
+  (db.raw.prepare('SELECT COUNT(*) AS c FROM sync_queue WHERE local_table = ? AND local_id = ?').get(table, id) as { c: number }).c;
 
 const BILL = 468000;   // ₹4,680
 
@@ -97,19 +100,12 @@ describe('deleting a group keeps my own history', () => {
     expect((await getAllGroups(asDb(s.db))).map(x => x.id)).not.toContain(s.gid);
   });
 
-  it('stops trying to sync, including the disputes cursor', async () => {
+  it('tells the server, so the next pull cannot bring it back', async () => {
+    // The tombstone travels as the group's own queued row; the drain turns a
+    // `deleted_at` into a delete of the server's group.
     const s = flat();
-    await s.db.runAsync(`INSERT INTO settings (key, value) VALUES ('sync.cursor.${s.gid}', '99')`);
-    await s.db.runAsync(`INSERT INTO settings (key, value) VALUES ('sync.cursor.${s.gid}#disputes', '99')`);
-
     await deleteGroup(asDb(s.db), s.gid, s.me);
-
-    // A queued row would retry against a group the server has tombstoned, forever.
-    // The `#disputes` cursor is the one this path used to forget.
-    expect(s.db.raw.prepare('SELECT COUNT(*) AS c FROM sync_outbox WHERE group_id = ?').get(s.gid))
-      .toEqual({ c: 0 });
-    expect(s.db.raw.prepare("SELECT COUNT(*) AS c FROM settings WHERE key LIKE ?").get(`sync.cursor.${s.gid}%`))
-      .toEqual({ c: 0 });
+    expect(queued(s.db, 'budget_group', s.gid)).toBe(1);
   });
 
   it('cannot be un-archived back into existence', async () => {
@@ -155,28 +151,15 @@ describe('leaving a group', () => {
     expect((await getMyExposure(asDb(s.db), s.me)).owe).toBe(exposureBefore.owe);
   });
 
-  it('publishes my departure before anything stops it being publishable', async () => {
+  it('queues my departure, so the others find out at all', async () => {
     const s = theirFlat();
     await leaveGroup(asDb(s.db), s.gid, s.me);
 
-    // The roster carries it, marked — this is how the others find out at all.
-    const doc = await readRosterDoc(asDb(s.db), s.gid);
-    expect(doc!.members.find(m => m.pid === s.me)?.removedAt).toEqual(expect.any(Number));
-    // And the dirty flag is still set, so the caller can publish it. Dropping the
-    // queue before publishing would leave nothing able to send it.
-    expect(s.db.raw.prepare('SELECT COUNT(*) AS c FROM settings WHERE key = ?')
-      .get(`sync.roster.dirty.${s.gid}`)).toEqual({ c: 1 });
-  });
-
-  it('stops syncing only once the caller says so', async () => {
-    const s = theirFlat();
-    await leaveGroup(asDb(s.db), s.gid, s.me);
-    await stopSyncingGroup(asDb(s.db), s.gid);
-
-    expect(s.db.raw.prepare('SELECT COUNT(*) AS c FROM settings WHERE key LIKE ?')
-      .get(`sync.%.${s.gid}`)).toEqual({ c: 0 });
-    expect(s.db.raw.prepare('SELECT COUNT(*) AS c FROM sync_outbox WHERE group_id = ?').get(s.gid))
-      .toEqual({ c: 0 });
+    // My membership row, marked ended — not deleted, or there would be nothing
+    // for the drain to read the departure from.
+    expect(queued(s.db, 'group_member', `${s.gid}|${s.me}`)).toBe(1);
+    expect(s.db.raw.prepare('SELECT deleted_at FROM group_member WHERE group_id = ? AND person_id = ?')
+      .get(s.gid, s.me)).toEqual({ deleted_at: expect.any(Number) });
   });
 
   it('refuses the creator, whose exit is Delete', async () => {

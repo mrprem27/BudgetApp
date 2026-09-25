@@ -1,37 +1,36 @@
 # budgetsplit-api
 
-Cloudflare Worker holding the app's **accounts**, its **encrypted backup blobs**,
-and the **sealed mailbox** shared groups sync through — phases S1 and S2/S3 of the
-server ladder in `budgetsplit/docs/V2_LAUNCH_CHECKLIST.md` §6b.
+Cloudflare Worker holding the app's **accounts** and the **account's copy of the
+ledger** that every signed-in phone syncs with (`SPEC-SERVER` in
+`budgetsplit/docs/history/`, decision `DQ-93`).
 
 Sibling of `../receipt-ocr-proxy` (a separate, stateless Worker) — they share the
 repo and the Cloudflare account, nothing else.
 
-## What it does and does not hold
+## What it holds
 
-The app is local-first: every transaction, group, budget and goal lives in each
-device's own SQLite database (`budgetsplit/src/db/schema.ts`), and that stays
-true. This server holds:
+The app stays **offline-first**: each phone keeps its own SQLite database
+(`budgetsplit/src/db/schema.ts`) and works without a connection. When signed in,
+the phone also keeps this server's copy up to date, and a new phone gets it back
+by signing in. This server holds:
 
-- **Identity** — email, display name, avatar. D1.
-- **Encrypted snapshots** — the exact `{v, createdAt, ciphertext}` envelope
-  `budgetsplit/src/lib/backup.ts` already produces, stored byte-for-byte. R2.
-- **Sealed shared-group entries** — one row per entry, sealed on the device with a
-  per-group key this server never receives. D1. See § Sync below.
+- **Identity** — email, display name, phone (self-declared), avatar. D1, with the
+  avatar image in KV or R2.
+- **Everything the account owns, readable** — personal spending and income,
+  goals, assets, budgets, categories, preferences, and every group it is in with
+  its entries, approvals and disputes. D1, schema in `migrations/0001_schema.sql`.
+  It is **not** end-to-end encrypted: the server checks every write against the
+  app's own rules (who may change what, trust and approval, split math), which it
+  could not do to data it cannot read. That trade was made on purpose (`DQ-93`).
 
-The passphrase that decrypts a snapshot is never sent here and never stored
-anywhere but the user's head. So a leaked bucket is unreadable, and a leaked D1
-gives up email addresses and nothing about anyone's money. There is no
-server-side reset for a forgotten passphrase — same tradeoff the local
-share-sheet backup already documents, unchanged by this server existing.
+What it does not hold: receipt photos (they never leave the phone) and the
+passphrase-encrypted backup file, which is the user's own and goes wherever they
+share it — it never comes here.
 
-What this still does not hold: anyone's **personal** finances. Sync carries shared
-groups only — personal spending, income, savings goals, budgets and net worth
-never leave the device at all. And what it does carry, it cannot read: the server
-stores sealed blobs and the per-device wraps of a key it has no copy of.
-
-Backup/restore remains a manual snapshot and is unrelated to sync — different
-data, different key, different lifecycle.
+Deleting an account (`DELETE /me`) erases its copy of everything that was the
+account's alone — its own scope and every group nobody else is in
+(`sync/erase.ts`). Its entries in groups other people are in stay: they are the
+group's record, already on the other members' phones.
 
 ## Auth model
 
@@ -85,48 +84,39 @@ widen who can call this from a browser.
 | `GET /links` | bearer | `{links: [...]}` — each with the other person, and their `phone` **only while their own flag is on**. |
 | `PATCH /links/:id` | bearer | `{sharePhone}` — flips only *your* side. You can never change what they disclose. |
 | `DELETE /links/:id` | bearer | Unlinks, for both. |
-| `POST /backups` | bearer | Raw encrypted blob (≤50 MB) → `201 {backup, pruned}`. Body is never parsed. |
-| `GET /backups` | bearer | `{backups: [{id, sizeBytes, createdAt}]}`, newest first. |
-| `GET /backups/:id` | bearer | The blob, `application/octet-stream`. |
-| `DELETE /backups/:id` | bearer | Removes the R2 object and the row. |
-| `POST /sync/devices` | bearer | `{deviceId, publicKey, label?}` → registers this device's public key. Upsert, scoped so another account cannot overwrite your key. |
-| `GET /sync/devices?userId=` | bearer | `{devices: [{deviceId, publicKey, label}]}` — yours, or those of someone you are **already linked with**. Not a directory. |
-| `POST /sync/groups` | bearer | `{groupId, wraps}` — publishes a group under its **existing client uuid**, with the key wrapped to your own devices. Idempotent; 403 if that id is another account's. |
-| `GET /sync/groups?deviceId=` | bearer | `{groups: [{id, owner, state, wrappedKey}]}`. `wrappedKey` is null when this device has no wrap yet. |
-| `POST /sync/groups/:id/members` | bearer | `{userId, wraps: [{deviceId, wrappedKey}]}` — invite someone you are **already linked with**, handing over the group key wrapped to each of their devices. They land `pending`. |
-| `POST /sync/groups/:id/join` | bearer | Accept your own invitation. `pending` → `approved`. |
-| `PUT /sync/entries` | bearer | `{groupId, entryId, version, ciphertext, isDeleted?}` → `{version, updatedAt}`, or **409 with the current row** when the version is stale. |
-| `GET /sync/entries?groupId=&since=` | bearer | `{entries, cursor, more}` — up to 200, ordered by `updated_at`. |
+| `DELETE /me` | bearer | Deletes the account: identity anonymised, its own copy erased (`sync/erase.ts`), every session and device signed out. |
+| `GET /friend-requests` · `POST` · `POST /:id/accept` · `/decline` · `DELETE /:id` | bearer | A friend request by email address. `POST` answers an identical `202` whether or not the address has an account — the email body differs, visible only to the inbox owner. |
+| `POST /sync/push` | bearer | `{deviceId, mutations: [{id, entity, op, entityId, baseVersion, data?}]}` → `{lastMutationId}`. At most 100 mutations and 2 MB. |
+| `POST /sync/pull` | bearer | `{deviceId, cursors, rejectionsAfter}` → `{scopes, revoked, revokedWhy, lastMutationId, rejections, invites}`. Pages of up to 500 rows. |
+| `GET /transactions/:id/history` | bearer | A transaction's saved versions, for anyone who can read its group. Loaded on open, never synced. |
 
-### Sync (Stage C)
+### Sync
 
-The server is a **blind, ordered mailbox**. Entries are sealed with a per-group
-key it never receives (`budgetsplit/src/lib/groupCrypto.ts`), and that key is
-stored only as per-device wraps it cannot open. It knows who may read which
-mailbox, and which version of an entry is current — nothing else.
+Code in `sync/`, reached only through its `index.ts` barrel. Each account has a
+**user scope** and each group is a **group scope**; every row carries its scope and
+a per-scope `seq`, and a phone keeps one cursor per scope.
 
-`PUT /sync/entries` is **compare-and-set on `version`**, which is why `version`
-is in the clear. Last-write-wins on a ledger is the lost-update problem with
-money in it: two people edit the same bill, both writes succeed, and the second
-silently erases the first with nobody told. A stale push gets 409 and the current
-row attached, for a human to resolve — never an automatic merge.
+- **Push** applies mutations in order, each in its own atomic D1 batch that also
+  advances `devices.last_mutation_id`, so a retried push applies each mutation
+  exactly once. A mutation carries the `baseVersion` it was made against; a stale
+  one is refused as a `conflict`, never silently overwritten. A refused mutation
+  is written to `sync_rejections` and the phone learns of it on the next pull,
+  reverts, and says why.
+- **Pull** returns, for every scope the account can read, the rows changed since
+  the phone's cursor, tombstones included. One page is one D1 batch, so children
+  always match parents, and a page never splits a `seq`.
+- **Access** is one module (`sync/utils/access.ts`): an account reads its own
+  scope and the groups it is an active member of; an invitation grants nothing
+  until accepted. Role rules (owner / admin / member) are the app's own
+  `permissions`, imported via `sync/rules.ts`, never re-implemented.
+- **Approvals** are decided here with the app's own `requiresMyApproval`: an entry
+  counts for its author at once and waits for everyone else it names, unless
+  they trust the author. A refusal outranks trust — an edit to an entry someone
+  refused asks them again (`sync/entities/approvals.ts`).
 
-Isolation changes shape here. Every earlier route answers "is this row yours"
-with `WHERE user_id = ?`; a shared group is the first thing that belongs to
-several people, so it goes through one `approvedMember` helper — 'pending' grants
-nothing, and `removed_at`/`deleted_at` are checked in the same place.
-
-**Rate limited.** `PUT /sync/entries` is capped at **500 entries per account per
-hour** (`SYNC_WRITES_PER_WINDOW`), on top of the 64 KiB per-request cap. It counts
-entries *touched* in the window rather than requests made, so rewriting one entry
-repeatedly costs one — that burns requests, not storage, and Cloudflare's own
-request cap already covers it. What this bounds is D1 filling an entry at a time.
-Migration `0005` adds the `(author_user, updated_at)` index that makes the check
-affordable; without it the guard would scan the table on every push.
-
-Every backup route resolves its row through one `WHERE id = ? AND user_id = ?`
-helper — that predicate is the only thing separating one account's backups from
-another's, so it isn't re-typed per route.
+D1 has no interactive transactions, so every write guards itself with a
+`write_guard` row that fails the batch when a precondition no longer holds
+(`sync/utils/guard.ts`).
 
 **On `avatarUrl`:** `users.avatar_url` stores either an R2 key (`avatars/{user_id}`)
 or an absolute `https://` URL, and the DTO resolves a key to `{origin}/me/avatar`
@@ -152,11 +142,6 @@ copied anywhere, so switching it off genuinely stops future reads — though the
 app's wording is careful to call it a disclosure, not a recall, because a number
 already seen is already on their phone.
 
-**Retention:** the newest 10 snapshots per user are kept; older ones are pruned
-on upload (`pruned` in the `POST /backups` response says how many went). Backup
-is a lost-phone safety net, not version history, and a device backing up weekly
-would otherwise grow the bucket forever.
-
 ## Deploy — free, no card, no domain
 
 Every piece below is on a free tier. Verified against the docs 2026-08-17:
@@ -171,9 +156,9 @@ npx wrangler login
 
 # 1. D1 — paste the returned database_id into wrangler.toml
 npx wrangler d1 create budgetsplit-api
-npx wrangler d1 migrations apply budgetsplit-api --remote
+npx wrangler d1 migrations apply budgetsplit-api --remote   # one file: 0001_schema.sql
 
-# 2. Blob storage — KV needs no card and no dashboard opt-in, so it is the
+# 2. Avatar storage — KV needs no card and no dashboard opt-in, so it is the
 #    default. (R2 is better and takes over automatically once bound, but it must
 #    be enabled from the dashboard first, which can ask for a payment method.)
 npx wrangler kv namespace create BLOBS      # paste the id into wrangler.toml
@@ -191,21 +176,17 @@ curl https://budgetsplit-api.<your-subdomain>.workers.dev/health
 ```
 
 `/health` reports which provider and which store are live on purpose: a deploy
-that cannot send, or cannot keep a backup, should be visible from a curl rather
+that cannot send, or cannot store an avatar, should be visible from a curl rather
 than from a user's failed sign-in.
 
 ### Storage: KV by default, R2 when available
 
 `storage.ts` prefers R2 and falls back to KV, so the same code runs either way.
-The only difference that leaks out is the size cap — KV stops at 25 MiB per
-value, R2 does not — and `POST /backups` reads that from the live backend rather
-than a constant, so an oversized backup is refused *before* the upload rather
-than discovered after it. KV's other free-plan limits (1 GB total, 1k writes/day)
-are far beyond a personal ledger's needs; a rows-only backup is tens of KB.
+It holds avatars only. The one difference that leaks out is the size cap — KV
+stops at 25 MiB per value, R2 does not — which an avatar (≤5 MB) never reaches.
 
-If neither is bound, backup and avatar routes answer `503
-E_STORAGE_UNCONFIGURED` and everything else — sign-in, profile, linking — works
-untouched.
+If neither is bound, the avatar routes answer `503 E_STORAGE_UNCONFIGURED` and
+everything else — sign-in, profile, linking, sync — works untouched.
 
 ### Switching to Cloudflare Email Sending later
 
@@ -253,10 +234,10 @@ expect real emails to real addresses.
 
 ## Notes
 
-- Migrations are numbered files under `migrations/`, applied with
-  `wrangler d1 migrations apply` — unlike the app's own SQLite, this database
-  started clean, so it gets versioned migrations from row one instead of the
-  app's guarded-rebuild pattern.
+- The schema is **one file**, `migrations/0001_schema.sql`, edited directly while
+  nothing is live. A dev database made from an older schema is deleted and
+  recreated, not migrated. Numbered migrations start with the first real
+  account.
 - `Env` is hand-written in `types.ts` rather than generated by `wrangler types`,
   matching `receipt-ocr-proxy`: the binding list is short and belongs in git next
   to the code that reads it.

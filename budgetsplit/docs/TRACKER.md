@@ -2,7 +2,7 @@
 
 `Last verified: 2026-09-07 · Guarded by: trackerIntegrity.test.ts · countClaims.test.ts · docIdGraph.test.ts`
 
-**178 items, 107 of them still open.** One row each: what it is, and where it stands.
+**188 items, 105 of them still open.** One row each: what it is, and where it stands.
 Nothing else.
 
 **The evidence is not here.** Why each item exists, what it costs, what breaks if you touch it, and
@@ -21,19 +21,19 @@ is defined in two places.
 
 | Section | Open | Total |
 |---|---|---|
-| §1 · Ship blockers | **14** | 18 |
+| §1 · Ship blockers | **13** | 18 |
 | §2 · Complexity — `OV-` | **19** | 34 |
-| §3 · Decisions — `DQ-` | **36** | 40 |
+| §3 · Decisions — `DQ-` | **42** | 51 |
 | §4 · Walk 1 — `W1-` | **17** | 39 |
-| §5 · Sync — `SYNC-F` | **7** | 24 |
-| §6 · Debt — `D-` | **12** | 12 |
+| §5 · Sync — `SYNC-F` | **1** | 24 |
+| §6 · Debt — `D-` | **11** | 11 |
 | §7 · Accepted — `A-` | **2** | 11 |
 
 ---
 
 ## §1 · Ship blockers — `B-`
 
-**18 items: 12 `OPEN`, 1 `DECIDE`, 1 `BLOCKED`, 4 `DONE`.** Nothing ships until every one is closed. Order of operations is in `FINDINGS.md` §1 — everything below `B-03` needs a phone.
+**18 items: 11 `OPEN`, 1 `DECIDE`, 1 `BLOCKED`, 5 `DONE`.** Nothing ships until every one is closed. Order of operations is in `FINDINGS.md` §1 — everything below `B-03` needs a phone.
 
 | | What | Status |
 |---|---|---|
@@ -41,7 +41,6 @@ is defined in two places.
 | `B-03` | Native rebuild | `OPEN` |
 | `B-04` | `EXPO_PUBLIC_API_URL` present wherever release builds run | `OPEN` |
 | `B-05` | `EXPO_PUBLIC_RECEIPT_OCR_PROXY_URL` likewise | `OPEN` |
-| `B-06` | Confirm demo/seed data is off | `OPEN` |
 | `B-07` | Rotate the Brevo API key | `OPEN` |
 | `B-08` | Privacy policy + App Store listing | `OPEN` |
 | `B-10` | App icon, splash, screenshots | `OPEN` |
@@ -52,7 +51,7 @@ is defined in two places.
 | `B-09` | India DPDP posture | `DECIDE` |
 | `B-02` | Buy the Apple Developer Program | `BLOCKED` |
 
-**Closed (4), detail in `FINDINGS.md`:** `B-15` `B-16` `B-17` `B-18`
+**Closed (5), detail in `FINDINGS.md`:** `B-06` `B-15` `B-16` `B-17` `B-18`
 
 ---
 ## §2 · Complexity and overlap — `OV-`
@@ -70,7 +69,7 @@ is defined in two places.
 | `OV-22` | Six vocabularies over daily/weekly/monthly/yearly | `OPEN` |
 | `OV-11` | A group has three end states that get conflated | `OPEN` |
 | `OV-06` | Categories are referenced by NAME, not by id | `DECIDE` |
-| `OV-10` | backOr is used in 5 of 46 route files | `DECIDE` |
+| `OV-10` | backOr is used in 6 of 45 route files | `DECIDE` |
 | `OV-14` | E-50 is recomputed on every read, with no memo boundary | `DECIDE` |
 | `OV-15` | /personal is a stack route pretending to be a tab | `DECIDE` |
 | `OV-19` | category_budget.period AND .cadence | `DECIDE` |
@@ -86,7 +85,7 @@ is defined in two places.
 ---
 ## §3 · Open decisions — `DQ-`
 
-**40 items: 29 `DECIDE`, 7 `BLOCKED`, 4 `DONE`.** A `DQ-` is a question only you can answer, so every unanswered one is `DECIDE` by definition. The default column is what ships if you never decide.
+**51 items: 35 `DECIDE`, 7 `BLOCKED`, 9 `DONE`.** A `DQ-` is a question only you can answer, so every unanswered one is `DECIDE` by definition. The default column is what ships if you never decide.
 
 | | What | Status | Default if never decided |
 |---|---|---|---|
@@ -114,11 +113,17 @@ is defined in two places.
 | `DQ-23` | `expo-file-system` legacy API | `DECIDE` | Keep using it until it breaks |
 | `DQ-29` | Partial acceptance | `DECIDE` | Binary |
 | `DQ-30` | A tracking-only group mode | `DECIDE` | No such mode |
-| `DQ-32` | Revocation and re-keying | `DECIDE` | Removal is local |
 | `DQ-33` | Ownership: handover, and the group with no admin | `DECIDE` | Neither exists |
 | `DQ-24` | Income that lands in an asset is not spendable | `DECIDE` | Every rupee of income counts as spendable |
 | `DQ-25` | A person can never be removed, and cannot be archived either | `DECIDE` | The roster only grows |
 | `DQ-27` | Should an asset keep a valuation history? | `DECIDE` | One current value per asset |
+| `DQ-87` | Does invest-mode Add still record as a transfer to an asset, or count as spending? | `DECIDE` | Transfer to an asset — net worth stays flat |
+| `DQ-90` | Does the Upcoming screen (was Reminders) keep the bell icon? | `DECIDE` | Yes, relabelled |
+| `DQ-92` | Home's "Coming up" list is gone (a badge count only); bring it back, or finish removing it from docs/demo expectations? | `DECIDE` | Leave it removed — a badge only, no card |
+| `DQ-94` | Phone and account both hold data at first sign-in: offer a merge? | `DECIDE` | No — "Use my account" (this phone exported to a file first) or "Not now" |
+| `DQ-95` | Workers Paid ($5/mo) before the pilot, now that D1 Free hard-stops at 100k rows written/day? | `DECIDE` | Free while developing; Paid before the first non-you sign-in |
+| `DQ-96` | May a group member edit someone else's transaction (Splitwise's model)? | `DECIDE` | No — author-only; approve/reject answers someone else's entry |
+| `DQ-97` | What does signing out do to this phone's data, now the server holds all of it? | `DECIDE` | Upload first, then empty the phone; unsent changes → a warning, and an export file before anything is deleted |
 | `DQ-80` | Paid Apple Developer account, $99/yr | `BLOCKED` | Apple |
 | `DQ-81` | Google OAuth **CASA Tier-3** for `gmail.readonly` | `BLOCKED` | Google |
 | `DQ-82` | The GPay export format | `BLOCKED` | Google |
@@ -127,7 +132,7 @@ is defined in two places.
 | `DQ-85` | R2 object storage | `BLOCKED` | A Cloudflare dashboard opt-in that asks for a card |
 | `DQ-86` | Cloudflare Email Sending | `BLOCKED` | Workers Paid $5/mo + an owned domain |
 
-**Closed (4), detail in `FINDINGS.md`:** `DQ-07` `DQ-26` `DQ-28` `DQ-31`
+**Closed (9), detail in `FINDINGS.md`:** `DQ-07` `DQ-26` `DQ-28` `DQ-31` `DQ-32` `DQ-88` `DQ-89` `DQ-91` `DQ-93`
 
 ---
 ## §4 · Walk 1 — `W1-`
@@ -159,24 +164,18 @@ is defined in two places.
 ---
 ## §5 · Sync — `SYNC-F`
 
-**24 items: 7 `OPEN`, 17 `DONE`.** `SYNC-F1`–`F12` were written while designing, so a `DONE` there means the wall exists. `F13`–`F24` came from tracing the built code, where four were live defects.
+**24 items: 1 `OPEN`, 23 `DONE`.** `SYNC-F1`–`F12` were written while designing, so a `DONE` there means the wall exists. `F13`–`F24` came from tracing the built code, where four were live defects.
 
 | | What | Status | Note |
 |---|---|---|---|
 | `SYNC-F8` | Email is the only identity and cannot be changed or merged | `OPEN` |  |
-| `SYNC-F15` | Any approved member can push a new version of an entry I authored | `OPEN` |  |
-| `SYNC-F16` | Removing a member is local only | `OPEN` |  |
-| `SYNC-F17` | The group key is never rotated | `OPEN` |  |
-| `SYNC-F20` | A group with no admin is reachable by adoption and unrepairable | `OPEN` |  |
-| `SYNC-F22` | `audit_log` has no structured author | `OPEN` |  |
-| `SYNC-F24` | Sharing is admin-gated on the client and member-gated on the server | `OPEN` |  |
 
-**Closed (17), detail in `FINDINGS.md`:** `SYNC-F1` `SYNC-F2` `SYNC-F3` `SYNC-F4` `SYNC-F5` `SYNC-F6` `SYNC-F7` `SYNC-F9` `SYNC-F10` `SYNC-F11` `SYNC-F12` `SYNC-F13` `SYNC-F14` `SYNC-F18` `SYNC-F19` `SYNC-F21` `SYNC-F23`
+**Closed (23), detail in `FINDINGS.md`:** `SYNC-F1` `SYNC-F2` `SYNC-F3` `SYNC-F4` `SYNC-F5` `SYNC-F6` `SYNC-F7` `SYNC-F9` `SYNC-F10` `SYNC-F11` `SYNC-F12` `SYNC-F13` `SYNC-F14` `SYNC-F15` `SYNC-F16` `SYNC-F17` `SYNC-F18` `SYNC-F19` `SYNC-F20` `SYNC-F21` `SYNC-F22` `SYNC-F23` `SYNC-F24`
 
 ---
 ## §6 · Open debt — `D-`
 
-**12 items: 6 `OPEN`, 2 `DECIDE`, 4 `PARKED`.** Real, evidenced, not blocking the pilot. **Verify a bullet against the tree before acting on it, and delete it the moment it lands.**
+**11 items: 5 `OPEN`, 2 `DECIDE`, 4 `PARKED`.** Real, evidenced, not blocking the pilot. **Verify a bullet against the tree before acting on it, and delete it the moment it lands.**
 
 | | What | Status |
 |---|---|---|
@@ -185,7 +184,6 @@ is defined in two places.
 | `D-03` | Android UPI is entirely untested | `OPEN` |
 | `D-04` | `help.tsx` is a third collapsible | `OPEN` |
 | `D-10` | Migrations are forward-only, applied by hand, with no rollback and no staging | `OPEN` |
-| `D-11` | Roster recovery self-heals only while the roster and the entry needing it fall inside one page… | `OPEN` |
 | `D-05` | `TransactionRow` never displays pay method | `DECIDE` |
 | `D-06` | Transfer has no `DetailChips` | `DECIDE` |
 | `D-07` | `budget_group.limit_daily/monthly/yearly` still exist as columns | `PARKED` |

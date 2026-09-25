@@ -16,7 +16,7 @@ import { PrimaryButton } from '../src/components/ui/PrimaryButton';
 import { SecondaryButton } from '../src/components/ui/SecondaryButton';
 import { Banner } from '../src/components/ui/Banner';
 import { ReviewSourceTabs, ReviewSourceHeader } from '../src/components/finance/review/ReviewSourceTabs';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { KeyboardFooter } from '../src/components/ui/KeyboardForm';
 import { ReviewList } from '../src/components/finance/review/ReviewList';
 import { useReviewCommit } from '../src/hooks/useReviewCommit';
 import { SkeletonCard } from '../src/components/ui/Skeleton';
@@ -62,6 +62,7 @@ import { useDataRefresh } from '../src/components/system/DataRefreshProvider';
 import { useToast } from '../src/components/system/Toast';
 import { haptic } from '../src/lib/haptics';
 import { saveFailureMessage } from '../src/lib/dbErrors';
+import { openConflicts } from '../src/db/queries/syncConflicts';
 import {
   type TxnSource, TXN_SOURCE_LABEL,
 } from '../src/constants/enums';
@@ -120,7 +121,8 @@ export default function ReviewScreen() {
     const personalId = groups.find(g => g.is_personal === 1)?.id ?? groups[0]?.id ?? '';
     // A pending row can only be assigned to an active shared group.
     const shared = groups.filter(g => g.is_personal !== 1 && g.is_archived !== 1);
-    const [pending, expenseCats, incomeCats, transferCats, ...memberLists] = await Promise.all([
+    const [conflicts, pending, expenseCats, incomeCats, transferCats, ...memberLists] = await Promise.all([
+      openConflicts(db),
       getPending(db),
       getCategoriesByFrequency(db, personalId, 'expense'),
       getCategoriesByFrequency(db, personalId, 'income'),
@@ -130,6 +132,7 @@ export default function ReviewScreen() {
     const groupMembers: Record<string, Person[]> = {};
     shared.forEach((g, i) => { groupMembers[g.id] = memberLists[i] as Person[]; });
     return {
+      conflicts: conflicts.map(c => c.txnId),
       pending, meId: me?.id ?? '', personalId,
       sharedGroups: shared.map(g => ({ id: g.id, name: g.name })),
       groupMembers, expenseCats, incomeCats, transferCats,
@@ -372,6 +375,20 @@ export default function ReviewScreen() {
     <View style={styles.container}>
       <ScreenHeader title="Review" onBack={() => router.back()} right={headerRight} />
 
+      {/* A transaction changed on two phones (SPEC-SERVER.md §6.3): listed here too,
+          so there is no new inbox to find. The choice is made on the transaction. */}
+      {!loading && (data?.conflicts.length ?? 0) > 0 && (
+        <Banner
+          tone={colors.healthAmber}
+          icon="git-merge"
+          text={data!.conflicts.length === 1
+            ? 'A transaction was changed on two phones. Choose which version to keep.'
+            : `${data!.conflicts.length} transactions were changed on two phones. Choose which versions to keep.`}
+          actionLabel="Open"
+          onAction={() => router.push(`/txn/${data!.conflicts[0]}` as never)}
+        />
+      )}
+
       {/* Recurring suggestion — surfaces after a batch Save, never auto-created. */}
       {!loading && recurCandidates.length > 0 && (
         <RecurringSuggestionBanner
@@ -429,7 +446,6 @@ export default function ReviewScreen() {
           fill
         />
       ) : (
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
         <ReviewList
           sections={sections}
           multiSource={multiSource}
@@ -460,12 +476,12 @@ export default function ReviewScreen() {
           onConfirm={confirmRow}
           onDiscard={deleteRow}
         />
-        </KeyboardAvoidingView>
       )}
 
-      {/* Sticky footer — one CTA normally, Actions + Save while selecting. */}
+      {/* Sticky footer — one CTA normally, Actions + Save while selecting. The
+          keyboard covers it while an amount is edited. */}
       {!loading && pending.length > 0 && !emptyFiltered && (
-        <View style={[styles.footer, { paddingBottom: insets.bottom + space.sm }]} onLayout={(e) => setFooterH(e.nativeEvent.layout.height)}>
+        <KeyboardFooter style={styles.footer} onHeight={setFooterH}>
           {selectMode ? (
             /* Two buttons, not four: every bulk edit moved into the Actions list, so adding
                one no longer means finding footer room. */
@@ -493,7 +509,7 @@ export default function ReviewScreen() {
               loading={batchSaving}
             />
           )}
-        </View>
+        </KeyboardFooter>
       )}
 
       {/* Bulk actions and their pickers — one unit, so this screen only tracks "open". */}

@@ -285,7 +285,7 @@ const AREAS = [
     sc:  ['SC-07','SC-08','SC-14','SC-15','SC-16','SC-23','SC-25','SC-35'],
     fe:  ['FE-01','FE-02','FE-03','FE-04','FE-05','FE-06','FE-07','FE-08','FE-09','FE-10','FE-38','FE-40'],
     ov:  ['OV-01','OV-06','OV-08','OV-18','OV-28','OV-34'],
-    dq:  ['DQ-16','DQ-18','DQ-20','DQ-22'],
+    dq:  ['DQ-16','DQ-18','DQ-20','DQ-22','DQ-91'],
   },
   {
     key: 'split', name: 'Splitting and settling',
@@ -315,7 +315,7 @@ const AREAS = [
     sc:  ['SC-05','SC-17','SC-42','SC-46'],
     fe:  ['FE-27','FE-28','FE-29','FE-30','FE-31'],
     ov:  ['OV-20','OV-30','OV-33'],
-    dq:  ['DQ-14','DQ-15','DQ-24','DQ-27'],
+    dq:  ['DQ-14','DQ-15','DQ-24','DQ-27','DQ-87'],
   },
   {
     key: 'recurring', name: 'Recurring and reminders',
@@ -325,7 +325,7 @@ const AREAS = [
     sc:  ['SC-30','SC-31','SC-32','SC-41'],
     fe:  ['FE-23','FE-24','FE-50','FE-60'],
     ov:  ['OV-03','OV-12','OV-22'],
-    dq:  [],
+    dq:  ['DQ-90', 'DQ-92'],
   },
   {
     key: 'import', name: 'Importing and review',
@@ -340,12 +340,12 @@ const AREAS = [
   {
     key: 'sync', name: 'Accounts, sync and backup',
     blurb: 'The optional half. An account buys off-device backup and shared-group sync and nothing else. Built end to end, encrypted per group — and no part of it has run on a phone.',
-    ent: ['E-18','E-19','E-20','E-21','E-22','E-65','E-82','E-87','E-88','E-89'],
+    ent: ['E-18a','E-18b','E-19','E-20','E-21','E-22','E-65','E-87','E-88','E-89'],
     fl:  ['FL-11','FL-24','FL-25','FL-27','FL-28','FL-29','FL-30','FL-31','FL-32','FL-49'],
-    sc:  ['SC-34','SC-36','SC-37','SC-38','SC-39','SC-40','SC-43','SC-44','SC-45'],
+    sc:  ['SC-34','SC-36','SC-37','SC-38','SC-39','SC-40','SC-43','SC-45'],
     fe:  ['FE-16','FE-52','FE-53','FE-54','FE-55','FE-56','FE-57','FE-58','FE-59'],
     ov:  [],
-    dq:  ['DQ-04','DQ-05','DQ-07','DQ-08','DQ-28','DQ-29','DQ-31','DQ-32','DQ-85','DQ-86'],
+    dq:  ['DQ-04','DQ-05','DQ-07','DQ-08','DQ-28','DQ-29','DQ-31','DQ-32','DQ-85','DQ-86','DQ-89','DQ-93','DQ-94','DQ-95','DQ-96','DQ-97'],
   },
   {
     key: 'shell', name: 'The app itself',
@@ -355,7 +355,7 @@ const AREAS = [
     sc:  ['SC-01','SC-02','SC-06','SC-24','SC-27','SC-27a','SC-28','SC-29'],
     fe:  ['FE-39','FE-41','FE-61','FE-62','FE-63','FE-64','FE-65','FE-66','FE-67','FE-68','FE-69','FE-70'],
     ov:  ['OV-09','OV-10','OV-13','OV-15','OV-16','OV-17','OV-23','OV-25','OV-26','OV-29','OV-31','OV-32'],
-    dq:  ['DQ-01','DQ-03','DQ-06','DQ-17','DQ-19','DQ-21','DQ-23','DQ-80'],
+    dq:  ['DQ-01','DQ-03','DQ-06','DQ-17','DQ-19','DQ-21','DQ-23','DQ-80','DQ-88'],
   },
 ];
 
@@ -390,7 +390,7 @@ const FRIENDLY = {
   'E-05': 'skipped dates', 'E-06': 'who paid', 'E-07': 'who owes', 'E-08': 'bill lines',
   'E-09': 'categories', 'E-10': 'deleted-category markers', 'E-11': 'stored settings',
   'E-12': 'budget lines', 'E-13': 'the history log', 'E-14': 'assets', 'E-15': 'goals',
-  'E-16': 'goal movements', 'E-17': 'the review inbox', 'E-18': 'the send queue',
+  'E-16': 'goal movements', 'E-17': 'the review inbox', 'E-18a': 'the send queue', 'E-18b': 'confirmed versions',
   'E-19': 'invites', 'E-20': 'approvals', 'E-21': 'per-group trust', 'E-22': 'disputes',
   'E-50': 'balances', 'E-51': 'what you owe and are owed', 'E-52': 'the settle-up plan',
   'E-53': 'yours to spend', 'E-54': 'total money', 'E-55': 'the health score',
@@ -398,7 +398,7 @@ const FRIENDLY = {
   'E-59': 'a recurring occurrence', 'E-60': 'the split maths', 'E-61': 'the afford verdict',
   'E-62': 'the savings plan', 'E-63': 'spending by category', 'E-64': 'what you may do in a group',
   'E-65': 'the trust decision', 'E-66': 'what saving will do', 'E-67': 'a suggested rule',
-  'E-80': 'app preferences', 'E-81': 'feature switches', 'E-82': 'this device key',
+  'E-80': 'app preferences', 'E-81': 'feature switches',
   'E-83': 'receipt photos', 'E-84': 'an unconfirmed payment', 'E-85': 'an unconfirmed settle-up',
   'E-86': 'a voice capture', 'E-87': 'your account', 'E-88': 'what syncs',
   'E-89': 'the backup file', 'E-90': 'scheduled reminders', 'E-91': 'reminder preferences',

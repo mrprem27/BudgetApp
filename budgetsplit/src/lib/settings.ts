@@ -22,25 +22,6 @@ const K = {
   // Opt-in, and default OFF. A sweep moves real money into goals without being
   // asked, so it has to be a decision someone made rather than one they inherited.
   autoSweep: 'auto_sweep_enabled',
-  // Whether shared-group entries travel between devices at all. Off by default:
-  // the app is local-first, and turning this on is the moment data leaves the
-  // phone. It is a pause, not a delete -- see `settings.setSyncEnabled`.
-  syncEnabled: 'sync_enabled',
-  lastSyncAt: 'sync_last_at',
-  lastSyncNote: 'sync_last_note',
-  syncGroups: 'sync_known_groups',
-  syncLog: 'sync_log',
-  syncEverything: 'sync_everything',
-  lastSnapshotAt: 'sync_last_snapshot_at',
-  /**
-   * Why the last automatic snapshot did not happen, or null when it did.
-   *
-   * Without this the switch could read "On" forever while no snapshot had EVER
-   * succeeded — the reason was computed and then discarded by both callers, so a
-   * database over the 25 MiB ceiling or a cleared keychain produced no log, no
-   * timestamp and no error surface anywhere.
-   */
-  lastSnapshotNote: 'sync_last_snapshot_note',
   restoreOfferDismissed: 'restore_offer_dismissed',
   defaultCadence: 'default_cadence',
   defaultCurrency: 'default_currency',
@@ -48,15 +29,6 @@ const K = {
   appLastOpen: 'app_last_open',
   onboardingDone: 'onboarding_done',
   onboardingIntent: 'onboarding_intent',
-  /**
-   * "I was offered people and groups at setup, and said no."
-   *
-   * Written only by the people step's Skip. Home's GET STARTED tiles used to key on
-   * `flags.splitting` and a live count alone, so skipping was invisible to them and
-   * the very next screen asked for a group again — which reads as the app not
-   * having listened. A count cannot express a decision; this can.
-   */
-  onboardingSkippedPeople: 'onboarding_skipped_people',
   pendingFirstAdd: 'pending_first_add',
   lockExplainerSeen: 'lock_explainer_seen',
   goalReorderHintSeen: 'goal_reorder_hint_seen',
@@ -79,21 +51,6 @@ async function getBool(key: string, fallback: boolean): Promise<boolean> {
   return v === null ? fallback : v === 'true';
 }
 const setBool = (key: string, v: boolean) => AsyncStorage.setItem(key, v ? 'true' : 'false');
-
-/** One sync attempt, as the details screen shows it. */
-export type SyncLogEntry = {
-  at: number;
-  pushed: number;
-  pulled: number;
-  conflicts: number;
-  /** Groups that ended — deleted for everyone, or that I left. */
-  vanished: number;
-  /** Absent when it completed. Otherwise why it did nothing. */
-  skipped?: string;
-};
-
-/** Enough to see a pattern, few enough to stay a diagnostic rather than history. */
-export const SYNC_LOG_MAX = 20;
 
 const getString = (key: string): Promise<string | null> => AsyncStorage.getItem(key);
 const setString = (key: string, v: string) => AsyncStorage.setItem(key, v);
@@ -120,93 +77,15 @@ export const settings = {
   setSaveLocation: (v: boolean) => setBool(K.saveLocation, v),
   autoSweep: () => getBool(K.autoSweep, false),
   setAutoSweep: (v: boolean) => setBool(K.autoSweep, v),
-  syncEnabled: () => getBool(K.syncEnabled, false),
-  /**
-   * Turning sync OFF is a pause, never a delete.
-   *
-   * Nothing already uploaded is removed, and nothing local is lost — the queue
-   * simply stops draining and no pulls happen. Turning it back on resumes from
-   * where it left off. The copy has to say that, because "off" reading as
-   * "deleted from the server" is the assumption people make, and acting on that
-   * assumption is how someone turns it off expecting a retraction they never get.
-   */
-  setSyncEnabled: (v: boolean) => setBool(K.syncEnabled, v),
-
-  /**
-   * When sync last completed, and what happened if it did not.
-   *
-   * Recorded because `runSync` deliberately never throws — a failed sync must not
-   * put a dialog in front of somebody who did not ask for one. The cost of that
-   * is a feature which, when it silently does nothing, looks exactly like a
-   * feature that is working. This is the one surface that tells the two apart,
-   * and it is what makes a problem on a real phone diagnosable instead of a
-   * shrug.
-   */
-  lastSyncAt: () => getNumber(K.lastSyncAt),
-  setLastSyncAt: (v: number) => setNumber(K.lastSyncAt, v),
-  lastSyncNote: () => getString(K.lastSyncNote),
-  setLastSyncNote: (v: string) => setString(K.lastSyncNote, v),
-
-  /**
-   * Keep an encrypted copy of EVERYTHING on the account, not just shared groups.
-   *
-   * The second switch, and a genuinely different promise from the first. Groups
-   * sync entry by entry because two people race the same bill. This is a whole-app
-   * snapshot, sealed with a passphrase the server never sees, so a fresh phone can
-   * become this one again — which the group sync cannot do, because personal data
-   * has no other member to re-wrap a key.
-   *
-   * Off by default, like everything else that sends data anywhere.
-   */
-  syncEverything: () => getBool(K.syncEverything, false),
-  setSyncEverything: (v: boolean) => setBool(K.syncEverything, v),
-
-  lastSnapshotAt: () => getNumber(K.lastSnapshotAt),
-  setLastSnapshotAt: (v: number) => setNumber(K.lastSnapshotAt, v),
-  lastSnapshotNote: () => getString(K.lastSnapshotNote),
-  setLastSnapshotNote: (v: string | null) =>
-    (v === null ? AsyncStorage.removeItem(K.lastSnapshotNote) : setString(K.lastSnapshotNote, v)),
-
   /**
    * They were offered their data back and said no.
    *
    * Sticky, because saying no means "this phone is a fresh start" and asking
    * again every launch would nag somebody out of a decision they have already
-   * made. Cleared by a restore, which makes the question moot anyway.
+   * made.
    */
   restoreOfferDismissed: () => getBool(K.restoreOfferDismissed, false),
   setRestoreOfferDismissed: (v: boolean) => setBool(K.restoreOfferDismissed, v),
-
-  /**
-   * What the server last said about my groups: `[id, state]` pairs.
-   *
-   * Cached so the Sync screen can answer "will this queue ever move?" without a
-   * request. Whether an entry can be sent depends on the group being published
-   * and joined, which is knowledge only the server has — and a screen that has to
-   * be online to explain why nothing is happening is useless in exactly the
-   * moment it is needed.
-   */
-  syncGroups: async (): Promise<Array<[string, string]>> => {
-    try { return JSON.parse((await getString(K.syncGroups)) ?? '[]'); } catch { return []; }
-  },
-  setSyncGroups: (v: Array<[string, string]>) => setString(K.syncGroups, JSON.stringify(v)),
-
-  /**
-   * The last few sync runs, newest first. A ring buffer, not a log file.
-   *
-   * `runSync` swallows every failure on purpose — it must never interrupt someone
-   * who did not ask for it — so without this there is no way to tell a sync that
-   * did nothing from one that never ran. Bounded at SYNC_LOG_MAX because this is
-   * a diagnostic, not history: the interesting question is always "what happened
-   * the last few times", never "what happened last March".
-   */
-  syncLog: async (): Promise<SyncLogEntry[]> => {
-    try { return JSON.parse((await getString(K.syncLog)) ?? '[]'); } catch { return []; }
-  },
-  appendSyncLog: async (entry: SyncLogEntry): Promise<void> => {
-    const prev = await settings.syncLog().catch(() => [] as SyncLogEntry[]);
-    await setString(K.syncLog, JSON.stringify([entry, ...prev].slice(0, SYNC_LOG_MAX)));
-  },
 
   // Entry defaults
   defaultCadence: () => getString(K.defaultCadence),
@@ -245,10 +124,14 @@ export const settings = {
   onboardingDone: () => getBool(K.onboardingDone, false),
   setOnboardingDone: (v: boolean) => setBool(K.onboardingDone, v),
   clearOnboardingDone: () => AsyncStorage.removeItem(K.onboardingDone),
+  /**
+   * Every preference on this phone, gone — the sign-out wipe (`DQ-97`). The next
+   * person to sign in may not be the same person, so nothing of the last one's
+   * choices (flags, reminders, pay method, onboarding) carries over.
+   */
+  resetAll: () => AsyncStorage.clear(),
   onboardingIntent: () => getString(K.onboardingIntent),
   setOnboardingIntent: (v: string) => setString(K.onboardingIntent, v),
-  onboardingSkippedPeople: () => getBool(K.onboardingSkippedPeople, false),
-  setOnboardingSkippedPeople: (v: boolean) => setBool(K.onboardingSkippedPeople, v),
   pendingFirstAdd: () => getBool(K.pendingFirstAdd, false),
   setPendingFirstAdd: (v: boolean) => setBool(K.pendingFirstAdd, v),
   clearPendingFirstAdd: () => AsyncStorage.removeItem(K.pendingFirstAdd),

@@ -6,6 +6,7 @@ import { PayMethod } from '../../constants/enums';
 import { getMe } from './persons';
 import { getAllGroups, personalGroupOf } from './groups';
 import { insertTxnRows } from './transactions';
+import { queueDelete, queueUpsert } from './syncQueue';
 
 /**
  * The asset register: what you own that isn't cash.
@@ -106,11 +107,14 @@ export async function insertAsset(
   const id = uuid();
   const now = Date.now();
   const next = await db.getFirstAsync<{ n: number | null }>('SELECT MAX(sort_order) AS n FROM asset');
-  await db.runAsync(
-    `INSERT INTO asset (id, name, kind, icon, color, balance, is_archived, sort_order, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
-    [id, name, input.kind ?? 'other', input.icon ?? null, input.color ?? null, balance, (next?.n ?? -1) + 1, now, now],
-  );
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `INSERT INTO asset (id, name, kind, icon, color, balance, is_archived, sort_order, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
+      [id, name, input.kind ?? 'other', input.icon ?? null, input.color ?? null, balance, (next?.n ?? -1) + 1, now, now],
+    );
+    await queueUpsert(db, 'asset', id);
+  });
   return (await getAssetById(db, id))!;
 }
 
@@ -134,10 +138,13 @@ export async function updateAsset(
   if (patch.icon !== undefined) { sets.push('icon = ?'); binds.push(patch.icon); }
   if (patch.color !== undefined) { sets.push('color = ?'); binds.push(patch.color); }
   if (sets.length === 0) return;
-  await db.runAsync(
-    `UPDATE asset SET ${sets.join(', ')}, updated_at = ? WHERE id = ?`,
-    [...binds, Date.now(), id],
-  );
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `UPDATE asset SET ${sets.join(', ')}, updated_at = ? WHERE id = ?`,
+      [...binds, Date.now(), id],
+    );
+    await queueUpsert(db, 'asset', id);
+  });
 }
 
 /**
@@ -150,7 +157,10 @@ export async function updateAsset(
  * where it went properly with a transfer out first.
  */
 export async function archiveAsset(db: SQLite.SQLiteDatabase, id: string, archived = true): Promise<void> {
-  await db.runAsync('UPDATE asset SET is_archived = ?, updated_at = ? WHERE id = ?', [archived ? 1 : 0, Date.now(), id]);
+  await db.withTransactionAsync(async () => {
+    await db.runAsync('UPDATE asset SET is_archived = ?, updated_at = ? WHERE id = ?', [archived ? 1 : 0, Date.now(), id]);
+    await queueUpsert(db, 'asset', id);
+  });
 }
 
 /** Persist a drag-reorder. */
@@ -159,6 +169,7 @@ export async function setAssetOrder(db: SQLite.SQLiteDatabase, idsInOrder: strin
   await db.withTransactionAsync(async () => {
     for (let i = 0; i < idsInOrder.length; i++) {
       await db.runAsync('UPDATE asset SET sort_order = ?, updated_at = ? WHERE id = ?', [i, now, idsInOrder[i]]);
+      await queueUpsert(db, 'asset', idsInOrder[i]);
     }
   });
 }
@@ -173,7 +184,10 @@ export async function deleteAsset(db: SQLite.SQLiteDatabase, id: string): Promis
     'SELECT COUNT(*) AS n FROM txn WHERE asset_id = ?', [id],
   );
   if ((row?.n ?? 0) > 0) return { ok: false, reason: 'has-history' };
-  await db.runAsync('DELETE FROM asset WHERE id = ?', [id]);
+  await db.withTransactionAsync(async () => {
+    await db.runAsync('DELETE FROM asset WHERE id = ?', [id]);
+    await queueDelete(db, 'asset', id, { id });
+  });
   return { ok: true };
 }
 
@@ -240,6 +254,7 @@ export async function transferToAsset(
       'UPDATE asset SET balance = balance + ?, updated_at = ? WHERE id = ?',
       [amount, now, asset.id],
     );
+    await queueUpsert(db, 'asset', asset.id);
   });
   return id;
 }
@@ -301,6 +316,7 @@ export async function transferFromAsset(
     if (res.changes === 0) {
       throw new AssetError('insufficient', `${asset.name} does not hold that much any more`);
     }
+    await queueUpsert(db, 'asset', asset.id);
   });
   return id;
 }
@@ -322,7 +338,10 @@ export async function restateAssetBalance(
   if (!Number.isFinite(balance) || balance < 0) {
     throw new AssetError('bad-amount', 'An asset cannot be worth less than nothing');
   }
-  await db.runAsync('UPDATE asset SET balance = ?, updated_at = ? WHERE id = ?', [balance, Date.now(), id]);
+  await db.withTransactionAsync(async () => {
+    await db.runAsync('UPDATE asset SET balance = ?, updated_at = ? WHERE id = ?', [balance, Date.now(), id]);
+    await queueUpsert(db, 'asset', id);
+  });
 }
 
 /** The name the one-time migration gives the asset it mints from `money.investments`. */

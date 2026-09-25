@@ -133,14 +133,14 @@ export default function NotificationsScreen() {
         {/* Reminders — every reminder setting lives here */}
         <Text style={styles.sectionLabel}>REMINDERS</Text>
         <View style={styles.card}>
-          {/* Bill / renewal reminders */}
+          {/* Reminders for upcoming charges */}
           <View style={styles.typeRow}>
             <Feather name="calendar" size={20} color={colors.accent} style={styles.typeIcon} />
             <View style={styles.typeInfo}>
-              <Text style={styles.typeLabel}>Bill reminders</Text>
-              <Text style={styles.typeDesc}>Alert before recurring bills and memberships renew</Text>
+              <Text style={styles.typeLabel}>Reminders for upcoming charges</Text>
+              <Text style={styles.typeDesc}>Alert before recurring bills and memberships are due</Text>
             </View>
-            <Toggle on={!!prefs?.renewals} onPress={() => toggle('renewals')} label="Bill reminders" />
+            <Toggle on={!!prefs?.renewals} onPress={() => toggle('renewals')} label="Reminders for upcoming charges" />
           </View>
           {prefs?.renewals && (
             <>
@@ -190,7 +190,7 @@ export default function NotificationsScreen() {
             <Feather name="save" size={20} color={colors.accent} style={styles.typeIcon} />
             <View style={styles.typeInfo}>
               <Text style={styles.typeLabel}>Back up your data</Text>
-              <Text style={styles.typeDesc}>Monthly nudge to export a CSV/PDF — your data lives only on this phone</Text>
+              <Text style={styles.typeDesc}>Monthly nudge to export a CSV/PDF you keep yourself</Text>
             </View>
             <Toggle on={!!prefs?.backup} onPress={() => toggle('backup')} label="Back up your data" />
           </View>
@@ -224,7 +224,7 @@ export default function NotificationsScreen() {
       {prefs && (
         <TimePickerSheet
           visible={timeEditing !== null}
-          title={timeEditing === 'daily' ? 'Daily reminder time' : 'Renewal reminder time'}
+          title={timeEditing === 'daily' ? 'Daily reminder time' : 'Reminder time'}
           value={timeEditing === 'daily' ? prefs.dailyTime : prefs.renewalTime}
           onClose={() => setTimeEditing(null)}
           onSave={onSaveTime}

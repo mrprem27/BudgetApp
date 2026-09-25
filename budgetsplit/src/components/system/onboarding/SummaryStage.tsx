@@ -6,13 +6,9 @@ import { Card } from '../../ui/Card';
 import { Divider } from '../../ui/Divider';
 import { IconCircle } from '../../ui/IconCircle';
 import { formatRupeesShort } from '../../../lib/money';
+import { fullDate } from '../../../lib/dateFormat';
 
 type Row = { icon: keyof typeof Feather.glyphMap; tint: string; title: string; where: string };
-
-function ordinal(n: number): string {
-  const s = ['th', 'st', 'nd', 'rd'], v = n % 100;
-  return n + (s[(v - 20) % 10] || s[v] || s[0]);
-}
 
 /**
  * The summary that replaced the fake committing checklist and the forward-only
@@ -22,20 +18,27 @@ function ordinal(n: number): string {
  * of a celebration.
  */
 export function SummaryStage({
-  incomeNum, payday, budgetNum, people, notifPerm,
+  incomeNum, firstPayDate, budgetNum, notifPerm, splits,
 }: {
   incomeNum: number;
-  payday: number;
+  /** Epoch ms — the exact date the salary rule's first occurrence lands. */
+  firstPayDate: number;
   budgetNum: number;
-  /** Names of the contacts added on the people step. */
-  people: string[];
   notifPerm: boolean;
+  /**
+   * Whether this persona splits with anyone at all (`intent !== 'personal'`).
+   * Onboarding no longer asks who you split with — that question moved to
+   * Friends (`SPEC-2026-09-FEEDBACK.md` §2 O6) — so there is nothing here to read back as a
+   * row; someone who said they track only their own spending doesn't need a
+   * pointer to a feature they just opted out of, either.
+   */
+  splits: boolean;
 }) {
   const rows: Row[] = [];
   if (incomeNum > 0) {
     rows.push({
       icon: 'trending-up', tint: colors.income,
-      title: `Salary ${formatRupeesShort(incomeNum * 100)} on the ${ordinal(payday)}`,
+      title: `Salary ${formatRupeesShort(incomeNum * 100)} — next on ${fullDate(firstPayDate)}`,
       where: 'Recurring · Plan',
     });
   }
@@ -46,30 +49,17 @@ export function SummaryStage({
       where: 'Home · pace bar',
     });
   }
-  if (people.length > 0) {
-    // Named as people, not as a group — onboarding no longer makes one from them,
-    // so a row promising one would send the user to a tab that doesn't have it.
-    //
-    // `Settings · People`, not `Friends`. The route is `/friends`, but that word
-    // appears on no screen in the app: the header says "People", so does the
-    // Settings row. Every other `where` here names something the user can read.
-    rows.push({
-      icon: 'users', tint: colors.settle,
-      title: `${people.length} ${people.length === 1 ? 'person' : 'people'} to split with — ${people.slice(0, 3).join(', ')}${people.length > 3 ? '…' : ''}`,
-      where: 'Settings · People',
-    });
-  }
   if (notifPerm) {
     rows.push({
       icon: 'bell', tint: colors.healthAmber,
-      title: 'Bill & renewal reminders on',
+      title: 'Reminders for upcoming charges on',
       where: 'Settings · Notifications',
     });
   }
   rows.push({
     icon: 'shield', tint: colors.income,
     title: 'Backup reminder on',
-    where: 'Settings · Backup — everything stays on this phone',
+    where: 'Settings · Backup — a file you keep',
   });
 
   return (
@@ -93,6 +83,14 @@ export function SummaryStage({
       ) : (
         <Text style={styles.emptyNote}>
           Nothing set up yet — that&apos;s fine. Everything here can be added from the app whenever you want.
+        </Text>
+      )}
+      {/* The one pointer to Friends, in place of the row that used to read back
+          who was added there — see `splits` above for why it's a line, not a
+          checkmark, and why it's gone entirely for 'personal'. */}
+      {splits && (
+        <Text style={styles.healthNote}>
+          Add friends in Settings to split expenses.
         </Text>
       )}
       <Text style={styles.healthNote}>

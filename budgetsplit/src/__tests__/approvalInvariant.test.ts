@@ -29,6 +29,16 @@ const QUERY_DIR = path.resolve(__dirname, '../db/queries');
  */
 const ALLOWLIST: { file: string; contains: string; why: string }[] = [
   {
+    file: 'identity.ts',
+    contains: 'SELECT (EXISTS (SELECT 1 FROM txn WHERE is_deleted = 0)',
+    why: 'phoneHasData: an entry waiting on my approval is still data on this phone that a restore would discard, so it counts toward "this phone has data".',
+  },
+  {
+    file: 'identity.ts',
+    contains: 'SELECT id FROM txn WHERE is_deleted = 0 AND author_person_id IS NULL',
+    why: 'backfillQueue: author_person_id IS NULL already means "mine", and my own entries never await my approval — a peer\'s pending entry has an author and is excluded by that clause, not by the approval filter.',
+  },
+  {
     file: 'assets.ts',
     contains: 'SELECT COUNT(*) AS n FROM txn WHERE asset_id = ?',
     why: 'deleteAsset\u2019s reference count. It must see EVERY row that names the asset — '

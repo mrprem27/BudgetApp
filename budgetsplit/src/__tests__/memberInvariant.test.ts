@@ -29,19 +29,14 @@ const QUERY_DIR = path.resolve(__dirname, '../db/queries');
  */
 const ALLOWLIST: { file: string; contains: string; why: string }[] = [
   {
-    file: 'syncDoc.ts',
-    contains: 'm.deleted_at AS removedAt',
-    why: 'readRosterDoc — the roster is how removal TRAVELS, so it must publish the people who left along with when. Omitting them is what made removal undetectable on the receiving device in the first place: absence from a roster is indistinguishable from a roster that is merely stale.',
+    file: 'syncApply.ts',
+    contains: 'SELECT * FROM group_member WHERE group_id = ? AND person_id = ?',
+    why: 'buildOutbound\'s group_member case — it sends the membership row as it stands, and a removal IS a row with deleted_at set. Filtering out people who left would turn every removal into a silent no-op on the server.',
   },
   {
     file: 'persons.ts',
     contains: '(SELECT COUNT(*) FROM group_member WHERE person_id = ?)',
     why: 'deletePerson\'s reference count. It is asking "does removing this row orphan anything", so it must see EVERY reference including memberships of groups the person has already left — a departed membership is still a row pointing at them, and this is a hard delete.',
-  },
-  {
-    file: 'persons.ts',
-    contains: 'SELECT group_id, ?, joined_at, role FROM group_member WHERE person_id = ?',
-    why: 'mergePerson — folds one person row into another and must move EVERY membership, including memberships of groups they had already left. Leaving those behind would orphan them on a person row that is about to be deleted.',
   },
 ];
 

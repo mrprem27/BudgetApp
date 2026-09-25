@@ -40,8 +40,6 @@ export type ServerUser = {
 
 export type ServerSession = { token: string; user: ServerUser };
 
-export type ServerBackup = { id: string; sizeBytes: number; createdAt: number };
-
 // --- Configuration --------------------------------------------------------
 
 /** Nothing is configured and no account UI should appear — the default build. */
@@ -313,47 +311,6 @@ export async function uploadAvatar(fileUri: string): Promise<ServerUser> {
   return readUser(await sendAuthed('/me/avatar', { method: 'PUT', json: { contentType, base64 } }));
 }
 
-// --- Backups --------------------------------------------------------------
-
-/** `envelopeJson` is the already-encrypted `BackupEnvelope`, serialised. */
-/**
- * Upload one encrypted envelope.
- *
- * `kind` matters, and defaulting it to `manual` is the safe direction. Manual
- * backups and automatic snapshots are pruned against SEPARATE quotas now, because
- * pruning them together meant four-a-day snapshots filled all ten slots in about
- * 60 hours and silently deleted the careful backup somebody made before a risky
- * change. A mislabelled manual backup is merely kept longer; a mislabelled
- * snapshot could push a deliberate one out.
- *
- * `pruned` is returned rather than discarded, so a caller can say what went.
- */
-export async function uploadBackup(
-  envelopeJson: string,
-  kind: 'manual' | 'snapshot' = 'manual',
-): Promise<ServerBackup & { pruned: number }> {
-  const response = await sendAuthed(`/backups?kind=${kind}`, { method: 'POST', text: envelopeJson });
-  const data = await response.json() as { backup?: ServerBackup; pruned?: number };
-  if (!data.backup) throw new ServerRequestError(502, 'The server sent back an unexpected response.');
-  return { ...data.backup, pruned: data.pruned ?? 0 };
-}
-
-export async function listServerBackups(): Promise<ServerBackup[]> {
-  const response = await sendAuthed('/backups');
-  const data = await response.json() as { backups?: ServerBackup[] };
-  return data.backups ?? [];
-}
-
-/** Returns the raw envelope text, for `decryptEnvelope` to open on-device. */
-export async function downloadServerBackup(id: string): Promise<string> {
-  const response = await sendAuthed(`/backups/${encodeURIComponent(id)}`);
-  return response.text();
-}
-
-export async function deleteServerBackup(id: string): Promise<void> {
-  await sendAuthed(`/backups/${encodeURIComponent(id)}`, { method: 'DELETE' });
-}
-
 // --- Linking (Stage B) ----------------------------------------------------
 
 export type ServerLink = {
@@ -516,157 +473,48 @@ export async function removeLink(id: string): Promise<void> {
 /** Same shape as `extractAuthToken`, for `budgetsplit:///link?token=…`. */
 export const extractInviteToken = extractAuthToken;
 
-// --- Sync (Stage C) --------------------------------------------------------
+// --- Sync (SPEC-SERVER.md §3) ----------------------------------------------
 
-export type SyncGroup = {
-  id: string;
-  owner: string;
-  /**
-   * `removed` — I left, or was removed. `deleted` — the owner deleted it for
-   * everyone. Both are reported rather than the group simply vanishing from the
-   * list, because a group that disappears is indistinguishable from a failed
-   * request, and the device would keep it forever, syncing nothing.
-   */
-  state: 'pending' | 'approved' | 'removed' | 'deleted';
-  /** Null when this device has no wrap yet — invited, or reinstalled. */
-  wrappedKey: string | null;
+export type Mutation = {
+  id: number; entity: string; op: 'upsert' | 'delete'; entityId: string; baseVersion: number; data?: Record<string, unknown>;
+};
+export type PulledScope = {
+  id: string; kind: 'user' | 'group'; cursor: number; reset: boolean; more: boolean;
+  /** The scope's latest seq; `cursor / head` is how far through it the phone is. */
+  head: number;
+  rows: Record<string, Array<Record<string, unknown>>>;
+};
+export type PullResult = {
+  scopes: PulledScope[];
+  revoked: string[];
+  /** Why each revoked group went (S21). */
+  revokedWhy?: Record<string, 'deleted' | 'removed' | 'left'>;
+  lastMutationId: number;
+  rejections: Array<{ mutationId: number; code: string; message: string; current: unknown }>;
+  /** Groups this account was invited to and hasn't answered (S18). */
+  invites?: Array<{ groupId: string; groupName: string; memberId: string; invitedBy: string | null; invitedAt: number }>;
 };
 
-export type SyncEntry = {
-  entryId: string;
-  version: number;
-  ciphertext: string;
-  author: string;
-  isDeleted: boolean;
-  updatedAt: number;
+/** A receipt only: what happened to each mutation is read on the next pull. */
+export async function pushSync(body: { deviceId: string; mutations: Mutation[] }): Promise<{ lastMutationId: number }> {
+  const res = await sendAuthed('/sync/push', { method: 'POST', json: body });
+  return (await res.json()) as { lastMutationId: number };
+}
+
+export async function pullSync(body: {
+  deviceId: string; cursors: Record<string, number>; rejectionsAfter: number;
+}): Promise<PullResult> {
+  const res = await sendAuthed('/sync/pull', { method: 'POST', json: body });
+  return (await res.json()) as PullResult;
+}
+
+/** One saved version of a transaction (SPEC-SERVER.md §6.4). */
+export type HistoryEntry = {
+  version: number; editedAt: number; editedBy: string; editorName: string | null; snapshot: Record<string, unknown>;
 };
 
-export type SyncDevice = { deviceId: string; publicKey: string; label: string | null };
-
-export async function registerDevice(
-  deviceId: string, publicKey: string, label?: string,
-): Promise<void> {
-  await sendAuthed('/sync/devices', { method: 'POST', json: { deviceId, publicKey, label } });
-}
-
-/**
- * The devices of someone you are linked with — what a group key gets wrapped to.
- *
- * Only reachable for a person who has already approved a link with you. There is
- * no directory here and this route must not become one.
- */
-export async function listDeviceKeys(userId?: string): Promise<SyncDevice[]> {
-  const q = userId ? `?userId=${encodeURIComponent(userId)}` : '';
-  const res = await sendAuthed(`/sync/devices${q}`);
-  return ((await res.json()) as { devices: SyncDevice[] }).devices;
-}
-
-export async function listSyncGroups(deviceId: string): Promise<SyncGroup[]> {
-  const res = await sendAuthed(`/sync/groups?deviceId=${encodeURIComponent(deviceId)}`);
-  return ((await res.json()) as { groups: SyncGroup[] }).groups;
-}
-
-/**
- * Publish a group, with the key wrapped to my own devices.
- *
- * The wraps travel WITH the publish rather than after it: without them the owner
- * has published a group they cannot read, because the key exists only in the
- * memory of the device that just generated it.
- */
-export async function publishSyncGroup(
-  groupId: string, wraps: Array<{ deviceId: string; wrappedKey: string }>,
-): Promise<void> {
-  await sendAuthed('/sync/groups', { method: 'POST', json: { groupId, wraps } });
-}
-
-/**
- * Hand MY OWN other devices the key to a group I am already in.
- *
- * A wrap is per device, and nothing used to create one for a device that showed
- * up later — so a second phone, or a reinstall on the same one, saw every group
- * listed as approved with `wrappedKey: null` and could never read a byte of it.
- * The server refuses any wrap naming a device that is not mine.
- */
-export async function pushSyncWraps(
-  groupId: string, wraps: Array<{ deviceId: string; wrappedKey: string }>,
-): Promise<void> {
-  await sendAuthed(`/sync/groups/${encodeURIComponent(groupId)}/wraps`, {
-    method: 'POST', json: { wraps },
-  });
-}
-
-export async function inviteSyncMember(
-  groupId: string, userId: string, wraps: Array<{ deviceId: string; wrappedKey: string }>,
-): Promise<void> {
-  await sendAuthed(`/sync/groups/${encodeURIComponent(groupId)}/members`, {
-    method: 'POST', json: { userId, wraps },
-  });
-}
-
-export async function joinSyncGroup(groupId: string): Promise<void> {
-  await sendAuthed(`/sync/groups/${encodeURIComponent(groupId)}/join`, { method: 'POST' });
-}
-
-/**
- * The push. Throws `ServerRequestError` with `status === 409` when the version is
- * stale, and `error.detail.current` then holds what the server actually has.
- *
- * Deliberately not swallowed into a boolean: a conflict is not a failed request,
- * it is news — someone else changed this entry — and the caller has to be able to
- * tell the two apart.
- */
-export async function pushSyncEntry(entry: {
-  groupId: string; entryId: string; version: number; ciphertext: string; isDeleted: boolean;
-}): Promise<{ version: number; updatedAt: number }> {
-  const res = await sendAuthed('/sync/entries', { method: 'PUT', json: entry });
-  return (await res.json()) as { version: number; updatedAt: number };
-}
-
-export async function pullSyncEntries(
-  groupId: string, since: number,
-): Promise<{ entries: SyncEntry[]; cursor: number; more: boolean }> {
-  const res = await sendAuthed(
-    `/sync/entries?groupId=${encodeURIComponent(groupId)}&since=${since}`,
-  );
-  return (await res.json()) as { entries: SyncEntry[]; cursor: number; more: boolean };
-}
-
-export type SyncDispute = {
-  entryId: string;
-  byUser: string;
-  version: number;
-  createdAt: number;
-  cleared: boolean;
-};
-
-/**
- * Tell the group I object to an entry — or withdraw that objection.
- *
- * Never a new version of their entry: a dispute is my opinion of what someone
- * else wrote, and expressing it as a version would let one person overwrite
- * another's record of what happened.
- */
-export async function pushSyncDispute(
-  groupId: string, entryId: string, version: number, cleared = false,
-): Promise<void> {
-  await sendAuthed('/sync/disputes', { method: 'PUT', json: { groupId, entryId, version, cleared } });
-}
-
-export async function pullSyncDisputes(
-  groupId: string, since: number,
-): Promise<{ disputes: SyncDispute[]; cursor: number; more: boolean }> {
-  const res = await sendAuthed(
-    `/sync/disputes?groupId=${encodeURIComponent(groupId)}&since=${since}`,
-  );
-  return (await res.json()) as { disputes: SyncDispute[]; cursor: number; more: boolean };
-}
-
-/** Leave a group someone else created. Their entries stay; my access ends. */
-export async function leaveSyncGroup(groupId: string): Promise<void> {
-  await sendAuthed(`/sync/groups/${encodeURIComponent(groupId)}/leave`, { method: 'POST' });
-}
-
-/** Delete a group for everyone. Owner only — the server enforces it too. */
-export async function deleteSyncGroup(groupId: string): Promise<void> {
-  await sendAuthed(`/sync/groups/${encodeURIComponent(groupId)}`, { method: 'DELETE' });
+/** A transaction's saved versions, oldest first. Loaded when it is opened, never synced. */
+export async function fetchTxnHistory(transactionId: string): Promise<HistoryEntry[]> {
+  const res = await sendAuthed(`/transactions/${encodeURIComponent(transactionId)}/history`);
+  return ((await res.json()) as { entries: HistoryEntry[] }).entries;
 }

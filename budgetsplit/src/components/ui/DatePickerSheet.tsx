@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import {
   startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval,
-  addMonths, subMonths, addYears, isSameDay, isSameMonth, format,
+  addMonths, subMonths, addYears, isSameDay, isSameMonth, isBefore, startOfDay, format,
 } from 'date-fns';
 import { monthLabel } from '../../lib/dateFormat';
 import { colors, type, space, radius } from '../tokens';
@@ -27,15 +27,25 @@ type Props = {
    */
   timeLabel?: string;
   onPickTime?: () => void;
+  /**
+   * Earliest selectable day, inclusive — anything before it renders muted and
+   * does not respond to a tap. Opt-in, and every caller but one leaves it
+   * unset: a transaction date, a filter bound and a recurring end date are
+   * all legitimately in the past. Onboarding's next-payment date is the one
+   * that is not (`SPEC-2026-09-FEEDBACK.md` §2 O4) — "next" stops meaning anything for a date
+   * already behind you.
+   */
+  minDate?: number;
 };
 
 const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
 /**
  * A reload-friendly (no native module) calendar picker. Any past or future date
- * can be chosen; the selected date keeps the existing time-of-day.
+ * can be chosen — unless `minDate` says otherwise — and the selected date keeps
+ * the existing time-of-day.
  */
-export function DatePickerSheet({ visible, value, onClose, onChange, timeLabel, onPickTime }: Props) {
+export function DatePickerSheet({ visible, value, onClose, onChange, timeLabel, onPickTime, minDate }: Props) {
   // Guard against an invalid/NaN epoch — date-fns throws RangeError otherwise.
   const safeValue = Number.isFinite(value) ? value : Date.now();
   const [viewMonth, setViewMonth] = useState(() => new Date(safeValue));
@@ -48,7 +58,10 @@ export function DatePickerSheet({ visible, value, onClose, onChange, timeLabel, 
   const gridEnd = endOfWeek(endOfMonth(viewMonth));
   const days = eachDayOfInterval({ start: gridStart, end: gridEnd });
 
+  const isDisabled = (day: Date) => minDate != null && isBefore(day, startOfDay(minDate));
+
   function pick(day: Date) {
+    if (isDisabled(day)) return;
     const d = new Date(day);
     d.setHours(selected.getHours(), selected.getMinutes(), selected.getSeconds(), 0);
     onChange(d.getTime());
@@ -94,12 +107,15 @@ export function DatePickerSheet({ visible, value, onClose, onChange, timeLabel, 
           const isSel = isSameDay(day, selected);
           const inMonth = isSameMonth(day, viewMonth);
           const isToday = isSameDay(day, today);
+          const disabled = isDisabled(day);
           return (
             <TouchableOpacity
               key={day.toISOString()}
               style={styles.cell}
               onPress={() => pick(day)}
+              disabled={disabled}
               accessibilityRole="button"
+              accessibilityState={{ disabled }}
               accessibilityLabel={format(day, 'd MMMM yyyy')}
             >
               <Text style={[
@@ -107,6 +123,7 @@ export function DatePickerSheet({ visible, value, onClose, onChange, timeLabel, 
                 !inMonth && styles.cellMuted,
                 isToday && !isSel && styles.cellToday,
                 isSel && styles.cellTextSelected,
+                disabled && styles.cellDisabled,
               ]}>
                 {day.getDate()}
               </Text>
@@ -147,6 +164,7 @@ const styles = StyleSheet.create({
   cell: { width: `${100 / 7}%`, aspectRatio: 1, alignItems: 'center', justifyContent: 'center' },
   cellText: { ...type.body, color: colors.textPrimary, width: 36, height: 36, borderRadius: 18, textAlign: 'center', textAlignVertical: 'center', lineHeight: 36 },
   cellMuted: { color: colors.textMuted },
+  cellDisabled: { color: colors.textMuted, opacity: 0.4 },
   cellToday: { color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   cellTextSelected: { backgroundColor: colors.accent, color: colors.bg, overflow: 'hidden', fontFamily: 'Inter_600SemiBold' },
   todayBtn: { alignSelf: 'center', paddingVertical: space.sm, paddingHorizontal: space.lg, marginTop: space.sm },

@@ -1,8 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Alert, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Sharing from 'expo-sharing';
 import { File, Paths } from 'expo-file-system';
@@ -23,41 +23,16 @@ import {
 import {
   readAllTables, restoreAllTables, readPhotoFiles, restorePhotoFiles, reapUnreferencedPhotos,
 } from '../../src/db/queries/backup';
-import { ServerBackupSheet } from '../../src/components/finance/backup/ServerBackupSheet';
 import { useServerSession } from '../../src/hooks/useServerSession';
-import { formatBytes } from '../../src/lib/storage';
 import { beginRestore, endRestore } from '../../src/lib/restoreGuard';
-import {
-  uploadBackup, listServerBackups, downloadServerBackup, deleteServerBackup,
-  type ServerBackup,
-} from '../../src/lib/serverApi';
-
-/**
- * The smaller of the two server ceilings — KV's hard 25 MiB per value.
- *
- * Deliberately conservative: `storage.ts` raises this to 50 MB once R2 is bound,
- * but a client that assumed the larger number would let someone spend a full
- * encrypt before a 413 on the deployment that is actually live.
- */
-const MAX_SERVER_BACKUP_BYTES = 25 * 1024 * 1024;
+import { linkedUser } from '../../src/db/queries/syncApply';
 
 export default function BackupScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
   const { refresh } = useDataRefresh();
 
-  const { session: serverSession, configured: serverConfigured } = useServerSession();
-  /**
-   * `?open=account` lands straight on the list of copies.
-   *
-   * The launch prompt sends people here, and making them find the right row
-   * afterwards would waste the one moment they are certain what they want. It
-   * goes no further than opening the list: the passphrase, the version check and
-   * the confirm are the same ones every other restore goes through.
-   */
-  const { open: openParam } = useLocalSearchParams<{ open?: string }>();
-  const autoOpened = useRef(false);
-
+  const { session: serverSession } = useServerSession();
   const [creating, setCreating] = useState(false);
   const [restoring, setRestoring] = useState(false);
   /**
@@ -72,25 +47,11 @@ export default function BackupScreen() {
   const onKdf = (f: number) => setKdfPct(Math.round(f * 100));
   const [unlocking, setUnlocking] = useState(false);
   const [showCreateSheet, setShowCreateSheet] = useState(false);
-  /** Where the encrypted envelope goes once it's built — the only difference
-   *  between the two "create" rows. Everything up to that point is identical. */
-  const [createTarget, setCreateTarget] = useState<'file' | 'server'>('file');
-  const [showServerList, setShowServerList] = useState(false);
-  const [serverBackups, setServerBackups] = useState<ServerBackup[]>([]);
-  const [listLoading, setListLoading] = useState(false);
-  const [listError, setListError] = useState<string | null>(null);
-  const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [includePhotos, setIncludePhotos] = useState(false);
   const [showRestoreSheet, setShowRestoreSheet] = useState(false);
   const [pickedEnvelope, setPickedEnvelope] = useState<BackupEnvelope | null>(null);
   const [restoreError, setRestoreError] = useState<string | null>(null);
   const [lastBackupAt, setLastBackupAt] = useState<number | null>(null);
-
-  useEffect(() => {
-    if (openParam !== 'account' || autoOpened.current || !serverSession) return;
-    autoOpened.current = true;   // once per visit, never on a re-render
-    openServerList();
-  }, [openParam, serverSession]);
 
   // The *backup* timestamp, not the reminder anchor — enabling the reminder
   // stamps the anchor, which is how this row came to claim a backup that never
@@ -110,65 +71,33 @@ export default function BackupScreen() {
       const payload = buildBackupPayload(tables, photos);
       const envelope = await encryptPayload(payload, passphrase, onKdf);
 
-      if (createTarget === 'server') {
-        /*
-         * Checked here, before the upload, because the alternative is cruel:
-         * the whole payload is held as base64, copied by JSON.stringify, copied
-         * again by the cipher, and only then rejected with a 413 — after the user
-         * has already waited through the key derivation.
-         *
-         * The ceiling is the server's, not a guess: KV stops at 25 MiB where R2
-         * keeps going, and `createBackup` reads it from whichever backend is
-         * actually bound. This number matches the smaller one, so the message is
-         * right on either.
-         */
-        const body = JSON.stringify(envelope);
-        if (body.length > MAX_SERVER_BACKUP_BYTES) {
-          haptic.warning();
-          Alert.alert(
-            'Too large for your account',
-            `This backup is ${formatBytes(body.length)}, and the limit is `
-            + `${formatBytes(MAX_SERVER_BACKUP_BYTES)}. Receipt photos are almost always the reason — `
-            + 'make one without them, or save it as a file instead.',
-          );
-          return;
-        }
-        // Uploaded already-encrypted: the server stores the same bytes this
-        // device would have written to a file, and can't read either.
-        const saved = await uploadBackup(body);
-        Alert.alert(
-          'Backed up to your account',
-          `${formatBytes(saved.sizeBytes)}, encrypted on this phone. You'll need this passphrase to restore it — it was never sent.`,
-        );
+      const file = new File(Paths.cache, backupFileName());
+      file.create({ overwrite: true });
+      file.write(JSON.stringify(envelope));
+      if (!(await Sharing.isAvailableAsync())) {
+        // Nowhere to share to, so the file in the cache directory IS the
+        // backup — and the OS may evict it. Recorded as done because it is as
+        // done as it can get here, and named so the user can go and move it.
+        Alert.alert('Saved', `Sharing isn’t available here. The backup was saved to:\n${file.uri}`);
       } else {
-        const file = new File(Paths.cache, backupFileName());
-        file.create({ overwrite: true });
-        file.write(JSON.stringify(envelope));
-        if (!(await Sharing.isAvailableAsync())) {
-          // Nowhere to share to, so the file in the cache directory IS the
-          // backup — and the OS may evict it. Recorded as done because it is as
-          // done as it can get here, and named so the user can go and move it.
-          Alert.alert('Saved', `Sharing isn’t available here. The backup was saved to:\n${file.uri}`);
-        } else {
-          await Sharing.shareAsync(file.uri, { mimeType: 'application/json', dialogTitle: 'Save backup' });
-          /*
-           * `shareAsync` resolves when the sheet CLOSES — the same whether the
-           * user saved the file or swiped the sheet away. Treating that as
-           * success meant a cancelled share was recorded as a backup: Settings
-           * then read "Backed up just now" and the nudge went quiet for a month,
-           * on the strength of a file that only exists in a cache the OS is free
-           * to delete.
-           *
-           * iOS gives no callback that distinguishes the two, so the only
-           * truthful source is the person who was just looking at the sheet. One
-           * tap, on something that happens monthly, to keep the one record that
-           * matters after losing a phone from being a guess.
-           */
-          const saved = await confirmSaved();
-          if (!saved) { haptic.warning(); return; }
-        }
+        await Sharing.shareAsync(file.uri, { mimeType: 'application/json', dialogTitle: 'Save backup' });
+        /*
+         * `shareAsync` resolves when the sheet CLOSES — the same whether the
+         * user saved the file or swiped the sheet away. Treating that as
+         * success meant a cancelled share was recorded as a backup: Settings
+         * then read "Backed up just now" and the nudge went quiet for a month,
+         * on the strength of a file that only exists in a cache the OS is free
+         * to delete.
+         *
+         * iOS gives no callback that distinguishes the two, so the only
+         * truthful source is the person who was just looking at the sheet. One
+         * tap, on something that happens monthly, to keep the one record that
+         * matters after losing a phone from being a guess.
+         */
+        const saved = await confirmSaved();
+        if (!saved) { haptic.warning(); return; }
       }
-      // Both: a real export is genuinely the new reminder anchor *and* the
+      // A real export is genuinely the new reminder anchor *and* the
       // moment a backup exists.
       await settings.setBackupAnchorAt(Date.now());
       await settings.setLastBackupAt(Date.now());
@@ -244,69 +173,6 @@ export default function BackupScreen() {
     }
   }
 
-  async function openServerList() {
-    setShowServerList(true);
-    setListLoading(true);
-    setListError(null);
-    try {
-      setServerBackups(await listServerBackups());
-    } catch (e) {
-      setListError(e instanceof Error ? e.message : 'Could not load your backups.');
-    } finally {
-      setListLoading(false);
-    }
-  }
-
-  /** Downloads one, then hands it to the exact same passphrase → confirm → restore
-   *  path a picked file goes through. The transport is the only difference. */
-  async function handlePickServerBackup(backup: ServerBackup) {
-    setDownloadingId(backup.id);
-    try {
-      const text = await downloadServerBackup(backup.id);
-      const json = JSON.parse(text) as Partial<BackupEnvelope>;
-      if (typeof json.ciphertext !== 'string') throw new Error('missing ciphertext');
-      // Same guard as the file path. Server backups are retained ten deep, so
-      // without this a single newer snapshot would report "wrong passphrase" on a
-      // screen where the user has no way to tell which of the ten is at fault.
-      if (!canReadCipher(json.v)) {
-        throw new Error('This backup was made by a newer version of BudgetSplit. Update the app, then restore it.');
-      }
-      setShowServerList(false);
-      setPickedEnvelope(json as BackupEnvelope);
-      setRestoreError(null);
-      setShowRestoreSheet(true);
-    } catch (e) {
-      haptic.error();
-      setListError(e instanceof Error ? e.message : 'Could not download that backup.');
-    } finally {
-      setDownloadingId(null);
-    }
-  }
-
-  function handleDeleteServerBackup(backup: ServerBackup) {
-    Alert.alert(
-      'Delete this backup?',
-      `The copy from ${dateTime(new Date(backup.createdAt))} is removed from your account. Anything on this device is untouched.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteServerBackup(backup.id);
-              setServerBackups(prev => prev.filter(b => b.id !== backup.id));
-              haptic.warning();
-            } catch (e) {
-              haptic.error();
-              setListError(e instanceof Error ? e.message : 'Could not delete that backup.');
-            }
-          },
-        },
-      ],
-    );
-  }
-
   async function handleRestoreSubmit(passphrase: string) {
     if (!pickedEnvelope) return;
     setKdfPct(0);
@@ -340,28 +206,27 @@ export default function BackupScreen() {
   }
 
   /**
-   * Refuse a restore while sync is on — F9.
+   * Refuse a restore while this phone is joined to an account — F9, under server sync.
    *
-   * Restore is wipe-and-replace, so with sync live it would push this snapshot
-   * over everyone else's copy: a shared group's history rewritten on other
-   * people's phones from a state they never saw and cannot judge. The damage lands
-   * where the person who caused it cannot see it and the people who suffer it
-   * cannot undo it, which is why this is a refusal rather than a warning.
-   *
-   * Not a silent block: it says what to do, and turning sync off is one tap away.
+   * Restore is wipe-and-replace. Over a ledger that syncs, the file and the
+   * account would then disagree about everything, and the account is what every
+   * shared group reads: the damage lands where the person who caused it can't see
+   * it and the people who suffer it can't undo it. So it's a refusal, not a
+   * warning — and it says what to do: sign out (which empties the phone), restore,
+   * and it's a phone of its own again.
    */
   async function confirmRestore(payload: BackupPayload) {
-    if (await settings.syncEnabled().catch(() => false)) {
+    if (await linkedUser(db)) {
       haptic.warning();
       Alert.alert(
-        'Turn off sync first',
-        'Restoring replaces everything on this phone. With sync on, that would also '
-        + 'replace what the people in your shared groups can see — from a backup they '
-        + 'were never part of.\n\nTurn sync off under Settings → Sync, restore, then '
-        + 'turn it back on when you are happy with what is here.',
+        'Sign out first',
+        'This phone keeps your account in sync, and restoring a file would replace what '
+        + 'the account — and everyone you share a group with — has, from a copy they were '
+        + 'never part of.\n\nYour account already has everything. To use a file instead, '
+        + 'sign out under Settings → Account, then restore.',
         [
           { text: 'Not now', style: 'cancel' },
-          { text: 'Open Sync', onPress: () => router.push('/settings/sync') },
+          { text: 'Open Account', onPress: () => router.push('/settings/account') },
         ],
       );
       return;
@@ -415,8 +280,6 @@ export default function BackupScreen() {
       await settings.setBackupAnchorAt(payload.createdAt);
       await settings.setLastBackupAt(payload.createdAt);
       setLastBackupAt(payload.createdAt);
-      // The "want your data back?" prompt has been answered by doing it.
-      await settings.setRestoreOfferDismissed(true).catch(() => {});
       haptic.success();
       refresh();
       Alert.alert('Restored', 'Your data has been restored from the backup.', [
@@ -443,7 +306,7 @@ export default function BackupScreen() {
           <IconCircle icon="shield" size={56} iconSize={20} color={colors.accent} bg={colors.accentMuted} style={styles.iconCircle} />
           <Text style={styles.note}>
             {serverSession
-              ? 'Your transactions live on this device — signing in didn’t change that. What an account adds is somewhere to keep a backup. Nothing happens automatically: a backup is a snapshot you make, encrypted here first with a passphrase that never leaves this phone. Forget the passphrase and that backup cannot be opened by anyone, including us.'
+              ? 'Your account already keeps everything, and a new phone gets it back when you sign in. A backup here is a file of your own, besides that: encrypted on this phone with a passphrase that never leaves it. Forget the passphrase and nobody can open the file, including us.'
               : 'Your data lives only on this device — nothing is uploaded. Make an encrypted backup and save it to Files, iCloud Drive or Google Drive. Nothing happens automatically, and the passphrase never leaves this phone — forget it and that backup cannot be opened by anyone.'}
           </Text>
           {lastBackupAt != null && (
@@ -456,7 +319,7 @@ export default function BackupScreen() {
             icon="upload-cloud"
             label="Create backup"
             value={creating ? `Encrypting… ${kdfPct}%` : 'Encrypted file'}
-            onPress={busy ? undefined : () => { setCreateTarget('file'); setShowCreateSheet(true); }}
+            onPress={busy ? undefined : () => setShowCreateSheet(true)}
             right={creating ? <ActivityIndicator size="small" color={colors.accent} /> : undefined}
           />
           <View style={settingsRowDivider} />
@@ -467,46 +330,6 @@ export default function BackupScreen() {
             onPress={busy ? undefined : handlePickRestoreFile}
             right={restoring ? <ActivityIndicator size="small" color={colors.accent} /> : undefined}
           />
-          {/* The same two actions, over the network instead of the share sheet.
-              Only in a build with a server configured, and only once signed in —
-              an account is what gives the blob somewhere to go. */}
-          {serverSession ? (
-            <>
-              <View style={settingsRowDivider} />
-              <SettingsRow
-                icon="cloud"
-                label="Back up to your account"
-                value={busy ? undefined : serverSession.user.email}
-                onPress={busy ? undefined : () => { setCreateTarget('server'); setShowCreateSheet(true); }}
-              />
-              <View style={settingsRowDivider} />
-              <SettingsRow
-                icon="rotate-ccw"
-                label="Restore from your account"
-                /*
-                 * Names the signed-in account, like the row above it (F8).
-                 *
-                 * Email is the only identity here and there is no merge: a typo at
-                 * sign-in is a second account with none of your backups. Someone
-                 * staring at an empty restore list needs to see WHICH account they
-                 * are looking at, because "my backups are gone" and "I am signed
-                 * into the wrong address" look identical otherwise.
-                 */
-                value={busy ? undefined : serverSession.user.email}
-                onPress={busy ? undefined : openServerList}
-              />
-            </>
-          ) : serverConfigured ? (
-            <>
-              <View style={settingsRowDivider} />
-              <SettingsRow
-                icon="cloud"
-                label="Back up off this phone"
-                value="Sign in"
-                onPress={() => router.push('/settings/account')}
-              />
-            </>
-          ) : null}
         </View>
 
         {/* Two separate facts, and the second one has never been said anywhere
@@ -548,16 +371,6 @@ export default function BackupScreen() {
           </TouchableOpacity>
         }
         submitting={creating}
-      />
-      <ServerBackupSheet
-        visible={showServerList}
-        onClose={() => { setShowServerList(false); setListError(null); }}
-        backups={serverBackups}
-        loading={listLoading}
-        error={listError}
-        onPick={handlePickServerBackup}
-        onDelete={handleDeleteServerBackup}
-        busyId={downloadingId}
       />
       <PassphraseSheet
         visible={showRestoreSheet}

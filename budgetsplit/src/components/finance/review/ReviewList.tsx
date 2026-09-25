@@ -5,6 +5,9 @@ import { ReviewRowCard } from './ReviewRowCard';
 import { ReviewSourceHeader } from './ReviewSourceTabs';
 import { ReviewListHeader } from './ReviewListHeader';
 import { AppRefreshControl } from '../../ui/AppRefreshControl';
+import { keyboardAwareScroll } from '../../ui/KeyboardForm';
+
+const listScroll = keyboardAwareScroll();
 import type { PendingTxn } from '../../../db/queries/pending';
 import type { Person } from '../../../db/queries/persons';
 import type { TxnSource } from '../../../constants/enums';
@@ -81,10 +84,10 @@ export function ReviewList({
     <SectionList
       sections={sections}
       keyExtractor={r => r.id}
-      // iOS-only, and kept: there is no keyboard-aware SectionList, so the screen
-      // wraps this in the library's KeyboardAvoidingView for Android. Both are
-      // needed — the inset prop gives iOS the smoother behaviour it already had.
-      automaticallyAdjustKeyboardInsets
+      // Keyboard-aware on both platforms (AGENTS.md §6b): a focused amount scrolls
+      // above the keyboard. Replaces an iOS-only inset prop plus
+      // a screen-wide KeyboardAvoidingView for Android.
+      renderScrollComponent={listScroll}
       renderItem={({ item }) => (
         <ReviewRowCard
           row={item}

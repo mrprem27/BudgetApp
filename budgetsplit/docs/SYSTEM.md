@@ -175,7 +175,7 @@ heading is how a document starts lying.
 ### What it is
 
 A **personal-finance app and a bill-splitting app in one**, local-first, for the India pilot.
-45 screens, 22 SQLite tables, 113 `src/lib` modules, 16 feature flags.
+45 screens, 24 SQLite tables, 113 `src/lib` modules, 16 feature flags.
 
 The two halves are not bolted together — they share one ledger and are kept honest by one rule
 (§5 `IV-08`): **the group ledger records what happened; your personal ledger records what it cost
@@ -209,7 +209,7 @@ into a personal cost, and `E-54`, which converts everything into one position.
 
 | Destination | What | When | Gate |
 |---|---|---|---|
-| `server/api` (own Worker) | Email address, encrypted backup blob, sealed group entries, device public key | Sign-in, backup, sync | Account + `EXPO_PUBLIC_API_URL` |
+| `server/api` (own Worker) | Email address; once signed in, a **readable** copy of the whole ledger — personal spending, groups, goals, budgets, net worth, preferences (`DQ-93`) | Sign-in, then every sync | Account + `EXPO_PUBLIC_API_URL` |
 | `server/receipt-ocr-proxy` (own Worker → Gemini) | One receipt image | Tapping Scan receipt with the cloud provider selected | `FE-03`, `ocr_provider = gemini` |
 | The user's UPI app | A `upi://pay` intent | Tapping Pay via UPI | `FE-17` |
 | WhatsApp | A drafted message, composed not sent | Tapping the reminder | `FE-20` |
@@ -222,7 +222,7 @@ photos never sync (`SYNC-F4`); balances never travel (`E-50`).
 
 One SQLite database, `budgetsplit.db`, opened by `SQLiteProvider` at the root. It is the single
 source of truth — there is no Redux, no React Query, no in-memory mirror. Reads go through
-`src/db/queries/` (23 modules); pure logic lives in `src/lib/` (117 modules) and touches neither
+`src/db/queries/` (25 modules); pure logic lives in `src/lib/` (112 modules) and touches neither
 React nor the database.
 
 **Foreign keys are OFF** on every connection (`applyConnectionPragmas`). Every `REFERENCES` clause
@@ -241,7 +241,7 @@ Aggregator partner and a Gmail OAuth CASA Tier-3 assessment (`DQ-81`, `DQ-83`).
 
 `Last verified: 2026-09-01 · Guarded by: entityCoverage.test.ts (existence), by hand (accuracy)`
 
-53 entities: 22 table-backed, 18 derived, 13 device/external/wire.
+53 entities: 23 table-backed, 18 derived, 12 device/external/wire.
 
 Every entry carries the same fields. `—` means empty, and **empty is information**: an entity that
 references nothing and is referenced by nothing is a leaf, and one whose `Sync` line is `—` cannot
@@ -251,7 +251,7 @@ fenced off from the four other concepts wearing its name.
 Storage cites `file:line`. It does **not** reproduce the DDL: `src/db/schema.ts` is the authority on
 columns, and copying them here would guarantee drift the guard cannot see.
 
-### The 22 tables at a glance
+### The 23 tables at a glance
 
 | | | | |
 |---|---|---|---|
@@ -259,8 +259,8 @@ columns, and copying them here would guarantee drift the guard cannot see.
 | `E-05` recur_skip | `E-06` txn_payment | `E-07` txn_share | `E-08` line_item |
 | `E-09` category | `E-10` category_tombstone | `E-11` settings | `E-12` category_budget |
 | `E-13` audit_log | `E-14` asset | `E-15` savings_goal | `E-16` savings_txn |
-| `E-17` pending_txn | `E-18` sync_outbox | `E-19` friend_request | `E-20` txn_approval |
-| `E-21` person_group_trust | `E-22` txn_dispute | | |
+| `E-17` pending_txn | `E-18a` sync_queue | `E-19` friend_request | `E-20` txn_approval |
+| `E-21` person_group_trust | `E-22` txn_dispute | `E-18b` sync_version | |
 
 ---
 
@@ -283,17 +283,19 @@ Referenced by. E-03 · E-06 · E-07 · E-12 (person_id) · E-19 · E-21 · E-22
                · E-02 (created_by, pair_person_id) · E-04 (author_person_id)
 Lifecycle.     created → named → [linked to an account: remote_uid set]
                → [receivable written off] → merged into another person, or deleted
-Create.        You, on SC-26 / SC-11. Sync, when a roster names someone you lack.
+Create.        You, on SC-26 / SC-11. The pull, when a group names someone you lack.
 Edit.          You. Name, avatar colour, photo, UPI VPA, email, mobile.
 Delete.        Refused three ways: never yourself (is_me), never someone with a
                linked account (their entries can arrive at any time), and never
                anyone referenced anywhere. That last check counts ten columns
                across eight tables in one statement (persons.ts:102-117) —
                because foreign keys are off (DQ-19), so a reference it missed
-               would be a dangling id nothing else would catch. Otherwise the
-               verb is merge, not delete.
-Sync.          Travels as a RosterMember (E-88) — a third shape, not this row.
-Aliases.       person · friend · member · roster member · contact · counterparty
+               would be a dangling id nothing else would catch.
+Sync.          As a `friends` row (mine) and a `group_members` row (the group's).
+               Someone with an account has the id `user:<account>` on every
+               phone; a placeholder that turns out to be an account is merged
+               into it on the server (`person_merges`, S21).
+Aliases.       person · friend · member · contact · counterparty
                · payer · sharer · linked person.  Nine.  OV-05.
 Surfaces.      SC-26 · SC-26a · SC-11 · SC-38 · SC-04 (balance chips)
 Invariants.    IV-10 trust is per person · IV-11 no remote_uid means no write path
@@ -317,8 +319,8 @@ Storage.       `budget_group`, src/db/schema.ts:28-54 + migrations :437-607.
 Identity.      id TEXT PK. idx_group_pair makes pair_person_id UNIQUE where set.
 Owned by.      Nothing. A root. created_by is immutable and always an admin.
 References.    E-01 created_by · E-01 pair_person_id
-Referenced by. E-03 · E-04 · E-12 · E-13 · E-17 (dest_group_id) · E-18 · E-21
-Lifecycle.     created → shared (a key is wrapped, E-88) → archived → deleted
+Referenced by. E-03 · E-04 · E-12 · E-13 · E-17 (dest_group_id) · E-21
+Lifecycle.     created → archived → deleted
                A group has three end states that are not the same thing, and
                conflating them is a real bug source: archived (hidden, still
                yours), left (you are out, it goes on without you), deleted
@@ -329,11 +331,12 @@ Delete.        The creator only, and never the personal group. It is a
                **tombstone, not a wipe**: deleted_at + is_archived are set and
                the entries stay. It used to hard-delete every txn, share and
                payment, which silently rewrote the deleter's own closed months —
-               and the group came back anyway, because the cursor was deleted and
-               the next pull re-adopted it from the roster as an empty husk.
-               `unarchiveGroup` refuses a group carrying deleted_at, so this
-               cannot be walked back. groups.ts:324-406.
-Sync.          Travels as a roster doc (E-88), separately from its entries.
+               and under v1 the group came back anyway, recreated by the next
+               pull as an empty husk. Now the tombstone is queued and the server
+               checks the owner. `unarchiveGroup` refuses a group carrying
+               deleted_at, so this cannot be walked back.
+Sync.          As a `groups` row, its own scope; my archive flag is a
+               `group_preferences` row, because archiving is my list, not the group.
 Aliases.       group · budget group · scope · ledger · tab · the Personal group.
 Surfaces.      SC-04 · SC-09 · SC-13 · SC-14 · SC-10b
 Invariants.    IV-16 income is never grouped
@@ -355,13 +358,15 @@ Owned by.      E-02.
 References.    E-02 · E-01
 Referenced by. E-64
 Lifecycle.     joined → role changed → removed (deleted_at set) → re-added
-Create.        Admins, on SC-11. Sync, when a roster gains someone.
+Create.        Admins, on SC-11. The pull, when the group gains someone.
 Edit.          Admins change role. `admin` | `member` only — no `owner`, because
                the creator is a column on E-02, not a role.
 Delete.        Admins, soft. `memberActive()` (queries/memberSql.ts) is the one
                predicate every statement must use; memberInvariant.test.ts holds it.
-Sync.          Travels inside the roster doc (E-88), version-stamped.
-Aliases.       member · membership · roster entry · participant.  Four.  OV-05.
+Sync.          As a `group_members` row, checked on the server with the app's own
+               permission functions (SYNC-F24). Someone with an account is
+               `invited` until they accept (`invited` = 1 here meanwhile).
+Aliases.       member · membership · participant.  Three.  OV-05.
 Surfaces.      SC-11 · SC-09 (Members tab)
 Invariants.    IV-21 the member-active predicate
 Open.          OV-05
@@ -387,7 +392,7 @@ Identity.      id TEXT PK, uuid, client-minted. A materialized occurrence takes
 Owned by.      E-02 (group_id NOT NULL).
 References.    E-02 · E-09 BY NAME (not an FK — OV-06) · E-04 parent_recur_id
                (self) · E-14 asset_id · E-01 author_person_id (NULL = me)
-Referenced by. E-06 · E-07 · E-08 · E-05 · E-18 · E-20 · E-22 · E-13
+Referenced by. E-06 · E-07 · E-08 · E-05 · E-18a · E-20 · E-22 · E-13
 Lifecycle.     [E-17 pending] → live → edited (sync_version++)
                              → soft-deleted (is_deleted = 1)
                as a rule:  active → paused → ended
@@ -397,13 +402,14 @@ Lifecycle.     [E-17 pending] → live → edited (sync_version++)
 Create.        You, in any group you are in · a trusted peer (lands live) · an
                untrusted peer (lands awaiting approval, E-20) · the system, on
                three paths: recurring materialisation, review commit, asset transfer.
-Edit.          The author, or any member of a shared group. Compare-and-set on
-               sync_version; a stale write is a 409, never a silent last-write-wins.
+Edit.          The author only, enforced on the server too (DQ-96, SYNC-F15).
+               Compare-and-set on the server's version: a stale write is refused
+               as a conflict — "keep yours or theirs?" — never merged.
 Delete.        Soft, by any member. Refused for an entry someone else wrote —
                the honest action there is to dispute it (E-22).
-Sync.          Travels, sealed per group. attachment_uri is nulled on receipt
-               (SYNC-F4). Line items do not travel: an itemized bill arrives as a
-               single expense, correct in money and missing its breakdown.
+Sync.          As a `transactions` bundle — payers, splits, line items, tags, the
+               repeat rule — one mutation, one batch. attachment_uri never
+               travels (SYNC-F4).
 Aliases.       transaction · entry · expense · txn · recurring rule · series
                · occurrence · item (Review) · line (ledger).  Nine.  OV-01.
 Surfaces.      SC-07 · SC-08 · SC-15 · SC-09 · SC-14 · SC-19 · SC-23 · SC-21
@@ -454,7 +460,7 @@ References.    E-04 · E-01
 Referenced by. E-50 (as the + side of netSql) · E-54 (cash, my rows only)
 Lifecycle.     Written with its transaction; replaced wholesale on every edit.
 Create/Edit/Delete.  Only ever through E-04's write paths. Never edited alone.
-Sync.          Travels inside the sealed entry (E-88).
+Sync.          Inside its transaction's bundle (E-88).
 Aliases.       payment · who paid · payer · fronted · "paid by".
 Surfaces.      SC-07 (Payers sheet) · SC-08 · SC-15
 Invariants.    IV-02 · IV-12 · IV-20 cash moves only on my rows
@@ -476,7 +482,7 @@ References.    E-04 · E-01
 Referenced by. E-50 (as the − side) · every analysis surface, via myShareOf
 Lifecycle.     As E-06 — written and replaced with the transaction.
 Create/Edit/Delete.  Only through E-04's write paths.
-Sync.          Travels inside the sealed entry.
+Sync.          Inside its transaction's bundle.
 Aliases.       share · split · your share · owed · consumed · portion.  Six.
 Surfaces.      SC-07 (Split sheet) · SC-08 · SC-15
 Invariants.    IV-02 · IV-08 your share is your spending · IV-12 · IV-13
@@ -753,27 +759,57 @@ Invariants.    IV-05 does not apply here — pending rows are simply not in `txn
 Open.          OV-21 four pending concepts · OV-23 (two columns with no writer)
 ```
 
-### E-18 · sync_outbox — what still has to be delivered
+### E-18a · sync_queue — what the server has not acknowledged yet
 
 ```
-Definition.    A queue of entries this device has not yet pushed.
-Is not.        · Not a change log. One row per entry, so N edits collapse to one
-                 delivery of the current state.
-               · Not backed up. It is the only member of NEVER_BACKED_UP —
-                 restoring a queue would re-push stale writes.
-Storage.       `sync_outbox`, src/db/schema.ts:313-317. Two indexes.
-Identity.      entry_id TEXT PK.
-Owned by.      E-04.
-References.    E-04 entry_id · E-02 group_id
-Referenced by. syncEngine
-Lifecycle.     queued → delivered (row removed)
-Create.        Every write to an entry in a shared group.
-Edit.          queued_at only.
-Delete.        markDelivered.
+Definition.    The delivery queue: one row per local row changed since the server
+               last acknowledged it (SPEC-SERVER.md §3.4).
+Is not.        · Not keyed on a server id. Rows name the PHONE'S row (local_table,
+                 local_id), so a write needs no account; the drain decides what
+                 each becomes on the server (lib/sync/rowMap).
+               · Not a change log. INSERT OR REPLACE per local row, so N edits
+                 collapse to one send of the latest state.
+               · Not backed up (NEVER_BACKED_UP) and emptied by a restore.
+Storage.       `sync_queue`, src/db/schema.ts. UNIQUE (local_table, local_id).
+Identity.      queue_id INTEGER PK AUTOINCREMENT — the order of last change.
+Owned by.      Every synced local table.
+References.    a local row, by (local_table, local_id); a delete carries a snapshot.
+               Three kinds of row are answers with no local row behind them —
+               `group_invite`, `txn_approval`, `person_merge` — and the snapshot
+               IS the mutation (queueAnswer, S20–S21).
+Referenced by. lib/sync (the drain), syncQueueCoverage.test.ts (the guard)
+Lifecycle.     queued → sent (sent_ids) → acknowledged (row removed)
+Create.        Every write to a synced table, in the same transaction
+               (db/queries/syncQueue.ts).
+Edit.          sent_ids, when the drain sends it.
+Delete.        clearAcknowledged, once the pull's lastMutationId covers it.
 Sync.          It *is* the sync mechanism. Does not itself travel.
-Aliases.       outbox · queue · pending upload.
-Surfaces.      SC-43 · SC-44
+Aliases.       queue · send queue · pending upload.
+Surfaces.      SC-43
 Invariants.    IV-22 only my own authored entries queue
+Open.          —
+```
+
+### E-18b · sync_version — what the server last confirmed
+
+```
+Definition.    The version the server last confirmed for each server row this
+               phone knows — the base a money write names (compare-and-set).
+Is not.        · Not a local row version. It is keyed on the SERVER entity and id.
+               · Not backed up; re-learned from the next pull.
+Storage.       `sync_version`, src/db/schema.ts. PK (entity, entity_id).
+Identity.      (entity, entity_id).
+Owned by.      E-18a
+References.    a server row, by name.
+Referenced by. lib/sync (drain and pull applier)
+Lifecycle.     learned on pull → read on push
+Create.        The pull applier.
+Edit.          The pull applier; optimistically after a push.
+Delete.        Sign-out, restore.
+Sync.          Device state. Does not travel.
+Aliases.       base version.
+Surfaces.      —
+Invariants.    —
 Open.          —
 ```
 
@@ -818,7 +854,8 @@ References.    E-04
 Referenced by. NOT_AWAITING_APPROVAL (queries/approvalSql.ts) — the one constant
                every money statement over `txn` must carry
 Lifecycle.     pending → approved | rejected → reopened
-Create.        ingestPeerTxn, when the author is not trusted for that group.
+Create.        The pull (queries/syncApply.ts), from the server's approvals row —
+               the server decides whether an entry waits for me (IV-09).
 Edit.          You, on SC-40 or SC-15.
 Delete.        —
 Sync.          Device-local. Is backed up.
@@ -1100,7 +1137,11 @@ Is not.        · Not a transaction. Nothing has happened; there is no row.
 Storage.       None. lib/upcoming.ts, over E-59.
 Derived from.  E-04 (rules) · E-05 (skips) · E-07 (your share)
 Aliases.       upcoming · committed · due · coming up · bills · renewals.
-Surfaces.      SC-05 · SC-30 · SC-03
+Surfaces.      SC-05 · SC-30. **Not SC-03** — `homeData.ts` still computes the full
+               list (`upcoming`, `buildUpcoming(…, 99, 14, …)`), but Home renders
+               only its `.length` as a badge on the bell, never the list itself
+               (`DQ-92`). Several comments and two other live docs still describe
+               a Home "Coming up" card; it does not currently exist.
 Invariants.    IV-04 · IV-05
 Open.          —
 ```
@@ -1237,7 +1278,8 @@ Is not.        · Not a group setting. Trust is per person, always, because a
                · Not a waiver of the transfer rule. You can always make yourself
                  worse off and never someone else, whatever the trust says. IV-09.
 Storage.       None. lib/trust.ts (pure, db-free) — appliesImmediately,
-               requiresMyApproval. Read at the loader (ingestPeerTxn).
+               requiresMyApproval. Run by the server on every write that
+               names me (server/api/sync/entities/approvals.ts).
 Derived from.  E-01.trust_state · E-21 (override) · E-01.remote_uid
 Aliases.       trust · trusted · on review · auto-accept.
 Surfaces.      SC-26a (TrustSheet) · SC-40
@@ -1290,11 +1332,10 @@ be lost, or diverge, independently of SQLite.
 
 | | | |
 |---|---|---|
-| `E-80` AsyncStorage settings | `E-81` feature-flag store | `E-82` device key |
-| `E-83` attachment file | `E-84` pending payment | `E-85` pending settlement |
-| `E-86` voice capture | `E-87` server account | `E-88` sync docs |
-| `E-89` backup envelope | `E-90` notification schedule | `E-91` reminder prefs |
-| `E-92` smart-category learning | | |
+| `E-80` AsyncStorage settings | `E-81` feature-flag store | `E-83` attachment file |
+| `E-84` pending payment | `E-85` pending settlement | `E-86` voice capture |
+| `E-87` server account | `E-88` sync wire | `E-89` backup envelope |
+| `E-90` notification schedule | `E-91` reminder prefs | `E-92` smart-category learning |
 
 ---
 
@@ -1343,23 +1384,6 @@ Surfaces.      SC-24
 Invariants.    Every key gates a real surface and appears on SC-24 —
                featureFlags.test.ts. The count is held by sourceCounts.test.ts.
 Open.          DQ-01
-```
-
-### E-82 · device key — this phone's identity
-
-```
-Definition.    An X25519 keypair identifying this device to the sync server, and
-               the wrapped per-group keys it can open.
-Is not.        · Not an account. The account is E-87; this is the thing that
-                 makes sealed group entries readable, and losing it loses access
-                 to shared history that no password can recover.
-               · Not backed up in the ordinary backup. Recovery is a separate
-                 mechanism (recoveryCode.ts).
-Storage.       Keychain. src/lib/deviceKey.ts, keychain.ts, groupCrypto.ts.
-Sync.          The public half is published; the private half never leaves.
-Aliases.       device key · identity · keypair · this device.
-Surfaces.      SC-43 · SC-38
-Open.          —
 ```
 
 ### E-83 · attachment file — a receipt photo
@@ -1456,43 +1480,54 @@ Invariants.    IV-11
 Open.          DQ-05 DPDP posture · DQ-08 email as the only identity
 ```
 
-### E-88 · sync docs — the entry doc and the roster doc
+### E-88 · sync wire — mutations up, scopes down
 
 ```
-Definition.    The two wire shapes: a sealed per-entry document, and a per-group
-               roster of members and wrapped keys.
-Is not.        · Not the tables. A RosterMember is a *third* shape for a person
-                 (pid, uid, name, color, role, removedAt), duplicating E-01 and
-                 E-03 for transit. OV-05.
-               · Not readable by the server. Entries are sealed with a per-group
-                 key the server never holds.
-               · Not carrying everything. Line items (E-08) and receipts (E-83)
-                 do not travel; balances (E-50) must never.
-Storage.       In transit + a cursor. queries/syncDoc.ts, lib/syncEngine.ts (769 L),
-               groupCrypto.ts. Versioned with compare-and-set; a stale push is
-               a 409, never a silent overwrite.
-Lifecycle.     queued (E-18) → sealed → pushed → pulled → ingested (peerIngest)
-Sync.          It *is* the sync.
-Aliases.       entry doc · roster · envelope · payload · the wire.
-Surfaces.      SC-43 · SC-44
+Definition.    The two shapes on the wire. Up: a push of numbered mutations
+               (entity, op, id, baseVersion, row). Down: a pull of every scope
+               the account can read — its own and each group's — as the rows
+               changed since the phone's cursor, plus revoked groups, open
+               invites and refused mutations.
+Is not.        · Not the tables. Each local row maps to a server row through
+                 lib/sync/rowMap.ts; a column that must not travel is marked
+                 local there, with the reason, and the map is tested to cover
+                 every column.
+               · Not sealed. The server holds a readable copy of everything
+                 (DQ-93) and checks every write against the same rules the
+                 phone runs (permissions, trust, split math).
+               · Not carrying everything. Receipt photos (E-83) never travel;
+                 balances (E-50) are computed, never sent.
+Storage.       In transit, plus this phone's device id, mutation counter and
+               cursors (sync2.* settings). Client: lib/sync/, queries/syncQueue.ts,
+               queries/syncApply.ts. Server: server/api/sync/.
+Lifecycle.     queued (E-18a) → pushed → applied or refused → pulled → applied
+               (E-18b holds the confirmed version)
+Sync.          It *is* the sync. Every mutation carries a baseVersion; a stale
+               one is refused as a conflict and reverted on the phone, never
+               silently overwritten.
+Aliases.       push · pull · mutation · scope · cursor · the wire.
+Surfaces.      SC-43
 Invariants.    IV-09 · IV-22
-Open.          OV-05
+Open.          —
 ```
 
 ### E-89 · backup envelope — the whole database, encrypted
 
 ```
 Definition.    Every backed-up table plus receipt photos, encrypted under a
-               passphrase, written to a file or to your account.
+               passphrase, written to a file you keep.
 Is not.        · Not a sync. Restoring replaces all data, and is refused outright
-                 while sync is on (restoreGuard, SYNC-F9) — because restoring an
-                 old state into a shared group would re-publish it.
-               · Not complete. E-18 is deliberately excluded (NEVER_BACKED_UP),
-                 and E-80's AsyncStorage preferences are not included at all.
-Storage.       A file, or server KV. lib/backup.ts, pbkdf2.ts (50k), restoreGuard.ts,
-               queries/backup.ts.
-Lifecycle.     created → shared / uploaded → restored (replaces everything)
-Sync.          Uploaded encrypted; the server cannot read it.
+                 while the phone is joined to an account (SYNC-F9 under server sync): the
+                 file and the account would then disagree about everything.
+               · Not the account's copy. That one is readable and kept by the
+                 server (DQ-93); this is a file of your own, besides it.
+               · Not complete. The sync queue is deliberately excluded
+                 (NEVER_BACKED_UP), and E-80's AsyncStorage preferences are not
+                 included at all.
+Storage.       A file. lib/backup.ts, pbkdf2.ts (50k), restoreGuard.ts,
+               queries/backup.ts. (The server copy went with v1 in S22.)
+Lifecycle.     created → shared → restored (replaces everything)
+Sync.          Never uploaded.
 Aliases.       backup · export · snapshot · restore file.
 Surfaces.      SC-34 · SC-36
 Open.          restore has never run on a device — RELEASE §0.4
@@ -1566,15 +1601,13 @@ E-02 budget_group ────────────────────�
  ├── E-03 group_member
  ├── E-12 category_budget
  │    └── (optionally scoped to one E-01, as an override)
- ├── E-18 sync_outbox
  └── E-04 txn ── group_id NOT NULL, so every money event is here
       ├── E-06 txn_payment          who fronted it
       ├── E-07 txn_share            who consumed it
-      ├── E-08 line_item            itemized only, does not sync
+      ├── E-08 line_item            itemized only
       ├── E-05 recur_skip           rules only
       ├── E-20 txn_approval         my decision, at most one
       ├── E-22 txn_dispute          their objections, many
-      ├── E-18 sync_outbox          delivery state, at most one
       └── E-04 txn                  parent_recur_id — a rule owns its occurrences
 
 Unparented — global or personal, belonging to no scope
@@ -1622,8 +1655,8 @@ Written from the code that deletes, not from the DDL — **`PRAGMA foreign_keys`
 
 | Delete | What happens to children | Where |
 |---|---|---|
-| **`E-02` group** | **Nothing is destroyed.** `deleted_at` + `is_archived` are set; every txn, share, payment and receipt survives. The outbox rows and both pull cursors are deleted; `pending_txn` rows drafted into it have their `dest_group_id`, `split_draft` and `counterparty_id` reset so they stay committable. `unarchiveGroup` refuses a group carrying `deleted_at`. | `groups.ts:324-406` |
-| **`E-02` leave** | Departure is announced, *then* sync stops — dropping the queue first would leave nothing able to publish it. Outbox + cursors deleted. A creator cannot leave. | `groups.ts:509-560` |
+| **`E-02` group** | **Nothing is destroyed.** `deleted_at` + `is_archived` are set; every txn, share, payment and receipt survives. The tombstone is queued like any change and the server checks the owner; `pending_txn` rows drafted into it have their `dest_group_id`, `split_draft` and `counterparty_id` reset so they stay committable. `unarchiveGroup` refuses a group carrying `deleted_at`. | `groups.ts:356-423` |
+| **`E-02` leave** | My membership row is ended and queued, and the group archived; the server marks me `left`, and my next pull lists the group as revoked. Nothing of mine is deleted. A creator cannot leave. | `groups.ts:519-552` |
 | **`E-04` txn** | Soft only: `is_deleted = 1`. Children stay. A recurring rule offers cascade-or-not, and the cascade takes the occurrences it logged. Undo restores. | `transactions.ts:640` |
 | **`E-04` edit** | `line_item`, `txn_payment` and `txn_share` are **DELETEd and re-INSERTed wholesale**. This is why approval state can never live on them (`IV-12`). | `transactions.ts:548-550, 916-917` |
 | **`E-01` person** | Refused if it is you, if they have a linked account, or if *any* of ten columns across eight tables names them — checked in one statement precisely because FKs are off. The real verb is `mergePerson`, which moves every reference and then deletes. | `persons.ts:89-125, 546-640` |
@@ -1663,7 +1696,7 @@ absence nobody notices.
 | `AX-08` | **Connectivity** | online · offline · flapping | Everything works offline. What changes is when other people find out. |
 | `AX-09` | **Lifecycle** | pending · live · soft-deleted · tombstoned | Four states that look alike on screen and behave differently in every query. |
 | `AX-10` | **Trust** | trusted · on review · overridden here · no account | Per person, never per group (`IV-10`). Inert without an account (`IV-11`). |
-| `AX-11` | **Device count** | one · two · reinstalled | One device can never observe divergence. Two can. A reinstall is the case where the device key (`E-82`) is gone and the history is not. |
+| `AX-11` | **Device count** | one · two · reinstalled | One device can never observe divergence. Two can. A reinstall is the case where this phone's sync state (device id, cursors, the queue) is gone and the account's history is not — signing in again restores it (FL-30). |
 
 **How to use them.** Take a flow, take an axis, ask "what if this were the other value". Most
 crossings are uninteresting and get one line; the interesting ones are where two axes meet — `AX-03`
@@ -1711,7 +1744,7 @@ the four surfaces already agreed. See `SYNC-MODEL.md` §6.
 | `IV-19` | **Never present a QR-supplied name as who you are paying.** A code's `pn` is written by whoever made the code; lead with the VPA and label the name unverified. | unenforced — by review | `FE-19` |
 | `IV-20` | Cash moves only on payments where `person_id = me`. Another person's expense, income or share moves your cash by zero. | `cashSql.test.ts` | `E-54` `E-06` |
 | `IV-21` | A removed group member is soft-deleted, and `memberActive()` is the one predicate every statement uses. | **`memberInvariant.test.ts`** | `E-03` |
-| `IV-22` | Only entries you authored enter the outbox. | **`outboxAuthorInvariant.test.ts`** | `E-18` |
+| `IV-22` | Only entries you authored are queued; someone else's is theirs to send. | **`outboxAuthor.test.ts`**, `syncQueueCoverage.test.ts` | `E-18a` |
 
 Three consequences that will look like bugs to anyone who does not know the rules above, and are
 not:
@@ -1797,7 +1830,7 @@ Shortcuts apparatus is slated for deletion when App Intents land.
 | `FE-12` | Split math — equal, exact, percent, shares | live | `SC-07` `SC-08` `SC-19` | `E-60` |
 | `FE-13` | Settle up, with debt simplification and multi-group allocation | live | `SC-07` Transfer pill — **no standalone route** | `E-52` |
 | `FE-14` | Owe / owed exposure | flag:`splitting` (strip) | `SC-03` `SC-04` `SC-26a` | `E-50` `E-51` |
-| `FE-15` | People — name-only contacts, no accounts needed | live | `SC-26` `SC-26a` | `E-01` |
+| `FE-15` | Friends — name-only contacts, no accounts needed | live | `SC-26` `SC-26a` | `E-01` |
 | `FE-16` | Trust, and the per-person-per-group override | live | `SC-26a` | `E-21` `E-65` |
 | `FE-17` | UPI intent hand-off — pay from your own UPI app | flag:`upiSettle` | `SC-07` | `E-85` |
 | `FE-18` | Request money by QR — **push, never a collect request** | flag:`upiSettle` | `SC-07` `SC-06` | — |
@@ -1861,18 +1894,19 @@ matches file paths loosely.
 |---|---|---|---|---|
 | `FE-52` | Account — email magic link, no password, delete account | server-gated, **unproven on device** | `SC-36` `SC-37` | `E-87` |
 | `FE-53` | Linked people — invite by link or QR; the sender approves | server-gated, **unproven** | `SC-38` `SC-39` | `E-19` |
-| `FE-54` | **Encrypted shared-group sync** — per-group key, X25519 wraps, sealed entries, CAS versioning, outbox | **built end to end, never run on a phone** | `SC-43` `SC-44` | `E-18` `E-82` `E-88` |
+| `FE-54` | **Server sync** — everything the account owns, personal and shared, offline-first: a queue of versioned mutations up, per-scope pulls down, the server checking every write | **built end to end, tested against the real server code; never run on a phone** | `SC-43` | `E-18a` `E-18b` `E-88` |
 | `FE-55` | Approvals queue — "waiting for you" | live and reachable | `SC-40` `SC-15` `SC-03` | `E-20` |
 | `FE-56` | Disputes — what others said about your entries | live | `SC-15` | `E-22` |
 | `FE-57` | Local encrypted backup — passphrase, PBKDF2 50k, share sheet | live | `SC-34` | `E-89` |
-| `FE-58` | Server backup / restore | server-gated; **restore never run on a device** | `SC-34` | `E-89` |
-| `FE-59` | Restore guard — refuses a restore while sync is on | live | `SC-34` | `E-89` |
+| `FE-58` | Restore by signing in — a new or wiped phone gets the account's copy back | server-gated; **never run on a device** | `SC-36` `SC-37` | `E-87` `E-88` |
+| `FE-59` | Restore guard — refuses a file restore while the phone is joined to an account | live | `SC-34` | `E-89` |
 | `FE-60` | Push notifications | **parked** on the paid Apple account; the entitlement is stripped at build | — | — |
 
-`FE-54` is the one to be careful about. It is complete — device identity, per-group keys, the
-outbox, the server, the transport, sharing a group — and **no part of it has run on a phone**. Two
-documents asserted it did not exist at all while it was deployed; that contradiction is what
-started this document.
+`FE-54` is the one to be careful about. It is complete — the queue, the push and pull, the
+server's own checks, first sign-in, sign-out, shared groups, approvals — and every flow is tested
+phone-to-server with the real app queries on one side and the real server code on the other. **No
+part of it has run on a phone yet.** It replaced an end-to-end-encrypted design (S0–S22, `DQ-93`)
+that the server could not read.
 
 ### System and safety
 
@@ -1894,9 +1928,10 @@ started this document.
 
 `Last verified: 2026-09-01 · Guarded by: docCoverage.test.ts, deadRouteRef.test.ts, screenIdMap.test.ts, entryPointCount.test.ts`
 
-46 routes. `SC-xx` numbers are the existing `S-xx` numbers — the same screen, the same digits, so old
-citations still resolve (§12). `SC-42`, `SC-43` and `SC-44` are new: `/assets`, `/settings/sync` and
-`/settings/sync-log` had no ID and no behaviour section anywhere before this document.
+45 routes. `SC-xx` numbers are the existing `S-xx` numbers — the same screen, the same digits, so old
+citations still resolve (§12). `SC-42` and `SC-43` are new: `/assets` and `/settings/sync` had no ID
+and no behaviour section anywhere before this document. `SC-44`, the sync log, was retired in S22
+with the sync it logged; its number is not reused.
 
 Layout and copy are **not** here — they are in `SCREENS.md`. This section answers "where does it live
 and how do I get there".
@@ -1992,7 +2027,7 @@ taps are listed separately below and are not in the count.
 | `SC-19` | `/review` | The staging inbox | 2 | Largest screen; 12 sheet states. `OV-24` |
 | `SC-23` | `/search` | 3-year search, month-sectioned | 1 | A **ledger**, not an analysis surface |
 | `SC-25` | `/categories` | The global catalog | 1 | |
-| `SC-26` | `/friends` | People | 2 | |
+| `SC-26` | `/friends` | Friends | 3 | |
 | `SC-45` | `/trust` | **Who can add to my ledger** — trust for everyone, in one list | 2 | Three groups, not two: the third is people with no account, whose setting is inert |
 | `SC-26a` | `/person/[id]` | One person, across every group | 2 | |
 | `SC-28` | `/history` | Audit log | 4 | |
@@ -2006,7 +2041,7 @@ taps are listed separately below and are not in the count.
 | `SC-27` | `/storage` | 1 | Dev only: demo data, **erase all**. Live in release (`DQ-21`) |
 | `SC-27a` | `/settings/storage` | 5 | Safe. Nothing here can lose a transaction |
 | `SC-29` | `/help` | 1 | A third collapsible pattern (`DQ-17`) |
-| `SC-30` | `/reminders` | 1 | Read-only "what's coming" |
+| `SC-30` | `/upcoming` | 1 | Read-only "what's coming". Renamed 2026-09-24 from the old reminders path (`SPEC-2026-09-FEEDBACK.md` §6) |
 | `SC-31` | `/settings/notifications` | 2 | |
 | `SC-34` | `/settings/backup` | 3 | |
 | `SC-35` | `/settings/voice` | 1 | |
@@ -2015,7 +2050,6 @@ taps are listed separately below and are not in the count.
 | `SC-38` | `/settings/linked` | 2 | Own `ErrorBoundary` |
 | `SC-39` | `/link` | **0** | Deep link only, by design |
 | `SC-43` | `/settings/sync` | 3 | **New ID** |
-| `SC-44` | `/settings/sync-log` | 2 | **New ID** |
 
 ### Getting there
 
@@ -2048,8 +2082,8 @@ open. The walkthrough shows these instead of the paths.
 | `SC-23` | **Home** → the magnifier at the top right |
 | `SC-24` | **Settings → Features** |
 | `SC-25` | **Settings → Categories** |
-| `SC-26` | **Settings → People** |
-| `SC-26a` | **People** → tap someone, or **Groups** → a balance chip |
+| `SC-26` | **Settings → Friends**, or **Groups** → the Friends icon at the top right (2026-09-24, `SPEC-2026-09-FEEDBACK.md` §5) |
+| `SC-26a` | **Friends** → tap someone, or **Groups** → a balance chip |
 | `SC-27` | **Settings** → tap the version number **seven times** |
 | `SC-27a` | **Settings → Storage**, or Home's low-disk banner |
 | `SC-28` | **Settings → Activity**, or a group → **⋯ → History** |
@@ -2065,12 +2099,11 @@ open. The walkthrough shows these instead of the paths.
 | `SC-38` | **Settings → Account → Linked people** |
 | `SC-39` | Tap an invite someone sent you. **Nothing in the app opens this** |
 | `SC-40` | **Home** → the *waiting for you* badge at the top right |
-| `SC-41` | **Plan** → the repeat icon → tap a rule. Also where a renewal reminder lands |
+| `SC-41` | **Plan** → the repeat icon → tap a rule. Also where a reminder for an upcoming charge lands |
 | `SC-42` | **Plan** → tap Total money → **Assets** |
 | `SC-45` | **Settings → Security → Who can add to my ledger**. Also the empty state of the *waiting for you* queue |
 | `SC-46` | **Plan → Assets → tap an asset**. Tapping a row used to open its edit sheet; Edit moved to the row's action strip, because seeing what is in an asset is commoner than renaming it |
 | `SC-43` | **Settings → Sync** |
-| `SC-44` | **Settings → Sync → Sync log** |
 
 `SC-01` and `SC-02` are the app shell and the tab bar — you are always inside them, so there is
 nowhere to go.
@@ -2082,7 +2115,7 @@ nowhere to go.
 - **One entry, and it was an unlabeled icon:** `SC-33` `/afford`. `featureFlags.ts` says of its
   flag, "a real feature since the engine grew; off is why nobody found it". The rail is labelled now
   (`OV-16`), so the entry count is unchanged and the entry is findable.
-- **One entry, buried:** `SC-23` `/search`, `SC-30` `/reminders`, `SC-21` `/report-transactions`,
+- **One entry, buried:** `SC-23` `/search`, `SC-30` `/upcoming`, `SC-21` `/report-transactions`,
   `SC-27` `/storage` (a 7-tap gesture).
 - **The hub:** `SC-07` `/add/quick`, at 24 in-app call sites plus three external entries. It is the
   destination of every settle-up, every "log it" affordance, the daily-log notification and the Siri
@@ -2107,7 +2140,7 @@ nowhere to go.
 
 `lib/nav.ts` exports `backOr(router, fallback)` — `back()` if there is a stack, otherwise
 `replace(fallback)`. It exists because a deep-linked or cold-started screen has an empty stack and a
-dead ✕. **It is used in 5 of 46 route files**; the other ~40 call bare `router.back()` (`OV-10`).
+dead ✕. **It is used in 6 of 45 route files**; the other ~40 call bare `router.back()` (`OV-10`).
 Today that is only safe because nothing deep-links into those screens.
 
 Four sites were pushing a *tab* route onto the stack, which stacks a duplicate tab instead of
@@ -2146,10 +2179,12 @@ launch
  └ cold notification tap: getLastNotificationResponseAsync → routeForReminder
 ```
 
-**Onboarding is not routes.** It replaces the navigator entirely: `hero → intent → name → income →
-money → pay → budget → people → permissions → summary`, with `people` skipped for the personal
-persona. "Replay welcome tour" clears the flag but **requires an app restart** — the gate cannot be
-re-entered live.
+**Onboarding is not routes.** It replaces the navigator entirely: `hero → welcome → (signin) →
+intent → name → income → (payday) → money → pay → budget → permissions → summary`. `signin` is the
+"I have an account" door only; `payday` is skipped when no income was entered. The `people` stage
+is gone (2026-09-23). "Replay welcome tour" clears the flag but **requires an app restart** — the
+gate cannot be re-entered live. The loader in front of it is one `BrandedLoader`, not three
+(`SCREENS.md` FLOW-01 step 4).
 
 **There is no auth gating.** The app is fully usable with no account.
 ---
@@ -2282,7 +2317,7 @@ Entry.       24 in-app call sites, plus 3 external. The full list:
              .E14 person Settle                       person/[id].tsx:235
              .E15 person Add expense                  person/[id].tsx:248
              .E16 friends Settle                      friends.tsx:338
-             .E17 reminders "Log payment"             reminders.tsx:144
+             .E17 upcoming "Log payment"              upcoming.tsx:81
              .E18 recurring list add                  plan/recurring.tsx:157
              .E19 rule action → log this one          hooks/useRecurringActions.ts:73
              .E20 insights CTA                        insights.tsx:143
@@ -2296,10 +2331,10 @@ Pre.         A group exists (the launch invariant guarantees the personal one).
 Steps.       .S1 amount  .S2 destination group  .S3 category  .S4 title/note
              .S5 date  .S6 pay method  .S7 payers  .S8 split  .S9 save
              All but .S1 and .S9 have defaults. The median real path is 2 steps.
-Entities.    W E-04 · W E-06 · W E-07 · R E-02 · R E-09 · R E-01 · W E-18 (shared)
+Entities.    W E-04 · W E-06 · W E-07 · R E-02 · R E-09 · R E-01 · W E-18a
              W E-83 (attachment) · R E-92 (the category guess)
 Writes.      One withTransactionAsync: the txn, its payments, its shares, its
-             line items if any, and an outbox row if the group is shared. IV-03.
+             line items if any, and its sync_queue rows (E-18a). IV-03.
 Exit.        Dismisses the fullScreenModal back to wherever it came from. Uses
              backOr, so a cold-started deep link does not get a dead ✕.
 Branches.    .B1 kind = income → FL-12, no shares, never grouped (IV-16)
@@ -2378,7 +2413,7 @@ Problems.    **Line items do not sync.** A peer receives a single expense: the
 Trigger.     "We're square" / "I paid them back".
 Entry.       .E1 Home balance strip  .E2 Groups friends strip  .E3 group balance
              card  .E4 group members pair  .E5 members screen  .E6 person detail
-             .E7 friends list  .E8 reminders "Settle now"
+             .E7 friends list  .E8 upcoming "Settle now"
              All eight land on SC-07 with kind=transfer and varying params — which
              is why a missing groupId here is a real bug class (OV-08).
 Pre.         A non-zero balance with someone (E-50). flags.splitting for the strip.
@@ -2576,27 +2611,25 @@ Problems.    priority vs sort_order is a standing confusion: priority protects
              from a raid, drag rank decides funding order. Two orderings, one word.
 ```
 
-### FL-11 · Back up and restore — 3 entry points
+### FL-11 · Back up and restore — 2 entry points
 
 ```
-Trigger.     "Don't lose my data" / "I have a new phone."
-Entry.       .E1 SC-06 → SC-34  .E2 the restore-offer alert on launch
-             .E3 SC-36 → SC-34
-Pre.         Restore to an account needs FE-52. A local file needs nothing.
+Trigger.     "Keep a file of my own." (A new phone gets everything back by
+             signing in — FL-30, the first sign-in — not from here.)
+Entry.       .E1 SC-06 → SC-34  .E2 SC-36 → SC-34
+Pre.         Nothing. Restoring needs this phone signed out.
 Steps.       .S1 set a passphrase  .S2 the DB + photos are encrypted (PBKDF2 50k)
-             .S3 out to the share sheet, or up to the account
+             .S3 out to the share sheet
              .S4 to restore: pick the file  .S5 passphrase  .S6 confirm REPLACE ALL
 Entities.    R/W E-89 · W every BACKUP_TABLE · W E-83 photos
-Writes.      A restore **replaces all data**. E-18 is deliberately excluded, and
+Writes.      A restore **replaces all data**. The sync queue is excluded, and
              E-80's AsyncStorage preferences are not in the backup at all — so a
              restore does not return you to exactly where you were.
 Exit.        Back, or a forced reload after a restore.
-Branches.    .B1 local file  .B2 server blob  .B3 the launch restore offer
+Branches.    .B1 local file
 Failures.    .FM1 wrong passphrase → refused, nothing touched
-             .FM2 **a restore is refused outright while sync is on** (restoreGuard,
-                  SYNC-F9) — restoring an old state into a shared group would
-                  re-publish it
-             .FM3 a backup over ~25 MiB is capped by KV standing in for R2 (DQ-85)
+             .FM2 **a restore is refused outright while joined to an account**
+                  (SYNC-F9) — sign out first, which empties the phone
 Reversible.  No. A restore is not undoable, which is why .S6 is explicit.
 State.       demo — plenty to back up. **Do this before any destructive test.**
 Numbers.     · after restoring, every figure must match what it was at backup
@@ -2650,7 +2683,7 @@ Entry.       .E1 SC-15 header Edit  .E2 group ledger row  .E3 Personal row
              .E4 person ledger row  .E5 search / report drill-down → SC-15 → Edit
 Pre.         You may edit your own anywhere, and anyone's in a shared group.
 Steps.       .S1 open  .S2 change  .S3 save
-Entities.    R/W E-04 · W E-06 · W E-07 · W E-08 · W E-18
+Entities.    R/W E-04 · W E-06 · W E-07 · W E-08 · W E-18a
 Writes.      **Payments, shares and line items are DELETEd and re-INSERTed
              wholesale.** This is why approval state can never live on them (IV-12).
              sync_version increments; a stale write is a 409, never silent LWW.
@@ -2688,7 +2721,7 @@ Entry.       .E1 group ledger swipe  .E2 Personal swipe  .E3 person ledger swipe
              .E4 SC-15 Delete
 Pre.         Your own, or any in a shared group. Refused for a peer's entry.
 Steps.       .S1 swipe or tap  .S2 confirm  .S3 undo toast, 5 s
-Entities.    W E-04 (is_deleted = 1) · W E-18
+Entities.    W E-04 (is_deleted = 1) · W E-18a
 Writes.      Soft delete only. Children stay.
 Exit.        Stays; the list reloads.
 Branches.    .B1 a recurring rule asks: rule only, or rule + everything it logged
@@ -2737,7 +2770,8 @@ State.       demo — Netflix, Spotify, rent, a weekly clean and a 90-day custom
              be detected.
 Numbers.     · **a rule is not a transaction.** Creating one must move **no**
                figure — not Home, not the budget, not Reports (IV-04)
-             · it appears under "coming up", which is a forecast, not a total
+             · it appears under Plan's Upcoming list, which is a forecast, not a
+               total (Home shows only a badge count now, not a list — `DQ-92`)
              · only when an occurrence actually fires does anything count
 Also try.    · **create a rule and check Home's month total does not move**
              · set it to a past start date and see whether occurrences appear
@@ -2773,12 +2807,13 @@ Numbers.     · pausing stops future occurrences and **changes no past figure**
 Also try.    · **find the paused Gym rule and the ended prepaid one** and check
                they look different from active ones, and from each other
              · skip the next occurrence of the weekly newspaper, then undo it
-             · check the same rule looks the same in all three places that list
-               recurring things — Plan, the group tab, and Home's "coming up"
+             · check the same rule looks the same in both places that list
+               recurring things — Plan and the group tab (Home shows neither; a
+               badge count only — `DQ-92`)
 Ladder.      SN-16
-Problems.    Three renderings of overlapping recurring data — SC-32, the group's
-             Recurring tab, and Home's "coming up". Two earlier ones were already
-             deleted for this reason.
+Problems.    Two renderings of overlapping recurring data — SC-32 and the group's
+             Recurring tab. A third, Home's own "coming up" card, is gone; this
+             line and several comments elsewhere were not updated when it was.
 ```
 
 ### FL-17 · Voice capture — 2 entry points
@@ -3016,52 +3051,57 @@ Ladder.      SN-23
 Problems.    —
 ```
 
-### FL-24 · Share a group — 2 entry points
+### FL-24 · Invite an account to a group — 2 entry points
 
 ```
 Trigger.     "Put this group on Aarav's phone too."
 State.       **needs a second device and an account.** Not walkable solo.
-Entry.       .E1 SC-13 → Share  .E2 SC-09 overflow
-Pre.         An account (FL-30), a build with the server configured, and the
-             other person linked to a local person (FL-31).
-Steps.       .S1 open the group  .S2 Share  .S3 pick who  .S4 confirm
-Entities.    W E-88 roster · W E-82 a key wrapped for their device · W E-18
-Writes.      The group's key is wrapped once per recipient device and the roster
-             is published. This is the moment a local group becomes a synced one.
+Entry.       .E1 SC-11 → Add or create person  .E2 SC-13 (a new group's members)
+Pre.         Signed in (FL-30), and the person linked to their account (FL-31).
+             There is no separate "share" step: every group is on the account
+             already, and adding someone who has one IS inviting them (S20).
+Steps.       .S1 add them as a member  .S2 the change goes up  .S3 they accept
+             on their phone (FL-25)
+Entities.    W E-03 (invited = 1) · W E-18a
+Writes.      A `group_members` row, `invited` on the server until they accept.
+             They read nothing until then, but can already be named in a split —
+             an entry naming them waits for their approval like any other.
 Numbers.     · nothing changes on your side — no balance, no total
-             · on theirs, the whole group's history appears at once
-Exit.        Back to the group.
-Branches.    .B1 sharing with someone with no account is refused (IV-11)
-Failures.    .FM1 no server configured → the option does not exist
-             .FM2 **none of this has ever run on a phone**
-Reversible.  Stop syncing the group; the other side keeps what it has.
+             · on theirs, the whole group's history appears when they accept
+Exit.        Back to Members, where they show as Invited.
+Branches.    .B1 a name with no account is a member at once — a placeholder
+Failures.    .FM1 a plain member can't invite: refused on the server (SYNC-F24)
+Reversible.  Remove them (FL-23); an invitation not yet answered simply ends.
 Also try.    · nothing solo. Park this until there are two devices.
 Ladder.      SN-24
-Problems.    Built end to end, never run on a phone.
+Problems.    Round-tripped on the real Worker (groupFlows); not yet on two
+             phones (Checkpoint E).
 ```
 
-### FL-25 · Accept an invite — 1 entry point
+### FL-25 · Accept a group invitation — 1 entry point
 
 ```
-Trigger.     Someone sent you a link.
+Trigger.     Someone added you to a group.
 State.       **needs a second device.** Not walkable solo.
-Entry.       .E1 SC-39, from a `budgetsplit:///link?token=…` deep link only
-Pre.         The link, and the app installed.
-Steps.       .S1 tap the link  .S2 the app opens on SC-39  .S3 claim
-             .S4 **the sender confirms on their phone**  .S5 the group appears
-Entities.    R E-19 · W E-02 · W E-03 · W E-88
-Writes.      Claiming **asks**. Nothing is linked until the sender approves —
-             a forwarded link must not be enough to join.
-Numbers.     · after adoption, their whole group history lands at once, and your
-               owe/owed figures move by your share of all of it
-Exit.        `replace`s to the group, or to Settings if it is only a person link.
-Branches.    .B1 `adoptGroup` rebuilds the group from the roster document
-Failures.    .FM1 a forwarded link claimed by a stranger — stopped at .S4
-             .FM2 a spent token
+Entry.       .E1 SC-43 → Waiting for you
+Pre.         Signed in; the invitation arrives with the next pull.
+Steps.       .S1 open Sync  .S2 Accept  .S3 the group arrives with the sync it
+             starts
+Entities.    W E-18a (an answer: `group_invite`) · then the pull writes E-02 · E-03
+             · E-04 · E-20
+Writes.      Accepting is queued like any change, so it holds offline. Anything
+             you were asked while invited comes down with the group, never before
+             it.
+Numbers.     · their whole group history lands at once, and your owe/owed
+               figures move only by what you accept (or trust)
+Exit.        The group, in Groups.
+Branches.    .B1 someone you already knew by another id is folded into their
+             account's person, not added twice
+Failures.    .FM1 declining — nothing arrives, and the inviter sees you declined
 Reversible.  Leave the group (FL-26).
 Also try.    · nothing solo.
 Ladder.      SN-25
-Problems.    Never run on a phone.
+Problems.    Round-tripped on the real Worker; not yet on two phones.
 ```
 
 ### FL-26 · Leave, archive or delete a group — 3 entry points
@@ -3073,11 +3113,11 @@ State.       demo — Old Flat is already archived; Weekend Plans is empty and
 Entry.       .E1 SC-13 Archive  .E2 SC-13 Leave  .E3 SC-13 Delete
 Pre.         Delete is creator-only. Leave is refused for the creator.
 Steps.       .S1 open the group  .S2 ⋯ → Edit  .S3 pick one  .S4 confirm
-Entities.    R/W E-02 · W E-03 · W E-18 · W E-11 (cursors)
+Entities.    R/W E-02 · W E-03 · W E-18a
 Writes.      **Three genuinely different things** (OV-11):
              archive  → `is_archived`, still yours, fully reversible
-             leave    → announce the exit, **then** stop syncing. The other order
-                        leaves nothing able to publish the departure
+             leave    → my membership goes up ended; my next pull lists the group
+                        as revoked, and every other phone learns it from theirs
              delete   → creator only, and a **tombstone, not a wipe**:
                         `deleted_at` + `is_archived` are set and **every entry
                         survives**
@@ -3111,9 +3151,10 @@ Entry.       .E1 SC-40, from the Home badge  .E2 SC-15, on the entry itself
 Pre.         A peer entry exists. Demo data makes three.
 Steps.       .S1 open Waiting for you  .S2 read the entry  .S3 Approve, or
              "Not mine"  .S4 optionally, trust the person from here
-Entities.    R/W E-20 · R E-04 · W E-22 on reject
+Entities.    R/W E-20 · R E-04 · W E-18a (the answer)
 Writes.      Approving clears the exclusion and the entry starts counting.
-             Rejecting soft-deletes it **for you** and sends an objection back.
+             Rejecting soft-deletes it **for you**; the answer goes up and the
+             server raises the objection the author sees (S21).
 Numbers.     · **this is the check worth doing.** Before approving, note Home's
                month total and the Roommates balance. A waiting entry must move
                **neither** (IV-05)
@@ -3146,9 +3187,10 @@ State.       demo — **Rohan disputes your ₹2,800 airport cab** in Goa Trip. 
 Entry.       .E1 SC-15
 Pre.         A synced entry with an author.
 Steps.       .S1 open the entry  .S2 read the banner  .S3 raise or withdraw
-Entities.    W E-22 · W E-20 (`dispute_state`)
-Writes.      An objection, keyed on their **account** id rather than a local
-             person — it can arrive before any person mapping exists.
+Entities.    R E-22 · W E-20 · W E-18a
+Writes.      Raised by rejecting (FL-27), withdrawn by approving or reopening —
+             both as my answer; the server writes the dispute. Keyed on their
+             **account** id rather than a local person.
 Numbers.     · a dispute **changes no figure on your side**. It is a message,
                not a correction
              · the two devices' balances stay different until someone edits or
@@ -3199,27 +3241,32 @@ Problems.    —
 ### FL-30 · Sign in — 4 entry points
 
 ```
-Trigger.     "Back up off this phone" / "put this on my other phone."
+Trigger.     "Put this on my other phone" / "keep it if I lose this one."
 State.       **needs a real email and a server build.** Never seen on a device.
-Entry.       .E1 SC-06 → Account  .E2 SC-34  .E3 SC-43  .E4 the restore offer
+Entry.       .E1 SC-06 → Account  .E2 SC-34  .E3 SC-43  .E4 the launch prompt on
+             an empty phone ("Used BudgetSplit before?")
 Pre.         A build with `EXPO_PUBLIC_API_URL` set. Otherwise none of this exists.
 Steps.       .S1 type your email  .S2 send the link  .S3 open the mail
              .S4 tap it — the app opens on SC-37  .S5 the token is spent once
-             .S6 SC-37 replaces itself with the account screen
-Entities.    W E-87 · R E-01
+             .S6 the first sign-in decides (SPEC-SERVER.md §4): **upload** this
+             phone's ledger to an empty account, **restore** the account onto an
+             empty phone, or **ask** when both have data (DQ-94: no merge)
+Entities.    W E-87 · R/W E-01 (me becomes `user:<account>`) · W E-18a
 Writes.      An account keyed on the email, and a session. No password anywhere.
-Numbers.     · signing in changes no financial figure. It buys backup and sync,
-               nothing else
+             From here every change goes to the account, readable (DQ-93).
+Numbers.     · signing in changes no financial figure on an upload
+             · a restore replaces what was on the phone with the account's copy,
+               which is why it only happens on an empty phone, or when asked
 Exit.        `replace`s to SC-36, or Home.
-Branches.    .B1 signing out keeps all local data
-             .B2 deleting the account is a separate, live endpoint
-Failures.    .FM1 **a typo in the email makes a second account holding none of
-                  your backups**, and email is the only identity — it cannot be
-                  changed or merged (DQ-08)
+Branches.    .B1 signing out sends anything not yet sent, then empties the phone;
+                 signing in again brings it back (DQ-97)
+             .B2 deleting the account erases the account's copy of everything
+                 that was theirs alone (sync/erase.ts)
+Failures.    .FM1 **a typo in the email makes a second, empty account**, and email
+                  is the only identity — it cannot be changed or merged (DQ-08)
              .FM2 a link opened twice — the token is spent
 Reversible.  Sign out. The account itself is deletable.
 Also try.    · sign in, then check that Settings shows **which email** you used
-               — this is the cheap fix for DQ-08 nobody has taken
              · open the magic link on a different phone
 Ladder.      SN-30
 Problems.    DQ-08. Never seen on a device.
@@ -3232,55 +3279,67 @@ Trigger.     "This Aarav in my list is that Aarav who just signed up."
 State.       **needs a second account.** Demo fakes the result: Aarav, Priya and
              Rohan already carry account ids.
 Entry.       .E1 SC-38 Linked people
-Pre.         An account, and an invite accepted in both directions.
+Pre.         An account, and a link accepted in both directions (an invite or a
+             friend request).
 Steps.       .S1 open Linked people  .S2 pick the incoming account
              .S3 match it to a person in your list  .S4 confirm
-Entities.    W E-01.remote_uid — **the only writer of that column**
-Writes.      The thread between an account and a local person.
-Numbers.     · no figure moves. This is identity, not money
+Entities.    W E-01.remote_uid, and E-01's id — the person becomes `user:<account>`
+             · W E-18a (a `person_merge` answer)
+Writes.      The thread between an account and a local person (`matchAccount`).
+             The person takes the account's id on this phone, and the server folds
+             its placeholder into the account too — memberships, splits, trust —
+             so every phone in their groups ends with one of them (S21).
+Numbers.     · no figure moves. This is identity, not money — the money that was
+               the placeholder's is now the account's, unchanged
 Exit.        Stays.
 Branches.    .B1 matching says **who they are**. Trusting says **and their
                  entries may count**. Two decisions, deliberately separate
+             .B2 the account already shares a group with you: matching someone
+                 else folds them into it; unmatching is refused
 Failures.    .FM1 matching the wrong person — their entries would then reach the
-                  wrong name in your ledger
-Reversible.  Unmatch.
+                  wrong name in your ledger. Unmatching gives the account's id back
+             .FM2 the server refuses a merge into an account you aren't linked with
+Reversible.  Unmatch, unless the account shares a group with you.
 Also try.    · check that a person with no account cannot be trusted meaningfully
              · look at Aarav in demo data: he has an account id, which is why
                his trust setting does anything at all
 Ladder.      SN-31
-Problems.    Never run on a phone.
+Problems.    Round-tripped on the real Worker (placeholderMerge); never on a phone.
 ```
 
 ### FL-32 · Sync push and pull — 0 entry points
 
 ```
-Trigger.     Nothing. It runs itself when the tab bar mounts — there is no button.
-State.       **needs a second device.** Demo fakes the results, not the transport.
-Entry.       .X1 app launch, from the tab bar
-Pre.         An account, a shared group, and a network.
-Steps.       .S1 the outbox is drained, oldest first  .S2 each entry is sealed
-             with the group key  .S3 pushed  .S4 the server's changes are pulled
-             .S5 each arriving entry goes through `ingestPeerTxn`
-             .S6 trust decides: land it, or hold it for approval
-Entities.    R/W E-18 · W E-04 · W E-20 · R E-82 · R/W E-88 · W E-11 (cursors)
-Writes.      Compare-and-set on `sync_version`. A stale push is a **409**, never
-             a silent last-write-wins.
+Trigger.     Nothing. It runs on launch, on every return to the app, and a few
+             seconds after any change while the app is open — there is no button.
+State.       Walkable with one phone and an account; a second device for the
+             group cases.
+Entry.       .X1 the tab bar: launch, foreground, and after a write
+Pre.         Signed in, and the ledger joined to the account (FL-30 .S6).
+Steps.       .S1 the queue (E-18a) is sent, oldest first, as mutations
+             .S2 the server applies each, checking permissions and money versions
+             .S3 every readable scope is pulled by seq — groups first, then mine
+             .S4 anyone known by another id takes their account's id first
+             .S5 the pull's rows replace the phone's, except where a change of
+             mine is still waiting to go up
+Entities.    R/W E-18a · R/W E-18b · W every synced table · R/W E-88
+Writes.      Compare-and-set on money: a stale write is refused as a conflict,
+             "keep yours or theirs?" (S17), never merged. A refused change reverts
+             and says why.
 Numbers.     · **the promise to check:** an entry waiting for approval must move
                **no figure of yours** — not Home, not the balance, not Reports
              · once approved, every figure moves at once and they agree
-Exit.        Nothing visible. SC-43 says when it last ran and why it did nothing.
-Branches.    .B1 offline → the outbox just grows
-             .B2 a group that vanished server-side is archived, never deleted
-Failures.    .FM1 409 on push after an offline edit
-             .FM2 entries this device cannot decrypt
-             .FM3 **no part of this has run on a phone**
+Exit.        Nothing visible. SC-43's status line says where it stands.
+Branches.    .B1 offline → the queue just grows, and nothing on screen waits for it
+             .B2 a group I can no longer read is archived, never deleted, and I'm
+                 told once whether it was deleted or I was removed
+Failures.    .FM1 a conflict after an offline edit → the conflict card
+             .FM2 a refusal → the banner on the entry, and History
 Reversible.  n/a.
-Also try.    · open Settings → Sync and read what it says about the last run —
-               that screen is the only window into any of this
-             · nothing else, solo
-Ladder.      SN-32 — the fullest list of cases in the document, and worth reading
-             before trusting any of it
-Problems.    Built end to end, never run on a phone.
+Also try.    · change something offline, reconnect, and watch the status line
+Ladder.      SN-32
+Problems.    Tested end to end on the real Worker (syncEngine, groupFlows,
+             approvals, syncConflicts); not yet on two phones (Checkpoint E).
 ```
 
 FL-27 · Approve or reject a peer entry — 2 entries (SC-40, SC-15)
@@ -3297,21 +3356,21 @@ FL-29 · Set trust — 2 entries (SC-26a TrustSheet, SC-40 "Trust <name>")
   W E-01.trust_state or W E-21 for the per-group override. Per person, never per
   group (IV-10); inert without an account (IV-11). Ladder SN-29.
 
-FL-30 · Sign in — 4 entries (SC-06, SC-34, SC-43, the restore-offer alert)
+FL-30 · Sign in — 4 entries (SC-06, SC-34, SC-43, the launch prompt)
   Email magic link, no password. Lands on SC-37 by deep link, spends the token
-  once, replaces itself with SC-36. Email is the ONLY identity and cannot be
-  changed or merged, so a typo makes a second account holding none of your
-  backups (DQ-08). Ladder SN-30. Never seen on a device.
+  once, then the first sign-in uploads, restores or asks. Email is the ONLY
+  identity and cannot be changed or merged, so a typo makes a second, empty
+  account (DQ-08). Sign-out empties the phone (DQ-97). Ladder SN-30.
 
 FL-31 · Link a person to an account — 1 entry (SC-38)
-  W E-01.remote_uid — the single writer. Matching says WHO THEY ARE; trusting
-  says AND THEIR ENTRIES MAY COUNT. Two decisions kept apart on purpose.
-  Ladder SN-31.
+  W E-01.remote_uid, and the person takes the account's id; the server folds its
+  placeholder in too. Matching says WHO THEY ARE; trusting says AND THEIR
+  ENTRIES MAY COUNT. Two decisions kept apart on purpose. Ladder SN-31.
 
-FL-32 · Sync push / pull — 0 user entries; runs from the tab bar on mount
-  R E-18 → seal → push; pull → peerIngest → W E-04 + W E-20. Compare-and-set;
-  a stale push is a 409. Cursors live in E-11. Ladder SN-32 — the one to read
-  before trusting any of this. Built end to end, never run on a phone.
+FL-32 · Sync push / pull — 0 user entries; launch, foreground, and after a write
+  R E-18a → mutations → push; pull by seq → every synced table. Compare-and-set
+  on money; a conflict is "keep yours or theirs?". Ladder SN-32. Tested on the
+  real Worker, not yet on two phones.
 
 ```
 
@@ -3655,8 +3714,10 @@ Entities.    W E-91 prefs · W E-90 the OS schedule
 Writes.      Preferences here; the OS holds the actual schedule, and it is
              **regenerated at every cold start** because the two can drift.
 Numbers.     · nothing financial moves
-             · SC-30 should list the same bills as Plan's "upcoming", and the
-               same ones Home shows under "coming up" — three surfaces, one set
+             · SC-30 and Plan's list both render `ComingUpList` (2026-09-24,
+               `SPEC-2026-09-FEEDBACK.md` §6), so they can't drift into two different sets — one
+               component, two surfaces. Home shows neither list, only a badge
+               count on the bell that opens SC-30
 Exit.        Stays. A tapped notification routes: a renewal opens the rule, the
              daily nudge opens Add, the backup nudge opens Reports.
 Branches.    .B1 permission refused → the switches should say so, not fail quietly
@@ -3665,7 +3726,8 @@ Failures.    .FM1 **jest cannot prove any of this.** It is device-only
 Reversible.  Turn them off.
 Also try.    · send a test, background the app, and tap the notification —
                check it lands on the right screen and not just Home
-             · compare SC-30's list against Plan's upcoming section
+             · compare SC-30's bills against Plan's list — same `ComingUpList`, so a
+               difference now means a real bug, not two implementations disagreeing
              · deny the permission and see what the screen says
 Ladder.      SN-44
 Problems.    Needs a dev build. DQ-80 gates real push entirely.
@@ -3788,32 +3850,14 @@ Ladder.      SN-48
 Problems.    The demo-row filter and `seedDemo.ts` are edited independently.
 ```
 
-### FL-49 · Server backup and restore — 1 entry point
+### FL-49 · Server backup and restore (retired in S22)
 
 ```
-Trigger.     "Keep a copy somewhere that is not this phone."
-State.       **needs an account and a server build.** Restore has never run on
-             a device.
-Entry.       .E1 SC-34
-Pre.         An account (FL-30), and a passphrase you will not forget.
-Steps.       .S1 open Backup  .S2 set a passphrase  .S3 back up to the account
-             .S4 to restore: pick it  .S5 passphrase  .S6 confirm **replace all**
-Entities.    R/W E-89 · W every backed-up table
-Writes.      Encrypted before it leaves. The server cannot read it.
-Numbers.     · after a restore every figure should match what you had at backup
-               time, exactly
-             · **but your app preferences will not come back** — they live in a
-               different store that is not in the backup, and nothing says so
-Exit.        A restore forces a reload.
-Branches.    .B1 the same flow writes a local file instead (FL-11)
-Failures.    .FM1 **a restore is refused outright while sync is on**, because it
-                  would re-publish an old state. Check the refusal, not the warning
-             .FM2 backups above about 25 MiB — KV is standing in for R2 (DQ-85)
-Reversible.  **No.** A restore is not undoable, which is why it asks twice.
-Also try.    · back up, change something, restore, and check the change is gone
-             · **check whether your feature switches survived the restore**
+State.       Gone. The account now keeps a readable copy of everything (DQ-93), so
+             a new phone gets it back by signing in (FL-30); a passphrase copy on
+             the server added nothing. A file of your own is still FL-11.
+Numbers.     · none — nothing to walk
 Ladder.      SN-49
-Problems.    Restore never run on a device. RELEASE §0.4.
 ```
 
 ### FL-50 · Load demo data or erase everything — 1 entry point
@@ -3872,31 +3916,15 @@ Ladder.      SN-51
 Problems.    All off by default.
 ```
 
-### FL-52 · Merge two people — 1 entry point
+### FL-52 · Merge two people (retired in S22)
 
 ```
-Trigger.     "There are two Aaravs."
-State.       demo, plus creating a duplicate person by hand first.
-Entry.       .E1 the merge alert, from the tab bar's sync chain
-Pre.         Two person rows that are the same human.
-Steps.       .S1 create a second "Aarav" in People  .S2 give them an expense
-             .S3 the merge prompt appears  .S4 pick which survives  .S5 confirm
-Entities.    W E-01 · W E-03 · W E-06 · W E-07 · W E-12 · W E-21 · W E-04
-Writes.      Every reference across **eight tables** is moved, then the loser is
-             deleted. This is the real answer to "delete a person" — a plain
-             delete is refused for anyone referenced anywhere.
-Numbers.     · **the merged person's balance must equal the sum of the two**
-             · no expense may be lost, and no total may change
-Exit.        Stays.
-Branches.    .B1 `deletePerson` refuses; merge is the supported path
-Failures.    .FM1 a reference the merge misses would be a dangling id, and
-                  foreign keys are off, so nothing else would catch it (DQ-19)
-Reversible.  **No.**
-Also try.    · make a duplicate, split an expense with each, merge, and **check
-               the balance is the sum**
-             · check the group member list shows one of them afterwards, not two
+State.       Gone with v1's "two people called X" prompt, its only entry point. In
+             server sync the same human has one id — `user:<account>` — on every phone, and
+             linking folds a hand-typed person into it (FL-31). A plain duplicate
+             with no account is deleted, not merged (`deletePerson`).
+Numbers.     · none — nothing to walk
 Ladder.      SN-52
-Problems.    DQ-19.
 ```
 
 ### FL-53 · Adopt an uncategorised name — 1 entry point
@@ -4040,7 +4068,7 @@ coverage anywhere in the repo — and it covers the page, not the app.)
 |---|---|---|
 | .T3a | Amount `12.345` / `1,2,3` / `-50` / empty / `0` | `✅ money` |
 | .T3b | App killed between the `txn` insert and the `txn_share` insert — is `withTransactionAsync` really around both? (`IV-03`) | `❓` |
-| .T3c | Offline → the outbox queues → 409 stale on push | `✅ syncOutbox` |
+| .T3c | Offline → the queue holds it → a stale base version is refused as a conflict on push, never overwritten | `✅ syncConflicts` |
 | .T3d | Two devices edit the same amount within one second | `❓` |
 | .T3e | The category is deleted by another device while the sheet is open | `❓` |
 | .T3f | The destination group is deleted while the Add screen is open | `❓` |
@@ -4096,7 +4124,7 @@ kind=settlement, payment(me, 420), share(Rohan, 420). The group net goes to 0.
 | .T3d | Offline settle → 409 because they settled simultaneously → two settlements, the balance overshoots negative | `❓` |
 | .T3e | Rejecting a settlement → soft-deleted on mine, alive on theirs, and the objection travels back | `✅ peerApproval` |
 | .T3f | Settling an amount that includes an entry still awaiting approval | `❓` |
-| .T3g | The settle sheet is open while the group key is re-wrapped | `❓` |
+| .T3g | The settle sheet is open while a pull removes the person being settled with | `❓` |
 
 | | T4 | |
 |---|---|---|
@@ -4117,44 +4145,49 @@ right answers" — and then asking what happens when the scopes disagree.
 
 ### SN-32 · Sync push and pull
 
-The ladder to read before trusting any of `FE-54`. **Every row here is `❓` at T2 and above**, because
-the subsystem is complete and has never run on a phone.
+The ladder to read before trusting any of `FE-54`. Every `✅` below runs the phone's real queries
+against the **real Worker code** on an in-process D1 — nothing about the server is mocked — and the
+server's own suites (`server/members`, `server/sharedTransactions`, `server/pushTransactions`,
+`server/erase`) hold its half. What none of it has done is run on two phones: that is Checkpoint E.
 
-**T0** — One device, one shared group, one entry. Queue → seal → push → 200. `✅ syncOutbox` `✅ groupCrypto`
+**T0** — One phone, one account, one entry. Queue → mutation → push → pull → the queue clears.
+`✅ syncEngine` `✅ rowMap` `✅ syncQueueCoverage`
 
 | | T1 | |
 |---|---|---|
-| .T1a | Ten entries queued, one drain — `MAX_PER_DRAIN` bounds the batch | `✅ syncOutbox` |
-| .T1b | An entry edited three times before its first push — the outbox collapses to one row | `✅ syncOutbox` |
-| .T1c | An entry created and deleted before any push | `❓` |
+| .T1a | A retried push whose reply was lost is applied once, not twice | `✅ syncEngine` |
+| .T1b | An entry edited three times before its first push — one queue row, the latest state | `✅ syncEngine` |
+| .T1c | A pulled copy never overwrites a change still waiting to go up | `✅ syncEngine` |
+| .T1d | Only my own entries are queued; a peer's is theirs to send | `✅ outboxAuthor` |
 
 | | T2 | |
 |---|---|---|
-| .T2a | Two devices, both mine, same account | `❓` |
-| .T2b | A peer's entry arrives from a trusted author → lands live | `✅ peerApproval` |
-| .T2c | From an untrusted author → lands awaiting approval, invisible to every money figure (`IV-05`) | `✅ approvalInvariant` |
-| .T2d | A new member joins → the roster gains a member, the key is wrapped for their device | `✅ shareGroupKey` |
-| .T2e | A member is removed → soft-deleted, past shares still resolve (`IV-21`) | `✅ memberInvariant` |
-| .T2f | The group vanishes server-side → `archiveVanishedGroup`, never a silent data loss | `✅ rosterLiveness` |
-| .T2g | A reinstall: the history is here, the device key is not | `❓` |
+| .T2a | Two devices, both mine, same account — the second restores the first | `✅ firstSignIn` |
+| .T2b | A peer's entry arrives from a trusted author → applies at once | `✅ approvals` |
+| .T2c | From an untrusted author → waits, invisible to every money figure (`IV-05`) | `✅ approvals` `✅ approvalInvariant` |
+| .T2d | Someone with an account is added → invited; accepting brings the group and its history | `✅ groupFlows` |
+| .T2e | A member is removed → their phone archives the group; past shares still resolve (`IV-21`) | `✅ groupFlows` `✅ memberInvariant` |
+| .T2f | The group is deleted by its owner → archived and marked deleted everywhere, and said once | `✅ groupFlows` |
+| .T2g | A friend typed in by hand turns out to be an account → one person on every phone, the old money theirs | `✅ placeholderMerge` |
 
 | | T3 | |
 |---|---|---|
-| .T3a | 409 on push — compare-and-set refuses, never a silent last-write-wins | `✅ syncDoc` |
+| .T3a | A stale money edit → refused as a conflict, "keep yours or theirs?", never merged | `✅ syncConflicts` |
 | .T3b | Offline for a week, then a large drain | `❓` |
 | .T3c | Connection drops mid-drain | `❓` |
-| .T3d | The server has entries this device cannot decrypt | `❓` |
-| .T3e | A roster version older than the local one | `✅ rosterLiveUpdates` |
-| .T3f | Two devices adopt the same group simultaneously | `✅ groupAdoption` |
+| .T3d | Signing out with changes not yet sent → sent first, or said so, then the phone empties | `✅ signOut` |
+| .T3e | An answer given offline is not overwritten by a pull | `✅ approvals` `✅ groupFlows` |
 
 | | T4 | |
 |---|---|---|
-| .T4a | Rejecting an entry leaves the two devices holding different rows. The objection travels back (`E-22`) and withdrawing it travels too, so the difference is visible to both — but nothing reconciles the rows themselves | `✅ peerApproval` |
-| .T4b | Two `is_me` rows after a restore-then-sync | `❌ SYNC-F5` |
-| .T4c | An itemized bill arrives as a single expense — the money is right, the breakdown is gone, and nothing on screen says so | `❌ SYNC-F4` |
+| .T4a | Rejecting an entry hides it for me, never for the author; the objection reaches them and withdrawing it travels too | `✅ approvals` |
+| .T4b | The author deletes an entry I accepted → it keeps counting until I agree (`DQ-31`) | `✅ approvals` |
+| .T4c | Two `is_me` rows after a restore-then-sync | `✅ identityRemap` |
 | .T4d | A receipt is attached locally and never travels, so one side sees evidence the other cannot | `❌ SYNC-F4` |
-| .T4e | A restore while sync is on would re-publish an old state — refused by `restoreGuard`, and the refusal itself is untested | `❌ SYNC-F9` |
-| .T4f | Clock skew between two devices reorders `updated_at` | `❓` |
+| .T4e | Restoring a file while joined to an account would overwrite the account — refused, sign out first | `❓` |
+| .T4f | Two devices editing the same entry offline at once | `✅ syncConflicts` |
+
+`.T4d` is the one left open on purpose (`SYNC-F4`: photos never sync).
 
 ---
 
@@ -4253,10 +4286,10 @@ that actually bite** — the axis pairs where that flow is known or suspected to
 | `SN-46` | Write-off | The only stored fact about a debt. |
 | `SN-47` | WhatsApp | Composes, never sends. |
 | `SN-48` | CSV round trip | Demo-row signatures can drift from `seedDemo.ts`. |
-| `SN-49` | Server backup | Never run on a device. |
+| `SN-49` | Server backup | Retired in S22 — the account keeps everything (FL-30). |
 | `SN-50` | Erase / demo | Not undoable, takes no backup first, live in release (`DQ-21`). |
 | `SN-51` | Lock | Locks on background, re-auths on foreground. |
-| `SN-52` | Merge | Eight tables in one statement; a missed reference is a dangling id (`DQ-19`). |
+| `SN-52` | Merge | Retired in S22 — one id per human; linking folds duplicates (FL-31). |
 | `SN-54` | Storage cleanup | Nothing here can lose a transaction — that is why it is separate from `SC-27`. |
 ---
 
@@ -4299,7 +4332,7 @@ Three routes had **no ID at all** and are new here:
 |---|---|---|
 | `SC-42` | `/assets` | Shipped 2026-09-01. `FEATURES_AND_FLOWS.md` mentioned "assets" exactly once, in an unrelated `src/assets/pdfjs` path. It passed `docCoverage.test.ts` only because that test matches file paths loosely. |
 | `SC-43` | `/settings/sync` | Never documented. |
-| `SC-44` | `/settings/sync-log` | Never documented. |
+| `SC-44` | the sync log | Never documented. Retired in S22. |
 
 Twelve routes had an `S-` id and **no state row** in the old §20: `/approvals`, `/assets`, `/auth`,
 `/link`, `/budget`, `/person/[id]`, `/settings/{account,linked,storage,sync,sync-log,voice}`.
@@ -4336,7 +4369,7 @@ rewritten.
 | `DRIFT-01` `src/lib` module count | Closed by `countClaims.test.ts` |
 | `DRIFT-21` two feature inventories with no shared IDs | Closed by `FE-` |
 | AUDIT §5 "no OAuth, no backend, no accounts" | **False since 2026-08-04.** Superseded by §1's egress table. |
-| `ARCHITECTURE.md` §1 "sync does not exist" | **False.** `syncEngine.ts` is 769 lines and deployed. Superseded by `FE-54` and `E-88`. This contradiction is why this document exists. |
+| `ARCHITECTURE.md` §1 "sync does not exist" | **False when written** — v1's `syncEngine.ts` was deployed. That contradiction is why this document exists. v1 was replaced by server sync and deleted in S22; `FE-54` and `E-88` describe what is there now. |
 
 ### What changed in the doc set
 

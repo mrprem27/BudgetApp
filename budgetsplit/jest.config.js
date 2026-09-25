@@ -5,12 +5,14 @@ module.exports = {
   // Only active when FAKE_TODAY is set — see jest.calendar.js and `npm run test:calendar`.
   setupFiles: ['<rootDir>/jest.calendar.js'],
   testMatch: ['**/__tests__/**/*.test.ts'],
+  // The server tests import `server/api/sync/*`, which lives outside this package.
+  // Babel's transform injects `@babel/runtime` into those files too, and Node
+  // resolution would look for it beside them — where there is no node_modules.
+  modulePaths: ['<rootDir>/node_modules'],
   transform: {
     '^.+\\.[jt]sx?$': ['babel-jest', { presets: ['babel-preset-expo'] }],
   },
-  // @noble ships ESM only, and it is real crypto the tests must actually run —
-  // stubbing it would make the group-key wrap untestable rather than tested.
-  transformIgnorePatterns: ['node_modules/(?!(date-fns|uuid|@noble)/)'],
+  transformIgnorePatterns: ['node_modules/(?!(date-fns|uuid)/)'],
   // Stub native-only modules that pure-logic code imports transitively but
   // never calls in these tests (they ship ESM that we don't transform).
   moduleNameMapper: {

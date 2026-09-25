@@ -177,6 +177,37 @@ export function addTxn(db: TestDb, t: {
   return tid;
 }
 
+/**
+ * An entry somebody ELSE wrote, as the pull leaves it: the row with
+ * `author_person_id` set to its author, and — when it names me — my
+ * `txn_approval` row in whatever state the server holds.
+ *
+ * The pull decides nothing about trust or transfers; the server does, and writes
+ * the approval row it wants me to see. So a fixture that states that row directly
+ * is the honest shape of "an entry arrived", not a shortcut around it.
+ *
+ * `approval` omitted = no row at all: an entry that applied on arrival.
+ */
+export function addPeerTxn(db: TestDb, t: Parameters<typeof addTxn>[1] & {
+  author: string;
+  approval?: 'pending' | 'approved' | 'rejected';
+  /** The author has retracted an entry I accepted, and it waits on me. */
+  pendingDelete?: boolean;
+  payMethod?: string | null;
+}): string {
+  const tid = addTxn(db, t);
+  db.raw.prepare(
+    `UPDATE txn SET author_person_id = ?, source = 'peer', pay_method = ?,
+       recur_interval = CASE WHEN recur_freq IS NULL THEN NULL ELSE 1 END WHERE id = ?`,
+  ).run(t.author, t.payMethod ?? null, tid);
+  if (t.approval) {
+    db.raw.prepare(
+      `INSERT INTO txn_approval (txn_id, state, created_at, decided_at, pending_delete) VALUES (?, ?, ?, ?, ?)`,
+    ).run(tid, t.approval, Date.now(), t.approval === 'pending' ? null : Date.now(), t.pendingDelete ? 1 : 0);
+  }
+  return tid;
+}
+
 /** A simple expense paid and consumed entirely by one person. */
 export function addSimpleExpense(
   db: TestDb,

@@ -282,14 +282,14 @@ export default function SavingsScreen() {
         {/* Recurring CHARGES due soon — one row per occurrence. Deliberately not the
             same list as /plan/recurring, which shows one row per rule: a yearly rule
             due in 11 months, or a paused/fully-skipped one, is a rule with no upcoming
-            charge. Titled by its window so it can't read as the inventory, with an
-            explicit link to the place that manages them. */}
+            charge. "Due this month" used to carry that distinction in the title itself;
+            `SPEC-2026-09-FEEDBACK.md` §6 collapsed it to one word everywhere ("Upcoming" is charges,
+            "Recurring" is the inventory) — the reader now tells them apart by which
+            block they're looking at, not by a bespoke title per screen. */}
         {upcoming.length > 0 && (
           // No "Manage" link: this screen's header already has a Recurring shortcut, so a
           // second entry point was pure clutter on a block whose job is to be glanced at.
-          // The title does the work the link was hedging — "Due this month" is a window,
-          // "Recurring" is the inventory.
-          <ComingUpList items={upcoming} title="Due this month" showIcon />
+          <ComingUpList items={upcoming} showIcon />
         )}
 
         {/* Month-end spend forecast */}

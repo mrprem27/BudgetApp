@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { Card } from '../../ui/Card';
 import { Divider } from '../../ui/Divider';
@@ -13,12 +13,22 @@ import type { UpcomingItem } from '../../../lib/upcoming';
 
 type Props = {
   items: UpcomingItem[];
-  /** Section label — defaults to the Home wording. */
+  /** Section label. Defaults to "Upcoming" — the one word this list is ever
+   *  titled (`SPEC-2026-09-FEEDBACK.md` §6); a caller overrides it only when the SAME list
+   *  genuinely means something narrower ("this month", not "next"). */
   title?: string;
-  /** Show a category icon per row (Plan's due-this-month list). */
+  /** Show a category icon per row (Plan's list, the Upcoming screen). */
   showIcon?: boolean;
   /** Right-hand slot on the header — Plan passes a link into the manager. */
   headerRight?: React.ReactNode;
+  /**
+   * One-tap "Log payment" per expense row, opening Add pre-filled in the
+   * bill's own group (`/upcoming`'s reason for existing — reading "Netflix
+   * ₹649 due tomorrow" and then retyping all four fields is the thing this
+   * exists to remove). Omit where a row is a glance-only preview, not
+   * somewhere you'd act from (Plan's list has no action today).
+   */
+  onLogPayment?: (item: UpcomingItem) => void;
 };
 
 function whenLabel(daysUntil: number): string {
@@ -42,7 +52,7 @@ function whenLabel(daysUntil: number): string {
  * glance-at-it block into a slab. `Card` and `Divider` still supply the chrome, so it
  * belongs to the design system; only the row metrics are local, and on purpose.
  */
-export function ComingUpList({ items, title = 'Coming up', showIcon = false, headerRight }: Props) {
+export function ComingUpList({ items, title = 'Upcoming', showIcon = false, headerRight, onLogPayment }: Props) {
   return (
     <View>
       {/* `first` matters: callers put a `gap` on their scroll container, and
@@ -69,6 +79,17 @@ export function ComingUpList({ items, title = 'Coming up', showIcon = false, hea
                   <Text style={styles.sub}>
                     {it.mode === 'remind' ? 'Reminder' : 'Recurring'} · {whenLabel(it.daysUntil)}
                   </Text>
+                  {onLogPayment && it.kind === 'expense' && (
+                    <TouchableOpacity
+                      style={styles.logBtn}
+                      onPress={() => onLogPayment(it)}
+                      hitSlop={8}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Log payment for ${it.name}`}
+                    >
+                      <Text style={styles.logBtnText}>Log payment</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
                 {/*
                   Money in is never shown looking like money out. The list carries all
@@ -97,4 +118,8 @@ const styles = StyleSheet.create({
   name: { ...type.bodySemi, color: colors.textPrimary, marginBottom: 2 },
   sub: { ...type.caption, color: colors.textMuted },
   amount: { ...type.amountSM, color: colors.settle },
+  // Small and self-aligned rather than a full-width `PrimaryButton` — this is
+  // one dense row among several, not the screen's one hero action (AGENTS §1).
+  logBtn: { alignSelf: 'flex-start', backgroundColor: colors.accent, borderRadius: radius.sm, paddingVertical: 4, paddingHorizontal: space.sm, marginTop: space.xs },
+  logBtnText: { ...type.caption, color: colors.onAccent, fontFamily: 'Inter_600SemiBold' },
 });

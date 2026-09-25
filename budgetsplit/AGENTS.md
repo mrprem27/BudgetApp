@@ -166,6 +166,36 @@ Rules:
 
 ---
 
+## 6b. Keyboard — one decision, two primitives
+
+Decided 2026-09-25, after three incompatible patterns had grown up side by side. Every screen that
+takes typing uses exactly one of:
+
+| Surface | Use | What it guarantees |
+|---|---|---|
+| A full screen | **`ui/KeyboardForm`** (`footer`, `anchor`) | the focused field scrolls into view above the keyboard; the keyboard adds an inset, never a height change, so nothing re-flows; dragging the body or tapping outside a field dismisses the keyboard |
+| A virtualized list with inputs, or with results under a search box | **`renderScrollComponent={keyboardAwareScroll()}`** | the same, for a `SectionList`/`FlatList` |
+| A sheet | **`SheetModal`** — nothing to add | `DraggableSheet` lifts above the keyboard, then scrolls the focused field into its visible area (after the lift, and on every focus change) |
+
+- **No toolbar on the keyboard.** A Done bar (`KeyboardToolbar`) was tried and removed the same day:
+  buggy on device, and the keyboard already has its own return key. A number pad has none, so it
+  closes by a tap outside the field or a drag down — every container supports both.
+- **The keyboard covers a screen's bottom button.** Close the keyboard and the button is where it
+  always is. Only a real multi-field form — many fields typed in a row, then saved — lifts its footer
+  over the keyboard with `footerAboveKeyboard` (today: the budget editor). The guard lists the opt-ins,
+  so adding one is deliberate.
+- **Never `justifyContent: 'center'` for content with a field.** Centred content sits exactly where
+  the keyboard lands. Single-question screens use `anchor="upper-third"`.
+- **Never import `KeyboardAvoidingView`, `KeyboardAwareScrollView` or `KeyboardStickyView` directly,
+  never `KeyboardToolbar` at all**, and never `automaticallyAdjustKeyboardInsets`.
+  `keyboardSourceGuard.test.ts` enforces all of this, and fails on any route that renders an input
+  outside the three containers above. An exception goes in its `EXEMPT` with the reason.
+
+Why it matters for sync: every sync screen (sign-in, restore, conflicts, invites) is a form. The
+guard is what makes each of them keyboard-safe by construction instead of by memory.
+
+---
+
 ## 7. Haptic Feedback — Sparingly, only for meaningful actions
 
 ```ts
@@ -554,8 +584,11 @@ who doesn't know the rule:
 
 **Sync exists now**, and the rule it was written for holds: *an entry takes effect
 immediately for whoever created it, and waits for approval from everyone else it
-touches.* You can always make yourself worse off, never someone else. The peer
-write path is `ingestPeerTxn`, reached from `lib/syncEngine`.
+touches.* You can always make yourself worse off, never someone else. The server
+enforces it: every write that names someone else runs the app's own
+`requiresMyApproval` there (`server/api/sync/entities/approvals.ts`), and the phone
+applies the answer on the pull (`db/queries/syncApply.ts`). A refusal outranks
+trust: an edit to an entry you refused asks you again, whoever wrote it.
 
 **Trust is per person, never per group.** Mark someone trusted and their entries
 apply immediately in every group you share; leave them on review and every entry
@@ -569,8 +602,8 @@ flat bills and vague on holiday" is a real thought, and without it the only way 
 say so was to distrust him everywhere. Absent = the global answer, and that must
 stay clearable, or "trusted except here" is a one-way door. Two things it can
 never do: make someone with no `remote_uid` reachable (that check runs first), or
-waive the transfer rule. The override is read at the loader (`ingestPeerTxn`) and
-passed in, so `lib/trust.ts` stays pure and db-free.
+waive the transfer rule. The server reads the override and passes it in, so
+`lib/trust.ts` stays pure and db-free.
 
 **A person with no `remote_uid` has no account and therefore no write path, so
 their trust value is inert** (`lib/trust.ts`). `remote_uid` is written by one
@@ -736,12 +769,14 @@ is what stops that recurring.
 | Charts | **react-native-svg** (donut, health ring) + **gifted-charts** (reports trend) |
 | Gestures / animation | **react-native-gesture-handler**, **react-native-reanimated**, RN `Animated` |
 | Fonts | **SpaceMono** for money, **Inter** for everything else |
-| Crypto | **crypto-js** for passphrase backups; **X25519** device keys and per-group wraps for sync |
-| Server | Two Cloudflare Workers. `server/receipt-ocr-proxy/` is stateless and exists only to hold `GEMINI_API_KEY`. `server/api/` is accounts + encrypted backup + **sync** (D1 + KV, magic-link auth) and is deployed. Neither ever sees a readable transaction |
+| Crypto | **crypto-js** / AES-GCM for passphrase backups. Sync is not end-to-end encrypted (`DQ-93`) |
+| Server | Two Cloudflare Workers. `server/receipt-ocr-proxy/` is stateless and exists only to hold `GEMINI_API_KEY`. `server/api/` is accounts, linking and **sync** (D1, magic-link auth): it holds a **readable** copy of everything a signed-in account owns, and checks every write against the app's own rules (`DQ-93`). Receipt photos never go to either |
 | Network | Everything that leaves the device is listed in `SYSTEM.md` §1. No analytics, no crash reporter, no ad network. pdf.js is bundled, not fetched |
 
-**Sync exists.** Two documents asserted otherwise while `src/lib/syncEngine.ts` was deployed; that
-contradiction is what `SYSTEM.md` was written to end.
+**Sync exists**, and it is server sync: the phone stays offline-first, and a signed-in phone keeps
+the account's copy up to date (`src/lib/sync/`, `server/api/sync/`). The first, end-to-end-encrypted
+design was replaced and deleted in S22. What happens when somebody else changes your numbers is
+`docs/SYNC-MODEL.md`.
 
 ```
 BudgetApp/
@@ -751,7 +786,7 @@ BudgetApp/
 │   │   ├── (tabs)/              # Custom 5-slot tab bar over 4 tab routes
 │   │   ├── add/                 # quick.tsx · itemized.tsx — the only fullScreenModal routes
 │   │   ├── group/[id].tsx       # Group hub + [id]/{budget,edit,members}
-│   │   └── …                    # 46 routes in total
+│   │   └── …                    # 45 routes in total
 │   ├── src/
 │   │   ├── components/
 │   │   │   ├── ui/              # Generic primitives, domain-free

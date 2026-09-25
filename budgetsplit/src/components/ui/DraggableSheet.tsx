@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import {  View, Text, StyleSheet, Pressable, Dimensions, Platform, Keyboard, type NativeSyntheticEvent, type NativeScrollEvent,
+import {  View, Text, StyleSheet, Pressable, Dimensions, Platform, Keyboard, TextInput, type NativeSyntheticEvent, type NativeScrollEvent,
 } from 'react-native';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { KeyboardAvoidingView, useFocusedInputHandler } from 'react-native-keyboard-controller';
 import { Gesture, GestureDetector, ScrollView } from 'react-native-gesture-handler';
 import Animated, {
   useSharedValue, useAnimatedStyle, withSpring, withTiming, interpolate,
@@ -9,6 +9,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, type, space, radius, shadow } from '../tokens';
+import { KEYBOARD_GAP } from './KeyboardForm';
 
 const SCREEN_H = Dimensions.get('window').height;
 const DISMISS_DY = 90;   // px dragged past which we dismiss
@@ -25,6 +26,8 @@ export const SHEET_EXIT_MS = 200;
  * purpose: focusing a frame late is invisible, focusing early is the jank.
  */
 export const SHEET_ENTER_MS = 380;
+
+type Measurable = { measureInWindow: (cb: (x: number, y: number, w: number, h: number) => void) => void };
 
 type Props = {
   /** Called once the close animation finishes (e.g. router.back / setVisible(false)). */
@@ -71,6 +74,8 @@ export function DraggableSheet({ onClose, title, children, scroll = true, header
   // (only start a drag-to-dismiss when the inner list is at the top).
   const scrollY = useSharedValue(0);
   const [kbVisible, setKbVisible] = useState(false);
+  const scrollRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
+  const kbUp = useRef(false);
   // Guards so onClose fires exactly once and never after unmount: drag-dismiss,
   // backdrop-tap and a parent flipping `visible` can otherwise overlap.
   const closingRef = useRef(false);
@@ -79,8 +84,11 @@ export function DraggableSheet({ onClose, title, children, scroll = true, header
   useEffect(() => {
     mountedRef.current = true;
     const show = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', () => setKbVisible(true));
-    const hide = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', () => setKbVisible(false));
-    return () => { mountedRef.current = false; show.remove(); hide.remove(); };
+    const hide = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', () => { setKbVisible(false); kbUp.current = false; });
+    // After the lift has landed: the sheet is at its final height, so the
+    // measurement below is the real one.
+    const shown = Keyboard.addListener('keyboardDidShow', () => { kbUp.current = true; revealFocused(); });
+    return () => { mountedRef.current = false; show.remove(); hide.remove(); shown.remove(); };
   }, []);
 
   // Spring in on mount.
@@ -96,6 +104,45 @@ export function DraggableSheet({ onClose, title, children, scroll = true, header
     closingRef.current = false;
     translateY.value = withSpring(0, { damping: 16, stiffness: 170, mass: 0.7 });
   }, [exiting, translateY]);
+
+  /**
+   * Scroll the focused field into the sheet's visible area.
+   *
+   * The `KeyboardAvoidingView` below lifts the whole sheet above the keyboard,
+   * which is right for a short sheet — but a tall one is capped at 88% of what
+   * is left, and a field low in its scroll body ends up lifted and still out of
+   * sight. `KeyboardAwareScrollView` can't be used here: it measures a field at
+   * focus, BEFORE the lift, and would scroll it a second keyboard-height up.
+   * So this measures after the lift, in window coordinates, and moves only the
+   * difference.
+   */
+  const revealFocused = React.useCallback(() => {
+    const sv = scrollRef.current as unknown as ({ scrollTo: (o: { y: number; animated: boolean }) => void; getNativeScrollRef?: () => Measurable | null } & Measurable) | null;
+    const input = TextInput.State.currentlyFocusedInput?.() as unknown as Measurable | null;
+    if (!sv || !input) return;
+    const frame = sv.getNativeScrollRef?.() ?? sv;
+    frame.measureInWindow((_x, top, _w, height) => {
+      input.measureInWindow((_ix, y, _iw, h) => {
+        const below = y + h - (top + height - KEYBOARD_GAP);
+        const above = top + KEYBOARD_GAP - y;
+        const delta = below > 0 ? below : above > 0 ? -above : 0;
+        if (delta !== 0) sv.scrollTo({ y: Math.max(0, scrollY.value + delta), animated: true });
+      });
+    });
+  }, [scrollY]);
+
+  // Moving to another field while the keyboard is already up fires no keyboard
+  // event, so follow focus: a selection change on a NEW input is a focus change.
+  const lastTarget = useSharedValue(-1);
+  const onFocusMove = React.useCallback(() => { if (kbUp.current) revealFocused(); }, [revealFocused]);
+  useFocusedInputHandler({
+    onSelectionChange: (e) => {
+      'worklet';
+      if (e.target === lastTarget.value) return;
+      lastTarget.value = e.target;
+      runOnJS(onFocusMove)();
+    },
+  }, [onFocusMove]);
 
   const finishClose = () => { if (mountedRef.current) onClose(); };
 
@@ -182,6 +229,7 @@ export function DraggableSheet({ onClose, title, children, scroll = true, header
             {scroll ? (
               <GestureDetector gesture={nativeGesture}>
                 <ScrollView
+                  ref={scrollRef}
                   keyboardShouldPersistTaps="handled"
                   showsVerticalScrollIndicator={false}
                   bounces={false}
@@ -194,7 +242,9 @@ export function DraggableSheet({ onClose, title, children, scroll = true, header
                 </ScrollView>
               </GestureDetector>
             ) : (
-              <View style={styles.content}>{children}</View>
+              // A tap on the body (not a control) closes the keyboard, as it does
+              // in the scrolling variant — a number pad has no return key.
+              <Pressable style={styles.content} onPress={Keyboard.dismiss} accessible={false}>{children}</Pressable>
             )}
           </Animated.View>
         </GestureDetector>

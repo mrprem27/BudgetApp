@@ -29,6 +29,22 @@ const QUERY_DIR = path.resolve(__dirname, '../db/queries');
  */
 const ALLOWLIST: { file: string; contains: string; why: string }[] = [
   {
+    file: 'identity.ts',
+    contains: 'SELECT (EXISTS (SELECT 1 FROM txn WHERE is_deleted = 0)',
+    why: 'phoneHasData: does this phone hold anything a person would mind losing at first sign-in. A recurring rule with no occurrence yet is exactly such a thing — excluding it would call a phone empty and replace it.',
+  },
+  {
+    file: 'identity.ts',
+    contains: 'SELECT id FROM txn WHERE is_deleted = 0 AND author_person_id IS NULL',
+    why: 'backfillQueue queues every entry this phone authored for the first upload. Rule templates are ledger rows the server stores (as recurring_rules); leaving them out would lose every recurring bill on restore.',
+  },
+  {
+    file: 'categories.ts',
+    contains: 'SELECT id FROM txn WHERE category = ? AND kind = ? AND author_person_id IS NULL',
+    why: 'renameCategory queues every entry the rename rewrote for the server. A rule template '
+      + 'was rewritten too, and its new category name has to reach the server with it.',
+  },
+  {
     file: 'assets.ts',
     contains: 'SELECT COUNT(*) AS n FROM txn WHERE asset_id = ?',
     why: 'deleteAsset\u2019s reference count. It must see EVERY row that names the asset — '
@@ -48,11 +64,6 @@ const ALLOWLIST: { file: string; contains: string; why: string }[] = [
     file: 'backup.ts',
     contains: 'SELECT attachment_uri AS uri FROM txn',
     why: 'reapUnreferencedPhotos — decides which FILES on disk still have a row pointing at them. A recurring RULE can carry an attachment exactly as an occurrence can, and excluding rules here would delete a receipt that is still referenced. Reads paths, never money.',
-  },
-  {
-    file: 'categories.ts',
-    contains: 'INSERT OR REPLACE INTO sync_outbox',
-    why: 'Queues shared entries for sync after a category rename. Recurring RULES are included deliberately: a rule carries a category too, and a peer left holding the old name would post a bill under a category that no longer exists on their device. This counts rows to deliver, not money.',
   },
   {
     file: 'transactions.ts',

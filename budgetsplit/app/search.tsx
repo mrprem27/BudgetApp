@@ -22,6 +22,7 @@ import { getAllPersons } from '../src/db/queries/persons';
 import { useScreenData } from '../src/hooks/useScreenData';
 import { SEARCH_SOURCE, SEARCH_SOURCE_LABEL, type SearchSource } from '../src/constants/enums';
 import type { TxnWithSplits } from '../src/db/queries/transactions';
+import { keyboardAwareScroll } from '../src/components/ui/KeyboardForm';
 
 // `KindFilter` was declared here, one of three private copies of the same idea.
 // It lives in `lib/txnFilter.ts` now, with the predicate that reads it.
@@ -39,6 +40,8 @@ type MoreRow = { _more: true; section: string; count: number; monthName: string 
 type Row = TxnWithSplits | MoreRow;
 type MonthSection = { title: string; data: Row[] };
 const isMore = (r: Row): r is MoreRow => (r as MoreRow)._more === true;
+
+const searchScroll = keyboardAwareScroll();
 
 export default function SearchScreen() {
   const router = useRouter();
@@ -230,8 +233,9 @@ export default function SearchScreen() {
                 style={styles.listFlex}
                 keyExtractor={(item) => isMore(item) ? `more-${item.section}` : item.id}
                 contentContainerStyle={styles.list}
-                keyboardShouldPersistTaps="handled"
-                keyboardDismissMode="on-drag"
+                // Keyboard-aware (AGENTS.md §6b): results scroll clear of the
+                // keyboard instead of ending behind it.
+                renderScrollComponent={searchScroll}
                 stickySectionHeadersEnabled={false}
                 renderSectionHeader={({ section }) => <SectionHeader title={section.title} />}
                 renderItem={({ item, index, section }) => {

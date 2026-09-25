@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Alert } from 'react-native';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, Alert } from 'react-native';
+import { KeyboardForm } from '../../../src/components/ui/KeyboardForm';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,14 +13,14 @@ import { ErrorState } from '../../../src/components/ui/ErrorState';
 import { Banner } from '../../../src/components/ui/Banner';
 import { PrimaryButton } from '../../../src/components/ui/PrimaryButton';
 import { GroupForm } from '../../../src/components/finance/GroupForm';
+import { PersonNameSheet } from '../../../src/components/finance/PersonNameSheet';
 import {
-  getGroupById, updateGroup, archiveGroupSafe, deleteGroup, leaveGroup, stopSyncingGroup,
+  getGroupById, updateGroup, archiveGroupSafe, deleteGroup, leaveGroup,
   type SplitMode,
 } from '../../../src/db/queries/groups';
 import { getGroupNet } from '../../../src/db/queries/balances';
-import { announceGroupExit } from '../../../src/lib/syncEngine';
 import { oweView } from '../../../src/lib/owe';
-import { getGroupMembers, getAllPersons, getMe, addMemberToGroup, removeMemberFromGroup, type Person } from '../../../src/db/queries/persons';
+import { getGroupMembers, getAllPersons, getMe, addMemberToGroup, removeMemberFromGroup, insertPerson, type Person } from '../../../src/db/queries/persons';
 import { GROUP_COLORS } from '../../../src/constants/palette';
 import { useDataRefresh } from '../../../src/components/system/DataRefreshProvider';
 import { haptic } from '../../../src/lib/haptics';
@@ -37,6 +37,8 @@ export default function EditGroupScreen() {
   const [color, setColor] = useState(GROUP_COLORS[0]);
   const [defaultSplit, setDefaultSplit] = useState<SplitMode>('equal');
   const [members, setMembers] = useState<string[]>([]);     // selected non-me ids
+  const [showAddPerson, setShowAddPerson] = useState(false);
+  const [addPersonName, setAddPersonName] = useState('');
   const [isPersonal, setIsPersonal] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -81,6 +83,24 @@ export default function EditGroupScreen() {
   useEffect(() => { if (!id) router.back(); }, [id]);
 
   if (!id) return null;
+
+  /** Same "+" tile as New Group — see `groups.tsx`'s `handleAddPerson`. */
+  async function handleAddPerson() {
+    const t = addPersonName.trim();
+    if (!t) return;
+    try {
+      const p = await insertPerson(db, t, GROUP_COLORS[allPersons.length % GROUP_COLORS.length]);
+      setShowAddPerson(false);
+      setAddPersonName('');
+      setMembers(prev => [...prev, p.id]);
+      await reload();
+      refresh();
+      haptic.success();
+    } catch {
+      haptic.error();
+      Alert.alert('Error', 'Could not add them. Try again.');
+    }
+  }
 
   async function handleSave() {
     if (!name.trim()) return;
@@ -129,11 +149,8 @@ export default function EditGroupScreen() {
         { text: 'Cancel', style: 'cancel' },
         { text: 'Delete for everyone', style: 'destructive', onPress: async () => {
           try {
-            // Server first: the owner check lives there, and a local delete it
-            // refused would leave the two permanently disagreeing about whether
-            // this group exists. The roster goes with it, before `deleted_at`
-            // makes every write from this device refused.
-            await announceGroupExit(db, id, 'delete');
+            // Queued like any change. The server checks the owner again; if it
+            // refuses, the pull puts its copy back and says why (S17).
             const res = await deleteGroup(db, id, meId);
             if (!res.ok) {
               Alert.alert('Can’t delete', 'The Personal group can’t be deleted.');
@@ -183,10 +200,8 @@ export default function EditGroupScreen() {
             );
             return;
           }
-          // Publish the departure, tell the server, THEN stop syncing — dropping
-          // the queue first would leave nothing able to publish it.
-          await announceGroupExit(db, id, 'leave');
-          await stopSyncingGroup(db, id);
+          // The departure is queued by `leaveGroup`; once it is on the server
+          // the group stops arriving here (`applyRevoked`).
           haptic.warning();
           refresh();
           router.dismissTo('/groups');
@@ -201,8 +216,7 @@ export default function EditGroupScreen() {
       {error ? (
         <ErrorState onRetry={reload} />
       ) : (
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+      <KeyboardForm contentContainerStyle={styles.scroll}>
         <GroupForm
           values={{ name, icon, color, members, defaultSplit }}
           onChange={(patch) => {
@@ -214,13 +228,25 @@ export default function EditGroupScreen() {
           }}
           allPersons={allPersons}
           showMembers={!isPersonal && mayManageMembers}
+          onRequestNewPerson={() => { setAddPersonName(''); setShowAddPerson(true); }}
+        />
+
+        <PersonNameSheet
+          visible={showAddPerson}
+          onClose={() => setShowAddPerson(false)}
+          title="Add a friend"
+          value={addPersonName}
+          onChangeText={setAddPersonName}
+          onSubmit={handleAddPerson}
+          placeholder="Friend's name"
+          submitLabel="Add friend"
         />
 
         <View style={{ height: space.lg }} />
         {/*
           Say it, rather than presenting a Save that can only be refused. The
           name, icon, colour and split all belong to the whole group now — they
-          travel on the roster — so changing them is an admin act.
+          sync to every member — so changing them is an admin act.
         */}
         {!isPersonal && !mayEdit && (
           <Banner icon="lock" text="Only an admin can change this group's details." />
@@ -251,8 +277,7 @@ export default function EditGroupScreen() {
             )}
           </View>
         )}
-      </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardForm>
       )}
     </View>
   );

@@ -100,26 +100,6 @@ export const toUserDto = (u: UserRow, origin: string): UserDto => ({
   createdAt: u.created_at,
 });
 
-export type BackupRow = {
-  id: string;
-  user_id: string;
-  r2_key: string;
-  size_bytes: number;
-  created_at: number;
-};
-
-export type BackupDto = {
-  id: string;
-  sizeBytes: number;
-  createdAt: number;
-};
-
-export const toBackupDto = (b: BackupRow): BackupDto => ({
-  id: b.id,
-  sizeBytes: b.size_bytes,
-  createdAt: b.created_at,
-});
-
 // --- Linking (Stage B) -----------------------------------------------------
 
 export type InviteRow = {
@@ -175,29 +155,3 @@ export type LinkDto = {
 
 /** Pairs are stored smaller-id-first so A→B and B→A cannot become two rows. */
 export const orderPair = (x: string, y: string): [string, string] => (x < y ? [x, y] : [y, x]);
-
-// --- Sync (Stage C) --------------------------------------------------------
-
-/**
- * One sealed entry as it sits in D1.
- *
- * `ciphertext` is opaque here and stays opaque: the key is per-group and never
- * reaches this Worker. `version` is the one field deliberately in the clear —
- * compare-and-set has to work on a payload the server cannot read.
- */
-export type SyncEntryRow = {
-  version: number;
-  ciphertext: string;
-  author_user: string;
-  is_deleted: number;
-  updated_at: number;
-};
-
-export type SyncEntryDto = {
-  entryId: string;
-  version: number;
-  ciphertext: string;
-  author: string;
-  isDeleted: boolean;
-  updatedAt: number;
-};

@@ -4,8 +4,7 @@ import * as SecureStore from 'expo-secure-store';
 import {
   extractAuthToken, serverBaseUrl, serverConfigured, deviceLabel,
   requestMagicLink, verifyMagicLink, signOut, getStoredSession,
-  fetchProfile, updateProfile, uploadBackup, listServerBackups,
-  downloadServerBackup, deleteServerBackup,
+  fetchProfile, updateProfile,
   ServerAuthError, ServerNotConfiguredError, ServerRequestError,
   claimInvite, decideClaim, listLinks, listPendingClaims, setLinkPhoneSharing,
 } from '../lib/serverApi';
@@ -189,53 +188,10 @@ describe('authed requests', () => {
 
   it('reports a non-401 failure with its status, without signing the user out', async () => {
     await signIn();
-    mockFetch({ status: 413, body: { error: 'Backup is larger than 52428800 bytes' } });
+    mockFetch({ status: 503, body: { error: 'Try again shortly' } });
 
-    await expect(uploadBackup('{"ciphertext":"x"}')).rejects.toBeInstanceOf(ServerRequestError);
+    await expect(fetchProfile()).rejects.toBeInstanceOf(ServerRequestError);
     await expect(getStoredSession()).resolves.not.toBeNull();
-  });
-});
-
-describe('backups', () => {
-  it('uploads the envelope as opaque text, unparsed and unwrapped', async () => {
-    await signIn();
-    const envelope = JSON.stringify({ v: 1, createdAt: 5, ciphertext: 'U2FsdGVk' });
-    mockFetch({ status: 201, body: { backup: { id: 'b1', sizeBytes: envelope.length, createdAt: 5 } } });
-
-    const saved = await uploadBackup(envelope);
-
-    expect(saved.id).toBe('b1');
-    // Byte-for-byte: the server stores what `lib/backup.ts` encrypted, so a
-    // re-encoding here would be a restore that can't be decrypted.
-    expect(calls[0].init.body).toBe(envelope);
-    expect((calls[0].init.headers as Record<string, string>)['content-type']).toBe('text/plain');
-  });
-
-  it('lists and deletes by id', async () => {
-    await signIn();
-    mockFetch(
-      { body: { backups: [{ id: 'b1', sizeBytes: 10, createdAt: 1 }] } },
-      { body: { ok: true } },
-    );
-
-    await expect(listServerBackups()).resolves.toHaveLength(1);
-    await deleteServerBackup('b1');
-    expect(calls[1].url).toBe(`${BASE}/backups/b1`);
-    expect(calls[1].init.method).toBe('DELETE');
-  });
-
-  it('returns an empty list rather than throwing when the field is missing', async () => {
-    await signIn();
-    mockFetch({ body: {} });
-    await expect(listServerBackups()).resolves.toEqual([]);
-  });
-
-  it('hands the download back as raw text for on-device decryption', async () => {
-    await signIn();
-    mockFetch({ text: '{"v":1,"createdAt":5,"ciphertext":"U2FsdGVk"}' });
-
-    const text = await downloadServerBackup('b1');
-    expect(JSON.parse(text).ciphertext).toBe('U2FsdGVk');
   });
 });
 

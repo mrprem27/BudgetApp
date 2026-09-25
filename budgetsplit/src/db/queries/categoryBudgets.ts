@@ -5,6 +5,7 @@ import { v4 as uuid } from 'uuid';
 import type { BudgetCadence } from '../../constants/enums';
 import { resolveBudgetLines } from '../../lib/budget';
 import { getGroupContext, getPersonalGroup } from './groups';
+import { queueDelete, queueUpsert } from './syncQueue';
 import { canEditGroupBudget, canSetOverrideFor, PermissionError } from '../../lib/permissions';
 export type { BudgetCadence } from '../../constants/enums';
 
@@ -142,19 +143,24 @@ export async function setCategoryBudgets(
     personId === null ? [groupId] : [groupId, personId],
   );
   const doomed = existing
-    .filter(r => known.has(r.category) || submitted.has(r.category))
-    .map(r => r.id);
+    .filter(r => known.has(r.category) || submitted.has(r.category));
 
   await db.withTransactionAsync(async () => {
-    for (const id of doomed) {
-      await db.runAsync('DELETE FROM category_budget WHERE id = ?', [id]);
+    for (const r of doomed) {
+      await db.runAsync('DELETE FROM category_budget WHERE id = ?', [r.id]);
+      // The server keys a line on (group, category, owner), so a line that is
+      // re-inserted below under a fresh local id is the SAME server row: the
+      // drain collapses this delete into the upsert that follows it.
+      await queueDelete(db, 'category_budget', r.id, { group_id: groupId, category: r.category, person_id: personId });
     }
     for (const e of entries) {
       if (e.amount > 0) {
+        const id = uuid();
         await db.runAsync(
           'INSERT INTO category_budget (id, group_id, category, period, cadence, amount, person_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
-          [uuid(), groupId, e.category, 'monthly', e.cadence, e.amount, personId],
+          [id, groupId, e.category, 'monthly', e.cadence, e.amount, personId],
         );
+        await queueUpsert(db, 'category_budget', id);
       }
     }
   });

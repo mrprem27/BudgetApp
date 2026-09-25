@@ -260,8 +260,8 @@ describe('envelope version dispatch', () => {
   it('the backup screen asks the library instead of comparing versions itself', async () => {
     const src = readFileSync(join(__dirname, '../../app/settings/backup.tsx'), 'utf8');
     expect(src).toContain('canReadCipher');
-    // Both pick paths — a file, and a server backup.
-    expect(src.match(/canReadCipher\(/g)?.length).toBeGreaterThanOrEqual(2);
+    // The one pick path — a file (the server copy went with v1, S22).
+    expect(src.match(/canReadCipher\(/g)?.length).toBeGreaterThanOrEqual(1);
     expect(src).not.toMatch(/json\.v\s*\?\?\s*CIPHER_/);
   });
 

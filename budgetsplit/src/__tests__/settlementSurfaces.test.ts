@@ -46,6 +46,7 @@ describe('what a settlement IS gets decided in one place', () => {
     'hooks/useTxnDetail.ts': 'resolves the asset NAME for the presenter to use',
     'finance/TransactionRow.tsx': 'passes the resolved name in; does not classify',
     'lib/backup.ts': 'orders `asset` before `txn` because the column points at it',
+    'sync/rowMap.ts': 'translates the column to the server and back; classifies nothing',
   };
 
   it('has nothing else branching on asset_id', () => {

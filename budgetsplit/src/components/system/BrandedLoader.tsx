@@ -1,25 +1,21 @@
 import React from 'react';
-import { View, Image, ActivityIndicator, StyleSheet } from 'react-native';
-import { colors, space } from '../../theme';
-
-const LOGO = require('../../../assets/splash-icon.png');
+import { View, StyleSheet } from 'react-native';
+import { colors } from '../../theme';
 
 /**
- * Full-screen branded loading state — the donut logo + a subtle spinner.
- * Used for the boot gate (fonts/DB) and the onboarding gate so the hand-off
- * from the native splash stays seamless instead of flashing a bare spinner.
+ * The boot gate's screen: the app background and nothing else.
+ *
+ * It is the same colour as the native launch screen (`expo-splash-screen` in
+ * `app.json`), so launch → loader → first screen reads as one continuous blank
+ * until real content draws. It used to show the finished logo and a spinner,
+ * which on a first launch put the completed mark on screen a moment before the
+ * onboarding hero animation assembled it from nothing — the reveal, spoiled.
+ * Boot takes well under a second, so a spinner had nothing to report.
  */
 export function BrandedLoader() {
-  return (
-    <View style={styles.container}>
-      <Image source={LOGO} style={styles.logo} resizeMode="contain" />
-      <ActivityIndicator color={colors.accent} style={styles.spinner} />
-    </View>
-  );
+  return <View style={styles.container} />;
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' },
-  logo: { width: 84, height: 84 },
-  spinner: { marginTop: space.lg },
+  container: { flex: 1, backgroundColor: colors.bg },
 });

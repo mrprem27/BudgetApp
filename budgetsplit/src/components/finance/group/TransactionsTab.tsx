@@ -12,6 +12,9 @@ import { SectionHeader } from '../../ui/SectionHeader';
 import { AppRefreshControl } from '../../ui/AppRefreshControl';
 import type { TxnWithSplits } from '../../../db/queries/transactions';
 import type { Person } from '../../../db/queries/persons';
+import { keyboardAwareScroll } from '../../ui/KeyboardForm';
+
+const listScroll = keyboardAwareScroll();
 
 type Props = {
   txns: TxnWithSplits[];
@@ -75,6 +78,9 @@ export function TransactionsTab({ txns, members, meId, groupName, onDeleteTxn, o
     <SectionList
       sections={sections}
       keyExtractor={t => t.id}
+      // The FilterBar search is in the header; matches below it must scroll
+      // clear of the keyboard (AGENTS.md §6b).
+      renderScrollComponent={listScroll}
       contentContainerStyle={[styles.listContent, { paddingBottom: bottomPad }]}
       initialNumToRender={12}
       maxToRenderPerBatch={10}

@@ -83,7 +83,7 @@ export function Chip({
       hitSlop={{ top: 4, bottom: 4, left: 0, right: 0 }}
       accessibilityLabel={accessibilityLabel ?? label}
       // Announce the selection, like every other choosable thing in `ui/`
-      // (`ListRow`, `OptionRow`, `TabPills`, `DayOfMonthGrid`). This was the one
+      // (`ListRow`, `OptionRow`, `TabPills`). This was the one
       // that didn't, so a chip's tint carried its whole state — invisible to
       // VoiceOver. It matters most where a chip GATES something: onboarding's money
       // step reveals its fields from two chip toggles, so "off" is not an unlabelled

@@ -100,7 +100,7 @@ export const VOICE_SHORTCUT_PRIVACY =
   'Siri turns your words into text, which recent iPhones do on the device. Tapping the one-tap '
   + 'link above fetches the shortcut definition from Apple once, at setup — after that nothing '
   + 'BudgetSplit stores leaves your phone unless you ask it to, like scanning a receipt in the '
-  + 'cloud or backing up to an account.';
+  + 'cloud or signing in to an account.';
 
 /**
  * What Siri says before it listens — the one field that turns a machine noise into a question.

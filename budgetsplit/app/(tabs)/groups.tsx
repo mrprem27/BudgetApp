@@ -15,7 +15,8 @@ import { useDataRefresh } from '../../src/components/system/DataRefreshProvider'
 import { insertGroup, getArchivedGroups, unarchiveGroup, archiveGroupSafe, listableGroups, type SplitMode } from '../../src/db/queries/groups';
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
 import { SheetModal } from '../../src/components/ui/SheetModal';
-import { getMe, getGroupMembers, getAllPersons, type Person } from '../../src/db/queries/persons';
+import { getMe, getGroupMembers, getAllPersons, insertPerson, type Person } from '../../src/db/queries/persons';
+import { PersonNameSheet } from '../../src/components/finance/PersonNameSheet';
 import { getGroupNet, getMyExposure, type FriendBalance } from '../../src/db/queries/balances';
 import { getBudgetAnalytics } from '../../src/lib/analytics';
 import { groupsTabView } from '../../src/lib/groupsView';
@@ -70,6 +71,8 @@ export default function GroupsScreen() {
   const [icon, setIcon] = useState<string>(GROUP_ICONS[0]);
   const [color, setColor] = useState<string>(GROUP_COLORS[0]);
   const [groupMembers, setGroupMembers] = useState<string[]>([]);
+  const [showAddPerson, setShowAddPerson] = useState(false);
+  const [addPersonName, setAddPersonName] = useState('');
   const [defaultSplit, setDefaultSplit] = useState<SplitMode>('equal');
   const [viewMode, setViewMode] = useState<'active' | 'archived'>('active');
   const swipeableRefs = useRef<Map<string, Swipeable>>(new Map());
@@ -151,6 +154,31 @@ export default function GroupsScreen() {
 
   function toggleMember(id: string) {
     setGroupMembers(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  }
+
+  /**
+   * The `+` tile in `GroupForm`'s member row — a brand-new friend, not one
+   * already in `allPersons`. Auto-selected into the group being created,
+   * since typing their name here plainly means "and this one" (the same
+   * reasoning onboarding's `addPerson` used to apply before that step was
+   * removed): a friend added mid-creation and then NOT included in the
+   * group would be the more surprising outcome.
+   */
+  async function handleAddPerson() {
+    const t = addPersonName.trim();
+    if (!t) return;
+    try {
+      const p = await insertPerson(db, t, GROUP_COLORS[allPersons.length % GROUP_COLORS.length]);
+      setShowAddPerson(false);
+      setAddPersonName('');
+      setGroupMembers(prev => [...prev, p.id]);
+      await reload();
+      refresh();
+      haptic.success();
+    } catch {
+      haptic.error();
+      Alert.alert('Error', 'Could not add them. Try again.');
+    }
   }
 
   async function handleCreate() {
@@ -262,7 +290,7 @@ export default function GroupsScreen() {
     if (activeFriends.length === 0) return null;
     return (
       <View style={styles.balancesWrap}>
-        <Text style={styles.balListLabel}>People</Text>
+        <Text style={styles.balListLabel}>Friends</Text>
         <View style={styles.balList}>
           {activeFriends.map((f, i) => (
             <View
@@ -310,6 +338,12 @@ export default function GroupsScreen() {
         title={viewMode === 'archived' ? 'Archived' : 'Groups'}
         right={
           <>
+            {/* Friends, always visible regardless of active/archived — the
+                same door as Settings → Friends, so "who do I split with" has
+                one consistent entry point next to where groups live. */}
+            <TouchableOpacity style={styles.headerAdd} hitSlop={10} onPress={() => router.push('/friends')} accessibilityRole="button" accessibilityLabel="Friends">
+              <Feather name="users" size={18} color={colors.textSecondary} />
+            </TouchableOpacity>
             {(archived.length > 0 || viewMode === 'archived') && (
               <TouchableOpacity
                 style={styles.headerAdd}
@@ -401,9 +435,21 @@ export default function GroupsScreen() {
           }}
           allPersons={allPersons}
           autoFocusName
+          onRequestNewPerson={() => { setAddPersonName(''); setShowAddPerson(true); }}
         />
         <PrimaryButton label="Create Group" onPress={handleCreate} disabled={!name.trim()} style={{ marginTop: space.md }} />
       </SheetModal>
+
+      <PersonNameSheet
+        visible={showAddPerson}
+        onClose={() => setShowAddPerson(false)}
+        title="Add a friend"
+        value={addPersonName}
+        onChangeText={setAddPersonName}
+        onSubmit={handleAddPerson}
+        placeholder="Friend's name"
+        submitLabel="Add friend"
+      />
     </View>
   );
 }

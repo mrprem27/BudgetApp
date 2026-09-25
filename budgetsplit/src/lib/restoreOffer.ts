@@ -1,14 +1,13 @@
 import type * as SQLite from 'expo-sqlite';
-import { listServerBackups, serverConfigured, getStoredSession } from './serverApi';
+import { serverConfigured, getStoredSession } from './serverApi';
 import { settings } from './settings';
 
 /**
- * "You have a copy on your account — want it back?"
+ * "Used BudgetSplit before?" — the way back to an account on a replacement phone.
  *
- * The last step of "keep a copy of everything". Snapshots upload on their own,
- * but until this existed, getting one back meant knowing to go to Settings →
- * Backup → Restore from your account. Someone setting up a replacement phone has
- * no reason to look there, and the whole feature is worthless if they do not.
+ * Signing in restores everything (the first sign-in, `lib/sync/firstSignIn.ts`),
+ * but someone setting up a replacement phone has no reason to open Settings →
+ * Account, and the whole feature is worthless if they do not.
  *
  * ### Why it only offers on an EMPTY device
  *
@@ -23,39 +22,19 @@ import { settings } from './settings';
  */
 
 /** What the offer needs to know, and nothing more. */
-export type RestoreOffer =
-  | {
-      kind: 'restore';
-      /** How many copies the account holds — "your most recent of 4". */
-      count: number;
-      /** When the newest was taken. */
-      newestAt: number;
-    }
-  /**
-   * A fresh phone with no session, which cannot be asked about backups because
-   * asking requires signing in first.
-   *
-   * This is the case the feature previously fell straight through, and it is
-   * exactly the case it was built for. `pendingRestoreOffer` returned null when
-   * there was no session — and a replacement phone has none, because a session
-   * lives in this install's keychain. Meanwhile onboarding tells the user
-   * "everything stays on this phone — no account, nothing uploaded", so nothing
-   * anywhere suggests signing in, and the only route back to their data was
-   * guessing at Settings → Account and then Settings → Backup.
-   *
-   * So the whole feature was unreachable on precisely the device it exists for.
-   * Offering sign-in is not a restore and promises nothing — it says the door is
-   * there. Same fresh-device guard, so it is never shown to somebody with work
-   * on this phone.
-   */
-  | { kind: 'sign-in' };
-
 /**
- * Null when there is nothing to offer, or nobody to offer it to.
+ * A fresh phone with no session: the one device that most needs to hear that
+ * signing in brings everything back, and the one that would never think to look.
  *
- * Never throws: this runs at launch behind a `catch`, and a network failure must
- * not delay or break the first screen.
+ * Onboarding tells the user nothing needs an account, so nothing anywhere
+ * suggested signing in, and a replacement phone had no way back to its data but
+ * guessing at Settings → Account. Offering sign-in promises nothing — it says the
+ * door is there. Only ever on a phone with nothing on it, so it is never shown to
+ * somebody with work here.
  */
+export type RestoreOffer = { kind: 'sign-in' };
+
+/** Null when there is nothing to offer, or nobody to offer it to. Runs at launch, behind a `catch`. */
 export async function pendingRestoreOffer(
   db: SQLite.SQLiteDatabase,
 ): Promise<RestoreOffer | null> {
@@ -66,26 +45,12 @@ export async function pendingRestoreOffer(
   // they already made.
   if (await settings.restoreOfferDismissed().catch(() => false)) return null;
 
-  // Both branches below are only ever offered on a phone with nothing on it.
+  // Only ever offered on a phone with nothing on it.
   if (!(await isFreshDevice(db))) return null;
 
-  // No session, so there is nothing to ask the server. Point at the door instead
-  // of returning null, which is what made this whole feature unreachable on a
-  // replacement phone — the one device it exists for.
-  if (!(await getStoredSession())) return { kind: 'sign-in' };
-
-  try {
-    const backups = await listServerBackups();
-    if (backups.length === 0) return null;
-    return {
-      kind: 'restore',
-      count: backups.length,
-      newestAt: Math.max(...backups.map(b => b.createdAt)),
-    };
-  } catch {
-    // Offline, or the session died. Nothing to say — it will ask next launch.
-    return null;
-  }
+  // Signed in already: the first sign-in brought the account's data, or there was none.
+  if (await getStoredSession()) return null;
+  return { kind: 'sign-in' };
 }
 
 /**

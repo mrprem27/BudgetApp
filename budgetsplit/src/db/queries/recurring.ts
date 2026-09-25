@@ -1,5 +1,5 @@
 import * as SQLite from 'expo-sqlite';
-import { queueEntry, queueSeries } from './syncOutbox';
+import { queueEntry, queueSeries, queueUpsertWhere } from './syncQueue';
 import { NOT_AWAITING_APPROVAL, AWAITING_APPROVAL_COL } from './approvalSql';
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
@@ -50,7 +50,7 @@ export async function pauseRecurring(db: SQLite.SQLiteDatabase, txnId: string): 
       ['paused', now, now, txnId],
     );
     if (row) {
-      await queueEntry(db, txnId, row.group_id);
+      await queueEntry(db, txnId);
       await logAudit(db, {
         entityType: 'recurring', entityId: txnId, groupId: row.group_id,
         action: 'paused', summary: `Paused recurring · ${row.category}`,
@@ -92,7 +92,7 @@ export async function resumeRecurring(db: SQLite.SQLiteDatabase, txnId: string):
       ['active', now, txnId],
     );
     if (row) {
-      await queueEntry(db, txnId, row.group_id);
+      await queueEntry(db, txnId);
       await logAudit(db, {
         entityType: 'recurring', entityId: txnId, groupId: row.group_id,
         action: 'resumed', summary: `Resumed recurring · ${row.category}`,
@@ -110,7 +110,7 @@ export async function endRecurring(db: SQLite.SQLiteDatabase, txnId: string): Pr
       ['ended', now, now, txnId],
     );
     if (row) {
-      await queueEntry(db, txnId, row.group_id);
+      await queueEntry(db, txnId);
       await logAudit(db, {
         entityType: 'recurring', entityId: txnId, groupId: row.group_id,
         action: 'ended', summary: `Ended recurring · ${row.category}`,
@@ -157,7 +157,7 @@ export async function convertToRecurring(
     // The rule itself changed shape and must reach the group: a peer holding the
     // old plain expense would otherwise keep it as a one-off while this device
     // treats it as a rule.
-    await queueEntry(db, txnId, row.group_id);
+    await queueEntry(db, txnId);
 
     // Hand the original spend back to the ledger as this rule's first occurrence.
     await insertOccurrence(db, row, splits, row.date, now);
@@ -266,7 +266,7 @@ async function insertOccurrence(
   // A fourth INSERT INTO txn, distinct from the three in transactions.ts.
   // Occurrences are real entries a peer must see, and the caller makes N of them
   // per run — so it queues per occurrence, not per call.
-  await queueEntry(db, newId, template.group_id);
+  await queueEntry(db, newId);
   for (const p of splits.payments) {
     await db.runAsync('INSERT INTO txn_payment (txn_id, person_id, amount) VALUES (?, ?, ?)', [newId, p.personId, p.amount]);
   }
@@ -398,6 +398,8 @@ export async function skipNextOccurrence(db: SQLite.SQLiteDatabase, seriesId: st
       'INSERT OR IGNORE INTO recur_skip (series_id, occurrence_date, created_at) VALUES (?, ?, ?)',
       [seriesId, date as number, now],
     );
+    // Skips travel with their rule, inside its transaction bundle.
+    await queueUpsertWhere(db, 'txn', 'SELECT id FROM txn WHERE id = ? AND author_person_id IS NULL', [seriesId]);
     await logAudit(db, {
       entityType: 'recurring', entityId: seriesId, groupId: series.group_id,
       action: 'updated', summary: `Skipped one occurrence · ${series.category}`,
@@ -421,6 +423,7 @@ export async function undoNextSkip(db: SQLite.SQLiteDatabase, seriesId: string):
     'DELETE FROM recur_skip WHERE series_id = ? AND occurrence_date = ?',
     [seriesId, row.occurrence_date],
   );
+  await queueUpsertWhere(db, 'txn', 'SELECT id FROM txn WHERE id = ? AND author_person_id IS NULL', [seriesId]);
   return row.occurrence_date;
 }
 
@@ -478,7 +481,7 @@ export async function splitRecurringSeries(
     if (splitDate <= old.date) {
       // The old rule never produced a past occurrence — fully superseded.
       await db.runAsync('UPDATE txn SET is_deleted=1, updated_at=? WHERE id=?', [now, seriesId]);
-      await queueSeries(db, seriesId, old.group_id);
+      await queueSeries(db, seriesId);
     } else {
       // Cap the old rule just before the split; its past occurrences remain.
       await db.runAsync(
@@ -487,7 +490,7 @@ export async function splitRecurringSeries(
       );
       // The cap is a change the group has to see: a peer still holding the
       // uncapped rule would keep posting it past the split alongside the new one.
-      await queueEntry(db, seriesId, old.group_id);
+      await queueEntry(db, seriesId);
     }
     await logAudit(db, {
       entityType: 'recurring', entityId: seriesId, groupId: old.group_id,

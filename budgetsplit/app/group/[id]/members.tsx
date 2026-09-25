@@ -30,7 +30,6 @@ import { PersonNameSheet } from '../../../src/components/finance/PersonNameSheet
 import { getMe } from '../../../src/db/queries/persons';
 import { getGroupContext, getGroupMembersWithRoles, setMemberRole, getGroupById } from '../../../src/db/queries/groups';
 import { isAdmin, canRemoveMember, canChangeRole } from '../../../src/lib/permissions';
-import { ShareGroupRow } from '../../../src/components/finance/group/ShareGroupRow';
 
 export default function MembersScreen() {
   const { id: groupId } = useLocalSearchParams<{ id: string }>();
@@ -256,7 +255,11 @@ export default function MembersScreen() {
                         {/* Creator outranks admin as a label: "Admin" is a role that can
                             be taken away, "Creator" never can, and the difference is the
                             whole point of the protection. */}
-                        {roleOf.get(item.id)?.is_creator ? (
+                        {/* Invited outranks both: until they accept they are in
+                            nothing, whatever role they were given. */}
+                        {roleOf.get(item.id)?.invited ? (
+                          <View style={styles.invitedBadge}><Text style={styles.invitedBadgeText}>Invited</Text></View>
+                        ) : roleOf.get(item.id)?.is_creator ? (
                           <View style={styles.roleBadge}><Text style={styles.roleBadgeText}>Creator</Text></View>
                         ) : roleOf.get(item.id)?.role === 'admin' ? (
                           <View style={styles.roleBadge}><Text style={styles.roleBadgeText}>Admin</Text></View>
@@ -309,21 +312,10 @@ export default function MembersScreen() {
         )}
 
         {/*
-          Sharing lives on Members because that is what it is: giving a specific
-          person the group, not flipping a property of the group. It renders
-          nothing at all on a build with no server configured.
-
-          A personal group is never offered — it is the half of the app that must
-          never leave the device.
+          No separate "share" step (S20): adding someone who has an account IS
+          inviting them — the server holds the group, and they accept on their
+          own phone. A name with no account is simply a member.
         */}
-        {/*
-          Admins only, matching `canAddMember` — sharing IS letting someone in,
-          and it discloses every member's name and account to them. `shareGroup`
-          refuses it too; this only spares a member a button that can only say no.
-        */}
-        {!isPersonal && mayManage && (
-          <ShareGroupRow groupId={groupId} members={members} onShared={reload} />
-        )}
       </ScrollView>
       )}
 
@@ -380,6 +372,8 @@ const styles = StyleSheet.create({
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, minWidth: 0 },
   roleBadge: { backgroundColor: colors.accentMuted, borderRadius: radius.pill, paddingHorizontal: space.sm, paddingVertical: 2 },
   roleBadgeText: { ...type.caption, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
+  invitedBadge: { backgroundColor: colors.bgMuted, borderRadius: radius.pill, paddingHorizontal: space.sm, paddingVertical: 2 },
+  invitedBadgeText: { ...type.caption, color: colors.textSecondary, fontFamily: 'Inter_600SemiBold' },
   name: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   netText: { ...type.caption, marginTop: 2 },
   swipeAction: { backgroundColor: colors.expense, justifyContent: 'center', alignItems: 'center', width: 80, gap: space.xs },

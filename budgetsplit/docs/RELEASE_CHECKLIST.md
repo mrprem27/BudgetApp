@@ -13,7 +13,7 @@ needed.
 
 | Doc | Answers |
 |---|---|
-| `SYSTEM.md` | **What the app is** — 53 entities, 22 invariants, 70 features, 48 screens, 54 flows, scenario ladders |
+| `SYSTEM.md` | **What the app is** — 53 entities, 22 invariants, 70 features, 47 screens, 54 flows, scenario ladders |
 | `SCREENS.md` | What each screen looks like — layout, copy, states, sheets. Formerly `FEATURES_AND_FLOWS.md` |
 | `TRACKER.md` | **What is left** — one row per item: what it is, and where it stands. Absorbed nine separate registers, including most of this file |
 | `FINDINGS.md` | **Why** — the count, the cost, the blast radius and the verdict behind every tracker id |
@@ -107,37 +107,27 @@ a user does actually travel".
 
 ### Travels today
 
-- [x] **Expenses and transfers in a shared group** — entry by entry, versioned,
-      compare-and-set, sealed per group.
-- [x] **Edits and deletions** — an edit is a new version; a deletion is a tombstone.
-- [x] **Recurring rules** — `recurFreq`/`interval`/`end` ride on the entry.
-- [x] **Who is in the group** — the roster document, republished on every change.
-- [x] **Rejections** — as an objection the author sees (SYNC-F10).
-- [x] **Leaving and deleting a group** — tombstoned, and the other phones archive
-      without losing their own history (SYNC-F11).
-- [x] **Everything personal** — as an encrypted snapshot on your account, restored
-      by passphrase on a new phone. Newest-wins, and it says so.
+Everything a signed-in account owns (`DQ-93`), each row mapped column by column in
+`lib/sync/rowMap.ts`, which a test holds to cover every column:
+
+- [x] **Transactions in every group, personal included** — payments, shares, line
+      items, recurring rules and skips. An edit is a new version; a stale one is
+      refused as a conflict, never overwritten. A deletion is a tombstone.
+- [x] **Groups, members, roles, invitations** — adding someone with an account
+      invites them; accepting brings the group and its whole history.
+- [x] **Approvals, rejections and disputes** — decided on the server with the
+      app's own rules; a refusal outranks trust.
+- [x] **Leaving and deleting a group** — tombstoned; other phones archive without
+      losing their own history (SYNC-F11).
+- [x] **Everything personal** — budgets, categories, goals and their movements,
+      assets, the money profile, trust settings, unreviewed imports.
 
 ### Does NOT travel, and each is a deliberate line
 
-- [ ] **Receipt photos.** Rows sync, photos never do (SYNC-F4). A restore nulls a URI it
-      cannot honour. Deliberate: size, and the 25 MiB per-copy ceiling.
-- [ ] **Itemized line items.** An itemized bill arrives with its totals and shares
-      intact — **the money is right** — but the per-item breakdown is not carried,
-      so the receiving phone shows it as a single expense. Cosmetic, not financial.
-      Listed because it will look like a bug to whoever hits it first.
-- [ ] **Budgets, savings goals, money profile.** Personal by definition; they travel
-      in the snapshot, never in group sync. Correct as designed.
-- [ ] **Categories.** Global catalog, seeded locally. A peer entry naming a category
-      you do not have folds into Others until adopted — the existing
-      adopt-or-ignore path.
-
-### The one bound worth knowing
-
-- [ ] ⚠️ Roster recovery self-heals only while the roster and the entry needing it
-      fall inside one page (200). In practice they always do, because
-      `drainRosters` runs before the entry drain in the same sync. Recorded because
-      it is the only shape that could stall.
+- [ ] **Receipt photos.** Rows sync, photos never do (SYNC-F4).
+- [ ] **App preferences in AsyncStorage** — feature switches, reminders, default
+      pay method. Per phone, like the backup file (`OV-13`).
+- [ ] **A backup file.** It is the user's own and is never uploaded.
 
 ## 1 · Hard blockers → `TRACKER.md` §1
 
@@ -225,7 +215,6 @@ Run it in two once-per-session passes as well: **Reduce Motion on**, and
 
 - [ ] Account screen, linked people, invite link/QR, sign-in landing — including
       a real invite round trip **across two phones**.
-- [ ] Server backup/restore rows sit with the two file rows as one card.
 - [ ] Goals as three Emergency/Need/Want sections; the tag drives funding **and**
       raid order; drag reorders within a section only.
 - [ ] "Can I Afford This" — verdict stays the hero; owed-to-you reads as excluded.
@@ -297,11 +286,10 @@ Needs the rebuild: npx expo prebuild --clean && npx expo run:ios
 
 - [ ] **S-34 Backup & restore** — `app/settings/backup.tsx`  
       Open: Settings → Backup & restore  
-      *Changed:* Server backup/restore rows, the picker sheet, the explainer copy
+      *Changed:* server backup removed; the explainer copy; restore refused while signed in
       - [ ] Explainer copy changes when signed in, and reads true
-      - [ ] The two server rows sit in the same card as the file rows, not a separate slab
-      - [ ] Restore sheet: date + size legible; trash icon tappable without hitting the row
-      - [ ] The red warning still reads as the last word on the screen
+      - [ ] Signed in, Restore from backup says "Sign out first" and opens Account
+      - [ ] The red warnings still read as the last word on the screen
 
 - [ ] **S-26 People** — `app/friends.tsx`  
       Open: Settings → People  
@@ -355,7 +343,8 @@ Needs the rebuild: npx expo prebuild --clean && npx expo run:ios
       Open: Home tab
       - [ ] One hero number dominates; tiles support rather than compete
       - [ ] Owe AND owed both show when both exist — never as one net figure
-      - [ ] “Coming up” shows the near-due rules from demo data
+      - [ ] The bell badge count matches the near-due rules from demo data (there
+            is no "Coming up" card on Home to check any more — `DQ-92`)
       - [ ] The last card clears the FAB and the tab bar
 
 - [ ] **S-09 Group detail** — `app/group/[id].tsx`  
@@ -472,8 +461,8 @@ Needs the rebuild: npx expo prebuild --clean && npx expo run:ios
       - [ ] The pdf.js row is GONE — it's bundled now
       - [ ] Both reclaim actions say what they will and won't delete
 
-- [ ] **S-30 Reminders & recurring** — `app/reminders.tsx · plan/recurring.tsx · recurring/[id].tsx`  
-      Open: Home → Coming up; Plan → Recurring
+- [ ] **S-30 Upcoming & recurring** — `app/upcoming.tsx · plan/recurring.tsx · recurring/[id].tsx`  
+      Open: Home → the bell (Upcoming); Plan → Recurring
       - [ ] Next-occurrence dates read unambiguously
       - [ ] Skip / Pause / Stop are distinguishable and look reversible
       - [ ] The monthly-equivalent total is labelled as an equivalent, not a charge
@@ -547,70 +536,29 @@ document was ahead, and neither reliably was.
 
 ## 3.1 · Sync — built, and what is not proven
 
-Shared-group sync is complete end to end: device identity, per-group keys, the
-outbox, the server, the transport, and sharing a group. What follows is a plain
-account of which parts are proven and which are not, because the honest answer
-differs by layer and a single "done" would misrepresent both halves.
+Server sync is complete end to end (S0–S22, `DQ-93`): the phone stays offline-first
+and queues every change; a signed-in phone pushes numbered mutations and pulls every
+scope it can read; the server holds a readable copy and checks each write against the
+app's own rules. The first, end-to-end-encrypted design was replaced and deleted in
+S22. How it behaves when somebody else changes your numbers is `SYNC-MODEL.md`.
 
-**The shape.** A device mints a secret into the keychain. A shared group gets a
-256-bit key, wrapped once per member DEVICE — per device, because a key wrapped to
-a *person* cannot be opened by their second phone, and because losing one phone
-should drop one wrap rather than rotate every group. Entries are sealed on the
-device with that key and pushed to a server that stores wraps and blobs and holds
-no key at all. `{group_id, entry_id, version}` is bound into the GCM AAD, so a
-sealed entry cannot be replayed under another id or rolled back to an older
-version. Only shared groups travel; personal spending, income, goals, budgets and
-net worth are never sent.
+**Proven, with tests that run the phone's real queries against the real server code**
+(in-process D1, nothing about the server mocked):
 
-**Proven, with tests that run:**
+- a retried push applies once; a stale edit is refused and reverted, never merged
+- first sign-in: upload, restore, and "this phone already has data"
+- sign-out sends first, warns about what could not be sent, then empties the phone
+- invite, accept, remove, leave and delete a group across two accounts
+- approvals, rejections, disputes, and a deletion of an accepted entry (`DQ-31`)
+- a hand-typed friend who turns out to be an account becomes one person everywhere
+- deleting an account erases what was its alone and nothing that was a group's
 
-- device key mint, reuse, and total forget
-- group key wrap → unwrap, and a wrap for one device failing on another
-- AAD binding refusing an entry replayed under another id, version, or group
-- the full round trip minus the HTTP — read → seal → open → resolve → ingest,
-  across two databases with different person ids for the same humans
-- version compare: an edit replaces in place, a stale copy is refused, an edit
-  re-opens an approval already given, and a trusted author cannot edit over a
-  rejection
-- the outbox never queueing personal data or anything awaiting my approval
+**Not proven: it has never run on a phone.** Two installs, two accounts, one shared
+group — Checkpoint E — is the gate. Before it: reset the dev D1, apply
+`server/api/migrations/0001_schema.sql`, deploy the Worker, ship a build.
 
-**Not proven, and it needs a deployed Worker and two phones:**
-
-- every route in `server/api` under `/sync` — none has run against a live D1
-- the push, the pull, and the 409 in practice
-- publishing and adopting a group, and accepting an invitation
-- migration `0004_sync.sql` applying cleanly
-
-**Closed since this section was written** — the heading here read "still open" over five
-bullets that were already ticked, which is the small version of the drift that moved every
-open item into [`TRACKER.md`](./TRACKER.md):
-
-- `PUT /sync/entries` is rate limited: 500 entries per account per hour, on top of
-  the 64 KiB per-request cap.
-- Wrapping is real **X25519**, ephemeral-static. Done while there were no users,
-  which is the only moment a re-wrap costs nothing.
-- `SYNC-F11`. `deleteGroup` is creator-only, leaving is its own route, and a
-  deletion now propagates: the server reports `deleted`/`removed` instead of
-  dropping the group from the list, and the client archives it, stops syncing it,
-  and says so once. **Nothing is deleted locally** — my share of every entry
-  already counted as spending in closed months, and erasing it for a decision that
-  was not mine has no undo.
-- `SYNC-F10`: a rejection reaches the author as an objection on the entry, and
-  withdrawing it travels too.
-- Sharing has a UI: group → Members → Share with a member, and invitations are
-  answered at the top of Settings → Sync. Settings → Sync also shows when sync
-  last ran and why it did nothing, which is the first thing to look at when it
-  appears dead on a phone.
-
-**The one that is actually still open, and it is the big one: sync has never run on a
-phone.** Everything is verified against the deployed Worker or by tests, which is not the
-same thing. Two installs, two accounts, linked, sharing a group — that test is the gate.
-The seven remaining `SYNC-F` failures are in `TRACKER.md` §5.
-
-**Migrations remain forward-only, applied by hand, with no rollback and no
-staging.** `0004_sync.sql` is strictly additive and readable by the currently
-deployed Worker, because `deploy` and `migrate` are separate manual commands and
-nothing orders them.
+**The schema is one file, edited directly** while nothing is live. Numbered,
+forward-only migrations start with the first real account.
 
 ---
 

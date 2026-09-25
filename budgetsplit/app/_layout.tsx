@@ -10,6 +10,7 @@ import { SQLiteProvider } from 'expo-sqlite';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { SpaceMono_400Regular } from '@expo-google-fonts/space-mono';
 import { StatusBar } from 'expo-status-bar';
+import * as SplashScreen from 'expo-splash-screen';
 import { openDB, applyConnectionPragmas } from '../src/db/schema';
 import { seedIfNeeded } from '../src/db/seed';
 import { runSavingsMaintenance } from '../src/db/queries/savings';
@@ -22,6 +23,8 @@ import { rescheduleReminders } from '../src/lib/reminders';
 import { routeForReminder } from '../src/lib/notificationRoutes';
 import { setPendingOverspendNotice } from '../src/lib/overspendNotice';
 import { colors } from '../src/theme';
+import { loadFlags, DEFAULTS, type FeatureFlags } from '../src/lib/featureFlags';
+import { settings } from '../src/lib/settings';
 import { LockGate } from '../src/components/system/LockGate';
 import { OnboardingGate } from '../src/components/system/OnboardingGate';
 import { PrivacyScreen } from '../src/components/system/PrivacyScreen';
@@ -46,6 +49,16 @@ import { isRestoring } from '../src/lib/restoreGuard';
  */
 export { AppErrorBoundary as ErrorBoundary };
 
+/*
+ * The iOS launch screen stays up until the first real screen has laid out, so a
+ * launch is ONE continuous background → Home (or the onboarding hero), with no
+ * loader frame in between. `BrandedLoader` below still renders, underneath it,
+ * as the fallback if hiding ever fails. Module scope: it must run before the
+ * first render, or the splash has already gone.
+ */
+SplashScreen.preventAutoHideAsync().catch(() => {});
+const hideSplash = () => { SplashScreen.hideAsync().catch(() => {}); };
+
 // Soft-deleted transactions older than this have long outlived the ~5s Undo
 // toast — their receipt photo is never coming back, so the reaper unlinks it.
 // A safety margin, not a number shown anywhere, so it needs no product call.
@@ -62,6 +75,14 @@ export default function RootLayout() {
   const [dbReady, setDbReady] = useState(false);
   const [dbError, setDbError] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  // Read in parallel with opening the DB, not after it — this is what lets
+  // `FeatureFlagsProvider` and `OnboardingGate` mount already-resolved, so the
+  // three separate loading states that used to follow one another
+  // (root → flags → onboarding, each its own `BrandedLoader` mount) collapse
+  // into this one. `null` means "not read yet"; both are AsyncStorage, so
+  // neither depends on `dbReady`.
+  const [initialFlags, setInitialFlags] = useState<FeatureFlags | null>(null);
+  const [initialOnboardingDone, setInitialOnboardingDone] = useState<boolean | null>(null);
   const [fontsLoaded] = useFonts({
     Inter_400Regular,
     Inter_600SemiBold,
@@ -73,27 +94,41 @@ export default function RootLayout() {
     let dbRef: Awaited<ReturnType<typeof openDB>> | null = null;
     (async () => {
       try {
-        const db = await openDB();
-        dbRef = db;
-        await seedIfNeeded(db);
-        // Catch-up: any recurring occurrence that came due (incl. across a missed
-        // "midnight") materializes into a real editable row the moment the app loads.
-        await materializeDueOccurrences(db);
-        // Phrases dictated to Siri while the app was closed. Drained here — before
-        // `setDbReady`, so nothing has mounted yet and every screen's first load already
-        // includes them, with no `refresh()` needed. Its own catch: a capture that can't be
-        // filed must never turn into the "Couldn't start BudgetSplit" screen.
-        ensureVoiceInbox();
-        await drainVoiceInbox(db).catch(() => {});
-        // Scheduled goal funding runs unattended — the user set it up, and it moves
-        // money *into* goals. The overspend raid no longer applies here: it only
-        // *proposes*, and Plan asks before anything leaves a goal (`V2-10`). Persist
-        // the proposal so it survives to whenever the user next opens that tab.
-        const raid = await runSavingsMaintenance(db);
-        if (raid.total > 0) setPendingOverspendNotice(raid).catch(() => {});
-        rescheduleReminders(db).catch(() => {}); // rebuild local reminders (no-op without permission)
-        reapOrphanedAttachments(db).catch(() => {});
-        if (alive) { setDbReady(true); setDbError(false); }
+        const [, flags, onboardingDone] = await Promise.all([
+          (async () => {
+            const db = await openDB();
+            dbRef = db;
+            await seedIfNeeded(db);
+            // Catch-up: any recurring occurrence that came due (incl. across a missed
+            // "midnight") materializes into a real editable row the moment the app loads.
+            await materializeDueOccurrences(db);
+            // Phrases dictated to Siri while the app was closed. Drained here — before
+            // `setDbReady`, so nothing has mounted yet and every screen's first load already
+            // includes them, with no `refresh()` needed. Its own catch: a capture that can't be
+            // filed must never turn into the "Couldn't start BudgetSplit" screen.
+            ensureVoiceInbox();
+            await drainVoiceInbox(db).catch(() => {});
+            // Scheduled goal funding runs unattended — the user set it up, and it moves
+            // money *into* goals. The overspend raid no longer applies here: it only
+            // *proposes*, and Plan asks before anything leaves a goal (`V2-10`). Persist
+            // the proposal so it survives to whenever the user next opens that tab.
+            const raid = await runSavingsMaintenance(db);
+            if (raid.total > 0) setPendingOverspendNotice(raid).catch(() => {});
+            rescheduleReminders(db).catch(() => {}); // rebuild local reminders (no-op without permission)
+            reapOrphanedAttachments(db).catch(() => {});
+            return db;
+          })(),
+          // Best-effort, same as `FeatureFlagsProvider`/`OnboardingGate` used to be on
+          // their own: a bad AsyncStorage read falls back rather than stranding boot.
+          loadFlags().catch(() => DEFAULTS),
+          settings.onboardingDone().catch(() => false),
+        ]);
+        if (alive) {
+          setInitialFlags(flags);
+          setInitialOnboardingDone(onboardingDone);
+          setDbReady(true);
+          setDbError(false);
+        }
       } catch {
         // Never strand the user on the splash — surface a retry instead.
         if (alive) setDbError(true);
@@ -147,7 +182,7 @@ export default function RootLayout() {
   if (dbError) {
     return (
       <SafeAreaProvider>
-        <View style={{ flex: 1, backgroundColor: colors.bg, justifyContent: 'center' }}>
+        <View style={{ flex: 1, backgroundColor: colors.bg, justifyContent: 'center' }} onLayout={hideSplash}>
           <ErrorState
             title="Couldn't start BudgetSplit"
             body="We couldn't open your data. Please try again."
@@ -159,7 +194,7 @@ export default function RootLayout() {
     );
   }
 
-  if (!fontsLoaded || !dbReady) {
+  if (!fontsLoaded || !dbReady || initialFlags === null || initialOnboardingDone === null) {
     return <BrandedLoader />;
   }
 
@@ -178,7 +213,7 @@ export default function RootLayout() {
         must sit above every screen, hence here.
       */}
       <KeyboardProvider>
-      <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.bg }}>
+      <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.bg }} onLayout={hideSplash}>
         {/*
           `onInit` because pragmas are PER CONNECTION, and this is the second
           connection — the one every screen writes through. `openDB` sets the
@@ -187,14 +222,14 @@ export default function RootLayout() {
           other. See `applyConnectionPragmas` for why the answer is OFF for now.
         */}
         <SQLiteProvider databaseName="budgetsplit.db" onInit={applyConnectionPragmas}>
-          <FeatureFlagsProvider>
+          <FeatureFlagsProvider initialFlags={initialFlags}>
           <FlagsGate>
           <DataRefreshProvider>
           <StoreHydrator />
           <ToastProvider>
           <StatusBar style="light" />
           <LockGate>
-            <OnboardingGate>
+            <OnboardingGate initialDone={initialOnboardingDone}>
               <Stack
                 screenOptions={{
                   headerShown: false,

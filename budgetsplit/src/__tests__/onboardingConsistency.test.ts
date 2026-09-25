@@ -142,38 +142,9 @@ describe('each question is asked exactly once', () => {
   });
 });
 
-/**
- * A step must not throw away something the user typed into it.
- *
- * The people step has a draft (name + email) that only becomes a contact when
- * `addPerson` runs. Someone who types a name and taps **Continue** plainly means
- * "and this one" — but `onPrimary` advanced the stage and the draft went with it,
- * silently, on a button that was simultaneously counting the people who had made
- * it ("Continue with 2"). Nothing rendered, so nothing could catch it.
- *
- * Source-scanned because the alternative is rendering a component, which this
- * suite never does. It asserts the wiring, not the behaviour — but the wiring is
- * where it went wrong.
- */
-describe('no step discards a draft on the way out', () => {
-  const src = read(ONBOARDING.find(f => label(f) === 'Onboarding.tsx')!);
-
-  it('flushes the person draft before leaving the people step', () => {
-    const step = src.slice(src.indexOf("stage === 'people'"), src.indexOf("stage === 'permissions'"));
-    const onPrimary = /onPrimary=\{([^}]*(?:\{[^}]*\}[^}]*)*)\}/.exec(step);
-    expect(onPrimary).toBeTruthy();
-    expect(onPrimary![1]).toContain('addPerson');
-  });
-
-  it('still lets the draft be added by return, not only by the button', () => {
-    // `returnKeyType="next"` with no `onSubmitEditing` shipped once: a key that
-    // named an action, did nothing, and could not move focus either — `ui/Input`
-    // exposes no ref.
-    const step = src.slice(src.indexOf("stage === 'people'"), src.indexOf("stage === 'permissions'"));
-    expect(step.match(/onSubmitEditing=\{addPerson\}/g) ?? []).toHaveLength(2);
-    expect(step).not.toContain('returnKeyType="next"');
-  });
-});
+// The people step's draft-flush suite (`addPerson` before `onPrimary` advanced
+// the stage) was removed with the step itself — `SPEC-2026-09-FEEDBACK.md` §2 O6, `onboarding.ts`
+// no longer has a `people` field to lose a draft into.
 
 /**
  * The hero's `FadeIn` delays are the one part of the animation that may be changed
@@ -222,4 +193,141 @@ describe('the hero reveal is stated once', () => {
   // why each was wrong" is the most useful thing that comment can say. The
   // invariant is that no delay is *driven* by a literal, which the tests above
   // hold, not that the history goes unmentioned.
+});
+
+/**
+ * The keyboard covers the footer (AGENTS.md §6b, 2026-09-25). Two alternatives
+ * were tried that day and rejected: a Continue lifted over the keys (crowds a
+ * one-question step) and a Done toolbar on the keyboard (buggy on device, and
+ * the keyboard already has its own return key).
+ */
+describe('the keyboard covers the footer', () => {
+  const scaffold = read(join(ROOT, 'src', 'components', 'system', 'onboarding', 'StepScaffold.tsx'));
+
+  it('StepScaffold hands its footer to KeyboardForm, without lifting it', () => {
+    expect(scaffold).toMatch(/<KeyboardForm[\s\S]*footer=\{footer\}/);
+    expect(scaffold).not.toMatch(/footerAboveKeyboard/);
+  });
+
+  it('and uses no keyboard component of its own', () => {
+    expect(scaffold).not.toMatch(/<(KeyboardStickyView|KeyboardToolbar|KeyboardAwareScrollView)\b/);
+  });
+});
+
+/**
+ * `SPEC-2026-09-FEEDBACK.md` §2 O2/O7 — the name step has no escape hatch (a group is identified by
+ * name everywhere downstream), and the Siri row is out of the permissions step,
+ * parked rather than deleted (`AGENTS.md` §11's rule for a caller-less primitive
+ * doesn't apply here on purpose — `SPEC-2026-09-FEEDBACK.md` explicitly asks it stay, commented).
+ */
+describe('name is required; Siri is parked out of the flow', () => {
+  const src = read(ONBOARDING.find(f => label(f) === 'Onboarding.tsx')!);
+
+  it('the name step renders no skip', () => {
+    const nameStep = src.match(/\{stage === 'name' && \(([\s\S]*?)\)\}\n\n\s*\{\/\* INCOME/);
+    expect(nameStep).not.toBeNull();
+    expect(nameStep![1]).not.toMatch(/skipLabel/);
+    expect(nameStep![1]).toMatch(/disabled=\{!name\.trim\(\)\}/);
+  });
+
+  it('renders no Siri OptionRow in the permissions step', () => {
+    expect(src).not.toMatch(/Log spends by talking to Siri/);
+  });
+
+  it('keeps openVoiceSetup, marked parked rather than deleted', () => {
+    expect(src).toMatch(/function openVoiceSetup/);
+    expect(src).toMatch(/Parked until Siri Intents/);
+  });
+});
+
+/**
+ * `SPEC-2026-09-FEEDBACK.md` §2 O4 — the day-of-month grid became an exact date, asked as its own
+ * step. `DayOfMonthGrid.tsx` had exactly one caller (this file) and is deleted,
+ * not left behind unreferenced — `deadComponents.test.ts` covers that half; this
+ * covers the half it can't see, that nothing quietly reintroduces the grid here.
+ */
+describe('next-payment date replaces the day-of-month grid', () => {
+  const src = read(ONBOARDING.find(f => label(f) === 'Onboarding.tsx')!);
+
+  it('asks the exact question, on its own numbered step', () => {
+    expect(src).toMatch(/stage === 'payday'/);
+    expect(src).toMatch(/When are you going to receive your next payment\?/);
+  });
+
+  it('renders no DayOfMonthGrid anywhere in onboarding', () => {
+    for (const f of ONBOARDING) expect(read(f)).not.toMatch(/DayOfMonthGrid/);
+  });
+
+  it('constrains the picker to today onward', () => {
+    // Mounted once, outside the `payday` stage block (see the comment beside
+    // it), so this checks the whole file rather than a slice of one stage.
+    const sheet = src.match(/<DatePickerSheet[\s\S]*?\/>/);
+    expect(sheet).not.toBeNull();
+    expect(sheet![0]).toMatch(/minDate=\{Date\.now\(\)\}/);
+  });
+});
+
+/**
+ * `SPEC-2026-09-FEEDBACK.md` §2 O5, cut back 2026-09-23 — a 5-chip "nothing open by default"
+ * version of this step shipped and was reverted the same day: it asked MORE
+ * up front than the 4-field layout it replaced, the opposite of less friction.
+ * Cash available is the one open hero field; bank/wallet/investments/credit
+ * are the only four behind a pick. This guard is what stops that specific
+ * regression sliding back in un-reviewed.
+ */
+describe('the money step: cash is the hero, four extras are picked', () => {
+  const step = read(ONBOARDING.find(f => label(f) === 'Onboarding.tsx')!);
+
+  it('asks for cash with the open hero field, not a chip', () => {
+    const moneyStep = step.slice(step.indexOf("stage === 'money'"), step.indexOf("stage === 'pay'"));
+    expect(moneyStep).toMatch(/<StepAmountField/);
+    expect(moneyStep).not.toMatch(/label="Cash in hand"/);
+    expect(moneyStep).not.toMatch(/toggleCash/);
+  });
+
+  it('offers exactly four extra chips, not five', () => {
+    const moneyStep = step.slice(step.indexOf("stage === 'money'"), step.indexOf("stage === 'pay'"));
+    expect(moneyStep.match(/<Chip\b/g) ?? []).toHaveLength(4);
+    for (const label of ['Bank balance', 'Wallet', 'Investments', 'Credit card']) {
+      expect(moneyStep).toContain(`label="${label}"`);
+    }
+  });
+});
+
+/**
+ * `SPEC-2026-09-FEEDBACK.md` §3 `entry-gate` — the hero no longer drops straight into the
+ * questionnaire. It forks first: new user → `intent` (unchanged), existing
+ * user → `signin`, which is the ONE code path both onboarding and
+ * `settings/account.tsx` share (`useEmailSignIn`) — not two email/code forms
+ * that could drift apart the way the money-step duplication once did.
+ */
+describe('welcome forks before the questionnaire starts', () => {
+  const src = read(ONBOARDING.find(f => label(f) === 'Onboarding.tsx')!);
+
+  it('Get Started opens Welcome, not Intent directly', () => {
+    expect(src).toMatch(/label="Get Started" onPress=\{\(\) => setStage\('welcome'\)\}/);
+  });
+
+  it('Welcome renders both doors, gated on whether a server is configured', () => {
+    expect(src).toMatch(/<WelcomeStage/);
+    expect(src).toMatch(/showExisting=\{serverConfigured\(\)\}/);
+  });
+
+  it('sign-in shares one hook with the Account screen, not a second form', () => {
+    expect(src).toMatch(/<SignInStage/);
+    const signInStage = read(join(ROOT, 'src', 'components', 'system', 'onboarding', 'SignInStage.tsx'));
+    const accountScreen = read(join(ROOT, 'app', 'settings', 'account.tsx'));
+    expect(signInStage).toMatch(/useEmailSignIn/);
+    expect(accountScreen).toMatch(/useEmailSignIn/);
+  });
+
+  it('never asks for a passphrase to sign in', () => {
+    for (const f of [
+      src,
+      read(join(ROOT, 'src', 'components', 'system', 'onboarding', 'SignInStage.tsx')),
+      read(join(ROOT, 'src', 'hooks', 'useEmailSignIn.ts')),
+    ]) {
+      expect(f).not.toMatch(/passphrase/i);
+    }
+  });
 });

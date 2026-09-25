@@ -65,51 +65,12 @@ export const FRIEND_REQUEST_WINDOW_MS = 24 * 60 * 60 * 1000;
 /** Magic-link requests allowed per email per window. Stops an email-bomb. */
 export const MAGIC_LINK_MAX_PER_WINDOW = 5;
 export const MAGIC_LINK_WINDOW_MS = 15 * 60 * 1000;
-/** Encrypted DB blobs are small (a personal ledger), so this is a sanity cap,
- *  well under R2's limits — it exists to reject a wrong-endpoint upload early. */
-export const MAX_BACKUP_BYTES = 50 * 1024 * 1024;
 /** Avatars are displayed at ~64px; anything larger than this is a mistake. */
 export const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
-/**
- * Snapshots kept per user — older ones are pruned on upload. Backup/restore is
- * a manual "I lost my phone" safety net, not version history, and a device that
- * backs up weekly would otherwise grow this bucket forever. Ten is generous for
- * that purpose while keeping storage bounded per account.
- */
-export const MAX_BACKUPS_PER_USER = 10;
 /** `users.name` is a display name, not prose. */
 export const MAX_NAME_LEN = 80;
 /** Long enough for any real avatar URL, short enough to not be an upload. */
 export const MAX_AVATAR_URL_LEN = 2048;
-
-/**
- * A sealed transaction — amount, payer, shares, line items — is well under a
- * kilobyte. 64 KiB is a sanity ceiling that rejects a wrong-endpoint upload
- * before it becomes a D1 row, not a real budget.
- */
-export const MAX_ENTRY_BYTES = 64 * 1024;
-/**
- * Entries returned by one pull. The client's own drain sends 50 at a time
- * (`MAX_PER_DRAIN`), and a bounded page is what keeps a first sync on a large
- * group from being one request that either times out or blows the memory limit.
- */
-export const SYNC_PAGE_SIZE = 200;
-
-/**
- * Ceiling on entries one account may write per hour, across all its groups.
- *
- * `PUT /sync/entries` is the first write route here with a real abuse profile: an
- * authenticated member of one group can fill D1 an entry at a time, and the
- * per-request size cap does nothing about volume.
- *
- * 500/hour is far above any genuine use — a busy household logs perhaps thirty
- * expenses a day — while bounding a runaway client or a malicious one to
- * something the free tier absorbs. It counts entries TOUCHED in the window, so
- * repeatedly rewriting one entry costs one, which is correct: that burns
- * requests, not storage, and Cloudflare's own request cap covers it.
- */
-export const SYNC_WRITES_PER_WINDOW = 500;
-export const SYNC_WRITE_WINDOW_MS = 60 * 60 * 1000;
 
 // --- Responses ------------------------------------------------------------
 
@@ -129,13 +90,6 @@ export const methodNotAllowed = (allow: string) =>
     headers: { 'content-type': 'application/json', allow },
   });
 export const forbidden = (error = 'Not yours') => json({ error }, 403);
-/**
- * A write that lost a race. 409 is not an error to swallow: it means someone
- * else's version of this entry is now current, so the client must pull and let a
- * human decide. Merging two versions of a money row automatically is how a figure
- * nobody typed ends up in a ledger.
- */
-export const conflict = (body: Record<string, unknown>) => json(body, 409);
 export const payloadTooLarge = (error: string) => json({ error }, 413);
 export const tooManyRequests = (error: string) => json({ error }, 429);
 
@@ -172,7 +126,7 @@ export const newId = (): string => crypto.randomUUID();
 /**
  * Lowercased and trimmed, because `users.email` is UNIQUE and an address that
  * differs only in case is the same person — without this, `Prem@x.com` and
- * `prem@x.com` become two accounts with two separate sets of backups.
+ * `prem@x.com` become two accounts with two separate ledgers.
  */
 export function normalizeEmail(raw: unknown): string | null {
   if (typeof raw !== 'string') return null;

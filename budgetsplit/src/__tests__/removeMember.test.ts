@@ -2,8 +2,6 @@ import { removeMemberFromGroup, addMemberToGroup, getGroupMembers } from '../db/
 import { getMyExposure, getGroupNet } from '../db/queries/balances';
 import { getGroupContext, getGroupMembersWithRoles, getSharedGroupsWith, getAllGroups } from '../db/queries/groups';
 import { isAdmin } from '../lib/permissions';
-import { readRosterDoc, adoptGroup } from '../db/queries/syncDoc';
-import { ingestPeerTxn } from '../db/queries/peerIngest';
 import { getTransactionsInRange } from '../db/queries/transactions';
 import { createTestDb, addPerson, addGroup, addMember, addTxn, addCategory, asDb, type TestDb } from './helpers/testDb';
 
@@ -16,10 +14,10 @@ import { createTestDb, addPerson, addGroup, addMember, addTxn, addCategory, asDb
  * was, and must reach the other phones.
  *
  * It used to do neither. The `group_member` row was hard-deleted, so the next
- * roster simply omitted them — and absence from a roster is indistinguishable
- * from a roster that is merely stale, so the receiving device could not act on
- * it. They stayed a member on every other phone forever, with `ingestPeerTxn`
- * still accepting entries that named them.
+ * roster simply omitted them — and absence is indistinguishable from a copy that
+ * is merely stale, so the receiving device could not act on it. They stayed a
+ * member on every other phone forever. Now the row is soft-deleted and queued,
+ * so what goes up is the removal itself, dated, rather than a silence.
  */
 
 const OWED = 234000;   // ₹2,340, owed by Aarav to me
@@ -141,59 +139,29 @@ describe('a removed member is out of the group everywhere it matters', () => {
     await removeMemberFromGroup(asDb(s.db), s.gid, s.aarav, s.me);
     expect(await getSharedGroupsWith(asDb(s.db), s.me, s.aarav)).toEqual([]);
   });
-
-  it('can no longer have entries written naming them', async () => {
-    const s = flat();
-    s.db.raw.prepare('UPDATE person SET remote_uid = ? WHERE id = ?').run('acct-priya', s.priya);
-    await removeMemberFromGroup(asDb(s.db), s.gid, s.aarav, s.me);
-
-    // A peer whose device has not seen the removal yet tries to park a share on
-    // them. Refused, rather than quietly reviving a member nobody re-added.
-    const r = await ingestPeerTxn(asDb(s.db), {
-      authorUid: 'acct-priya', groupId: s.gid, version: 1, kind: 'expense',
-      date: Date.now(), category: 'Food',
-      payments: [{ personId: s.priya, amount: 100000 }],
-      shares: [{ personId: s.me, amount: 50000 }, { personId: s.aarav, amount: 50000 }],
-    });
-    expect(r).toEqual({ ok: false, reason: 'not-a-member' });
-  });
 });
 
+/** What the drain will send for this membership: the queued row, and the row it reads. */
+function queuedMembership(db: TestDb, gid: string, pid: string) {
+  const queued = db.raw.prepare(
+    "SELECT op FROM sync_queue WHERE local_table = 'group_member' AND local_id = ?",
+  ).get(`${gid}|${pid}`) as { op: string } | undefined;
+  const row = db.raw.prepare('SELECT deleted_at FROM group_member WHERE group_id = ? AND person_id = ?')
+    .get(gid, pid) as { deleted_at: number | null } | undefined;
+  return { queued: queued?.op ?? null, deletedAt: row?.deleted_at };
+}
+
 describe('the removal reaches the other phones', () => {
-  it('is published on the roster with when it happened', async () => {
+  it('is queued for the server with when it happened', async () => {
     const s = flat();
     await removeMemberFromGroup(asDb(s.db), s.gid, s.aarav, s.me);
 
-    const doc = await readRosterDoc(asDb(s.db), s.gid);
-    const entry = doc!.members.find(m => m.pid === s.aarav);
-    // Present in the document, marked — NOT omitted. Omission is
-    // indistinguishable from a stale roster.
-    expect(entry).toBeDefined();
-    expect(typeof entry!.removedAt).toBe('number');
-  });
-
-  it('applies on the receiving device without deleting anything', async () => {
-    const s = flat();
-    await removeMemberFromGroup(asDb(s.db), s.gid, s.aarav, s.me);
-    const doc = await readRosterDoc(asDb(s.db), s.gid);
-
-    // A second device that still has them as a member.
-    const other = createTestDb();
-    const otherMe = addPerson(other, 'Priya', true);
-    addGroup(other, 'Flat', false, otherMe);
-    await adoptGroup(asDb(other), s.gid, doc!);
-
-    const active = other.raw.prepare(
-      'SELECT person_id FROM group_member WHERE group_id = ? AND deleted_at IS NULL',
-    ).all(s.gid) as { person_id: string }[];
-    expect(active.map(r => r.person_id)).not.toContain(s.aarav);
-
-    // The row and the person both survive — the row is what lets this device
-    // carry the removal onward, and the person is referenced by their history.
-    expect(other.raw.prepare('SELECT COUNT(*) AS c FROM group_member WHERE person_id = ?').get(s.aarav))
-      .toEqual({ c: 1 });
-    expect(other.raw.prepare('SELECT COUNT(*) AS c FROM person WHERE id = ?').get(s.aarav))
-      .toEqual({ c: 1 });
+    // An UPSERT of a row that still exists, marked — NOT a delete, and not an
+    // omission. The drain reads `deleted_at` off it; a hard-deleted row would
+    // leave it nothing to send.
+    const m = queuedMembership(s.db, s.gid, s.aarav);
+    expect(m.queued).toBe('upsert');
+    expect(m.deletedAt).toEqual(expect.any(Number));
   });
 
   it('brings them back cleanly when they are re-added', async () => {
@@ -202,19 +170,18 @@ describe('the removal reaches the other phones', () => {
     await addMemberToGroup(asDb(s.db), s.gid, s.aarav, s.me);
 
     expect((await getGroupMembers(asDb(s.db), s.gid)).map(p => p.id)).toContain(s.aarav);
-    // And the roster says so, rather than still carrying a removal date.
-    const doc = await readRosterDoc(asDb(s.db), s.gid);
-    expect(doc!.members.find(m => m.pid === s.aarav)?.removedAt).toBeNull();
+    // And what goes up says so, rather than still carrying a removal date.
+    expect(queuedMembership(s.db, s.gid, s.aarav)).toEqual({ queued: 'upsert', deletedAt: null });
   });
 });
 
 /**
  * SYNC-F23 — "Shared" was a stored flag that nothing ever updated.
  *
- * `budget_group.is_shared` is hard-coded 0 on create and 1 on adoption, and no
- * statement anywhere UPDATEs it. So the destination picker showed "Shared" only
+ * `budget_group.is_shared` was hard-coded 0 on create and 1 on (v1) adoption, and
+ * no statement anywhere UPDATEd it. So the destination picker showed "Shared" only
  * on groups you RECEIVED, and never on a group you shared yourself — wrong for
- * exactly the case you would most expect it on. It is counted now, and a count
+ * exactly the case you would most expect it on. Server sync does not carry it at all. It is counted now, and a count
  * cannot drift because it is the thing itself.
  */
 describe('a group knows how many people are in it', () => {

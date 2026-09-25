@@ -33,11 +33,9 @@ import type { GroupRole } from '../constants/enums';
  *   admin may rewrite what another person recorded either. `PeerEntryError`
  *   refuses it outright, and approve/reject is the way to answer one.
  *
- * The one rule that remains advisory is the wire: a peer can push whatever
- * `EntryDoc` and whatever roster it likes, and `ingestPeerTxn` checks membership,
- * authorship and balance but never role. Enforcing role across devices needs the
- * server, which today has exactly one such rule (`DELETE /sync/groups/:id` is
- * owner-only).
+ * None of this is advisory. The server imports this module
+ * (`server/api/sync/rules.ts`) and runs the same checks on every write, so a
+ * modified client gains nothing by skipping them.
  */
 
 /** Everything a permission decision needs about the actor and the group. */
@@ -91,7 +89,7 @@ export function canSetOverrideFor(ctx: GroupContext, targetPersonId: string): bo
  * There was no capability for this at all, and no check anywhere, so any member
  * could rename a shared group for everybody and change the split mode every
  * future expense in it defaults to. The last two are not cosmetic: they decide
- * what the settle-up instructions say, and they now travel on the roster, so one
+ * what the settle-up instructions say, and they sync to every member, so one
  * member's change reaches every phone.
  */
 export const canEditGroup = isAdmin;

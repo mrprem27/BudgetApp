@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, TextInput } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, TextInput } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius, layout, shadow, alpha } from '../src/theme';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { ErrorState } from '../src/components/ui/ErrorState';
+import { KeyboardForm } from '../src/components/ui/KeyboardForm';
 import { AppRefreshControl } from '../src/components/ui/AppRefreshControl';
 import { EmptyState } from '../src/components/ui/EmptyState';
 import { SheetModal } from '../src/components/ui/SheetModal';
@@ -115,7 +116,7 @@ export default function FriendsScreen() {
     if (!person) return;
     Alert.alert(
       `Remove ${person.name}?`,
-      'They will be gone from your people list.',
+      'They will be gone from your friends list.',
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Remove', style: 'destructive', onPress: async () => {
@@ -208,7 +209,7 @@ export default function FriendsScreen() {
   return (
     <View style={styles.container}>
       <ScreenHeader
-        title="People"
+        title="Friends"
         onBack={() => router.back()}
         right={
           <TouchableOpacity style={styles.addPill} onPress={() => { setAddName(''); setShowAdd(true); }} hitSlop={8} accessibilityRole="button" accessibilityLabel="Add person">
@@ -220,9 +221,10 @@ export default function FriendsScreen() {
       {loadError ? (
         <ErrorState onRetry={reload} />
       ) : (
-        <ScrollView
+        // Keyboard-aware (AGENTS.md §6b): the search field sits mid-list, and the
+        // matches below it must stay reachable above the keyboard.
+        <KeyboardForm
           contentContainerStyle={styles.list}
-          keyboardShouldPersistTaps="handled"
           refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         >
           <Text style={styles.intro}>People you split with. No account needed — names only.</Text>
@@ -371,7 +373,7 @@ export default function FriendsScreen() {
             </View>
           </TouchableOpacity>
           )}
-        </ScrollView>
+        </KeyboardForm>
       )}
 
       <PersonNameSheet

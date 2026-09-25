@@ -35,3 +35,12 @@ export const memberActive = (alias: string): string => `${alias}.deleted_at IS N
 
 /** For the common unaliased `FROM group_member` case. */
 export const MEMBER_ACTIVE = 'deleted_at IS NULL';
+
+/**
+ * Whether adding this person makes them INVITED rather than in (S21): someone with
+ * an account decides for themselves, so the server invites them; a name with no
+ * account is simply a member. The server is the one that decides — this is the
+ * phone saying the same thing before it hears back. One `?`: the person's id.
+ */
+export const INVITED_ON_ADD =
+  'SELECT CASE WHEN remote_uid IS NOT NULL AND is_me = 0 THEN 1 ELSE 0 END FROM person WHERE id = ?';

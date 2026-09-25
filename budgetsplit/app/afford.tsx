@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { View, Text, TextInput, StyleSheet, Platform, ScrollView, TouchableOpacity } from 'react-native';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { KeyboardForm } from '../src/components/ui/KeyboardForm';
 import { useRouter } from 'expo-router';
 import { useScreenData } from '../src/hooks/useScreenData';
 import { Feather } from '@expo/vector-icons';
@@ -164,8 +164,7 @@ export default function AffordScreen() {
           onRetry={reload}
         />
       ) : (
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+      <KeyboardForm contentContainerStyle={styles.scroll}>
           <Text style={styles.label}>What does it cost?</Text>
           <View style={styles.amountWrap}>
             <Text style={styles.rupee}>₹</Text>
@@ -390,8 +389,7 @@ export default function AffordScreen() {
               </View>
             </View>
           )}
-        </ScrollView>
-      </KeyboardAvoidingView>
+        </KeyboardForm>
       )}
     </View>
   );

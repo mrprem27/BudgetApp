@@ -13,7 +13,7 @@ import { EmptyState } from '../../src/components/ui/EmptyState';
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
 import { SecondaryButton } from '../../src/components/ui/SecondaryButton';
 import { useSQLiteContext } from 'expo-sqlite';
-import { getAllPersons, setRemoteUid, type Person } from '../../src/db/queries/persons';
+import { getAllPersons, matchAccount, type Person } from '../../src/db/queries/persons';
 import { SheetModal } from '../../src/components/ui/SheetModal';
 import { SectionHeader } from '../../src/components/ui/SectionHeader';
 import { haptic } from '../../src/lib/haptics';
@@ -121,10 +121,9 @@ export default function LinkedPeopleScreen() {
     if (!matching) return;
     const uid = matching.person.id;
     try {
-      // Clear any previous holder first: one account, one person.
-      const prev = people.find(p => p.remote_uid === uid);
-      if (prev && prev.id !== person?.id) await setRemoteUid(db, prev.id, null);
-      if (person) await setRemoteUid(db, person.id, uid);
+      // One account, one person — `matchAccount` decides whether the previous
+      // holder is moved off or folded in.
+      await matchAccount(db, uid, person?.id ?? null);
       haptic.success();
       setMatching(null);
       await load();

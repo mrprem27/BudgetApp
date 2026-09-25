@@ -138,15 +138,19 @@ describe('the money is identical to a hand-made shared group', () => {
     const pair = await getOrCreatePairGroup(asDb(s.db), s.me, s.aarav);
     await halfShared(s.db, s.me, s.aarav, pair.id);
 
-    const queued = s.db.raw.prepare('SELECT COUNT(*) AS c FROM sync_outbox WHERE group_id = ?')
-      .get(pair.id);
+    const queued = s.db.raw.prepare(
+      "SELECT COUNT(*) AS c FROM sync_queue q JOIN txn t ON t.id = q.local_id WHERE q.local_table = 'txn' AND t.group_id = ?",
+    ).get(pair.id);
     expect(queued).toEqual({ c: 1 });
   });
 
-  it('does not queue the same expense put in Personal — the behaviour this replaces', async () => {
+  it('queues the same expense put in Personal too — everything goes to the account now (DQ-93)', async () => {
+    // Under v1 only shared groups travelled, which is why a pair group was needed
+    // at all. Now a personal entry is on the account as well; the pair group
+    // stays because it's where the split with one friend lives, not for sync.
     const s = scene();
     await halfShared(s.db, s.me, s.aarav, s.personal);
-    expect(s.db.raw.prepare('SELECT COUNT(*) AS c FROM sync_outbox').get()).toEqual({ c: 0 });
+    expect(s.db.raw.prepare("SELECT COUNT(*) AS c FROM sync_queue WHERE local_table = 'txn'").get()).toEqual({ c: 1 });
   });
 });
 

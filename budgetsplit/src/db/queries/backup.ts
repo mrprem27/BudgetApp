@@ -1,6 +1,7 @@
 import * as SQLite from 'expo-sqlite';
 import { File, Directory, Paths } from 'expo-file-system';
 import { seedGlobalCategories } from '../seedCategories';
+import { insertFirstRunRows } from '../seed';
 import { BACKUP_TABLES, assertSafeColumnNames, type BackupTables, type BackupPhotos } from '../../lib/backup';
 import { collectPhotoUris, photoKey, rewritePhotoUris } from '../../lib/backupPhotos';
 import { applyLaunchInvariants } from '../schema';
@@ -51,28 +52,53 @@ export async function readAllTables(db: SQLite.SQLiteDatabase): Promise<BackupTa
  * `UNIQUE(name, kind)`, and `applyOneTimeFixes` throwing takes the whole app to
  * the "Couldn't start BudgetSplit" screen, permanently.
  *
- * `sync.` is the second family, for a different reason: those keys describe THIS
- * device's conversation with the server — the pull cursor per group, and the
- * roster version the server last accepted. They are not user data and they do not
- * belong to a backup.
+ * `sync2.` (and v1's `sync.`, still filtered so an old backup cannot bring its
+ * keys back) is the second family, for a different reason: those keys describe
+ * THIS device's conversation with the server — its device id, mutation counter
+ * and pull cursors. They are not user data and they do not belong to a backup.
  *
  * The cursor is the one that loses data, and it loses it silently. Restore device
- * A's backup onto device B and B inherits A's pull position — so every entry
+ * A's backup onto device B and B inherits A's pull position — so every row
  * between B's real position and A's is fetched by nobody: it is behind the cursor
  * from the first sync onwards and never comes back. Pulling from too FAR BACK is
- * harmless by comparison, because every ingest is idempotent and answers `stale`.
- * Asymmetric, so take the cheap side and start from nothing.
- *
- * A restored roster version is milder: it collides at a number the server has
- * already used, and `drainRosters` records the version the 409 reports and leaves
- * the group dirty, so the next sync lands. One wasted round trip, not a permanent
- * state — but still not something a backup should be carrying.
+ * harmless by comparison, because applying a pulled row is idempotent. Asymmetric,
+ * so take the cheap side and start from nothing.
  *
  * Prefix-matched rather than an exact list so a new `fix_*` or `sync.*` cannot be
  * forgotten.
  */
 function isDeviceOnlySetting(key: string): boolean {
-  return key.startsWith('fix_') || key.startsWith('sync.') || key === 'category_global_v1';
+  // `sync2.` is sync's per-device state (device id, mutation counter, pull cursors,
+  // linked account); `sync.` is v1's. A restored cursor with an emptied
+  // `sync_version` would skip every row behind it for good.
+  return key.startsWith('fix_') || key.startsWith('sync.') || key.startsWith('sync2.') || key === 'category_global_v1';
+}
+
+/**
+ * Every row a backup carries, plus the sync queue and versions that describe
+ * them, gone — except this device's migration markers. Runs inside the caller's
+ * exclusive transaction. Shared by restore (which then inserts the backup) and
+ * the sign-out wipe (which then inserts a fresh install's rows), so the two can
+ * never disagree about what "this phone's data" is.
+ */
+async function clearLedgerRows(db: SQLite.SQLiteDatabase): Promise<void> {
+  // The sync queue and its confirmed versions describe the ledger being thrown
+  // away. A restored file is a different ledger; the next sign-in decides how
+  // it meets the account (SPEC-SERVER.md §4), from what is actually here.
+  await db.runAsync('DELETE FROM sync_queue');
+  await db.runAsync('DELETE FROM sync_version');
+
+  for (const name of [...BACKUP_TABLES].reverse()) {
+    if (name === 'settings') {
+      // Everything EXCEPT this device's own migration markers. Wiping those
+      // makes a completed fix look undone and re-runs it. See above.
+      await db.runAsync(
+        `DELETE FROM settings WHERE key NOT LIKE 'fix\\_%' ESCAPE '\\' AND key <> 'category_global_v1'`,
+      );
+      continue;
+    }
+    await db.runAsync(`DELETE FROM ${name}`);
+  }
 }
 
 export async function restoreAllTables(db: SQLite.SQLiteDatabase, tables: BackupTables): Promise<void> {
@@ -94,34 +120,7 @@ export async function restoreAllTables(db: SQLite.SQLiteDatabase, tables: Backup
      * whole connection: everything else is additive.
      */
     await db.withExclusiveTransactionAsync(async () => {
-      /*
-       * The outbox is not in BACKUP_TABLES — it is this device's delivery queue,
-       * not user data — but it still has to be CLEARED here, and that half was
-       * missing.
-       *
-       * `sync_outbox.entry_id REFERENCES txn(id)`, and every txn is about to be
-       * deleted. Leaving the queue behind points every row at an id that no longer
-       * exists: the Sync screen counts changes "waiting to go up" that cannot be
-       * read, and the first drain walks rows whose entries are gone.
-       *
-       * Dropped rather than re-queued deliberately. A restore is refused while
-       * sync is on (F9), so nothing is in flight; re-queueing would instead mean
-       * pushing a restored snapshot at the group. Reconciliation is the sync
-       * engine's job when sync is next turned on, from what is actually here.
-       */
-      await db.runAsync('DELETE FROM sync_outbox');
-
-      for (const name of [...BACKUP_TABLES].reverse()) {
-        if (name === 'settings') {
-          // Everything EXCEPT this device's own migration markers. Wiping those
-          // makes a completed fix look undone and re-runs it. See above.
-          await db.runAsync(
-            `DELETE FROM settings WHERE key NOT LIKE 'fix\\_%' ESCAPE '\\' AND key <> 'category_global_v1'`,
-          );
-          continue;
-        }
-        await db.runAsync(`DELETE FROM ${name}`);
-      }
+      await clearLedgerRows(db);
       for (const name of BACKUP_TABLES) {
         for (const row of tables[name]) {
           // ...and never take a marker FROM a backup either: it would mark a fix
@@ -163,6 +162,28 @@ export async function restoreAllTables(db: SQLite.SQLiteDatabase, tables: Backup
    * they re-create the asset by hand, the next launch converts the key too and
    * counts the same money twice.
    */
+  await applyLaunchInvariants((sql) => db.execAsync(sql));
+}
+
+/**
+ * Sign-out (SPEC-SERVER.md §4.1, `DQ-97`): this phone back to a fresh install.
+ *
+ * One exclusive transaction — the clear and the first-run rows commit together
+ * or not at all, so a failure leaves the phone exactly as it was. The category
+ * catalog and launch invariants follow, as they do after a restore; both are
+ * idempotent and re-run on every launch, so they heal themselves if interrupted.
+ */
+export async function wipeToFreshInstall(db: SQLite.SQLiteDatabase): Promise<void> {
+  await db.execAsync('PRAGMA foreign_keys=OFF;');
+  try {
+    await db.withExclusiveTransactionAsync(async () => {
+      await clearLedgerRows(db);
+      await insertFirstRunRows(db, 'Me');
+    });
+  } finally {
+    await db.execAsync('PRAGMA foreign_keys=OFF;');
+  }
+  await seedGlobalCategories(db);
   await applyLaunchInvariants((sql) => db.execAsync(sql));
 }
 

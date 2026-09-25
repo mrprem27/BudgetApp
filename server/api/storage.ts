@@ -1,13 +1,13 @@
 import type { Env } from './types';
 
 /**
- * Where the encrypted backup blobs and avatars live.
+ * Where avatars live.
  *
  * Two backends, for one practical reason: **R2 has to be switched on in the
  * Cloudflare dashboard before a bucket can exist**, and that step can ask for a
  * payment method. Workers KV needs neither — it is part of the Workers free plan
  * and `wrangler kv namespace create` just works. So a deployment with no card on
- * file gets working backups on KV, and one with R2 enabled transparently gets
+ * file gets working avatars on KV, and one with R2 enabled transparently gets
  * the better store.
  *
  * The differences that matter are encoded as `maxBytes` and nothing else, so
@@ -35,10 +35,9 @@ const KV_MAX_BYTES = 25 * 1024 * 1024;
  *
  * When BOTH are bound, R2 is the store and KV is a **read fallback**. That is the
  * whole migration story, and it exists because the obvious version loses data:
- * switching `FILES` on makes every route look in R2, and every backup already
- * written to KV becomes unreachable in the same deploy. Silently — a user opens
- * the restore list, sees their ten snapshots (the rows are in D1), taps one, and
- * gets "that backup is no longer stored".
+ * switching `FILES` on makes every route look in R2, and every avatar already
+ * written to KV becomes unreachable in the same deploy — silently, because the
+ * row pointing at it is still in D1.
  *
  * So a miss in R2 falls through to KV, and anything found there is **copied into
  * R2 as it is read**, so the estate drains itself as people use it. Deletes go to
@@ -73,7 +72,7 @@ function migratingStorage(bucket: R2Bucket, kv: KVNamespace): Storage {
       if (!old) return null;
 
       // Promote, then serve. A failed copy must NOT fail the read — the user
-      // gets their backup either way, and it simply migrates on the next attempt.
+      // gets their avatar either way, and it simply migrates on the next attempt.
       try {
         const bytes = old.body instanceof ArrayBuffer ? old.body : await new Response(old.body).arrayBuffer();
         await r2.put(key, bytes, old.contentType);
@@ -84,7 +83,7 @@ function migratingStorage(bucket: R2Bucket, kv: KVNamespace): Storage {
     },
     async delete(keys) {
       // Both, always. Deleting only from R2 would leave the KV copy to be
-      // promoted straight back the next time it is read — a deleted backup
+      // promoted straight back the next time it is read — a deleted file
       // resurrecting itself is worse than one that lingers.
       await r2.delete(keys);
       await legacy.delete(keys).catch(() => {});
@@ -131,8 +130,8 @@ function kvStorage(kv: KVNamespace): Storage {
       return { body: value, contentType: metadata?.contentType ?? 'application/octet-stream' };
     },
     async delete(keys) {
-      // No batch delete in KV; the counts here are single digits (pruning old
-      // backups), so a loop is the whole implementation rather than a compromise.
+      // No batch delete in KV; the counts here are single digits (one avatar per
+      // account), so a loop is the whole implementation rather than a compromise.
       for (const key of Array.isArray(keys) ? keys : [keys]) await kv.delete(key);
     },
   };

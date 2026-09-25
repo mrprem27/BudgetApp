@@ -2,8 +2,8 @@ import * as SQLite from 'expo-sqlite';
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
 import { logAudit } from './audit';
-import { markRosterDirty } from './syncDoc';
-import { memberActive, MEMBER_ACTIVE } from './memberSql';
+import { queueUpsert, queueUpsertWhere } from './syncQueue';
+import { INVITED_ON_ADD, memberActive, MEMBER_ACTIVE } from './memberSql';
 
 export type BudgetGroup = {
   id: string;
@@ -204,6 +204,7 @@ export async function unarchiveGroup(db: SQLite.SQLiteDatabase, groupId: string)
   await db.withTransactionAsync(async () => {
     const g = await db.getFirstAsync<BudgetGroup>('SELECT * FROM budget_group WHERE id=?', [groupId]);
     await db.runAsync('UPDATE budget_group SET is_archived=0 WHERE id=?', [groupId]);
+    await queueUpsert(db, 'budget_group', groupId);
     await logAudit(db, {
       entityType: 'group', entityId: groupId, groupId,
       action: 'updated', summary: `Restored group · ${g?.name ?? ''}`,
@@ -251,10 +252,13 @@ export async function insertGroup(
     const ids = creator && !memberIds.includes(creator) ? [creator, ...memberIds] : memberIds;
     for (const pid of ids) {
       await db.runAsync(
-        'INSERT OR IGNORE INTO group_member (group_id, person_id, joined_at, role) VALUES (?, ?, ?, ?)',
-        [id, pid, now, pid === creator ? 'admin' : 'member'],
+        `INSERT OR IGNORE INTO group_member (group_id, person_id, joined_at, role, invited)
+         VALUES (?, ?, ?, ?, (${INVITED_ON_ADD}))`,
+        [id, pid, now, pid === creator ? 'admin' : 'member', pid],
       );
+      await queueUpsert(db, 'group_member', `${id}|${pid}`);
     }
+    await queueUpsert(db, 'budget_group', id);
     // Categories are a single global catalog now (seeded once in openDB) — groups
     // no longer seed their own copies.
   });
@@ -286,14 +290,11 @@ export async function setSimplifyDebt(
     throw new PermissionError('change how this group settles up');
   }
   await db.runAsync('UPDATE budget_group SET simplify_debt=? WHERE id=?', [on ? 1 : 0, groupId]);
+  await queueUpsert(db, 'budget_group', groupId);
   await logAudit(db, {
     entityType: 'group', entityId: groupId, groupId, action: 'updated',
     summary: on ? 'Turned on simplified settling' : 'Turned off simplified settling',
   });
-  // This decides what the SETTLE-UP INSTRUCTIONS look like — "pay Rohan ₹2,000"
-  // versus two smaller direct payments — so leaving it on one device means the
-  // group is told two different things about the same ledger.
-  await markRosterDirty(db, groupId);
 }
 
 /**
@@ -301,8 +302,8 @@ export async function setSimplifyDebt(
  *
  * `actorId` is required and checked. There was no capability for this and no
  * check anywhere, so any member could rename a shared group for everybody and
- * change the mode every future expense in it defaults to — and both now travel on
- * the roster, so one member's change reaches every phone.
+ * change the mode every future expense in it defaults to — and both travel to the
+ * server, so one member's change reaches every phone.
  */
 export async function updateGroup(
   db: SQLite.SQLiteDatabase,
@@ -328,12 +329,12 @@ export async function updateGroup(
         [name, icon, color, groupId],
       );
     }
+    await queueUpsert(db, 'budget_group', groupId);
     await logAudit(db, {
       entityType: 'group', entityId: groupId, groupId,
       action: 'updated', summary: `Updated group · ${name}`,
     });
-  });  // Name, icon and colour are what the other phones display.
-  await markRosterDirty(db, groupId);
+  });
 }
 
 export type DeleteGroupResult = {
@@ -347,10 +348,9 @@ export type DeleteGroupResult = {
 };
 
 /**
- * Hard-delete a group and everything tied to it (transactions, splits, line
- * items, members, budgets, its audit history). Never deletes the Personal group.
- * Irreversible — the caller must confirm first, and must unlink the returned
- * attachment files.
+ * Delete a group: a tombstone, not a wipe (see below). Its entries stay, and the
+ * deletion is queued so every member's phone learns it. Never deletes the
+ * Personal group. Irreversible — the caller must confirm first.
  */
 export async function deleteGroup(
   db: SQLite.SQLiteDatabase,
@@ -374,25 +374,19 @@ export async function deleteGroup(
    * It destroyed the deleter's OWN history. My share of each of those bills has
    * already counted as my spending, in months that are already closed, so
    * deleting them silently rewrote figures I had made decisions on — with no
-   * undo. `archiveVanishedGroup` refuses to do that to me when somebody ELSE
+   * undo. The pull refuses to do that to me when somebody ELSE
    * deletes a group, and there is no principled reason to be harsher to the
    * person pressing the button. They are the only one who can do it by accident.
    *
-   * And the group came BACK. Nothing told the server, so `sync_group` was still
-   * live and the local `sync.cursor` row had just been deleted — which means the
-   * next pull started from zero, fetched the `__roster__` entry first, and
-   * `adoptGroup` recreated the whole group from it. Empty, because every entry
-   * was gone locally, and unadministrable, because adoption did not carry a
-   * creator. So the delete produced a husk instead of nothing.
-   *
-   * The server is told first, by the caller (`deleteSyncGroup`), because the owner
-   * check lives there and a local delete the server refused would leave the two
-   * permanently disagreeing about whether the group exists.
+   * And under v1 the group came BACK: nothing told the server, so the next pull
+   * recreated it from its roster — an empty, unadministrable husk. Now the
+   * tombstone is queued like any change, the server checks the owner again, and
+   * if it refuses, the pull puts its copy back and says why (S17).
    */
   await db.withTransactionAsync(async () => {
     const now = Date.now();
     // `deleted_at` means "this group ended, and I know it" — set both when I
-    // delete it and when `reconcileVanished` learns somebody else did.
+    // delete it and when the pull learns somebody else did (`applyRevoked`).
     // `is_archived` keeps it out of the active list. `unarchiveGroup` refuses a
     // group carrying `deleted_at`, so this cannot be walked back into a group
     // that no longer exists for anyone else.
@@ -400,19 +394,9 @@ export async function deleteGroup(
       'UPDATE budget_group SET deleted_at = ?, is_archived = 1, updated_at = ? WHERE id = ?',
       [now, now, groupId],
     );
-    /*
-     * The delivery queue and both pull cursors.
-     *
-     * Nothing is left to deliver and there is nowhere to deliver it, so a queued
-     * row would retry against a group the server has tombstoned on every sync
-     * forever. The `#disputes` cursor goes with the entry cursor —
-     * `archiveVanishedGroup` already deletes both, and this path used to forget
-     * the second one.
-     */
-    await db.runAsync('DELETE FROM sync_outbox WHERE group_id=?', [groupId]);
-    await db.runAsync('DELETE FROM settings WHERE key=? OR key=?', [
-      `sync.cursor.${groupId}`, `sync.cursor.${groupId}#disputes`,
-    ]);
+    await queueUpsert(db, 'budget_group', groupId);
+    // Drafts aimed at this group lose their target below; they are the user's too.
+    await queueUpsertWhere(db, 'pending_txn', 'SELECT id FROM pending_txn WHERE dest_group_id = ?', [groupId]);
     // Unreviewed imports that were drafted into this group. Left pointing at a
     // dead group they became permanently un-committable and sat in Review forever.
     // Reset rather than delete — the row is a real imported transaction the user
@@ -455,9 +439,8 @@ export async function deleteGroup(
  * that has to agree with the first forever — and a figure that moves while the
  * others do not is the failure AGENTS §13 calls worse than all of them moving.
  *
- * As an ordinary shared group this inherits the roster, the per-device key wrap,
- * compare-and-set, the cursor, disputes, trust and approval, and adds no new sync
- * machinery at all. It also survives the thing that always happens next: the first
+ * As an ordinary shared group this inherits membership, compare-and-set, the
+ * cursor, disputes, trust and approval, and adds no new sync machinery at all. It also survives the thing that always happens next: the first
  * weekend away turns "me and Aarav" into "me, Aarav and Priya", which is
  * `addMemberToGroup` rather than a data migration under a live balance.
  *
@@ -482,6 +465,7 @@ export async function getOrCreatePairGroup(
   if (existing) {
     if (existing.is_archived === 1 && existing.deleted_at == null) {
       await db.runAsync('UPDATE budget_group SET is_archived = 0 WHERE id = ?', [existing.id]);
+      await queueUpsert(db, 'budget_group', existing.id);
       return { ...existing, is_archived: 0 };
     }
     return existing;
@@ -502,6 +486,7 @@ export async function getOrCreatePairGroup(
    */
   const group = await insertGroup(db, person.name, 'users', person.avatar_color, [personId], 'equal', meId);
   await db.runAsync('UPDATE budget_group SET pair_person_id = ? WHERE id = ?', [personId, group.id]);
+  await queueUpsert(db, 'budget_group', group.id);
   return { ...group, pair_person_id: personId };
 }
 
@@ -522,16 +507,9 @@ export type LeaveGroupResult =
  * rule exists to prevent. Their exit is Delete. (Handing ownership to somebody
  * else would be the other answer, and it is not built.)
  *
- * ORDER MATTERS, and this is the only place it is written down:
- *
- * 1. Mark my membership as ended, and mark the roster dirty.
- * 2. Publish the roster — the CALLER does this, before step 3.
- * 3. Tell the server I have left.
- *
- * Backwards, and nobody ever learns. The moment `removed_at` is set the server
- * refuses every write from me, so a roster published after leaving is rejected and
- * the others keep me as a member forever, with my entries still resolving and my
- * share still counting in their splits.
+ * The departure is queued like any change: my membership row goes up ended, the
+ * server marks me `left`, and my next pull lists the group as revoked. Every
+ * other phone learns it from their own pull.
  *
  * Nothing of mine is deleted. Same rule as everywhere else here: my share of every
  * one of those bills has already counted as my spending, in months that are
@@ -562,32 +540,14 @@ export async function leaveGroup(
     await db.runAsync(
       'UPDATE budget_group SET is_archived = 1, updated_at = ? WHERE id = ?', [now, groupId],
     );
+    await queueUpsert(db, 'group_member', `${groupId}|${meId}`);
+    await queueUpsert(db, 'budget_group', groupId);
     await logAudit(db, {
       entityType: 'group', entityId: groupId, groupId,
       action: 'updated', summary: `Left group · ${g.name}`,
     });
   });
-  // Published by the caller before it tells the server. Deliberately NOT cleared
-  // here — the outbox and cursors are dropped by the caller after the roster has
-  // gone, because dropping them now would leave nothing able to publish it.
-  await markRosterDirty(db, groupId);
   return { ok: true };
-}
-
-/**
- * Stop syncing a group this device is done with — after the roster carrying the
- * departure has been published.
- */
-export async function stopSyncingGroup(
-  db: SQLite.SQLiteDatabase,
-  groupId: string,
-): Promise<void> {
-  await db.runAsync('DELETE FROM sync_outbox WHERE group_id = ?', [groupId]);
-  await db.runAsync('DELETE FROM settings WHERE key = ? OR key = ? OR key = ?', [
-    `sync.cursor.${groupId}`,
-    `sync.cursor.${groupId}#disputes`,
-    `sync.roster.dirty.${groupId}`,
-  ]);
 }
 
 /** Soft-delete (archive). Personal group can never be archived. */
@@ -596,6 +556,7 @@ export async function archiveGroupSafe(db: SQLite.SQLiteDatabase, groupId: strin
   if (!g || g.is_personal === 1) return false;
   await db.withTransactionAsync(async () => {
     await db.runAsync('UPDATE budget_group SET is_archived=1 WHERE id=?', [groupId]);
+    await queueUpsert(db, 'budget_group', groupId);
     await logAudit(db, {
       entityType: 'group', entityId: groupId, groupId,
       action: 'archived', summary: `Archived group · ${g.name}`,
@@ -637,15 +598,15 @@ export async function getGroupContext(
 export async function getGroupMembersWithRoles(
   db: SQLite.SQLiteDatabase,
   groupId: string,
-): Promise<Array<{ person_id: string; role: GroupRole; is_creator: boolean }>> {
-  const rows = await db.getAllAsync<{ person_id: string; role: GroupRole; created_by: string | null }>(
-    `SELECT gm.person_id, gm.role, bg.created_by
+): Promise<Array<{ person_id: string; role: GroupRole; is_creator: boolean; invited: boolean }>> {
+  const rows = await db.getAllAsync<{ person_id: string; role: GroupRole; created_by: string | null; invited: number }>(
+    `SELECT gm.person_id, gm.role, bg.created_by, gm.invited
        FROM group_member gm JOIN budget_group bg ON bg.id = gm.group_id
       WHERE gm.group_id = ? AND ${memberActive('gm')}`,
     [groupId],
   );
   return rows
-    .map(r => ({ person_id: r.person_id, role: r.role, is_creator: r.created_by === r.person_id }))
+    .map(r => ({ person_id: r.person_id, role: r.role, is_creator: r.created_by === r.person_id, invited: r.invited === 1 }))
     .sort((a, b) => Number(b.is_creator) - Number(a.is_creator));
 }
 
@@ -662,12 +623,23 @@ export async function setMemberRole(
     'UPDATE group_member SET role = ? WHERE group_id = ? AND person_id = ?',
     [role, groupId, targetPersonId],
   );
-  // Roles travel on the roster. Without this, promoting somebody was a fact about
-  // one phone: they stayed a plain member everywhere else, and the shield toggle
-  // that appeared to grant it granted nothing.
-  await markRosterDirty(db, groupId);
+  await queueUpsert(db, 'group_member', `${groupId}|${targetPersonId}`);
 }
 
+
+/** Groups this person was added to and hasn't accepted yet (S21) — what the person screen says instead of passing them off as in. */
+export async function invitedGroupsOf(
+  db: SQLite.SQLiteDatabase,
+  personId: string,
+): Promise<Array<{ id: string; name: string }>> {
+  return db.getAllAsync<{ id: string; name: string }>(
+    `SELECT g.id, g.name FROM budget_group g
+       JOIN group_member m ON m.group_id = g.id AND m.person_id = ? AND ${memberActive('m')} AND m.invited = 1
+      WHERE g.deleted_at IS NULL AND g.is_archived = 0
+      ORDER BY g.created_at ASC`,
+    [personId],
+  );
+}
 
 /**
  * Groups the two of us are both in.

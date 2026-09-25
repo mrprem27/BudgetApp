@@ -1,6 +1,7 @@
 import * as SQLite from 'expo-sqlite';
 import type { MoneyProfile } from '../../lib/cash';
 import { getAssetsTotal } from './assets';
+import { MONEY_PROFILE_ID, queueUpsert } from './syncQueue';
 
 /**
  * The user's real-money inputs for the Plan screen's "Total Money": starting cash
@@ -168,6 +169,8 @@ export async function setMoneyProfileRows(
       [key, String(value)],
     );
   }
+  // The whole profile travels as one row (money_profiles); the drain reads it whole.
+  await queueUpsert(db, 'settings', MONEY_PROFILE_ID);
 }
 
 /**

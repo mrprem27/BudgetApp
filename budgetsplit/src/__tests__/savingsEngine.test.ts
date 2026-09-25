@@ -127,7 +127,9 @@ describe('applyOverspendRaid — consent is the whole point (V2-10)', () => {
       inserts,
       db: {
         withTransactionAsync: async (fn: () => Promise<void>) => { await fn(); },
-        runAsync: async (_sql: string, args: unknown[]) => { inserts.push(args); },
+        // Only ledger rows count as withdrawals; the sync queue rows written beside
+        // them record the change for the server and move no money.
+        runAsync: async (sql: string, args: unknown[]) => { if (/INSERT INTO savings_txn/.test(sql)) inserts.push(args); },
       } as unknown as Parameters<typeof applyOverspendRaid>[0],
     };
   }

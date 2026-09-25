@@ -1,8 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, Alert, findNodeHandle } from 'react-native';
-import { KeyboardAwareScrollView, type KeyboardAwareScrollViewRef } from 'react-native-keyboard-controller';
+import type { KeyboardAwareScrollViewRef } from 'react-native-keyboard-controller';
 import { useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius, layout, shadow } from '../../tokens';
 import { ScreenHeader } from '../../ui/ScreenHeader';
@@ -16,7 +15,7 @@ import { TabPills } from '../../ui/TabPills';
 import { Card } from '../../ui/Card';
 import { Divider } from '../../ui/Divider';
 import { ListRow } from '../../ui/ListRow';
-import { useContentInset } from '../../../hooks/useContentInset';
+import { KeyboardForm } from '../../ui/KeyboardForm';
 import { useBudgetEditor } from '../../../hooks/useBudgetEditor';
 import { rollUpBudgets } from '../../../lib/budget';
 import { formatRupees, formatCompact, parseToPaise } from '../../../lib/money';
@@ -52,11 +51,8 @@ export function BudgetEditor({ scope, groupId, focusCategory }: {
   focusCategory?: string;
 }) {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const e = useBudgetEditor({ scope, groupId, focusCategory });
 
-  const [footerH, setFooterH] = React.useState(0);
-  const listPad = useContentInset({ footer: footerH });
   // Typed from the library, not RN: KeyboardAwareScrollView's ref adds
   // `assureFocusedInputVisible` and is not a plain ScrollView.
   const scrollRef = useRef<KeyboardAwareScrollViewRef>(null);
@@ -109,16 +105,16 @@ export function BudgetEditor({ scope, groupId, focusCategory }: {
         <ErrorState onRetry={() => { void e.reload(); }} />
       ) : (
       <>
-        {/* No KeyboardAvoidingView: it padded the whole stack, so the footer rode the
-            keyboard up on every one of 40-odd field focuses. The ScrollView insets
-            itself instead, keeping the focused row visible and the CTA in place. */}
-        <KeyboardAwareScrollView
+        {/* `KeyboardForm` (AGENTS.md §6b). One of the few real forms: dozens of
+            lines typed in a row and then saved, so Save rides above the keyboard
+            rather than making you close it after every line. */}
+        <KeyboardForm
           ref={scrollRef}
-          style={styles.list}
-          contentContainerStyle={[styles.scroll, { paddingBottom: listPad }]}
-          keyboardShouldPersistTaps="handled"
-         
+          contentContainerStyle={[styles.scroll, { paddingBottom: space.lg }]}
           refreshControl={<AppRefreshControl refreshing={e.refreshing} onRefresh={e.onRefresh} />}
+          footerStyle={styles.footer}
+          footerAboveKeyboard
+          footer={<PrimaryButton label={e.copy.cta} onPress={handleSave} loading={e.saving} disabled={!e.dirty} />}
         >
           {/* Segmented, not chips: this is "pick exactly one", and the two are
               alternatives rather than toggles. */}
@@ -229,14 +225,7 @@ export function BudgetEditor({ scope, groupId, focusCategory }: {
           }) : (
             <EmptyState icon="target" title="No categories yet" body="Add categories from Settings, then set their budgets here." />
           )}
-        </KeyboardAwareScrollView>
-
-        <View
-          style={[styles.footer, { paddingBottom: insets.bottom + space.md }]}
-          onLayout={(ev) => setFooterH(ev.nativeEvent.layout.height)}
-        >
-          <PrimaryButton label={e.copy.cta} onPress={handleSave} loading={e.saving} disabled={!e.dirty} />
-        </View>
+        </KeyboardForm>
       </>
       )}
 
@@ -275,7 +264,6 @@ export function BudgetEditor({ scope, groupId, focusCategory }: {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  list: { flex: 1 },
   /*
    * No `gap`. `SectionCard` carries its own `marginBottom: space.md` (§3), so a
    * container gap stacked with it and put **32px** between every card — which
@@ -293,8 +281,5 @@ const styles = StyleSheet.create({
   totalAmount: { ...type.amountXL, color: colors.accent },
   totalSub: { ...type.caption, color: colors.textMuted },
   explain: { ...type.caption, color: colors.textMuted, lineHeight: 16 },
-  footer: {
-    paddingHorizontal: layout.screenPaddingH, paddingTop: space.md,
-    borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.bg,
-  },
+  footer: { paddingTop: space.md, borderTopWidth: 1, borderTopColor: colors.border },
 });

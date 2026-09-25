@@ -5,10 +5,9 @@ import { colors, type, space, layout } from '../src/theme';
 import { IconCircle } from '../src/components/ui/IconCircle';
 import { PrimaryButton } from '../src/components/ui/PrimaryButton';
 import { SecondaryButton } from '../src/components/ui/SecondaryButton';
-import { haptic } from '../src/lib/haptics';
-import { extractAuthToken, serverConfigured, verifyMagicLink } from '../src/lib/serverApi';
-import { useSQLiteContext } from 'expo-sqlite';
-import { claimMyAccount } from '../src/db/queries/persons';
+import { extractAuthToken, serverConfigured } from '../src/lib/serverApi';
+import { useEmailSignIn } from '../src/hooks/useEmailSignIn';
+import { FirstSignInStep } from '../src/components/system/FirstSignInStep';
 
 /**
  * Where a tapped sign-in link lands: `budgetsplit:///auth?token=…`, redirected
@@ -18,13 +17,19 @@ import { claimMyAccount } from '../src/db/queries/persons';
  * The token is spent here, once. React re-running an effect must not spend it
  * twice — the second attempt would fail, since the server marks it used — hence
  * the `attempted` ref rather than relying on the effect's dependency list.
+ *
+ * It signs in through `useEmailSignIn`'s `signInWithToken`, the same path as a
+ * typed code, so a tapped link settles the first sign-in (upload, restore or ask,
+ * `SPEC-SERVER.md` §4) exactly as the code does. This is the path most people
+ * take; skipping it here would leave them signed in to a phone that never syncs.
  */
 export default function AuthCallbackScreen() {
   const router = useRouter();
-  const db = useSQLiteContext();
   const params = useLocalSearchParams<{ token?: string }>();
-  const [error, setError] = useState<string | null>(null);
+  const [linkError, setLinkError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const { signInWithToken, restoring, asking, answer, error: signInError } = useEmailSignIn();
+  const error = linkError ?? signInError;
   const attempted = useRef(false);
 
   const raw = typeof params.token === 'string' ? params.token : '';
@@ -37,32 +42,20 @@ export default function AuthCallbackScreen() {
 
     (async () => {
       if (!serverConfigured()) {
-        setError('This build has no server configured, so sign-in links can’t be used.');
+        setLinkError('This build has no server configured, so sign-in links can’t be used.');
         return;
       }
       const token = extractAuthToken(raw);
       if (!token) {
-        setError('That sign-in link is incomplete. Open the link from the email again.');
+        setLinkError('That sign-in link is incomplete. Open the link from the email again.');
         return;
       }
-      try {
-        const { user } = await verifyMagicLink(token);
-        // Bind the ledger's "me" to the account, exactly as the Account screen
-        // does. This is the path most people take — the emailed link — so leaving
-        // it out here would mean sharing quietly not working for the majority,
-        // and working for whoever happened to paste the code by hand instead.
-        // Best-effort: the session IS established, and a refusal has somewhere to
-        // be reported (the Account screen this navigates to).
-        await claimMyAccount(db, { uid: user.id, email: user.email }).catch(() => {});
-        setDone(true);
-        haptic.success();
-        goToAccount();
-      } catch (e) {
-        haptic.error();
-        setError(e instanceof Error ? e.message : 'Could not finish signing in. Please try again.');
-      }
+      const result = await signInWithToken(token);
+      if (result === 'signed-in') setDone(true);
+      // "Not now" signed out and changed nothing; a failure stays on screen.
+      if (result !== 'failed') goToAccount();
     })();
-  }, [raw, goToAccount, db]);
+  }, [raw, goToAccount, signInWithToken]);
 
   if (error) {
     return (
@@ -76,6 +69,16 @@ export default function AuthCallbackScreen() {
     );
   }
 
+  if (restoring !== null || asking) {
+    return (
+      <View style={styles.page}>
+        {restoring !== null
+          ? <FirstSignInStep kind="restore" progress={restoring} />
+          : <FirstSignInStep kind="ask" onUseAccount={() => answer('use-my-account')} onNotNow={() => answer('not-now')} />}
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <ActivityIndicator color={colors.accent} size="large" />
@@ -85,6 +88,7 @@ export default function AuthCallbackScreen() {
 }
 
 const styles = StyleSheet.create({
+  page: { flex: 1, backgroundColor: colors.bg },
   container: {
     flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center',
     padding: layout.screenPaddingH, gap: space.sm,

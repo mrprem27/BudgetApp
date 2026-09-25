@@ -30,7 +30,7 @@ Split bills. Budget for real.
 ## 2 · Promotional text (170 chars, changeable without review)
 
 ```
-Split with friends without losing track of your own money. No bank login, no ads, no tracking — and nothing leaves your phone unless you switch it on.
+Split with friends without losing track of your own money. No bank login, no ads, no tracking. Works offline, and signing in is optional.
 ```
 
 ---
@@ -61,20 +61,18 @@ Everything else
 • A money-health score that explains itself instead of scolding you
 
 Your data
-Your money lives on this phone. There is no ad network, no analytics, and no
-tracking of any kind. By default your personal spending, income, savings goals,
-budgets and net worth never leave the device.
+The app works fully offline, with no account. There is no ad network, no
+analytics, and no tracking of any kind.
 
-Nothing leaves unless you switch it on. Receipt scanning sends that one photo to
-a cloud text-reader. Signing in lets you keep an encrypted backup off the phone.
-Sync keeps the groups you split with up to date for everyone in them. And "keep a
-copy of everything" saves an encrypted copy of your whole app, so a new phone can
-become your old one.
+Two things can leave your phone. Receipt scanning sends that one photo to a cloud
+text-reader — you can switch it to reading on the phone instead. And if you sign
+in, your account keeps a copy of everything, so a new phone gets it all back and
+the groups you split with stay up to date for everyone in them.
 
-Everything that leaves is sealed on this phone first, with a key we never
-receive — we store data we cannot read, and cannot see amounts, who paid, or what
-anything was for. All of it is explained in the app, and all of it can be turned
-off.
+That copy is stored on our server as it is — it is not end-to-end encrypted — so
+that the server can check who may change what in a shared group. Deleting your
+account erases everything that was yours alone. All of it is explained in the
+app.
 
 Made for India. Rupees, UPI, and the way people here actually settle up.
 ```
@@ -97,6 +95,7 @@ split,expense,bill,budget,upi,money,shared,flatmate,trip,settle,tracker,spending
 • Savings remember which account they came from, and go back there
 • Recurring bills can post themselves, or just remind you
 • Backups are encrypted with a much stronger key
+• Sign in and everything syncs — a new phone gets it all back
 ```
 
 ---
@@ -112,11 +111,12 @@ split,expense,bill,budget,upi,money,shared,flatmate,trip,settle,tracker,spending
 
 | Type | Collected? | Linked to identity? | Tracking? | Purpose | Where |
 |---|---|---|---|---|---|
-| **Email address** | **Yes** | **Yes** | No | Sign-in and account backup | `serverApi.ts`, `server/api` D1 `users` |
+| **Email address** | **Yes** | **Yes** | No | Sign-in and the account | `serverApi.ts`, `server/api` D1 `users` |
 | **Name** | Yes, optional | Yes | No | Shown to people you link with | `PATCH /me` |
 | **Phone number** | Yes, optional | Yes | No | Only shown to people you link with, and only if you switch it on | `links.share_phone_*` |
-| **Photos** (receipts) | **Yes, on by default** | No | No | Read the line items off a receipt | `receipt-ocr-proxy` → Gemini |
-| **Financial info** | **No** | — | — | Leaves only inside an encrypted envelope the server cannot read — a backup, a sealed group entry, or the whole-app copy. Never in the clear | `backup.ts`, `groupCrypto.ts`, `syncSnapshot.ts` |
+| **Photos** (receipts) | **Yes, on by default** | No | No | Read the line items off a receipt. Never sent to our own server | `receipt-ocr-proxy` → Gemini |
+| **Financial info** (other financial info) | **Yes, once signed in** | **Yes** | No | App functionality: the account's copy of the ledger — transactions, balances, budgets, goals, assets — which syncs shared groups and restores a new phone | `lib/sync/`, `server/api/sync/`, D1 |
+| **User content** (other) | **Yes, once signed in** | **Yes** | No | Notes, category names, and the names you give the people you split with, as part of that copy | same |
 | **Identifiers / usage / diagnostics** | No | — | — | No analytics SDK, no crash reporter, no ad network | — |
 
 ### The three answers people get wrong
@@ -125,36 +125,32 @@ split,expense,bill,budget,upi,money,shared,flatmate,trip,settle,tracker,spending
    Apple asks whether data *leaves the device*, not whether it is retained. It is
    also **on by default** (`settings.ocrProvider()` is `gemini`), so it cannot be
    declared as opt-in.
-2. **Financial info is genuinely "not collected"**, and that is defensible: backups
-   are sealed with a passphrase-derived key before upload and the server has no key
-   (`encryptPayload`). Say encrypted-and-unreadable, never "we don't store it".
+2. **Financial info IS collected, and linked to the account**, from the moment
+   someone signs in (`DQ-93`). It used to be "not collected" because everything that
+   left was sealed with a key the server never had. Server sync ended that: the
+   account's copy is readable, on purpose. Keeping the old answer would be a false
+   declaration — declare it, as app functionality, not tracking.
 3. **Nothing is "tracking"** in Apple's sense — no data goes to a data broker and
    nothing is joined with third-party data for advertising. So no ATT prompt.
 
-### Sync and "keep a copy of everything" — shipped, and what they do not change
+### What server sync changed (`DQ-93`)
 
-Nothing is added to the table above. Shared-group entries are end-to-end encrypted
-with a per-group key the server never receives, and the whole-app copy is the
-**same envelope backups already use**, sealed with a passphrase that is never
-sent. Both rest on the identical argument, which is why neither changes the
-declaration.
+Sync used to be end-to-end encrypted and a whole-app copy was a passphrase-sealed
+envelope, so neither added a data type. Both were replaced by server sync: a
+signed-in account's copy is stored readable, so the server can enforce who may
+change what. That is why **Financial info** and **User content** are now declared
+as collected and linked. Things that did not change:
 
-⚠️ Do not describe the personal copy as "not stored". It IS stored — encrypted,
-and unreadable to us. Say encrypted-and-unreadable, the same wording as backups,
-because the distinction is the whole defence. The declarations that follow from it:
-
-- **Financial info stays "not collected".** Defensible for the same reason as
-  backups — sealed before upload, no key on the server. Say
-  encrypted-and-unreadable, never "we don't store it".
-- **No new data type.** Group membership is stored, but it is derived from
-  accounts already declared, not separately collected.
 - **Still no tracking**, so still no ATT prompt.
+- **Receipt photos never reach our server** — only the OCR provider, and only
+  when scanning in the cloud.
+- **The backup file is still the user's own**: encrypted on the phone with a
+  passphrase never sent anywhere, and never uploaded by the app.
 
-The description above is written to match: nothing leaves **by default**, four
-things can leave **when switched on**, and everything that does is sealed here
-first. Keep that shape in any future edit. "Nothing leaves your device" was true
-once and each feature since has made it less so — the honest version is a default
-plus a list, not an absolute.
+The description above is written to match: the app works without an account,
+two things can leave, and the one that stores data says plainly that it is not
+end-to-end encrypted. Keep that shape in any future edit — the honest version is a
+default plus a list, not an absolute.
 
 ---
 

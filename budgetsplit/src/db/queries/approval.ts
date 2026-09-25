@@ -1,6 +1,7 @@
 import type * as SQLite from 'expo-sqlite';
 import { softDeleteTxn, restoreTxn } from './transactions';
 import { logAudit } from './audit';
+import { queueAnswer } from './syncQueue';
 import type { ApprovalState, PayMethod } from '../../constants/enums';
 
 export { NOT_AWAITING_APPROVAL } from './approvalSql';
@@ -16,6 +17,37 @@ export type TxnApproval = {
   pending_delete: number;
 };
 
+export type TxnDispute = {
+  txn_id: string;
+  by_uid: string;
+  version: number;
+  created_at: number;
+  cleared: number;
+  /** The local person's name, when this device knows who that account is. */
+  name: string | null;
+};
+
+/**
+ * Live objections against one entry of mine — filled by the pull from the
+ * server's `disputes` (S21).
+ *
+ * Withdrawn ones are excluded, and so are objections to a version older than the
+ * one the server now holds: editing in response to an objection clears it from
+ * the author's view, because the thing objected to no longer exists.
+ */
+export async function disputesFor(db: SQLite.SQLiteDatabase, txnId: string): Promise<TxnDispute[]> {
+  return db.getAllAsync<TxnDispute>(
+    `SELECT d.*, p.name
+       FROM txn_dispute d
+       LEFT JOIN person p ON p.remote_uid = d.by_uid
+      WHERE d.txn_id = ? AND d.cleared = 0
+        AND d.version >= COALESCE((SELECT v.version FROM sync_version v
+                                    WHERE v.entity = 'transactions' AND v.entity_id = d.txn_id), 0)
+      ORDER BY d.created_at ASC`,
+    [txnId],
+  );
+}
+
 /**
  * Two shapes of "waiting on me", and they are not the same question.
  *
@@ -25,6 +57,21 @@ export type TxnApproval = {
  * why they cannot share one column.
  */
 const AWAITING_ME = `(a.state = 'pending' OR a.pending_delete = 1)`;
+
+/**
+ * My answer, on its way to the server (S21) — as an answer, not as the row: the
+ * row after refusing a retraction reads "approved", and the server must hear
+ * "rejected" to keep the entry. 'pending' takes a decision back.
+ */
+async function answer(db: SQLite.SQLiteDatabase, txnId: string, status: 'approved' | 'rejected' | 'pending', landed?: string | null) {
+  // Only ever about someone else's entry. My own has no question to answer, and
+  // the server would be told I objected to myself.
+  const peer = await db.getFirstAsync<{ n: number }>(
+    'SELECT 1 AS n FROM txn WHERE id = ? AND author_person_id IS NOT NULL', [txnId],
+  );
+  if (!peer) return;
+  await queueAnswer(db, 'txn_approval', txnId, landed ? { status, landed_pay_method: landed } : { status });
+}
 
 /** Every entry still waiting on me, oldest arrival first. */
 export async function getPendingApprovals(db: SQLite.SQLiteDatabase): Promise<TxnApproval[]> {
@@ -92,6 +139,7 @@ export async function approveTxn(
       `UPDATE txn_approval SET pending_delete = 0, state = 'approved', decided_at = ? WHERE txn_id = ?`,
       [now, txnId],
     );
+    await answer(db, txnId, 'approved');
     await softDeleteTxn(db, txnId, false, true);
     await logAudit(db, {
       entityType: 'txn', entityId: txnId, action: 'deleted',
@@ -105,6 +153,7 @@ export async function approveTxn(
         WHERE txn_id = ? AND state = 'pending'`,
       [now, landedPayMethod ?? null, txnId],
     );
+    await answer(db, txnId, 'approved', landedPayMethod);
     // Also written onto the entry itself, because on MY device `pay_method` should
     // describe what happened to MY money — that is what `CASH_TOTALS_SQL` reads to
     // tell a card repayment from cash moving. The approval row keeps the record of
@@ -136,10 +185,10 @@ export async function approveTxn(
  * being shown as though it did.
  *
  * It does NOT edit their copy, and must not: I can refuse an entry, not rewrite
- * what someone else recorded. What it does now is TELL them — `dispute_state` is
- * a one-column outbox the sync drain turns into an objection on their screen
- * (F10). Before that, their balance and mine simply disagreed and neither of us
- * was told, which is the worst thing this app can do with money.
+ * what someone else recorded. What it does is TELL them: the answer goes up
+ * queued, and the server raises an objection on their screen (F10, S21). Before
+ * that, their balance and mine simply disagreed and neither of us was told, which
+ * is the worst thing this app can do with money.
  */
 export async function rejectTxn(db: SQLite.SQLiteDatabase, txnId: string): Promise<void> {
   /*
@@ -147,17 +196,18 @@ export async function rejectTxn(db: SQLite.SQLiteDatabase, txnId: string): Promi
    * exactly where it is and only the flag clears. It must not fall through to the
    * soft delete below, which would carry out the very removal I just refused.
    *
-   * `dispute_state = 'raise'` still fires: the author needs to know I disagreed,
-   * and that is the same need the rejection path has.
+   * The answer still goes up as a rejection: the server keeps the entry counting,
+   * and the author needs to know I disagreed.
    */
   const retraction = await db.getFirstAsync<{ n: number }>(
     'SELECT 1 AS n FROM txn_approval WHERE txn_id = ? AND pending_delete = 1', [txnId],
   );
   if (retraction) {
     await db.runAsync(
-      `UPDATE txn_approval SET pending_delete = 0, decided_at = ?, dispute_state = 'raise' WHERE txn_id = ?`,
+      `UPDATE txn_approval SET pending_delete = 0, decided_at = ? WHERE txn_id = ?`,
       [Date.now(), txnId],
     );
+    await answer(db, txnId, 'rejected');
     await logAudit(db, {
       entityType: 'txn', entityId: txnId, action: 'updated',
       summary: 'You refused a retraction — the entry stays',
@@ -190,10 +240,11 @@ export async function rejectTxn(db: SQLite.SQLiteDatabase, txnId: string): Promi
    * the entry ever had to wait.
    */
   await db.runAsync(
-    `INSERT OR REPLACE INTO txn_approval (txn_id, state, created_at, decided_at, dispute_state)
-     VALUES (?, 'rejected', COALESCE((SELECT created_at FROM txn_approval WHERE txn_id = ?), ?), ?, 'raise')`,
+    `INSERT OR REPLACE INTO txn_approval (txn_id, state, created_at, decided_at)
+     VALUES (?, 'rejected', COALESCE((SELECT created_at FROM txn_approval WHERE txn_id = ?), ?), ?)`,
     [txnId, txnId, Date.now(), Date.now()],
   );
+  await answer(db, txnId, 'rejected');
   await logAudit(db, {
     entityType: 'txn', entityId: txnId, action: 'deleted',
     summary: 'You refused an entry somebody else wrote',
@@ -211,9 +262,10 @@ export async function reopenApproval(db: SQLite.SQLiteDatabase, txnId: string): 
    * their screen that I have since withdrawn, and they would have no way to know.
    */
   await db.runAsync(
-    "UPDATE txn_approval SET state = 'pending', decided_at = NULL, dispute_state = 'clear' WHERE txn_id = ?",
+    "UPDATE txn_approval SET state = 'pending', decided_at = NULL WHERE txn_id = ?",
     [txnId],
   );
+  await answer(db, txnId, 'pending');
   // Only a reject soft-deleted it; restoring an already-live row is a no-op.
   await restoreTxn(db, txnId);
   await logAudit(db, {

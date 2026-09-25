@@ -12,13 +12,17 @@ import { PayMethod } from '../constants/enums';
 const store = AsyncStorage as unknown as { __reset: () => void };
 beforeEach(() => store.__reset());
 
+// Deliberately not local midnight — 3:30pm — so the salary-rule assertion below
+// can prove `paydayAnchor` floors it (`SPEC-2026-09-FEEDBACK.md` §2 O4: "Default time to 12:00
+// AM"), rather than merely echoing back whatever `firstPayDate` already was.
+const NEXT_PAY = new Date(2026, 9, 5, 15, 30).getTime();
+
 const data = (over: Partial<OnboardingData> = {}): OnboardingData => ({
   intent: 'both',
   name: 'Prem',
   incomeNum: 50000,
-  payday: 5,
+  firstPayDate: NEXT_PAY,
   budgetNum: 30000,
-  people: [],
   addFirst: false,
   payMethod: PayMethod.Upi,
   money: { openingBank: 5000000, investments: 0, creditLimit: 10000000, creditUsed: 200000 },
@@ -40,14 +44,17 @@ describe('finalizeOnboarding — every answer lands somewhere', () => {
     const persons = await getAllPersons(db);
     expect(persons.find(p => p.is_me === 1)?.name).toBe('Prem');
 
-    // The salary is a recurring INCOME rule anchored to pay-day — the record of
-    // both the amount and the date (nothing is stored as a preference).
+    // The salary is a recurring INCOME rule dated to the exact next-payment
+    // date picked — the record of both the amount and the date (nothing is
+    // stored as a preference).
     const rules = await getRecurringForGroup(db, 'personal');
     const salary = rules.find(r => r.kind === 'income');
     expect(salary).toBeTruthy();
     expect(salary!.recur_freq).toBe('monthly');
     expect(salary!.payments[0].amount).toBe(50000 * 100);
-    expect(salary!.date).toBe(paydayAnchor(5));
+    // Floored to local midnight, not the 3:30pm `NEXT_PAY` was given as —
+    // proves `paydayAnchor` normalizes rather than only being called.
+    expect(salary!.date).toBe(new Date(2026, 9, 5, 0, 0, 0, 0).getTime());
 
     expect(await settings.budgetTarget()).toBe(30000 * 100);
     const money = await getMoneyProfile(db);
@@ -57,69 +64,52 @@ describe('finalizeOnboarding — every answer lands somewhere', () => {
     expect(money.creditUsed).toBe(200000);
   });
 
-  it('turns the people answer into contacts, with the email when one was given', async () => {
-    const db = await seedFresh();
-    await finalizeOnboarding(db, data({
-      people: [{ name: 'Aarav', email: 'aarav@example.com' }, { name: 'Riya' }],
-    }));
-
-    const persons = await getAllPersons(db);
-    expect(persons.map(p => p.name).sort()).toEqual(['Aarav', 'Prem', 'Riya']);
-    // The email is the only identifier that is the same string on both phones, so
-    // it is what a friend request is addressed to later.
-    expect(persons.find(p => p.name === 'Aarav')?.email).toBe('aarav@example.com');
-    // Optional means optional: no email must leave the column null, not ''.
-    expect(persons.find(p => p.name === 'Riya')?.email ?? null).toBeNull();
-  });
-
   /**
-   * Onboarding no longer builds a group. It used to — name from three chips, icon
-   * inferred from that name string, colour hard-coded — which bypassed `GroupForm`
-   * and made this the one place a group could be created wrong. The step asks who
-   * you split with; which groups they belong in is asked where groups are made.
+   * Onboarding no longer collects people at all (`SPEC-2026-09-FEEDBACK.md` §2 O6 — the question
+   * moved to Friends). The five tests this replaces covered the person-insertion
+   * loop that used to live in `finalizeOnboarding`; that loop is gone with the
+   * step that fed it, so what's left to prove is only that a group is still
+   * never created here — the reasoning that used to sit beside those tests.
    */
-  it('creates no group, even when people were added', async () => {
+  it('creates no group', async () => {
     const db = await seedFresh();
-    await finalizeOnboarding(db, data({ people: [{ name: 'Aarav' }, { name: 'Riya' }] }));
+    await finalizeOnboarding(db, data());
 
     expect((await getAllGroups(db)).filter(g => g.is_personal !== 1)).toHaveLength(0);
-    // …and the contacts still exist. Dropping the group must not drop the people.
-    expect((await getAllPersons(db)).map(p => p.name).sort()).toEqual(['Aarav', 'Prem', 'Riya']);
   });
 
   /**
-   * The stored form has to BE the compared form.
-   *
-   * `friends.tsx` lower-cases an address on save and then asks "did the email
-   * change?" to decide whether to send a friend request. An onboarding contact
-   * stored as typed therefore compares unequal to itself: open that person's rename
-   * sheet, change nothing, tap Save, and the app decides the address is new and
-   * fires an invite nobody asked for.
+   * `SPEC-2026-09-FEEDBACK.md` §2 O5 — nothing is WRITTEN for a chip the user never ticked, not
+   * a zero standing in for it. `getMoneyProfile`'s read side always defaults a
+   * missing figure to 0 (`money.openingBank` etc. below), so the only place
+   * the difference is visible is `updatedAt`/`cardBaselineAt`: a write with
+   * every field `undefined` is `setMoneyProfileRows`' `entries.length === 0`
+   * early-return, so it never stamps them at all.
    */
-  it('stores the email lower-cased, so it compares equal to itself later', async () => {
+  it('writes nothing when no money figure was ticked, not zeros', async () => {
     const db = await seedFresh();
-    await finalizeOnboarding(db, data({
-      people: [{ name: 'Aarav', email: '  Aarav@Example.COM ' }],
-    }));
-    expect((await getAllPersons(db)).find(p => p.name === 'Aarav')?.email)
-      .toBe('aarav@example.com');
+    await finalizeOnboarding(db, data({ money: { investments: 0 } }));
+
+    const money = await getMoneyProfile(db);
+    expect(money.openingBank).toBe(0);   // the read side still defaults, as always
+    expect(money.updatedAt).toBeNull();  // but no write happened to produce that 0
+    expect(money.cardBaselineAt).toBeNull();
   });
 
-  it('drops an address that is not one, rather than storing the typo', async () => {
-    // Unvalidated, it sits in the DB until it is handed to sendFriendRequest much
-    // later and fails there, with nothing pointing back at the typo.
+  it('a partial pick writes only what was ticked', async () => {
     const db = await seedFresh();
-    await finalizeOnboarding(db, data({ people: [{ name: 'Riya', email: 'riya at gmail' }] }));
+    // Bank ticked, nothing else — the common case (only one bucket of five).
+    await finalizeOnboarding(db, data({ money: { investments: 0, openingBank: 500000 } }));
 
-    const riya = (await getAllPersons(db)).find(p => p.name === 'Riya');
-    expect(riya).toBeTruthy();          // the contact still lands
-    expect(riya?.email ?? null).toBeNull();
-  });
-
-  it('skips blank names and de-duplicates nothing it was not given', async () => {
-    const db = await seedFresh();
-    await finalizeOnboarding(db, data({ people: [{ name: '  ' }, { name: ' Riya ' }] }));
-    expect((await getAllPersons(db)).map(p => p.name).sort()).toEqual(['Prem', 'Riya']);
+    const money = await getMoneyProfile(db);
+    expect(money.openingBank).toBe(500000);
+    expect(money.updatedAt).not.toBeNull(); // a write did happen
+    // Everything else stayed untouched — reads at its default, same as if
+    // this were a brand-new profile nobody had written to at all.
+    expect(money.openingCash).toBe(0);
+    expect(money.openingWallet).toBe(0);
+    expect(money.creditLimit).toBe(0);
+    expect(money.creditUsed).toBe(0);
   });
 
   // V2-02: with no sync, a lost phone is total data loss and the backup nudge is
@@ -161,5 +151,27 @@ describe('default pay method', () => {
     await seedGroupAndMe(db);
     await finalizeOnboarding(db, data({ payMethod: PayMethod.Cash }));
     expect(await settings.defaultPayMethod()).toBe('cash');
+  });
+});
+
+describe('paydayAnchor', () => {
+  it('floors a date to local midnight, whatever time it was given', () => {
+    const evening = new Date(2026, 2, 14, 23, 59, 59, 999).getTime();
+    expect(paydayAnchor(evening)).toBe(new Date(2026, 2, 14, 0, 0, 0, 0).getTime());
+  });
+
+  it('leaves a date already at midnight unchanged', () => {
+    const midnight = new Date(2026, 2, 14, 0, 0, 0, 0).getTime();
+    expect(paydayAnchor(midnight)).toBe(midnight);
+  });
+
+  it('never moves the calendar date, only the time — no month/day drift', () => {
+    // A defensive check against the DST-adjacent off-by-one this kind of
+    // flooring is prone to: 1 Jan, floored, must still read as 1 Jan.
+    const newYearMorning = new Date(2026, 0, 1, 6, 0, 0, 0).getTime();
+    const floored = new Date(paydayAnchor(newYearMorning));
+    expect(floored.getFullYear()).toBe(2026);
+    expect(floored.getMonth()).toBe(0);
+    expect(floored.getDate()).toBe(1);
   });
 });

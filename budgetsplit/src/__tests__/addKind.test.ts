@@ -1,6 +1,6 @@
 import { readFileSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
-import { AddKind, ADD_KIND, ADD_KIND_LABEL, SETTLEMENT_ADD_KINDS } from '../constants/enums';
+import { AddKind, ADD_KIND, ADD_KIND_TABS, ADD_KIND_LABEL, SETTLEMENT_ADD_KINDS } from '../constants/enums';
 import { kindAccent, kindGradient, kindAmountColor } from '../lib/kindTheme';
 import { detectVoiceKind } from '../lib/voiceParse';
 
@@ -50,6 +50,33 @@ describe('every kind is reachable and complete', () => {
     expect(SETTLEMENT_ADD_KINDS).toContain(AddKind.Invest);
     expect(SETTLEMENT_ADD_KINDS).not.toContain(AddKind.Expense);
     expect(SETTLEMENT_ADD_KINDS).not.toContain(AddKind.Income);
+  });
+});
+
+/**
+ * Invest lost its switcher pill for v1 (`SPEC-2026-09-FEEDBACK.md` §4, 2026-09-24 — "unnecessary
+ * complexity" for a pilot, three kinds is enough) without losing the kind itself:
+ * `ADD_KIND` (validation — a deep link's `?kind=`, a stored draft) still names
+ * all four, and `ADD_KIND_TABS` (the switcher's render list) is the one that
+ * dropped to three. Collapsing them back into one list is exactly the class of
+ * bug `addKind.test.ts`'s own header describes — a kind that compiles and
+ * renders like it's still there, minus the one control that reached it.
+ */
+describe('Invest is reachable without a switcher pill', () => {
+  it('ADD_KIND_TABS has three kinds; ADD_KIND still has all four', () => {
+    expect(ADD_KIND_TABS).not.toContain(AddKind.Invest);
+    expect(ADD_KIND_TABS).toHaveLength(3);
+    expect(ADD_KIND).toContain(AddKind.Invest);
+    expect(ADD_KIND).toHaveLength(4);
+  });
+
+  it('the switcher renders ADD_KIND_TABS, not ADD_KIND', () => {
+    const src = readFileSync(
+      join(__dirname, '..', '..', 'app', 'add', 'quick.tsx'),
+      'utf8',
+    );
+    expect(src).toMatch(/ADD_KIND_TABS\.map/);
+    expect(src).not.toMatch(/\bADD_KIND\.map/);
   });
 });
 

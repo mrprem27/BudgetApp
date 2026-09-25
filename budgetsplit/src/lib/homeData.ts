@@ -354,8 +354,6 @@ export async function loadHomeData(
       },
       // For Home's GET STARTED tiles: don't re-ask what onboarding answered.
       peopleCount: persons.filter(p => p.id !== me.id).length,
-      /** Declined people and groups at setup — see `settings.onboardingSkippedPeople`. */
-      skippedPeople: await settings.onboardingSkippedPeople(),
       catRows, catTotal, health, healthInputs,
       healthTxnCount: txns.filter(t => !t.is_deleted).length,
       upcoming, forecast, topShift, sts,

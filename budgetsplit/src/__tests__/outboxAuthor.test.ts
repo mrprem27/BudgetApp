@@ -17,8 +17,8 @@ import { createTestDb, addPerson, addGroup, addMember, addTxn, addCategory, asDb
  */
 
 const queued = (db: TestDb): string[] =>
-  (db.raw.prepare('SELECT entry_id FROM sync_outbox ORDER BY entry_id').all() as { entry_id: string }[])
-    .map(r => r.entry_id);
+  (db.raw.prepare("SELECT local_id FROM sync_queue WHERE local_table = 'txn' ORDER BY local_id").all() as { local_id: string }[])
+    .map(r => r.local_id);
 
 /** A shared group with me and one peer, and a `peerTxn` helper that writes their entry. */
 function scene() {
@@ -39,7 +39,7 @@ function scene() {
     // What `ingestPeerTxn` writes: authored by them, arrived over sync. A TRUSTED
     // author gets no txn_approval row at all — that is the whole trap.
     db.raw.prepare("UPDATE txn SET author_person_id = ?, source = 'peer' WHERE id = ?").run(peer, id);
-    db.raw.prepare('DELETE FROM sync_outbox').run();
+    db.raw.prepare("DELETE FROM sync_queue WHERE local_table = 'txn'").run();
     return id;
   };
 
@@ -49,7 +49,7 @@ function scene() {
       payments: [{ personId: me, amount: 100000 }],
       shares: [{ personId: me, amount: 50000 }, { personId: peer, amount: 50000 }],
     });
-    db.raw.prepare('DELETE FROM sync_outbox').run();
+    db.raw.prepare("DELETE FROM sync_queue WHERE local_table = 'txn'").run();
     return id;
   };
 
@@ -66,10 +66,20 @@ describe('the outbox never carries a peer entry', () => {
     // Locally refused...
     expect(s.db.raw.prepare('SELECT is_deleted FROM txn WHERE id = ?').get(id))
       .toEqual({ is_deleted: 1 });
-    // ...and their copy is left alone. The objection travels as a dispute.
+    // ...and their copy is left alone. The objection travels as my answer; the
+    // server raises the dispute (S21).
     expect(queued(s.db)).toEqual([]);
-    expect(s.db.raw.prepare('SELECT dispute_state FROM txn_approval WHERE txn_id = ?').get(id))
-      .toEqual({ dispute_state: 'raise' });
+    expect(s.db.raw.prepare("SELECT snapshot FROM sync_queue WHERE local_table = 'txn_approval' AND local_id = ?").get(id))
+      .toEqual({ snapshot: JSON.stringify({ status: 'rejected' }) });
+  });
+
+  it('an answer is only ever about someone else\'s entry', async () => {
+    // My own entry has no question to answer. Nothing on screen offers it, but
+    // if anything ever called this, the server would be told I objected to myself.
+    const s = scene();
+    const id = s.myTxn();
+    await rejectTxn(asDb(s.db), id);
+    expect(s.db.raw.prepare("SELECT COUNT(*) AS n FROM sync_queue WHERE local_table = 'txn_approval'").get()).toEqual({ n: 0 });
   });
 
   /*
@@ -104,7 +114,7 @@ describe('the outbox never carries a peer entry', () => {
     const s = scene();
     const id = s.peerTxn();
     await softDeleteTxn(asDb(s.db), id, false, true);
-    s.db.raw.prepare('DELETE FROM sync_outbox').run();
+    s.db.raw.prepare("DELETE FROM sync_queue WHERE local_table = 'txn'").run();
 
     await restoreTxn(asDb(s.db), id);
     expect(queued(s.db)).toEqual([]);
@@ -124,7 +134,7 @@ describe('the outbox still carries my own entries', () => {
       shares: [{ personId: s.me, amount: 50000 }, { personId: s.peer, amount: 50000 }],
     });
     // `addTxn` is a fixture and writes rows directly, so prove each real path.
-    s.db.raw.prepare('DELETE FROM sync_outbox').run();
+    s.db.raw.prepare("DELETE FROM sync_queue WHERE local_table = 'txn'").run();
 
     await updateTxn(asDb(s.db), {
       id, groupId: s.gid, kind: 'expense', entryMode: 'quick', date: Date.now(),
@@ -134,18 +144,18 @@ describe('the outbox still carries my own entries', () => {
     });
     expect(queued(s.db)).toEqual([id]);
 
-    s.db.raw.prepare('DELETE FROM sync_outbox').run();
+    s.db.raw.prepare("DELETE FROM sync_queue WHERE local_table = 'txn'").run();
     await softDeleteTxn(asDb(s.db), id);
     expect(queued(s.db)).toEqual([id]);
 
-    s.db.raw.prepare('DELETE FROM sync_outbox').run();
+    s.db.raw.prepare("DELETE FROM sync_queue WHERE local_table = 'txn'").run();
     await restoreTxn(asDb(s.db), id);
     expect(queued(s.db)).toEqual([id]);
   });
 
-  it('still refuses to queue anything from a personal group', async () => {
-    // The older guard, retested here because both now live in the same statement
-    // and a rewrite could drop either.
+  it('queues a personal-group entry too — everything goes to the account (DQ-93)', async () => {
+    // v1 refused: only shared groups travelled. Now the account keeps everything,
+    // and a personal entry that never went up would be lost with the phone.
     const db = createTestDb();
     const me = addPerson(db, 'Me', true);
     const personal = addGroup(db, 'Personal', true);
@@ -154,9 +164,9 @@ describe('the outbox still carries my own entries', () => {
       groupId: personal, kind: 'expense', date: Date.now(), category: 'Food',
       payments: [{ personId: me, amount: 50000 }], shares: [{ personId: me, amount: 50000 }],
     });
-    db.raw.prepare('DELETE FROM sync_outbox').run();
+    db.raw.prepare("DELETE FROM sync_queue WHERE local_table = 'txn'").run();
 
     await softDeleteTxn(asDb(db), id);
-    expect(queued(db)).toEqual([]);
+    expect(queued(db)).toEqual([id]);
   });
 });

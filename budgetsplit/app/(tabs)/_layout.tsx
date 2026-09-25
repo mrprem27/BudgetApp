@@ -10,12 +10,9 @@ import { setPendingPayment } from '../../src/lib/pendingPayment';
 import { askAboutPendingPayment, recordScannedPayment } from '../../src/lib/confirmPayment';
 import { askAboutPendingSettlement } from '../../src/lib/confirmSettlement';
 import { settings } from '../../src/lib/settings';
-import { dateTime } from '../../src/lib/dateFormat';
 import { drainVoiceInbox } from '../../src/lib/voiceDrain';
-import { runSync, type Vanished } from '../../src/lib/syncEngine';
-import { maybeSnapshot } from '../../src/lib/syncSnapshot';
+import { runSync, scheduleSync, type SyncOutcome, type Vanished } from '../../src/lib/sync';
 import { pendingRestoreOffer } from '../../src/lib/restoreOffer';
-import { mergePerson } from '../../src/db/queries/persons';
 import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, gradients, type, space, radius, layout, shadow } from '../../src/theme';
@@ -41,13 +38,14 @@ import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvide
  * to do about it, while being removed from one means it is still running without
  * you, and there is somebody you could ask why.
  */
-function announceVanished(r: { vanished: Vanished[] }) {
-  if (r.vanished.length === 0) return;
+function announceVanished(r: SyncOutcome | null) {
+  const vanished: Vanished[] = r?.vanished ?? [];
+  if (vanished.length === 0) return;
   const kept = 'Nothing has been deleted here — everything you spent is still in your history, '
     + 'and the group has moved to Archived.';
 
-  const deleted = r.vanished.filter(v => v.state === 'deleted').length;
-  const removed = r.vanished.filter(v => v.state === 'removed').length;
+  const deleted = vanished.filter(v => v.state === 'deleted').length;
+  const removed = vanished.filter(v => v.state === 'removed').length;
 
   // One at a time: two Alerts at once leaves an invisible view that eats every
   // touch on iOS, which is the hazard `sheetStage` exists for.
@@ -68,77 +66,6 @@ function announceVanished(r: { vanished: Vanished[] }) {
     return;
   }
   showRemoved();
-}
-
-/**
- * A shared group brought in somebody who looks like somebody already here.
- *
- * Asked, never guessed. Merging the wrong two people splits a balance across two
- * rows that never reconcile — the same defect as F5 — and the app cannot tell
- * "Priya my flatmate" from "Priya from work" by name alone. Keeping them apart is
- * always recoverable; merging is not.
- *
- * One at a time, and only ever after a real answer — but ALL of them.
- *
- * Only the first was ever asked about, and the rest were dropped on the floor and
- * never came back: `adoptGroup` reports a clash only on the sync that CREATES the
- * row, so on every later sync the rows already exist and `collisions` is empty. A
- * trip group introducing a duplicate Priya, Rohan and Vikram asked about Priya
- * and left the other two split across two rows each, permanently, with no UI
- * anywhere that could merge them.
- *
- * Chained through the dismiss handler rather than stacked: two RN `<Alert>`s at
- * once is the same "invisible view eats every touch" hazard `sheetStage` exists
- * for, and three questions arriving in one breath is not a decision anyone makes
- * carefully.
- */
-type Collision = { incomingId: string; existingId: string; name: string };
-
-function askAboutMerges(
-  db: Parameters<typeof runSync>[0],
-  r: { collisions: Collision[] },
-  refresh: () => void,
-) {
-  const queue = [...r.collisions];
-
-  const askNext = () => {
-    const next = queue.shift();
-    if (!next) return;
-    Alert.alert(
-      `Two people called ${next.name}`,
-      `A shared group just introduced a ${next.name}, and you already have one. `
-      + 'Same person?\n\nIf you are not sure, keep them separate — you can merge later, '
-      + 'but a merge cannot be undone.'
-      + (queue.length > 0 ? `\n\n${queue.length} more to check after this.` : ''),
-      [
-        { text: 'Keep separate', style: 'cancel', onPress: askNext },
-        {
-          text: 'Same person',
-          onPress: () => {
-            mergePerson(db, next.incomingId, next.existingId)
-              .then(() => { refresh(); askNext(); })
-              // A merge can now REFUSE — two different accounts, or you as the
-              // one being folded away — and a refusal the user never sees looks
-              // exactly like a merge that worked. They tapped a one-way door and
-              // are owed the reason it did not open.
-              //
-              // The next question waits for THIS alert to be dismissed. Firing it
-              // alongside would put two `<Alert>`s up at once, which on iOS leaves
-              // an invisible view that eats every touch.
-              .catch((e: unknown) => {
-                Alert.alert(
-                  "Couldn't merge them",
-                  e instanceof Error ? e.message : 'Something went wrong. They have been kept separate.',
-                  [{ text: 'OK', onPress: askNext }],
-                );
-              });
-          },
-        },
-      ],
-    );
-  };
-
-  askNext();
 }
 
 const TAB_ICON: Record<string, React.ComponentProps<typeof Feather>['name']> = {
@@ -166,7 +93,7 @@ function AppTabBar({ state, navigation }: { state: any; navigation: any }) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { flags } = useFeatureFlags();
-  const { refresh } = useDataRefresh();
+  const { refresh, version } = useDataRefresh();
   const db = useSQLiteContext();
   const [scanPay, setScanPay] = useState(false);
   const [showHint, setShowHint] = useState(false);
@@ -189,18 +116,11 @@ function AppTabBar({ state, navigation }: { state: any; navigation: any }) {
       // balance wrong for two people.
       askAboutPendingSettlement(db).then(filed => { if (filed) refresh(); }).catch(() => {});
       drainVoiceInbox(db).then(r => { if (r.saved + r.queued > 0) refresh(); }).catch(() => {});
-      // Shared groups exchange changes here, and only here. A ledger does not need
-      // to be a chat: pushing on every keystroke would mean a live connection, a
-      // battery cost and a stream of half-typed entries reaching other people. This
-      // is what the Sync screen means by "when you open the app".
-      //
-      // `runSync` gates itself on the setting and never throws, so there is no
-      // check to duplicate here and no failure that can reach a screen.
-      runSync(db).then(r => { if (r.changed) refresh(); announceVanished(r); askAboutMerges(db, r, refresh); }).catch(() => {});
-      // "Keep a copy of everything", if it is on and one is due. Its own throttle
-      // (six hours) lives inside — a full read, seal and upload on every
-      // foreground would be absurd.
-      maybeSnapshot(db).catch(() => {});
+      // The account's copy of everything (SPEC-SERVER.md), on every return to the
+      // app; writes in between go within seconds (`scheduleSync`, below). Gated
+      // inside on the ledger having been joined to this account at first sign-in,
+      // and it never throws, so no failure can reach a screen.
+      runSync(db).then(r => { if (r?.changed) refresh(); announceVanished(r); }).catch(() => {});
     });
     return () => sub.remove();
   }, [db, refresh]);
@@ -208,17 +128,19 @@ function AppTabBar({ state, navigation }: { state: any; navigation: any }) {
   // The cold-start half. `AppState` only fires on a transition, so without this a
   // launch straight into the app syncs nothing until you leave and come back.
   useEffect(() => {
-    runSync(db).then(r => { if (r.changed) refresh(); announceVanished(r); askAboutMerges(db, r, refresh); }).catch(() => {});
-    maybeSnapshot(db).catch(() => {});
+    runSync(db).then(r => { if (r?.changed) refresh(); announceVanished(r); }).catch(() => {});
   }, [db, refresh]);
 
+  // After a write: send it within seconds while the app is open. Every write calls
+  // refresh(), which moves `version`; scheduleSync debounces and does nothing
+  // when the queue is empty, so a pull's own refresh cannot schedule another.
+  useEffect(() => {
+    scheduleSync(db, refresh);
+  }, [db, refresh, version]);
+
   /*
-   * "Your data is on your account — want it back?"
-   *
-   * The last step of "keep a copy of everything". Snapshots upload on their own,
-   * and until this existed getting one back meant knowing to go to Settings →
-   * Backup → Restore from your account. Somebody setting up a replacement phone
-   * has no reason to look there.
+   * "Used BudgetSplit before?" — on a replacement phone, signing in is the way
+   * back to everything, and somebody setting one up has no reason to look for it.
    *
    * Only ever on a phone with no transactions on it — a restore is
    * wipe-and-replace, and a prompt that can appear next to real data is one
@@ -238,40 +160,17 @@ function AppTabBar({ state, navigation }: { state: any; navigation: any }) {
        * phone with nothing on it, which is exactly when somebody is most likely
        * to be setting up a replacement. Offering the door is not a promise that
        * anything is behind it, and it is the step that was missing: onboarding
-       * says "no account, nothing uploaded", so nothing anywhere suggested
+       * says "nothing is uploaded unless you sign in", so nothing anywhere suggested
        * signing in, and the restore feature was unreachable on the one device it
        * exists for.
        */
-      if (offer.kind === 'sign-in') {
-        Alert.alert(
-          'Used BudgetSplit before?',
-          'If you had it on another phone and turned on "keep a copy of everything", '
-          + 'signing in with the same email brings that copy back.\n\n'
-          + 'Otherwise just carry on — nothing here needs an account.',
-          [
-            { text: 'Start fresh', style: 'cancel', onPress: dismiss },
-            { text: 'Sign in', onPress: () => router.push('/settings/account') },
-          ],
-        );
-        return;
-      }
-
       Alert.alert(
-        'Welcome back',
-        `Your account has ${offer.count === 1 ? 'a saved copy' : `${offer.count} saved copies`} of your `
-        + `BudgetSplit data, the most recent from ${dateTime(new Date(offer.newestAt))}.\n\n`
-        // "the code you saved" rather than naming one: somebody who turned this on
-        // before recovery codes existed has a passphrase they invented, and telling
-        // them to find a code they were never given is how a good backup gets
-        // written off as unopenable.
-        + 'Bringing it back needs the code you saved when you turned this on. '
-        + 'Nothing here is overwritten — this phone has nothing on it yet.',
+        'Used BudgetSplit before?',
+        'If you had it on another phone, signing in with the same email brings everything back.\n\n'
+        + 'Otherwise just carry on — nothing here needs an account.',
         [
           { text: 'Start fresh', style: 'cancel', onPress: dismiss },
-          {
-            text: 'Restore',
-            onPress: () => router.push('/settings/backup?open=account'),
-          },
+          { text: 'Sign in', onPress: () => router.push('/settings/account') },
         ],
       );
     }).catch(() => {});

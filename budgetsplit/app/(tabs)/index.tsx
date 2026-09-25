@@ -142,15 +142,12 @@ export default function DashboardScreen() {
   // monthly — offering them "Set a monthly budget" would be re-asking a question
   // they already answered.
   const peopleCount = data?.peopleCount ?? 0;
-  // Skipping the people step at setup is an answer, and re-asking on the very next
-  // screen reads as the app not having heard it. The flag is set only by that Skip
-  // and stops mattering the moment a person or group exists — so it suppresses the
-  // nag, never the feature: both tiles come back if you later add someone and
-  // remove them, and every other route to groups and people is untouched.
-  const declinedPeople = data?.skippedPeople ?? false;
+  // Onboarding no longer asks who you split with (`SPEC-2026-09-FEEDBACK.md` §2 O6), so there is
+  // no "declined" answer to remember here — the tile shows for anyone splitting
+  // is on for and who has no friends or groups yet, full stop.
   const showBudgetTile = !budget.exists;
-  const showGroupTile = flags.splitting && !declinedPeople && groups.filter(g => g.is_personal !== 1).length === 0;
-  const showPeopleTile = flags.splitting && !declinedPeople && peopleCount === 0;
+  const showGroupTile = flags.splitting && groups.filter(g => g.is_personal !== 1).length === 0;
+  const showPeopleTile = flags.splitting && peopleCount === 0;
 
   return (
     <View style={styles.container}>
@@ -185,7 +182,7 @@ export default function DashboardScreen() {
             <TouchableOpacity onPress={() => router.push('/search')} hitSlop={8} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel="Search">
               <Feather name="search" size={18} color={colors.textSecondary} />
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => router.push('/reminders')} hitSlop={8} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel={`Reminders${upcoming.length > 0 ? `, ${upcoming.length} upcoming` : ''}`}>
+            <TouchableOpacity onPress={() => router.push('/upcoming')} hitSlop={8} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel={`Upcoming${upcoming.length > 0 ? `, ${upcoming.length}` : ''}`}>
               <Feather name="bell" size={18} color={colors.textSecondary} />
               {upcoming.length > 0 && (
                 <View style={styles.notifBadge}>
@@ -280,14 +277,13 @@ export default function DashboardScreen() {
                 </View>
 
                 {/* Only what's genuinely still missing. Onboarding can set a
-                    budget and add people — re-offering those to the user who just
-                    did them is why the flow read as "nothing happened".
+                    budget — re-offering that to the user who just did it is why
+                    the flow read as "nothing happened".
 
-                    It no longer creates a group (`W1-08`), so the group tile now
-                    fires for someone who completed the people step. That is
-                    correct, not a regression: they have contacts and no group, and
-                    the Groups tab shows them the same prompt. The skip case is
-                    still suppressed, which is what `W1-09` was about. */}
+                    Onboarding never creates a group and, as of `SPEC-2026-09-FEEDBACK.md` §2 O6,
+                    never adds a person either — that question moved to Friends
+                    entirely, so there is no "already answered this" case left to
+                    suppress here. Both tiles simply track whether one exists. */}
                 {(showBudgetTile || showGroupTile || showPeopleTile) && (
                   <>
                     <Text style={styles.getStartedLabel}>GET STARTED</Text>

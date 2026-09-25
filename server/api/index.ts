@@ -1,19 +1,13 @@
 /**
- * BudgetSplit API Worker — phase S1: sign-in and encrypted backup/restore.
+ * BudgetSplit API Worker: sign-in, linking, and the account's copy of the ledger.
  *
- * What this server deliberately does NOT do: hold anyone's financial data. The
- * app stays local-first (each device's own SQLite, `budgetsplit/src/db/schema.ts`)
- * and the backup blobs stored here are already AES-encrypted on-device by
- * `budgetsplit/src/lib/backup.ts` with a passphrase this server never sees. A
- * leaked bucket is unreadable; a leaked D1 gives up email addresses and nothing
- * about anyone's money.
- *
- * Stage C adds sync for SHARED groups, and does not change that: entries are
- * sealed on the device with a per-group key this Worker never receives, and the
- * key is stored only as per-device wraps it cannot open. What the server gains is
- * knowledge of who is in which group and how many entries changed when — not what
- * any of them say. Personal spending, income, goals, budgets and net worth are
- * never sent at all.
+ * The app stays offline-first (each phone's own SQLite,
+ * `budgetsplit/src/db/schema.ts`), and a signed-in phone keeps this server's copy
+ * of EVERYTHING the account owns up to date — personal money and shared groups
+ * alike (`DQ-93`). That copy is readable, not sealed: the server checks every write
+ * against the app's own rules, and a new phone gets it all back by signing in.
+ * Sync lives in `./sync`, reached through its barrel. Receipt photos and the
+ * passphrase-encrypted backup file never come here.
  *
  * See README.md for deploy steps and the route table.
  */
@@ -31,19 +25,11 @@ import {
   MAGIC_LINK_MAX_PER_WINDOW,
   MAGIC_LINK_WINDOW_MS,
   SESSION_TTL_MS,
-  MAX_BACKUP_BYTES,
-  MAX_BACKUPS_PER_USER,
   MAX_AVATAR_BYTES,
   MAX_AVATAR_URL_LEN,
   MAX_NAME_LEN,
-  MAX_ENTRY_BYTES,
-  SYNC_PAGE_SIZE,
-  SYNC_WRITES_PER_WINDOW,
-  SYNC_WRITE_WINDOW_MS,
   authenticate,
   badRequest,
-  conflict,
-  forbidden,
   json,
   methodNotAllowed,
   newId,
@@ -55,37 +41,33 @@ import {
   randomToken,
   tooManyRequests,
   unauthorized,
-  type AuthedUser,
 } from './lib';
 import {
   avatarKey,
   isAvatarKey,
   orderPair,
-  toBackupDto,
   toUserDto,
-  type BackupRow,
   type Env,
   type InviteRow,
   type LinkDto,
   type LinkRow,
   type PendingClaimDto,
-  type SyncEntryDto,
-  type SyncEntryRow,
   type UserRow,
 } from './types';
 import { mailProvider, sendMail } from './mailer';
 import { storage } from './storage';
+import { handleSync, handleHistory, eraseAccount } from './sync';
 
 const USER_COLUMNS = 'id, email, name, phone, avatar_url, created_at, deleted_at';
 
 /**
- * Backups and avatars need R2; sign-in and linking do not. R2 must be enabled
+ * Avatars need R2; sign-in, linking and sync do not. R2 must be enabled
  * once on the Cloudflare dashboard before a bucket can be created, so a Worker
  * can legitimately be live before storage exists. Say so precisely instead of
  * failing in a way that reads like a bug.
  */
 const noStorage = () => json(
-  { error: 'Backup storage is not configured on this server yet.', code: 'E_STORAGE_UNCONFIGURED' },
+  { error: 'File storage is not configured on this server yet.', code: 'E_STORAGE_UNCONFIGURED' },
   503,
 );
 
@@ -120,6 +102,12 @@ async function route(request: Request, env: Env): Promise<Response> {
       ? json({ ok: true, mail: mailProvider(env), storage: storage(env)?.kind ?? 'none' })
       : methodNotAllowed('GET');
   }
+
+  if (path === '/sync/push' || path === '/sync/pull') {
+    return handleSync(request, env, path);
+  }
+  const historyMatch = /^\/transactions\/([^/]+)\/history$/.exec(path);
+  if (historyMatch) return handleHistory(request, env, decodeURIComponent(historyMatch[1]));
 
   if (path === '/auth/request-link') {
     return method === 'POST' ? requestLink(request, env, url) : methodNotAllowed('POST');
@@ -175,47 +163,6 @@ async function route(request: Request, env: Env): Promise<Response> {
     return methodNotAllowed('PATCH, DELETE');
   }
 
-  if (path === '/backups') {
-    if (method === 'GET') return listBackups(request, env);
-    if (method === 'POST') return createBackup(request, env, url);
-    return methodNotAllowed('GET, POST');
-  }
-  if (path.startsWith('/backups/')) {
-    const id = decodeURIComponent(path.slice('/backups/'.length));
-    if (!id || id.includes('/')) return notFound('No such backup');
-    if (method === 'GET') return downloadBackup(request, env, id);
-    if (method === 'DELETE') return deleteBackup(request, env, id);
-    return methodNotAllowed('GET, DELETE');
-  }
-
-  if (path === '/sync/devices') {
-    if (method === 'POST') return registerDevice(request, env);
-    if (method === 'GET') return listDeviceKeys(request, env, url);
-    return methodNotAllowed('GET, POST');
-  }
-  if (path === '/sync/groups') {
-    if (method === 'GET') return listSyncGroups(request, env, url);
-    if (method === 'POST') return publishSyncGroup(request, env);
-    return methodNotAllowed('GET, POST');
-  }
-  if (path.startsWith('/sync/groups/') && path.endsWith('/members')) {
-    if (method !== 'POST') return methodNotAllowed('POST');
-    const id = decodeURIComponent(path.slice('/sync/groups/'.length, -'/members'.length));
-    if (!id || id.includes('/')) return notFound('No such group');
-    return inviteSyncMember(request, env, id);
-  }
-  if (path.startsWith('/sync/groups/') && path.endsWith('/wraps')) {
-    if (method !== 'POST') return methodNotAllowed('POST');
-    const id = decodeURIComponent(path.slice('/sync/groups/'.length, -'/wraps'.length));
-    if (!id || id.includes('/')) return notFound('No such group');
-    return addSyncWraps(request, env, id);
-  }
-  if (path.startsWith('/sync/groups/') && path.endsWith('/join')) {
-    if (method !== 'POST') return methodNotAllowed('POST');
-    const id = decodeURIComponent(path.slice('/sync/groups/'.length, -'/join'.length));
-    if (!id || id.includes('/')) return notFound('No such group');
-    return joinSyncGroup(request, env, id);
-  }
   if (path === '/friend-requests') {
     if (method === 'POST') return createFriendRequest(request, env, url);
     if (method === 'GET') return listFriendRequests(request, env);
@@ -239,29 +186,6 @@ async function route(request: Request, env: Env): Promise<Response> {
     if (method === 'DELETE') return cancelFriendRequest(request, env, id);
     return methodNotAllowed('DELETE');
   }
-  if (path === '/sync/entries') {
-    if (method === 'GET') return pullEntries(request, env, url);
-    if (method === 'PUT') return pushEntry(request, env);
-    return methodNotAllowed('GET, PUT');
-  }
-  if (path === '/sync/disputes') {
-    if (method === 'GET') return pullDisputes(request, env, url);
-    if (method === 'PUT') return pushDispute(request, env);
-    return methodNotAllowed('GET, PUT');
-  }
-  if (path.startsWith('/sync/groups/') && path.endsWith('/leave')) {
-    if (method !== 'POST') return methodNotAllowed('POST');
-    const id = decodeURIComponent(path.slice('/sync/groups/'.length, -'/leave'.length));
-    if (!id || id.includes('/')) return notFound('No such group');
-    return leaveSyncGroup(request, env, id);
-  }
-  if (path.startsWith('/sync/groups/')) {
-    const id = decodeURIComponent(path.slice('/sync/groups/'.length));
-    if (!id || id.includes('/')) return notFound('No such group');
-    if (method === 'DELETE') return deleteSyncGroup(request, env, id);
-    return methodNotAllowed('DELETE');
-  }
-
   return notFound('No such route');
 }
 
@@ -498,38 +422,34 @@ async function patchMe(request: Request, env: Env, url: URL): Promise<Response> 
  *
  * ## What is destroyed
  *
- * Everything that identifies the person or gives anything access:
+ * Everything that identifies the person, everything the account kept for them,
+ * and everything that gives anything access:
  *
  * - the email, name, phone and avatar URL, overwritten in place on `users`;
- * - every session, so every signed-in device is signed out at once;
+ * - the account's copy of their ledger — their own scope and every group that is
+ *   theirs alone (`sync/erase.ts`, which says exactly what and why);
+ * - every session and device, so every signed-in phone is signed out at once;
  * - every unused magic link for that address, so a link already in an inbox
- *   cannot resurrect the account;
- * - every device key and every `sync_wrap` sealed to one, which is what makes
- *   this irreversible in the way that matters — no future device of theirs can
- *   decrypt a group's entries, because the wraps that would have let it are gone;
- * - every backup blob in R2 and its row.
+ *   cannot resurrect the account.
  *
  * ## What survives, and why
  *
- * Their entries in shared groups, and their disputes. Those are not the account's
- * data, they are the GROUP'S record of what was spent, held on four other
- * people's phones already. Cascading a delete through them would rewrite other
- * people's ledgers because a fifth person closed their account — the same rule
+ * Their entries in groups other people are in, and their objections to them.
+ * Those are not the account's data, they are the GROUP's record of what was
+ * spent, already on the other members' phones. Erasing them would rewrite other
+ * people's ledgers because one person closed their account — the same rule
  * removal follows everywhere else here: it ends a relationship, never a record.
- * `0010_account_deletion.sql` has the full argument.
- *
- * Their membership is ended rather than erased (`removed_at`), so no group keeps
- * delivering to an account that no longer exists, and live links are tombstoned
- * with `ended_by` set to them — the shape `0007_link_end.sql` built so the other
- * side is told once instead of quietly finding somebody gone.
+ * Their membership there ends (`left`), and live links are tombstoned with
+ * `ended_by` set to them, so the other side is told once instead of quietly
+ * finding somebody gone.
  *
  * ## Ordering
  *
- * R2 first, then D1. D1 has no cross-binding transaction with R2, so one of the
- * two orders leaves garbage on a failure and the other loses the only pointer to
- * it. Deleting the blobs first means a failure leaves rows pointing at objects
- * that are already gone — recoverable, and the retry is idempotent. The reverse
- * would orphan paid-for bytes nothing can ever name again.
+ * R2 first (the avatar), then D1 in one batch. D1 has no cross-binding
+ * transaction with R2, so one of the two orders leaves garbage on a failure and
+ * the other loses the only pointer to it. Deleting the blob first means a failure
+ * leaves a row pointing at an object already gone — recoverable, and the retry is
+ * idempotent. The reverse would orphan bytes nothing can ever name again.
  */
 async function deleteAccount(request: Request, env: Env): Promise<Response> {
   const auth = await authenticate(request, env);
@@ -537,26 +457,19 @@ async function deleteAccount(request: Request, env: Env): Promise<Response> {
   const userId = auth.user.id;
   const now = Date.now();
 
-  // 1. R2 first (see Ordering above): backups, then the avatar.
+  // 1. R2 first (see Ordering above): the avatar.
   const files = storage(env);
-  if (files) {
-    const blobs = await env.DB.prepare('SELECT r2_key FROM backups WHERE user_id = ?')
-      .bind(userId).all<{ r2_key: string }>();
-    for (const b of blobs.results ?? []) await files.delete(b.r2_key);
-    if (auth.user.avatar_url && isAvatarKey(auth.user.avatar_url)) {
-      await files.delete(auth.user.avatar_url);
-    }
+  if (files && auth.user.avatar_url && isAvatarKey(auth.user.avatar_url)) {
+    await files.delete(auth.user.avatar_url);
   }
 
   // 2. D1, in one batch so a failure part-way leaves the account intact and
   // signed in rather than half-erased and unusable.
   await env.DB.batch([
-    env.DB.prepare('DELETE FROM backups WHERE user_id = ?').bind(userId),
+    // The account's copy of the ledger (DQ-93): everything that was theirs alone.
+    ...(await eraseAccount(env.DB, userId, now)),
     env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(userId),
     env.DB.prepare('DELETE FROM magic_links WHERE email = ?').bind(auth.user.email),
-    // Wraps before device keys: sync_wrap references device_key.
-    env.DB.prepare('DELETE FROM sync_wrap WHERE device_id IN (SELECT device_id FROM device_key WHERE user_id = ?)').bind(userId),
-    env.DB.prepare('DELETE FROM device_key WHERE user_id = ?').bind(userId),
     // Requests they sent, and blocks they set: both are theirs alone.
     env.DB.prepare("DELETE FROM friend_request WHERE from_user = ?").bind(userId),
     env.DB.prepare('DELETE FROM friend_block WHERE owner_user = ?').bind(userId),
@@ -570,19 +483,6 @@ async function deleteAccount(request: Request, env: Env): Promise<Response> {
     // Live links end, attributed, exactly as an unlink does.
     env.DB.prepare('UPDATE links SET ended_at = ?, ended_by = ? WHERE (user_a = ? OR user_b = ?) AND ended_at IS NULL')
       .bind(now, userId, userId, userId),
-    // Membership ends so nothing keeps delivering to a dead account.
-    env.DB.prepare('UPDATE sync_member SET removed_at = ? WHERE user_id = ? AND removed_at IS NULL')
-      .bind(now, userId),
-    // Groups they own and nobody else is in are tombstoned. A group with other
-    // live members is deliberately left alone — see the migration.
-    env.DB.prepare(
-      `UPDATE sync_group SET deleted_at = ?
-        WHERE owner_user = ? AND deleted_at IS NULL
-          AND NOT EXISTS (
-            SELECT 1 FROM sync_member m
-             WHERE m.group_id = sync_group.id AND m.user_id <> ? AND m.removed_at IS NULL
-          )`,
-    ).bind(now, userId, userId),
     // Finally the identity itself. The email is replaced rather than nulled
     // (NOT NULL UNIQUE) with a value nobody can type, which also frees the real
     // address for a genuinely new account.
@@ -1204,752 +1104,6 @@ function friendRequestHtml(who: string, note: string | null, hasAccount: boolean
 </body></html>`;
 }
 
-// --- Backups ---------------------------------------------------------------
-
-/**
- * The body is stored byte-for-byte and never parsed: it's the encrypted
- * envelope `budgetsplit/src/lib/backup.ts` already produces, and the passphrase
- * that opens it stays on the user's device. Any content-type is accepted for
- * the same reason — this endpoint's job is to be blind.
- */
-async function createBackup(request: Request, env: Env, url: URL): Promise<Response> {
-  const auth = await authenticate(request, env);
-  if (!auth) return unauthorized();
-  const files = storage(env);
-  if (!files) return noStorage();
-
-  // The cap is whatever THIS deployment's backend accepts, not a constant: KV
-  // stops at 25 MiB where R2 keeps going, and discovering that *after* a
-  // successful upload would be the worst possible moment to learn it.
-  const limit = Math.min(MAX_BACKUP_BYTES, files.maxBytes);
-  const declared = Number(request.headers.get('content-length') ?? '');
-  if (Number.isFinite(declared) && declared > limit) {
-    return payloadTooLarge(`Backup is larger than ${limit} bytes`);
-  }
-  const bytes = await request.arrayBuffer();
-  if (bytes.byteLength === 0) return badRequest('Empty backup body');
-  if (bytes.byteLength > limit) {
-    return payloadTooLarge(`Backup is larger than ${limit} bytes`);
-  }
-
-  const id = newId();
-  const createdAt = Date.now();
-  const key = `backups/${auth.user.id}/${createdAt}-${id}.enc`;
-  await files.put(key, bytes, 'application/octet-stream');
-  // R2 first, then D1: an object with no row is invisible dead storage the prune
-  // below will never see, but a row with no object is a restore that 404s at the
-  // worst possible moment. Prefer the leak.
-  // `?kind=snapshot` marks an automatic one. Anything else is manual, which is
-  // the safe default: a mislabelled manual backup is merely kept longer, while a
-  // mislabelled snapshot could push a deliberate backup out.
-  const kind = url.searchParams.get('kind') === 'snapshot' ? 'snapshot' : 'manual';
-  await env.DB.prepare(
-    'INSERT INTO backups (id, user_id, r2_key, size_bytes, created_at, kind) VALUES (?, ?, ?, ?, ?, ?)',
-  ).bind(id, auth.user.id, key, bytes.byteLength, createdAt, kind).run();
-
-  const pruned = await pruneOldBackups(env, auth.user.id, kind);
-  return json({
-    backup: toBackupDto({ id, user_id: auth.user.id, r2_key: key, size_bytes: bytes.byteLength, created_at: createdAt }),
-    pruned,
-  }, 201);
-}
-
-/**
- * Drops everything past the newest N **of the same kind**. Returns how many went.
- *
- * Scoped to one kind because they answer different questions. A snapshot is a
- * rolling window of "this phone, recently"; a manual backup is a point somebody
- * chose. Pruned together — which is what happened — the four-a-day snapshots
- * filled all ten slots in about 60 hours and the careful backup made before a
- * risky change was gone, with the deletion count returned by the API and
- * discarded by the client.
- */
-async function pruneOldBackups(env: Env, userId: string, kind: string): Promise<number> {
-  const stale = await env.DB.prepare(
-    `SELECT id, r2_key FROM backups WHERE user_id = ? AND kind = ?
-      ORDER BY created_at DESC LIMIT -1 OFFSET ?`,
-  ).bind(userId, kind, MAX_BACKUPS_PER_USER).all<{ id: string; r2_key: string }>();
-  const rows = stale.results ?? [];
-  if (rows.length === 0) return 0;
-
-  await storage(env)?.delete(rows.map(r => r.r2_key));
-  await env.DB.prepare(
-    `DELETE FROM backups WHERE id IN (${rows.map(() => '?').join(',')})`,
-  ).bind(...rows.map(r => r.id)).run();
-  return rows.length;
-}
-
-async function listBackups(request: Request, env: Env): Promise<Response> {
-  const auth = await authenticate(request, env);
-  if (!auth) return unauthorized();
-  const rows = await env.DB.prepare(
-    'SELECT id, user_id, r2_key, size_bytes, created_at FROM backups WHERE user_id = ? ORDER BY created_at DESC',
-  ).bind(auth.user.id).all<BackupRow>();
-  return json({ backups: (rows.results ?? []).map(toBackupDto) });
-}
-
-async function downloadBackup(request: Request, env: Env, id: string): Promise<Response> {
-  const auth = await authenticate(request, env);
-  if (!auth) return unauthorized();
-  const files = storage(env);
-  if (!files) return noStorage();
-  const row = await ownedBackup(env, auth, id);
-  if (!row) return notFound('No such backup');
-
-  const object = await files.get(row.r2_key);
-  // Row without object: only reachable if a put succeeded and its object was
-  // later removed out of band. Report it as gone rather than serving an empty file.
-  if (!object) return notFound('That backup is no longer stored');
-  return new Response(object.body, {
-    headers: {
-      'content-type': 'application/octet-stream',
-      'content-length': String(row.size_bytes),
-      'cache-control': 'no-store',
-    },
-  });
-}
-
-async function deleteBackup(request: Request, env: Env, id: string): Promise<Response> {
-  const auth = await authenticate(request, env);
-  if (!auth) return unauthorized();
-  const row = await ownedBackup(env, auth, id);
-  if (!row) return notFound('No such backup');
-
-  await storage(env)?.delete(row.r2_key);
-  await env.DB.prepare('DELETE FROM backups WHERE id = ?').bind(row.id).run();
-  return json({ ok: true });
-}
-
-/**
- * Always scoped by `user_id`, never by id alone — this is the only thing
- * standing between one account's backups and another's, so it lives in one
- * function that every backup route goes through rather than being re-typed.
- */
-function ownedBackup(env: Env, auth: AuthedUser, id: string): Promise<BackupRow | null> {
-  return env.DB.prepare(
-    'SELECT id, user_id, r2_key, size_bytes, created_at FROM backups WHERE id = ? AND user_id = ?',
-  ).bind(id, auth.user.id).first<BackupRow>();
-}
-
-// --- Sync (Stage C) --------------------------------------------------------
-//
-// The mailbox. Everything below stores or serves bytes it cannot read: entries
-// are sealed with a per-group key that never reaches this Worker, and the wraps
-// of that key are themselves sealed to a device. What the server does know is
-// who may read which mailbox, and which version of an entry is current.
-//
-// ⚠️ NOT RATE LIMITED. `/auth/request-link` is the only route here with a
-// limiter, and `PUT /sync/entries` is the first write route with a real abuse
-// profile — an authenticated member of one group can fill D1. Bounded per
-// request (MAX_ENTRY_BYTES) but not per account per hour. Stated rather than
-// implied to be handled.
-
-/**
- * Register (or refresh) this device's public key.
- *
- * Upsert on device_id: reinstalling mints a new secret and therefore a new
- * public key, and the old wraps become unopenable. That is F12 working as
- * intended — the wraps get reissued by a member who still holds the group key —
- * not a case to paper over by keeping the old key alive.
- */
-async function registerDevice(request: Request, env: Env): Promise<Response> {
-  const auth = await authenticate(request, env);
-  if (!auth) return unauthorized();
-  const body = await parseJsonObject(request);
-  if (!body) return badRequest('Invalid JSON body');
-
-  const deviceId = typeof body.deviceId === 'string' ? body.deviceId.trim() : '';
-  const publicKey = typeof body.publicKey === 'string' ? body.publicKey.trim() : '';
-  if (!deviceId || !publicKey) return badRequest('deviceId and publicKey are required');
-  if (!/^[0-9a-f]{32,128}$/i.test(publicKey)) return badRequest('publicKey must be hex');
-
-  const label = typeof body.label === 'string' ? body.label.slice(0, MAX_NAME_LEN) : null;
-  const now = Date.now();
-  // Scoped by user_id in the WHERE of the update half: without it, knowing
-  // someone's device id would let another account overwrite their public key and
-  // have every future wrap issued to itself.
-  const written = await env.DB.prepare(
-    `INSERT INTO device_key (device_id, user_id, public_key, label, created_at, seen_at)
-     VALUES (?, ?, ?, ?, ?, ?)
-     ON CONFLICT(device_id) DO UPDATE SET
-       public_key = excluded.public_key,
-       label      = excluded.label,
-       seen_at    = excluded.seen_at
-     WHERE device_key.user_id = excluded.user_id`,
-  ).bind(deviceId, auth.user.id, publicKey, label, now, now).run();
-
-  /*
-   * The guard above correctly refuses to overwrite another account's device, but
-   * saying so is the other half. Returning the caller's own input regardless made
-   * a refused write look like a successful one — and a device that believes it is
-   * registered would try to sync forever against a public key the server never
-   * accepted, failing silently every time.
-   *
-   * Only reachable on a device-id collision, which random 32-hex makes vanishingly
-   * unlikely. Reported anyway: a silent wrong answer costs far more to diagnose
-   * than this costs to write.
-   */
-  if ((written.meta?.changes ?? 0) === 0) {
-    return forbidden('That device id is registered to another account');
-  }
-
-  return json({ device: { deviceId, publicKey, label } });
-}
-
-/**
- * The public keys of someone you are linked with — or your own.
- *
- * Wrapping a group key to another person's devices requires knowing what to wrap
- * it to, and nothing else here would tell you. **Gated on an existing link**, and
- * that gate is the whole security of this route: without it, a user id would be
- * enough to enumerate someone's devices, which is a rough count of their phones
- * and a fingerprint that survives them changing their name and email.
- *
- * There is still no directory. You can only ask about someone who has already
- * approved a link with you.
- */
-async function listDeviceKeys(request: Request, env: Env, url: URL): Promise<Response> {
-  const auth = await authenticate(request, env);
-  if (!auth) return unauthorized();
-
-  const userId = (url.searchParams.get('userId') ?? '').trim() || auth.user.id;
-  if (userId !== auth.user.id && !(await findLink(env, auth.user.id, userId))) {
-    return forbidden('You are not linked with that person');
-  }
-
-  const rows = await env.DB.prepare(
-    'SELECT device_id, public_key, label FROM device_key WHERE user_id = ? ORDER BY created_at ASC',
-  ).bind(userId).all<{ device_id: string; public_key: string; label: string | null }>();
-
-  return json({
-    devices: (rows.results ?? []).map(r => ({
-      deviceId: r.device_id, publicKey: r.public_key, label: r.label,
-    })),
-  });
-}
-
-/**
- * The one isolation check, in one place.
- *
- * Every route above this section answers "is this row yours" with
- * `WHERE user_id = ?`. A shared group is the first thing here that belongs to
- * several people, so the question changes shape — and a wrong join exposes one
- * household's ledger to another. It is a single function for exactly that reason:
- * re-typing this per route is how one copy eventually forgets `state='approved'`
- * or `removed_at IS NULL`.
- *
- * 'pending' is not membership. An invitation grants nothing until accepted.
- */
-async function approvedMember(env: Env, groupId: string, userId: string): Promise<boolean> {
-  const row = await env.DB.prepare(
-    `SELECT 1 AS ok FROM sync_member m JOIN sync_group g ON g.id = m.group_id
-      WHERE m.group_id = ? AND m.user_id = ? AND m.state = 'approved'
-        AND m.removed_at IS NULL AND g.deleted_at IS NULL`,
-  ).bind(groupId, userId).first<{ ok: number }>();
-  return !!row;
-}
-
-/**
- * Publish a group under the id it already has on this phone.
- *
- * Adoption rather than creation: the client keeps its local uuid. A server-minted
- * id would put a mapping between two ids on every device, and every bug in that
- * mapping attaches a ledger to the wrong household.
- *
- * Idempotent, because a drain that fails after publishing must be safe to retry.
- */
-async function publishSyncGroup(request: Request, env: Env): Promise<Response> {
-  const auth = await authenticate(request, env);
-  if (!auth) return unauthorized();
-  const body = await parseJsonObject(request);
-  if (!body) return badRequest('Invalid JSON body');
-  const groupId = typeof body.groupId === 'string' ? body.groupId.trim() : '';
-  if (!groupId) return badRequest('groupId is required');
-
-  const existing = await env.DB.prepare('SELECT id, owner_user FROM sync_group WHERE id = ?')
-    .bind(groupId).first<{ id: string; owner_user: string }>();
-  if (existing) {
-    // Someone else's group under an id we happen to share is not ours to take
-    // over. Local uuids collide only by accident or on purpose; both answer 403.
-    if (existing.owner_user !== auth.user.id) return forbidden('That group id belongs to another account');
-    /*
-     * Idempotent, but NOT a no-op: the wraps still land.
-     *
-     * Returning here without running them was half of why sharing a group with a
-     * second person was broken. The owner re-shares, sends wraps for their own
-     * devices, and this dropped them on the floor — so a second phone, or a
-     * reinstalled one, could never be given the key it was just handed, and the
-     * client had no way to tell that from success.
-     *
-     * `wrapStatements` upserts and refuses any wrap aimed at a device that is not
-     * theirs, so re-sending the same wrap is free and sending someone else's is
-     * still refused.
-     */
-    const again = await wrapStatements(env, groupId, auth.user.id, body.wraps, Date.now());
-    if (typeof again === 'string') return badRequest(again);
-    if (again.length > 0) await env.DB.batch(again);
-    return json({ group: { id: groupId, owner: auth.user.id } });
-  }
-
-  const now = Date.now();
-  const statements = [
-    env.DB.prepare('INSERT INTO sync_group (id, owner_user, created_at) VALUES (?, ?, ?)')
-      .bind(groupId, auth.user.id, now),
-    env.DB.prepare(
-      `INSERT INTO sync_member (group_id, user_id, state, joined_at) VALUES (?, ?, 'approved', ?)`,
-    ).bind(groupId, auth.user.id, now),
-  ];
-
-  /*
-   * The publisher's OWN wraps, sent with the publish.
-   *
-   * Without them the owner publishes a group they cannot read: the key exists
-   * only in the memory of the device that generated it, and is gone the moment
-   * that app is backgrounded. Their own second phone would never get it either.
-   * The wraps are made on the device, so this Worker still never sees the key.
-   */
-  const own = await wrapStatements(env, groupId, auth.user.id, body.wraps, now);
-  if (typeof own === 'string') return badRequest(own);
-  statements.push(...own);
-
-  await env.DB.batch(statements);
-  return json({ group: { id: groupId, owner: auth.user.id } }, 201);
-}
-
-/**
- * `{ wraps }` → give MY OWN devices the key to a group I am already in.
- *
- * The hole this closes: a wrap is made per DEVICE, and nothing anywhere created
- * one for a device that appeared later. Sign in on a second phone, or reinstall on
- * the same one, and `listSyncGroups` returns every group with `wrappedKey: null`
- * — forever. The group is listed, is approved, and cannot be read, and the only
- * escape was for another member to re-share it, which (before this change) minted
- * a new key and broke everyone else instead.
- *
- * The key never reaches this Worker. A device that can already open the group
- * wraps it for the caller's other devices and posts the results.
- *
- * `wrapStatements` is what keeps this safe, and it is the same function the
- * publish and invite paths use: a wrap naming a device that is not the caller's is
- * refused. So the worst this can do is give me access I already have.
- */
-async function addSyncWraps(request: Request, env: Env, groupId: string): Promise<Response> {
-  const auth = await authenticate(request, env);
-  if (!auth) return unauthorized();
-  const body = await parseJsonObject(request);
-  if (!body) return badRequest('Invalid JSON body');
-
-  // Membership, not ownership: anyone in the group holds the key already, so
-  // there is nothing here an approved member could learn that they could not.
-  if (!(await approvedMember(env, groupId, auth.user.id))) {
-    return forbidden('You are not a member of that group');
-  }
-
-  const statements = await wrapStatements(env, groupId, auth.user.id, body.wraps, Date.now());
-  if (typeof statements === 'string') return badRequest(statements);
-  if (statements.length > 0) await env.DB.batch(statements);
-  return json({ wraps: statements.length });
-}
-
-/**
- * Turn a `wraps` array into statements, refusing any wrap aimed at a device that
- * does not belong to `userId`.
- *
- * That check is not incidental. Without it an inviter could name their own device
- * and be handed a wrap for a group they were invited to but never joined — and
- * shared by both routes, it cannot be present in one and forgotten in the other.
- */
-async function wrapStatements(
-  env: Env, groupId: string, userId: string, raw: unknown, now: number,
-): Promise<D1PreparedStatement[] | string> {
-  if (raw === undefined) return [];
-  if (!Array.isArray(raw)) return 'wraps must be an array';
-
-  const out: D1PreparedStatement[] = [];
-  for (const w of raw) {
-    const entry = w as Record<string, unknown>;
-    const deviceId = typeof entry.deviceId === 'string' ? entry.deviceId : '';
-    const wrappedKey = typeof entry.wrappedKey === 'string' ? entry.wrappedKey : '';
-    if (!deviceId || !wrappedKey) return 'each wrap needs deviceId and wrappedKey';
-    const owns = await env.DB.prepare('SELECT 1 AS ok FROM device_key WHERE device_id = ? AND user_id = ?')
-      .bind(deviceId, userId).first<{ ok: number }>();
-    if (!owns) return 'a wrap names a device that is not theirs';
-    out.push(env.DB.prepare(
-      `INSERT INTO sync_wrap (group_id, device_id, wrapped_key, created_at) VALUES (?, ?, ?, ?)
-       ON CONFLICT(group_id, device_id) DO UPDATE SET wrapped_key = excluded.wrapped_key`,
-    ).bind(groupId, deviceId, wrappedKey, now));
-  }
-  return out;
-}
-
-/**
- * My groups, each with the wrap for THIS device.
- *
- * `deviceId` is required rather than optional: a listing without it would be a
- * list of groups whose keys this device cannot open, which is not useful to
- * anyone and invites a caller to fall back on some other device's wrap.
- */
-async function listSyncGroups(request: Request, env: Env, url: URL): Promise<Response> {
-  const auth = await authenticate(request, env);
-  if (!auth) return unauthorized();
-  const deviceId = (url.searchParams.get('deviceId') ?? '').trim();
-  if (!deviceId) return badRequest('deviceId is required');
-
-  /*
-   * Deleted and removed groups are REPORTED, not filtered out.
-   *
-   * They used to be dropped from this list, which made "the owner deleted this
-   * group" indistinguishable from "you were never in it" and from "the request
-   * failed" — so the other members' devices kept a group that had ceased to
-   * exist, quietly syncing nothing, forever. A tombstone is only useful if
-   * somebody is told about it.
-   *
-   * The membership row is still what decides access: `approvedMember` is
-   * unchanged and refuses reads and writes for both states. This route is the one
-   * place that says *why*.
-   */
-  const rows = await env.DB.prepare(
-    `SELECT g.id, g.owner_user, m.state, m.removed_at, g.deleted_at, w.wrapped_key
-       FROM sync_member m
-       JOIN sync_group g ON g.id = m.group_id
-       LEFT JOIN sync_wrap w ON w.group_id = g.id AND w.device_id = ?
-      WHERE m.user_id = ?
-      ORDER BY g.created_at ASC`,
-  ).bind(deviceId, auth.user.id)
-    .all<{
-      id: string; owner_user: string; state: string;
-      removed_at: number | null; deleted_at: number | null; wrapped_key: string | null;
-    }>();
-
-  return json({
-    groups: (rows.results ?? []).map(r => ({
-      id: r.id,
-      owner: r.owner_user,
-      // Deletion outranks removal: if the group is gone for everyone, that is the
-      // more useful thing to say to someone who also happens to have left it.
-      state: r.deleted_at !== null ? 'deleted' : r.removed_at !== null ? 'removed' : r.state,
-      // Null means this device has no wrap yet — it is invited, or it re-installed
-      // and its old wraps died with its old key. Either way the client cannot read
-      // the group and must be told so plainly rather than shown an empty ledger.
-      wrappedKey: r.wrapped_key,
-    })),
-  });
-}
-
-/**
- * Invite someone, handing over the group key wrapped to each of their devices.
- *
- * Only an approved member may invite, and the wraps are produced on the
- * inviter's phone — the server never sees an unwrapped key and could not produce
- * one if it wanted to.
- *
- * The invitee lands as 'pending'. They are not a member until they accept, which
- * keeps "someone added me to a group" from being something that happens TO you.
- */
-async function inviteSyncMember(request: Request, env: Env, groupId: string): Promise<Response> {
-  const auth = await authenticate(request, env);
-  if (!auth) return unauthorized();
-  if (!(await approvedMember(env, groupId, auth.user.id))) return forbidden('Not a member of that group');
-
-  const body = await parseJsonObject(request);
-  if (!body) return badRequest('Invalid JSON body');
-  const userId = typeof body.userId === 'string' ? body.userId.trim() : '';
-  const wraps = Array.isArray(body.wraps) ? body.wraps : null;
-  if (!userId || !wraps) return badRequest('userId and wraps are required');
-
-  // Only someone already linked can be invited. There is no directory and no
-  // search anywhere in this API, and an invite route that accepts a bare user id
-  // would quietly become one.
-  if (!(await findLink(env, auth.user.id, userId))) {
-    return forbidden('You are not linked with that person');
-  }
-
-  const now = Date.now();
-  const statements = [
-    env.DB.prepare(
-      `INSERT INTO sync_member (group_id, user_id, state, joined_at) VALUES (?, ?, 'pending', ?)
-       ON CONFLICT(group_id, user_id) DO UPDATE SET removed_at = NULL`,
-    ).bind(groupId, userId, now),
-  ];
-  const wrapRows = await wrapStatements(env, groupId, userId, wraps, now);
-  if (typeof wrapRows === 'string') return badRequest(wrapRows);
-  statements.push(...wrapRows);
-  await env.DB.batch(statements);
-
-  return json({ invited: userId, wraps: wraps.length });
-}
-
-/** Accept an invitation. Only the invitee can do this, and only from 'pending'. */
-async function joinSyncGroup(request: Request, env: Env, groupId: string): Promise<Response> {
-  const auth = await authenticate(request, env);
-  if (!auth) return unauthorized();
-
-  const joined = await env.DB.prepare(
-    `UPDATE sync_member SET state = 'approved', joined_at = ?, removed_at = NULL
-      WHERE group_id = ? AND user_id = ? AND state = 'pending'`,
-  ).bind(Date.now(), groupId, auth.user.id).run();
-  if ((joined.meta?.changes ?? 0) !== 1) return notFound('No invitation to that group');
-
-  return json({ state: 'approved' });
-}
-
-/**
- * Push one sealed entry. Compare-and-set on `version`.
- *
- * This is the whole reason `version` is in the clear. Last-write-wins on a ledger
- * is the lost-update problem with money in it: two people edit the same bill from
- * their own phones, both writes succeed, and the second silently erases the
- * first. Nobody is told, and the number that survives is whichever request
- * happened to arrive later.
- *
- * So a write must state the version it was based on, and a stale one is refused
- * with 409 and the current row attached, for a human to resolve. The guarded
- * UPDATE + `meta.changes` idiom is the same one `claimInvite` uses.
- */
-async function pushEntry(request: Request, env: Env): Promise<Response> {
-  const auth = await authenticate(request, env);
-  if (!auth) return unauthorized();
-  const body = await parseJsonObject(request);
-  if (!body) return badRequest('Invalid JSON body');
-
-  const groupId = typeof body.groupId === 'string' ? body.groupId.trim() : '';
-  const entryId = typeof body.entryId === 'string' ? body.entryId.trim() : '';
-  const ciphertext = typeof body.ciphertext === 'string' ? body.ciphertext : '';
-  const version = typeof body.version === 'number' ? body.version : NaN;
-  if (!groupId || !entryId || !ciphertext) return badRequest('groupId, entryId and ciphertext are required');
-  if (!Number.isInteger(version) || version < 1) return badRequest('version must be a positive integer');
-  if (ciphertext.length > MAX_ENTRY_BYTES) return payloadTooLarge('Entry is too large');
-
-  if (!(await approvedMember(env, groupId, auth.user.id))) return forbidden('Not a member of that group');
-
-  /*
-   * The volume guard, checked after membership so a stranger's requests are
-   * refused by the cheaper test first.
-   *
-   * Counts entries this account has TOUCHED in the window, not requests made:
-   * rewriting one entry repeatedly costs one, which is right, because that burns
-   * requests rather than storage and Cloudflare's own request cap already covers
-   * it. What this bounds is D1 filling up an entry at a time.
-   */
-  const since = Date.now() - SYNC_WRITE_WINDOW_MS;
-  const recent = await env.DB.prepare(
-    'SELECT COUNT(*) AS n FROM sync_entry WHERE author_user = ? AND updated_at > ?',
-  ).bind(auth.user.id, since).first<{ n: number }>();
-  if ((recent?.n ?? 0) >= SYNC_WRITES_PER_WINDOW) {
-    return tooManyRequests('Too many changes at once. Sync will carry on shortly.');
-  }
-
-  const isDeleted = body.isDeleted === true ? 1 : 0;
-  const now = Date.now();
-
-  // v1 is a create; anything higher must replace exactly its predecessor. Both
-  // are one guarded statement so two devices racing the same version cannot both
-  // win — `changes` is 0 for the loser.
-  const written = version === 1
-    ? await env.DB.prepare(
-      `INSERT INTO sync_entry (group_id, entry_id, version, ciphertext, author_user, is_deleted, updated_at)
-       VALUES (?, ?, 1, ?, ?, ?, ?)
-       ON CONFLICT(group_id, entry_id) DO NOTHING`,
-    ).bind(groupId, entryId, ciphertext, auth.user.id, isDeleted, now).run()
-    : await env.DB.prepare(
-      `UPDATE sync_entry SET version = ?, ciphertext = ?, author_user = ?, is_deleted = ?, updated_at = ?
-        WHERE group_id = ? AND entry_id = ? AND version = ?`,
-    ).bind(version, ciphertext, auth.user.id, isDeleted, now, groupId, entryId, version - 1).run();
-
-  if ((written.meta?.changes ?? 0) === 1) return json({ entryId, version, updatedAt: now });
-
-  // Lost the race, or based on a version that is no longer current. Hand back
-  // what IS current so the client can show both rather than guess between them.
-  const current = await env.DB.prepare(
-    `SELECT version, ciphertext, author_user, is_deleted, updated_at
-       FROM sync_entry WHERE group_id = ? AND entry_id = ?`,
-  ).bind(groupId, entryId).first<SyncEntryRow>();
-
-  return conflict({
-    error: 'That entry changed on another device',
-    entryId,
-    current: current ? toSyncEntryDto(entryId, current) : null,
-  });
-}
-
-/**
- * Pull everything in a group that changed after `since`.
- *
- * The cursor is `updated_at`, and the bound is EXCLUSIVE with the returned
- * cursor being the last row's own timestamp — so a client that stores it and
- * comes back gets each change once. Two rows written in the same millisecond are
- * the ordering hazard here; `entry_id` is the tiebreak in the sort so the page
- * boundary is at least deterministic, and the client is idempotent regardless
- * because `ingestPeerTxn` treats re-delivery as normal.
- */
-async function pullEntries(request: Request, env: Env, url: URL): Promise<Response> {
-  const auth = await authenticate(request, env);
-  if (!auth) return unauthorized();
-
-  const groupId = (url.searchParams.get('groupId') ?? '').trim();
-  if (!groupId) return badRequest('groupId is required');
-  if (!(await approvedMember(env, groupId, auth.user.id))) return forbidden('Not a member of that group');
-
-  const rawSince = Number(url.searchParams.get('since') ?? '0');
-  const since = Number.isFinite(rawSince) && rawSince > 0 ? rawSince : 0;
-
-  const rows = await env.DB.prepare(
-    `SELECT entry_id, version, ciphertext, author_user, is_deleted, updated_at
-       FROM sync_entry
-      WHERE group_id = ? AND updated_at > ?
-      ORDER BY updated_at ASC, entry_id ASC
-      LIMIT ?`,
-  ).bind(groupId, since, SYNC_PAGE_SIZE).all<SyncEntryRow & { entry_id: string }>();
-
-  const results = rows.results ?? [];
-  const entries = results.map(r => toSyncEntryDto(r.entry_id, r));
-  return json({
-    entries,
-    cursor: results.length ? results[results.length - 1].updated_at : since,
-    // The client must come straight back rather than wait for the next launch:
-    // a first sync of a busy group is several pages, and stopping halfway would
-    // leave a ledger that is missing its most recent half.
-    more: results.length === SYNC_PAGE_SIZE,
-  });
-}
-
-function toSyncEntryDto(entryId: string, r: SyncEntryRow): SyncEntryDto {
-  return {
-    entryId,
-    version: r.version,
-    ciphertext: r.ciphertext,
-    author: r.author_user,
-    isDeleted: r.is_deleted === 1,
-    updatedAt: r.updated_at,
-  };
-}
-
-/**
- * Record that I object to someone else's entry — F10.
- *
- * A dispute is my OPINION of their entry, never a new version of it. Writing it
- * as a version would let one person overwrite another's record of what happened,
- * which is precisely the authority the approval model withholds. The author is
- * shown the objection and decides; nobody edits anyone else's entry.
- *
- * Withdrawing is the same route with `cleared: true`, so reopening an entry I had
- * rejected takes the objection back rather than leaving it standing forever.
- */
-async function pushDispute(request: Request, env: Env): Promise<Response> {
-  const auth = await authenticate(request, env);
-  if (!auth) return unauthorized();
-  const body = await parseJsonObject(request);
-  if (!body) return badRequest('Invalid JSON body');
-
-  const groupId = typeof body.groupId === 'string' ? body.groupId.trim() : '';
-  const entryId = typeof body.entryId === 'string' ? body.entryId.trim() : '';
-  const version = typeof body.version === 'number' ? body.version : NaN;
-  if (!groupId || !entryId) return badRequest('groupId and entryId are required');
-  if (!Number.isInteger(version) || version < 1) return badRequest('version must be a positive integer');
-  if (!(await approvedMember(env, groupId, auth.user.id))) return forbidden('Not a member of that group');
-
-  const now = Date.now();
-  const cleared = body.cleared === true ? now : null;
-  await env.DB.prepare(
-    `INSERT INTO sync_dispute (group_id, entry_id, by_user, version, created_at, cleared_at)
-     VALUES (?, ?, ?, ?, ?, ?)
-     ON CONFLICT(group_id, entry_id, by_user) DO UPDATE SET
-       version = excluded.version, created_at = excluded.created_at, cleared_at = excluded.cleared_at`,
-  ).bind(groupId, entryId, auth.user.id, version, now, cleared).run();
-
-  return json({ entryId, cleared: cleared !== null });
-}
-
-/** Objections raised in a group since a cursor. Same shape as entry pulls. */
-async function pullDisputes(request: Request, env: Env, url: URL): Promise<Response> {
-  const auth = await authenticate(request, env);
-  if (!auth) return unauthorized();
-  const groupId = (url.searchParams.get('groupId') ?? '').trim();
-  if (!groupId) return badRequest('groupId is required');
-  if (!(await approvedMember(env, groupId, auth.user.id))) return forbidden('Not a member of that group');
-
-  const rawSince = Number(url.searchParams.get('since') ?? '0');
-  const since = Number.isFinite(rawSince) && rawSince > 0 ? rawSince : 0;
-
-  const rows = await env.DB.prepare(
-    `SELECT entry_id, by_user, version, created_at, cleared_at
-       FROM sync_dispute
-      WHERE group_id = ? AND created_at > ?
-      ORDER BY created_at ASC, entry_id ASC
-      LIMIT ?`,
-  ).bind(groupId, since, SYNC_PAGE_SIZE)
-    .all<{ entry_id: string; by_user: string; version: number; created_at: number; cleared_at: number | null }>();
-
-  const results = rows.results ?? [];
-  return json({
-    disputes: results.map(r => ({
-      entryId: r.entry_id,
-      byUser: r.by_user,
-      version: r.version,
-      createdAt: r.created_at,
-      cleared: r.cleared_at !== null,
-    })),
-    cursor: results.length ? results[results.length - 1].created_at : since,
-    more: results.length === SYNC_PAGE_SIZE,
-  });
-}
-
-/**
- * Leave a group — F11, the half that is not deletion.
- *
- * Sets `removed_at` rather than deleting the row, so leaving is auditable and a
- * re-invite is an ordinary state change instead of a resurrection. Their wraps go,
- * because a device that has left must not keep being handed the key.
- *
- * What is deliberately NOT done: removing their entries. They happened, the rest
- * of the group still owes or is owed against them, and rewriting history because
- * somebody walked away is how a ledger stops being trustworthy.
- */
-async function leaveSyncGroup(request: Request, env: Env, groupId: string): Promise<Response> {
-  const auth = await authenticate(request, env);
-  if (!auth) return unauthorized();
-
-  const left = await env.DB.prepare(
-    `UPDATE sync_member SET removed_at = ? WHERE group_id = ? AND user_id = ? AND removed_at IS NULL`,
-  ).bind(Date.now(), groupId, auth.user.id).run();
-  if ((left.meta?.changes ?? 0) !== 1) return notFound('You are not in that group');
-
-  await env.DB.prepare(
-    `DELETE FROM sync_wrap WHERE group_id = ?
-      AND device_id IN (SELECT device_id FROM device_key WHERE user_id = ?)`,
-  ).bind(groupId, auth.user.id).run();
-
-  return json({ state: 'left' });
-}
-
-/**
- * Delete a group for everyone — F11.
- *
- * **Owner only.** This is the one destructive action here that reaches other
- * people's phones, and the local rule already matches: `canDeleteGroup` is
- * `isCreator`, so a member who wants out leaves instead.
- *
- * A tombstone, not a DELETE. `deleted_at` is what `approvedMember` already checks,
- * so setting it stops every read and write in one place — and it leaves something
- * for other devices to SEE. Hard-deleting the rows would make the group simply
- * stop existing, which is indistinguishable from a network failure on every other
- * phone: the whole reason this was a divergence hole.
- */
-async function deleteSyncGroup(request: Request, env: Env, groupId: string): Promise<Response> {
-  const auth = await authenticate(request, env);
-  if (!auth) return unauthorized();
-
-  const deleted = await env.DB.prepare(
-    'UPDATE sync_group SET deleted_at = ? WHERE id = ? AND owner_user = ? AND deleted_at IS NULL',
-  ).bind(Date.now(), groupId, auth.user.id).run();
-  if ((deleted.meta?.changes ?? 0) !== 1) {
-    // Either not theirs or already gone. Both answer the same way rather than
-    // confirming that a group they do not own exists.
-    return forbidden('Only the person who created a group can delete it for everyone');
-  }
-  return json({ state: 'deleted' });
-}
-
 // --- Email bodies ----------------------------------------------------------
 
 const MINUTES = Math.round(MAGIC_LINK_TTL_MS / 60000);
@@ -1957,7 +1111,9 @@ const MINUTES = Math.round(MAGIC_LINK_TTL_MS / 60000);
 /** The one line Gmail shows next to the subject. Wasted if left to chance. */
 const PREHEADER = `Tap to sign in. The link works once and expires in ${MINUTES} minutes.`;
 
-export const SIGN_IN_SUBJECT = 'Sign in to BudgetSplit';
+// Not exported: every named export of a Worker's main module is treated as an
+// entrypoint, and a string there stops the runtime from starting at all.
+const SIGN_IN_SUBJECT = 'Sign in to BudgetSplit';
 
 /**
  * The sign-in email.
@@ -2029,7 +1185,7 @@ function signInHtml(openUrl: string, token: string): string {
           <td style="padding:20px 28px 0 28px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:12px;line-height:19px;color:#7C918E;text-align:center;">
             Didn't ask to sign in? Ignore this email &mdash; nothing happens until the link is used.
             <br><br>
-            BudgetSplit keeps your money on your phone. An account only adds an encrypted backup.
+            Your account keeps a copy of your BudgetSplit data, so signing in on a new phone brings it all back.
           </td>
         </tr>
       </table>

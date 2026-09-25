@@ -35,6 +35,7 @@ import { oweView } from '../src/lib/owe';
 import { haptic } from '../src/lib/haptics';
 import { buildGroupExportCsv } from '../src/lib/groupExport';
 import { shareCsv, csvFileSlug } from '../src/lib/shareCsv';
+import { keyboardAwareScroll } from '../src/components/ui/KeyboardForm';
 
 /*
  * Two tabs, not three.
@@ -51,6 +52,8 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: 'activity', label: 'Activity' },
   { key: 'budget', label: 'Budget' },
 ];
+
+const listScroll = keyboardAwareScroll();
 
 export default function PersonalScreen() {
   const db = useSQLiteContext();
@@ -256,6 +259,9 @@ export default function PersonalScreen() {
             <SectionList
               sections={sections}
               keyExtractor={t => t.id}
+              // The FilterBar search is in the header; matches below it must
+              // scroll clear of the keyboard (AGENTS.md §6b).
+              renderScrollComponent={listScroll}
               contentContainerStyle={[styles.activityContent, { paddingBottom: bottomPad }]}
               refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
               ListHeaderComponent={

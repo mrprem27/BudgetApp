@@ -1,14 +1,34 @@
-import React, { useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 import { settings } from '../../lib/settings';
 import { Onboarding } from './Onboarding';
 import { BrandedLoader } from './BrandedLoader';
 import { useFeatureFlags } from './FeatureFlagsProvider';
 
-export function OnboardingGate({ children }: { children: React.ReactNode }) {
-  const [status, setStatus] = useState<'loading' | 'onboarding' | 'done'>('loading');
+type Props = {
+  children: React.ReactNode;
+  /**
+   * Whether onboarding was already done, read by the root boot effect in
+   * parallel with opening the DB (`app/_layout.tsx`). When given, this gate
+   * starts resolved — no second AsyncStorage read, and so no second loader,
+   * between the root's one loader and the first real screen. Omit it
+   * (existing callers, tests) and the gate reads for itself as before.
+   */
+  initialDone?: boolean;
+};
+
+/** Send the app back to Welcome, as on a fresh install — after the sign-out wipe. */
+const RestartContext = createContext<() => void>(() => {});
+export const useRestartOnboarding = () => useContext(RestartContext);
+
+export function OnboardingGate({ children, initialDone }: Props) {
+  const [status, setStatus] = useState<'loading' | 'onboarding' | 'done'>(
+    () => (initialDone === undefined ? 'loading' : initialDone ? 'done' : 'onboarding'),
+  );
   const { reload: reloadFlags } = useFeatureFlags();
 
   useEffect(() => {
+    // Already resolved from the root boot effect — nothing to do.
+    if (initialDone !== undefined) return;
     (async () => {
       try {
         setStatus((await settings.onboardingDone()) ? 'done' : 'onboarding');
@@ -16,7 +36,7 @@ export function OnboardingGate({ children }: { children: React.ReactNode }) {
         setStatus('onboarding');
       }
     })();
-  }, []);
+  }, [initialDone]);
 
   async function complete() {
     try {
@@ -40,5 +60,5 @@ export function OnboardingGate({ children }: { children: React.ReactNode }) {
     return <Onboarding onDone={complete} />;
   }
 
-  return <>{children}</>;
+  return <RestartContext.Provider value={() => setStatus('onboarding')}>{children}</RestartContext.Provider>;
 }

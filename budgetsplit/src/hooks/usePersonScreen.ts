@@ -9,8 +9,7 @@ import { groupByDate } from '../lib/txnGrouping';
 import { settleRhythmDays, settleRhythmLabel, isReceivableStale } from '../lib/settleHistory';
 import { appliesImmediately } from '../lib/trust';
 import { getGroupTrustFor, setGroupTrust } from '../db/queries/persons';
-import { getSharedGroupsWith } from '../db/queries/groups';
-import { groupSyncStatuses, describeSyncStatus } from '../lib/groupSyncStatus';
+import { getSharedGroupsWith, invitedGroupsOf } from '../db/queries/groups';
 import { confirmAsync } from '../lib/confirm';
 import { asReceivableState, asTrustState } from '../constants/enums';
 import { haptic } from '../lib/haptics';
@@ -31,28 +30,27 @@ export function usePersonScreen(personId: string) {
   const { data, loading, error, refreshing, onRefresh, reload } = useScreenData(
     async (db) => {
       if (!me) throw new Error('No current user');
-      const [person, activity, balances, scopes, shared, overrides, statuses] = await Promise.all([
+      const [person, activity, balances, scopes, shared, overrides, invited] = await Promise.all([
         getPersonById(db, personId),
         getSharedActivityWith(db, me.id, personId),
         getFriendBalances(db, me.id),
         computeTransferScopes(db, me.id, personId),
         getSharedGroupsWith(db, me.id, personId),
         getGroupTrustFor(db, personId),
-        groupSyncStatuses(db),
+        invitedGroupsOf(db, personId),
       ]);
       /*
-       * The one sentence about what is waiting to reach THEM.
-       *
-       * Only for a group that is actually held — `sending` is the ordinary state
-       * and saying so on every screen would be noise. Scoped to the groups we
-       * share, so somebody else's stuck group is not reported here.
+       * The one sentence about what hasn't reached THEM: a group they were added
+       * to and haven't accepted. Their entries there still count here; they just
+       * can't see the group until they say yes.
        */
-      const sharedIds = new Set(shared.map(g => g.id));
-      const held = statuses.find(s => sharedIds.has(s.groupId) && s.state !== 'sending');
+      const first = invited[0];
       return {
         person,
         activity,
-        syncNote: held && person ? describeSyncStatus(held, person.name) : null,
+        syncNote: first && person
+          ? `${person.name} hasn't accepted ${invited.length === 1 ? first.name : `${first.name} and ${invited.length - 1} more`} yet, so they can't see ${invited.length === 1 ? 'it' : 'them'}.`
+          : null,
         // `getFriendBalances` returns everyone sharing a group, settled ones included,
         // so a missing row means we share no group rather than "balance zero".
         net: balances.find(b => b.personId === personId)?.net ?? 0,

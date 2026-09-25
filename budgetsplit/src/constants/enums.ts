@@ -41,8 +41,8 @@ export const TXN_KIND_LABEL_PLURAL: Record<TxnKind, string> = {
 
 /**
  * What the Add screen is adding. Deliberately *not* `TxnKind`: the user picks
- * "Transfer", which is stored as a `settlement`. This is the UI-facing set, and
- * the order here is the order of the switcher.
+ * "Transfer", which is stored as a `settlement`. This is the UI-facing set —
+ * **not** the switcher's order any more; see `ADD_KIND_TABS` for that.
  *
  * Previously declared in `components/finance/add/KindToggle.tsx`, so a type every
  * layer needed (the form hook, the amount field, the category pills) was reached
@@ -58,21 +58,31 @@ export const TXN_KIND_LABEL_PLURAL: Record<TxnKind, string> = {
  * consumption, so neither counts in analysis (`AGENTS.md` §12).
  *
  * Invest existed as a *movement* long before it existed as a button —
- * `transferToAsset` has written both halves atomically for months. What the user
- * met instead was a banner on the Expense pill saying "you may have meant an
- * asset, go to /assets", which is a workaround for a missing control (`OV-30`).
+ * `transferToAsset` had written both halves atomically for months. It got a
+ * fourth switcher pill (`OV-30`) and then lost it again for v1 (`SPEC-2026-09-FEEDBACK.md` §4,
+ * 2026-09-24 — a fourth kind was judged unnecessary complexity for a pilot):
+ * the category-pick door (the Banner in `app/add/quick.tsx`) is what's left,
+ * plus a deep link and voice. See `ADD_KIND_TABS`.
  */
-/** Transfer sits in the MIDDLE deliberately: it's the switcher's neutral centre,
- *  with money-out on the left and money-in on the right. Invest sits beside
- *  Transfer because it is the same movement with a different destination. */
 export enum AddKind {
   Expense = 'expense',
   Income = 'income',
   Transfer = 'transfer',
   Invest = 'invest',
 }
-/** Render order for the switcher — not the same thing as the member list. */
+/**
+ * Every kind that exists, for validating one — a deep link's `?kind=`, a voice
+ * parse, a stored draft. **Not** the switcher's render list; see
+ * `ADD_KIND_TABS` for that. Kept separate on purpose: `AddKind.Invest` is
+ * real and reachable — a category pick, a deep link, "SIP 5000" said aloud —
+ * it just has no pill of its own to tap, for v1.
+ */
 export const ADD_KIND = [AddKind.Expense, AddKind.Transfer, AddKind.Invest, AddKind.Income] as const;
+/**
+ * The switcher's render order. Transfer sits in the MIDDLE deliberately: it's
+ * the neutral centre, money-out on the left and money-in on the right.
+ */
+export const ADD_KIND_TABS = [AddKind.Expense, AddKind.Transfer, AddKind.Income] as const;
 export const ADD_KIND_LABEL: Record<AddKind, string> = {
   [AddKind.Expense]: 'Expense',
   [AddKind.Income]: 'Income',

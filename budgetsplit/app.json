@@ -87,7 +87,13 @@
       "expo-notifications",
       "./plugins/withSwiftUICoreLinkFix",
       "./plugins/withDevelopmentTeam",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#0A0F11"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

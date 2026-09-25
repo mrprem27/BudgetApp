@@ -78,7 +78,7 @@ describe('readAllTables / restoreAllTables', () => {
    * rows whose entries are gone. It is also the one table `restoreAllTables` never
    * touched, so nothing else would have caught it.
    */
-  it('clears the sync outbox, so no queued row survives pointing at a deleted txn', async () => {
+  it('clears the sync queue, so no queued row survives pointing at a deleted txn', async () => {
     const db = createTestDb();
     const me = addPerson(db, 'Me', true);
     const group = addGroup(db, 'Roommates');
@@ -88,13 +88,13 @@ describe('readAllTables / restoreAllTables', () => {
       groupId: group, personId: me, amount: 50000, date: Date.now(), category: 'Groceries',
     });
     await db.runAsync(
-      'INSERT INTO sync_outbox (entry_id, group_id, queued_at) VALUES (?, ?, ?)',
-      [txnId, group, Date.now()],
+      "INSERT OR REPLACE INTO sync_queue (local_table, local_id, op, queued_at) VALUES ('txn', ?, 'upsert', ?)",
+      [txnId, Date.now()],
     );
 
     await restoreAllTables(asDb(db), emptyTables());
 
-    const left = await db.getAllAsync('SELECT * FROM sync_outbox');
+    const left = await db.getAllAsync('SELECT * FROM sync_queue');
     expect(left).toHaveLength(0);
   });
 

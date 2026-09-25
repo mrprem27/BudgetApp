@@ -3,14 +3,13 @@ import {
   View, Text, StyleSheet, Switch, TouchableOpacity,
   ScrollView, Alert, Platform, ActivityIndicator,
 } from 'react-native';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSQLiteContext } from 'expo-sqlite';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { settings } from '../../src/lib/settings';
-import { reconciledBackupAt } from '../../src/lib/backupStatus';
+import { linkedUser } from '../../src/db/queries/syncApply';
 import { colors, type, space, radius, layout, shadow } from '../../src/theme';
 import { haptic } from '../../src/lib/haptics';
 import { formatAgoCompact } from '../../src/lib/time';
@@ -86,6 +85,8 @@ export default function SettingsScreen() {
   // `null` = never. Shown on the row because the only other prompt is a local
   // notification, which needs flags.reminders + an OS grant + a dev build.
   const [backupAt, setBackupAt] = useState<number | null>(null);
+  /** Joined to an account: it holds everything, so "never backed up" would be false. */
+  const [onAccount, setOnAccount] = useState(false);
 
   // Free space, shown on the row itself so a filling device is visible from Settings without
   // having to open the screen. Tinted only when it has become worth acting on.
@@ -145,7 +146,8 @@ export default function SettingsScreen() {
       // `lastBackupAt`, not the reminder anchor: turning the backup *reminder* on
       // writes the anchor, so this row used to read "Backed up just now" to someone
       // who had never backed up at all.
-      setBackupAt(await reconciledBackupAt());
+      setBackupAt(await settings.lastBackupAt().catch(() => null));
+      setOnAccount(!!(await linkedUser(db).catch(() => null)));
       // Narrowed, not cast: a database written before `once` was removed still
       // holds it here, and an unknown key would index CADENCE_LABELS to undefined.
       const dc = await settings.defaultCadence();
@@ -246,7 +248,9 @@ export default function SettingsScreen() {
   }
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
+    // No keyboard container: every field here is in a sheet, and `DraggableSheet`
+    // handles its own keyboard (AGENTS.md §6b).
+    <View style={styles.root}>
     {/* Persistent status-bar cover — outside the ScrollView so scrolled content
         never paints under the clock/notch once the large title scrolls away. */}
     <View style={[styles.statusBarCover, { height: insets.top, backgroundColor: colors.bg }]} pointerEvents="none" />
@@ -303,9 +307,9 @@ export default function SettingsScreen() {
       </TouchableOpacity>
 
       {/* ACCOUNT — only in a build that has a server to talk to
-          (EXPO_PUBLIC_API_URL). Signing in buys one thing: backups that outlive
-          this phone. Everything else stays local-first either way, which is why
-          this is a row and not a gate in front of the app. */}
+          (EXPO_PUBLIC_API_URL). Signing in keeps a copy of everything on the
+          account and syncs shared groups; the app stays offline-first either way,
+          which is why this is a row and not a gate in front of the app. */}
       {serverSessionConfigured && (
         <>
           <Text style={[styles.sectionTitle, sectionTop(true)]}>Account</Text>
@@ -313,7 +317,7 @@ export default function SettingsScreen() {
             <SettingsRow
               icon={serverSession ? 'user-check' : 'cloud'}
               label={serverSession ? 'Account' : 'Sign in'}
-              value={serverSession ? serverSession.user.email : 'Back up beyond this phone'}
+              value={serverSession ? serverSession.user.email : 'Keep a copy on your account'}
               onPress={() => { router.push('/settings/account'); }}
             />
           </View>
@@ -349,7 +353,7 @@ export default function SettingsScreen() {
       <View style={styles.card}>
         <SettingsRow
           icon="users"
-          label="People"
+          label="Friends"
           value={contactCount > 0 ? `${contactCount} contact${contactCount !== 1 ? 's' : ''}` : undefined}
           onPress={() => { router.push('/friends'); }}
         />
@@ -456,17 +460,14 @@ export default function SettingsScreen() {
           icon="shield"
           label="Backup & restore"
           // Amber, not red: no backup is a risk to act on, not a user error.
-          value={backupAt ? `Backed up ${formatAgoCompact(backupAt)}` : 'Never backed up'}
-          tint={backupAt ? colors.accent : colors.healthAmber}
+          value={onAccount ? 'On your account' : backupAt ? `Backed up ${formatAgoCompact(backupAt)}` : 'Never backed up'}
+          tint={onAccount || backupAt ? colors.accent : colors.healthAmber}
           onPress={() => { router.push('/settings/backup'); }}
         />
         <View style={settingsRowDivider} />
         <SettingsRow icon="help-circle" label="Help & Feedback" onPress={() => { router.push('/help'); }} />
         <View style={settingsRowDivider} />
-        {/* Clears the people-step answer too: replaying the tour means asking the
-            questions again, and a stale "no thanks" from the previous run would
-            silently suppress Home's tiles for a setup that never declined anything. */}
-        <SettingsRow icon="play-circle" label="Replay welcome tour" onPress={async () => { await settings.clearOnboardingDone(); await settings.setOnboardingSkippedPeople(false); haptic.light(); Alert.alert('Welcome tour reset', 'Fully close and reopen BudgetSplit to see the intro again.'); }} />
+        <SettingsRow icon="play-circle" label="Replay welcome tour" onPress={async () => { await settings.clearOnboardingDone(); haptic.light(); Alert.alert('Welcome tour reset', 'Fully close and reopen BudgetSplit to see the intro again.'); }} />
         <View style={settingsRowDivider} />
         <SettingsRow icon="clock" label="Audit log" onPress={() => { router.push('/history'); }} />
       </View>
@@ -518,7 +519,7 @@ export default function SettingsScreen() {
           style={styles.nameInputGap}
         />
         <Text style={styles.vpaHint}>
-          Goes into the QR others scan to pay you. It stays on this phone — nothing is uploaded.
+          Goes into the QR others scan to pay you. Signed in, it's kept on your account with your profile.
         </Text>
         <PrimaryButton label="Save" onPress={saveVpa} />
       </SheetModal>
@@ -551,7 +552,7 @@ export default function SettingsScreen() {
 
       {/* Default-currency sheet hidden for v1 (INR-only). */}
     </ScrollView>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -566,6 +567,7 @@ function ToggleRow({ icon, label, value, onValueChange }: { icon: keyof typeof F
 }
 
 const styles = StyleSheet.create({
+  root: { flex: 1 },
   container: { flex: 1, backgroundColor: colors.bg },
   statusBarCover: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 },
   scroll: { padding: layout.screenPaddingH, paddingBottom: space.lg },

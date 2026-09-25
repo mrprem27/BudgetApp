@@ -69,62 +69,78 @@
 
 ## 1. First run & onboarding
 
-`OnboardingGate` checks AsyncStorage `onboarding_done`. If unset, it renders the **10-stage** (8 numbered)
+`OnboardingGate` checks AsyncStorage `onboarding_done`. If unset, it renders the **12-stage** (8 numbered)
 `Onboarding` flow (`src/hooks/useOnboardingForm.ts` owns the stage machine; `OnboardingStage`
-is the authoritative list): `hero → intent → name → income → money → budget → people →
-permissions → summary`. A single DB commit (`finalizeOnboarding`) happens at the very end —
-nothing is written mid-flow except the persona flag defaults.
+is the authoritative list): `hero → welcome → [signin] → intent → name → income → payday →
+money → pay → budget → permissions → summary`. `signin` is reached only down one branch of
+`welcome` (2026-09-23, `SPEC-2026-09-FEEDBACK.md` §3 `entry-gate`) — the hero no longer drops straight into the
+questionnaire; it forks first into **new user** (→ `intent`, unchanged) and **existing user**
+(→ `signin` → `intent`, now signed in). A single DB commit (`finalizeOnboarding`) happens at
+the very end — nothing is written mid-flow except the persona flag defaults and, on the
+existing-user branch, the account claim. **Who you split with is not asked here** — that
+question moved to Friends (`SPEC-2026-09-FEEDBACK.md` §2 O6, 2026-09-23): the `people` stage, contact-collecting
+fields and the group-decline flag it used to set are all gone.
 
-**One of the nine asks nothing.** `summary` reads back what the answers actually created —
-the salary rule and where it shows, the budget and where it shows, the group and its members,
-the backup reminder — then offers "Log your first expense". It replaced a forward-only
-`payoff` beat and a `committing` stage whose three-phase checklist was ~1.7s of manufactured
-waiting over a write that completes in milliseconds. Every other stage now changes something
-the user can see; the four-slide feature carousel, which asked nothing and changed nothing,
-was deleted (`RELEASE_CHECKLIST.md`, appendix).
+**One of the twelve asks nothing.** `summary` reads back what the answers actually created —
+the salary rule and where it shows, the budget and where it shows, the backup reminder, a
+pointer to Friends if this persona splits with anyone — then offers "Log your first expense".
+It replaced a forward-only `payoff` beat and a `committing` stage whose three-phase checklist
+was ~1.7s of manufactured waiting over a write that completes in milliseconds. Every other
+stage now changes something the user can see; the four-slide feature carousel, which asked
+nothing and changed nothing, was deleted (`RELEASE_CHECKLIST.md`, appendix).
 
 **Shared chrome.** Every non-hero stage renders through `StepScaffold` (back + one progress bar
-in a single top row, scrolling body, pinned `StepFooter`). Before this, the back chevron was
-copy-pasted into seven stages, the footer into six, and there were **two** unrelated progress
-systems shown on different subsets of steps. ⛔ The hero keeps its own layout, `styles.footer`
-and `bottomPad` — those are tuned to `LogoAssembly`'s ~3.7 s run, so `StepFooter` **forks**
-equivalent styling rather than sharing theirs.
+in a single top row, scrolling body, footer). Before this, the back chevron was copy-pasted
+into seven stages, the footer into six, and there were **two** unrelated progress systems shown
+on different subsets of steps. ⛔ The hero keeps its own layout, `styles.footer` and `bottomPad`
+— those are tuned to `LogoAssembly`'s ~3.7 s run, so `StepFooter` **forks** equivalent styling
+rather than sharing theirs. **The footer sits in plain flow, behind the keyboard** when one is
+up (2026-09-23) — it used to ride above the keyboard on `KeyboardStickyView`; a
+`KeyboardToolbar` "Done" now dismisses the keyboard instead, and Continue/Skip wait underneath
+rather than sitting one mis-tap above the keys.
 
 | # | Stage | What the user does | Persisted |
 |---|---|---|---|
-| 0 | **Hero** | `LogoAssembly` brand animation plays (⛔ off-limits), wordmark + tagline + **Get Started** fade in together from `HERO_REVEAL_MS` (3300 ms), 150 ms apart. That is when the mark has **finished** — `startDelay` 1850 + `TENSION_S` 1000 + `SNAP_S` 400; the snap is where the wedges *start* landing, and reading it as the finish is how an earlier value came out 350 ms early. The fan spin that runs on to ~4.25 s is a flourish over a finished mark, not assembly, and is not waited for. There is **no "Skip intro"** today — it was real (added `c9c29dd`, removed `c8676c9` four days later, when the hero text itself moved earlier), and this row was written after the removal and described a control that had already gone. First tap is ~3.6 s. | nothing |
-| 1 | **Intent** | "What brings you here?" — pick *personal* / *split* / *household* / *both* (default both). The note beneath lists exactly what the choice **trims**, derived live from `personaTrims()`, so the copy can't drift from the flags. | `onboarding_intent` **and the flag defaults it implies** (`personaFlags` / `personaChangedKeys` in `src/lib/personaDefaults.ts`) |
-| 2 | **Name** | Type your name (≤30). **Continue** or **Skip**. | committed in `finalize` |
-| 3 | **Income + pay-day** | Take-home `₹` field + preset chips (30k/45k/60k/1L). Pay-day is `ui/DayOfMonthGrid` — all 31 days, not the seven someone thought to list — and is **always shown**. It was briefly revealed on typing, which took the step across the height where `StepScaffold` stops centring and jumped the whole page ~140pt on the first digit. The **sub-copy** is what is conditional: it promises a salary entry, and `finalize` writes that rule only for `incomeNum > 0`. **Skip**. | committed in `finalize` |
-| 4 | **Money** | Cash on hand leads and is always shown. The optional three are **pick-then-fill**: two toggle chips — *Investments* · *Credit card* — reveal their `MoneyRow`s in a `Collapse` beneath. Un-ticking clears what was typed, so nothing can be committed by a control you can no longer see. Everyone used to be shown all four fields, so a person with no card typed a zero (a claim the app then treats as real) or skipped the whole screen. **Skip**. | committed in `finalize` |
-| 5 | **Budget** | Monthly cap field + presets **derived from the income just entered** (50/60/70% of take-home, deduped — rounding collapses them into one value at low incomes); shows "X% of your take-home — it shows as the pace bar on Home". **No income → no presets at all**, where four flat round numbers used to stand in. **Skip**. | `budget_target`, read by Home's pace bar and the health engine when no category budgets exist |
-| 6 | **People** | Name + **optional email**, added inline (dedup by name), listed as `ListRow`s with `MemberAvatar`. **No group is created** — that bypassed `GroupForm`, inferred the icon from the name string and hard-coded the colour, so it was the one place a group could be made wrong. `person.email` is the only identifier that is the same string on both phones, and this is its first writer. **Skipped entirely when intent is *personal***. | contacts, in `finalize` |
-| 7 | **Permissions** | Prime **Notifications** (→ renewal reminders on grant) and **Location** (→ `save_location='true'`), plus the flag-gated Siri shortcut hand-off. States the local-only reality and the monthly backup nudge. | `save_location` on grant |
-| 8 | **Summary** | Reads back what the answers actually created — each row names the artifact and where it now lives — then **Log your first expense** (arms `pending_first_add`) or **Go to Home**. Asks nothing. | `pending_first_add` on the primary CTA |
+| 0 | **Hero** | `LogoAssembly` brand animation plays (⛔ off-limits), wordmark + tagline + **Get Started** fade in together from `HERO_REVEAL_MS` (3300 ms), 150 ms apart. That is when the mark has **finished** — `startDelay` 1850 + `TENSION_S` 1000 + `SNAP_S` 400; the snap is where the wedges *start* landing, and reading it as the finish is how an earlier value came out 350 ms early. The fan spin that runs on to ~4.25 s is a flourish over a finished mark, not assembly, and is not waited for. There is **no "Skip intro"** today — it was real (added `c9c29dd`, removed `c8676c9` four days later, when the hero text itself moved earlier), and this row was written after the removal and described a control that had already gone. First tap is ~3.6 s. The splash-to-hero hand-off is now one continuous loader (`app/_layout.tsx`, 2026-09-23) — flags and onboarding-done are read in parallel with opening the DB, rather than each gate reading for itself in sequence, which used to flash three separate loading screens. | nothing |
+| 1 | **Welcome** | "Welcome" — two doors, `OptionRow`s with no `selected` (chevrons, not radios: each tap leaves this screen). **I'm new here** → `intent`. **I have an account** → `signin`, hidden entirely when `serverConfigured()` is false — nothing to sign in to. | nothing |
+| 2 | **Sign in** *(existing-user branch only)* | Email → **a code, not the emailed link** — the link opens `budgetsplit:///auth`, a Stack route `OnboardingGate` doesn't render until onboarding is done, so it has nowhere to land here. `SignInStage` and `settings/account.tsx` share one hook, `useEmailSignIn`, so the two screens can't drift on validation or on what the three server errors say. **No passphrase anywhere** (2026-09-23 decision — passphrases are local-only, for backup files and app lock). On success: `claimMyAccount` binds this phone's `me` row, the server's `user.name` prefills the still-blank name field, and the flow continues into `intent`, signed in. What restoring a backup at this point does is deferred to the sync redesign (`DQ-89`) — today, nothing does. | account claim, via `claimMyAccount` |
+| 3 | **Intent** | "What brings you here?" — pick *personal* / *split* / *household* / *both* (default both). The note beneath lists exactly what the choice **trims**, derived live from `personaTrims()`, so the copy can't drift from the flags. | `onboarding_intent` **and the flag defaults it implies** (`personaFlags` / `personaChangedKeys` in `src/lib/personaDefaults.ts`) |
+| 4 | **Name** | Type your name (≤30). **Continue only — no Skip** (2026-09-23): a group's every ledger and split identifies people by name, so an unnamed "Anonymous" isn't a real answer the way a rough income is. Continue is disabled until the field is non-blank, and submitting an empty field from the keyboard is a no-op. | committed in `finalize` |
+| 5 | **Income** | Take-home `₹` field, typed only — a 7-preset chip grid was built and cut the same day it shipped (too much friction, `DQ-88`). **Skip**, or Continue with nothing typed, both route past `payday` straight to `money`. | committed in `finalize` |
+| 6 | **Payday** | *Only reached when income > 0.* "When are you going to receive your next payment?" — a tappable date hero (icon + `fullDate`) opens `DatePickerSheet` (`minDate` = today: a past date isn't "next"). Continue only, defaulting to today. Replaces the old always-shown `ui/DayOfMonthGrid` (day-of-month, 31 cells, deleted — it had no other caller) with the exact date; `paydayAnchor` no longer computes "next occurrence at 09:00", it floors the picked date to local **00:00**. | committed in `finalize` |
+| 7 | **Money** | Cash available leads as the one open `StepAmountField`, always asked. Four more are **pick-then-fill** toggle chips — *Bank balance* · *Wallet* · *Investments* · *Credit card* — each revealing its `MoneyRow` in one `Collapse`d card, dividers interleaved by a `.map` over whichever subset is ticked. Un-ticking clears what was typed. A 5-chip "cash is a chip too" version was built and reverted the same day: it asked more up front than this four-field layout, which was the opposite of the goal. **Skip**. | committed in `finalize` |
+| 8 | **Pay** | "How do you usually pay?" — `PayMethodSelector`, defaults to UPI, skippable (skip keeps UPI). | committed in `finalize` |
+| 9 | **Budget** | Monthly cap field + presets **derived from the income just entered** (50/60/70% of take-home, deduped — rounding collapses them into one value at low incomes); shows "X% of your take-home — it shows as the pace bar on Home". **No income → no presets at all**, where four flat round numbers used to stand in. **Skip**. | `budget_target`, read by Home's pace bar and the health engine when no category budgets exist |
+| 10 | **Permissions** | Prime **Notifications** (→ reminders for upcoming charges on grant) and **Location** (→ `save_location='true'`). States the local-only reality and the monthly backup nudge. **No Siri row** (2026-09-23) — parked until App Intents (`openVoiceSetup` stays in the file, commented, not deleted; `TRACKER.md` §8). | `save_location` on grant |
+| 11 | **Summary** | Reads back what the answers actually created — each row names the artifact and where it now lives, salary row reading "next on {date}" rather than "on the Nth" now that a date, not a day-of-month, was asked — then **Log your first expense** (arms `pending_first_add`) or **Go to Home**. One extra line, "Add friends in Settings to split expenses," for any persona that splits (`intent !== 'personal'`) — the pointer that replaced the row that used to read back who was added on the deleted `people` stage. Asks nothing. | `pending_first_add` on the primary CTA |
 
-**Stage order** comes from `NUMBERED_STEPS = ['intent','name','income','money','pay','budget','people','permissions']` (8 — **this document** omitted `pay` from its transcription; the constant itself has included it since the step was created),
-filtered by intent (`numberedSteps()`); `summary` is a result, not a numbered question. Back
-navigation uses `afterBudget` / `beforePermissions`, which skip `people` for the personal
-persona in both directions. The progress indicator is known from the **first** question rather
-than appearing three screens in, and the personal persona reads "5 of 6" rather than leaving a
-gap where `people` would have been.
+**Stage order** comes from `NUMBERED_STEPS = ['intent','name','income','payday','money','pay','budget','permissions']`
+(8; unconditional — `people` was the only stage ever filtered by persona, and it's gone). `hero`,
+`welcome`, `signin` and `summary` carry no number. `payday` sits in the list unconditionally too but is
+**runtime-skipped** straight from `income` to `money` whenever `incomeNum === 0`, whichever
+button left the income step — a deliberate numbering gap (a user can see "3 of 8" then "5 of 8")
+over a `total` that would otherwise shift under them mid-flow, the same trade-off `people`'s
+removal already established.
 
 **`finalizeOnboarding()`** (`src/lib/onboarding.ts`, best-effort, each step isolated so
 one failure never blocks finishing — covered by `finalizeOnboarding.test.ts`, including a
 preservation case asserting that a skipped answer removes only its own artifact):
 - `applyPersona(intent)` — the stored intent plus the flag defaults it implies.
 - `updatePersonName(me)` if a name was entered.
-- If income > 0: inserts a **recurring monthly Salary income** in the Personal group anchored
-  by `paydayAnchor(day)` — the next occurrence of that day-of-month at 09:00, clamped to month
-  length, so it never immediately back-fills. Visible day-0 on `/plan/recurring` (which shows
-  income, not just expenses) and used as the afford engine's income floor.
+- If income > 0: inserts a **recurring monthly Salary income** in the Personal group dated to
+  `paydayAnchor(firstPayDate)` — the exact date picked on the `payday` step, floored to local
+  00:00. Visible day-0 on `/plan/recurring` (which shows income, not just expenses) and used as
+  the afford engine's income floor.
 - If budget > 0: writes the `budget_target` preference. **Not** a `category_budget` — inventing
   a `Total` category put a phantom Others row on Personal and offered "Total" for adoption in
   the editor. Home's pace bar and the health engine read the preference until real category
   budgets exist.
-- Each contact → `insertPerson`, then `setPersonContact({ email })` when one was given — in its
-  own `try`, so a failed email never costs the contact. **No group is created**; see step 6.
-- `setMoneyProfile` writes cash / credit (investments are the asset register now — `MoneyProfileWrite` omits the field).
+- `setMoneyProfile` writes whichever of bank / cash / wallet / credit-limit / credit-used were
+  actually ticked on the `money` step — **`undefined`, not 0, for anything never ticked**
+  (2026-09-23: the previous version always wrote `creditLimit`/`creditUsed` as 0 for everyone
+  who never ticked Credit card, a real if minor correctness gap `setMoneyProfileRows`'
+  `!== undefined` check now closes). Investments are the asset register (`insertAsset`), not a
+  `setMoneyProfile` field — `investments` is explicitly destructured out before the call.
 - `setReminderPrefs({ backup: true })` — the monthly backup nudge defaults on, because with no
   sync a lost phone is total data loss and a skipped notification prompt used to mean no
   mitigation at all (`V2-02`).
@@ -173,7 +189,7 @@ right-slide push.
 
 ## 3. Screen index (S-XX)
 
-Absorbed from `AUDIT.md` §2 so the IDs cited elsewhere resolve here. 46 route files under
+Absorbed from `AUDIT.md` §2 so the IDs cited elsewhere resolve here. 45 route files under
 `app/`; expo-router registers each implicitly by filename.
 
 ### 3.1 Shell / layout (not user-visible screens)
@@ -187,7 +203,7 @@ Absorbed from `AUDIT.md` §2 so the IDs cited elsewhere resolve here. 46 route f
 
 | ID | Screen | File | Purpose | Exits |
 |---|---|---|---|---|
-| S-03 | **Home / Dashboard** | `app/(tabs)/index.tsx` | Period-scoped spend hero + category ranks + owe/owed + forecast + streak. Dedicated first-run empty state. | `/review` `/search` `/reminders` `/settings` `/history` `/add/quick` `/group/{personal}/budget` `/groups` `/friends` `/category/{name}` `/insights` |
+| S-03 | **Home / Dashboard** | `app/(tabs)/index.tsx` | Period-scoped spend hero + category ranks + owe/owed + forecast + streak. Dedicated first-run empty state. | `/review` `/search` `/upcoming` `/settings` `/history` `/add/quick` `/group/{personal}/budget` `/groups` `/friends` `/category/{name}` `/insights` |
 | S-04 | **Groups** | `app/(tabs)/groups.tsx` | Groups list (Personal pinned first) with budget health + my net; swipe-left archive/restore; People balance chips. | `/group/{id}` (or `/personal`) · `/add/quick?kind=transfer&to=` |
 | S-05 | **Plan** | `app/(tabs)/savings.tsx` | Available-Money card (+ net worth, credit headroom), overspend **consent** prompt, drag-rankable goals, upcoming bills, forecast. | `/insights` `/plan/recurring` `/afford` · `/savings/{id}` |
 | S-06 | **Settings** | `app/(tabs)/settings.tsx` | Profile + **Account** (only with a server configured) / **Getting paid** (Your UPI ID · Show my UPI QR, behind `upiSettle`) / Manage / Preferences / Security / Notifications / Data & Help / About. Version ×7 unlocks S-27. | `/settings/account` `/friends` `/categories` `/group/{personal}/budget` `/groups` `/features` `/settings/notifications` `/settings/backup` `/import` `/reports` `/help` `/history` `/storage` |
@@ -250,13 +266,13 @@ Absorbed from `AUDIT.md` §2 so the IDs cited elsewhere resolve here. 46 route f
 | S-35 | **Voice entry** | `app/settings/voice.tsx` | Sets up hands-free capture: what to say, which words route to a split, and the one-time Siri-shortcut setup (one-tap iCloud install when `VOICE_SHORTCUT_URL` is set, otherwise the four manual Shortcuts actions). Creates the `voice-inbox` folder the shortcut writes into, and shows how many captures are waiting. Gated on `voiceEntry`. |
 | S-28 | **Audit log** | `app/history.tsx` | Paged (30/page) date-grouped log of created/updated/deleted/settled/paused/resumed/ended. `?groupId=` scopes it. |
 | S-29 | **Help** | `app/help.tsx` | Static accordion of help copy, ordered by screen flow — Getting Started → Your Home Screen → Groups → **Settling Up & Paying** → Budgets → Savings → Recurring → Reports → Categories → Privacy → Tips. No data access. |
-| S-30 | **Reminders** | `app/reminders.tsx` | Read-only "what's coming": bills due in 14 days + pending settle-ups involving me. |
+| S-30 | **Upcoming** | `app/upcoming.tsx` | Read-only "what's coming": bills due in 14 days + pending settle-ups involving me. Renamed from Reminders/`reminders.tsx` (2026-09-24, `SPEC-2026-09-FEEDBACK.md` §6) — its bills section now renders `ComingUpList`, the same component Plan uses, rather than its own hand-rolled row. |
 | S-31 | **Notifications** | `app/settings/notifications.tsx` | Reminder prefs (renewals / daily log / backup nudge), OS permission handling, send-a-test. See §18. |
 | S-32 | **Recurring (global)** | `app/plan/recurring.tsx` | All active recurring expense rules across groups, sorted by next occurrence, with a monthly-equivalent total. No per-row actions — the row taps through to S-35, where they live. |
 | S-41 | **Recurring rule** | `app/recurring/[id].tsx` | **One** rule: name (`note \|\| category`), cadence, **your share** (with the whole bill named under it when they differ), state, started/next dates, skipped-occurrence banner, and the actions as full rows — Edit · Skip the next one · Undo the next skip · Pause/Resume · Stop (shared `useRecurringActions`). Every recurring list in the app taps into this, and so does a `renew_*` reminder. Replaced `group/[id]/recurring.tsx`, which was the *group's* list rendered a second time and was the only place carrying the actions — so tapping a rule opened a list of rules. |
 | S-33 | **Afford check** | `app/afford.tsx` | Amount + optional category + optional necessity (*Need · Want · Can wait*) → Comfortable / Tight / No verdict with plain-English reasons, plus a **what this costs you** block (projected month-end, goal delay). Seven axes: cash, buffer, category budget, category norm, income share, month projection, typical-basket size. **Only cash produces a hard No**; necessity softens the buffer axis alone and never overrides it. The same `evaluateAfford` drives the one-line verdict in Add's `BudgetNudge`. |
-| S-34 | **Backup & restore** | `app/settings/backup.tsx` | Passphrase-encrypted whole-DB backup out to the share sheet **or** to your account; restore **replaces all data**. See §13.3. |
-| S-36 | **Account** | `app/settings/account.tsx` | Optional server account (`server/api`): sign in by email magic link — no password — see the profile the server holds, push this device's name/picture up, sign out. Exists only in a build with `EXPO_PUBLIC_API_URL` set; buys exactly one capability, off-device encrypted backups (§13.3). |
+| S-34 | **Backup & restore** | `app/settings/backup.tsx` | Passphrase-encrypted whole-DB backup out to the share sheet — a file you keep, separate from the account; restore **replaces all data** and is refused while signed in. See §13.3. |
+| S-36 | **Account** | `app/settings/account.tsx` | Optional server account (`server/api`): sign in by email magic link — no password — see the profile the server holds, push this device's name/picture up, sign out, delete the account. Exists only in a build with `EXPO_PUBLIC_API_URL` set. Signing in joins the phone to the account's copy of everything (§13.4, §13.6). |
 | S-38 | **Linked people** | `app/settings/linked.tsx` | Who you're linked with, who is **waiting for your approval**, and per-person "show them my number". Invite by link or QR. No search, no directory — a link you generated is the only way in. Server-configured builds only. See §13.5. |
 | S-39 | **Invite landing** | `app/link.tsx` | Where a tapped invite link lands (`budgetsplit:///link?token=…`, bounced from the Worker's `/invite/open`). Claiming **asks**; it links nothing until the sender confirms. Deep-link target only. |
 | S-37 | **Sign-in callback** | `app/auth.tsx` | Where a tapped magic link lands (`budgetsplit:///auth?token=…`, redirected from the Worker's `/auth/open`). Spends the token once, then replaces itself with S-36. Not reachable from any button — a deep-link target only. |
@@ -283,7 +299,7 @@ link in an email or a message.
 - **Full:** hero + period pills + breakdown + balances + forecast + coming-up + streak.
 
 ### Layout (top → bottom) & actions
-1. **Header** — greeting + first name, then the icon row: **inbox badge** *(only when `reviewCount > 0`, showing the count or "9+")* → `/review`; 🔍 → `/search`; 🔔 *(labelled with the upcoming count)* → `/reminders`; avatar → `/settings`.
+1. **Header** — greeting + first name, then the icon row: **inbox badge** *(only when `reviewCount > 0`, showing the count or "9+")* → `/review`; 🔍 → `/search`; 🔔 *(labelled with the upcoming count)* → `/upcoming`; avatar → `/settings`.
 2. **Catch-up banner** (conditional) — amber, when the app was closed 30+ days with active recurring rules. **Review entries** → `/history` (the only route to the audit log from Home); **Dismiss**.
 3. **HeroCard** — XL period spend (SpaceMono); pace bar + "X% · ₹Y left" **only if a budget is set** (else number + delta vs previous period); SVG health ring *(flag `healthScore` — `index.tsx:80` nulls the score when off, and `HeroCard` hides the ring on a null score)* → **HealthSheet** *(sheet)*.
 4. 🔘 **TabPills** — `Month · Today · Year` (re-runs the data load for that period).
@@ -311,13 +327,21 @@ outside the loader: reads AsyncStorage `hide_amounts` (obfuscates the hero), `ap
 - **Error:** `ErrorState` + retry.
 - **Empty:** `EmptyState` "No groups yet" + New Group CTA, rendered in the list **footer** under the always-present Personal card — `ListEmptyComponent` cannot fire, because the seed guarantees Personal; a **separate** `EmptyState`
   "No archived groups" for the archived view.
-- **Full:** FlatList of group cards + a People balances footer.
+- **Full:** FlatList of group cards + a Friends balances footer.
 
 ### Layout & actions
-1. **Header** — title flips "Groups"/"Archived"; archive-toggle (only if archived groups exist); **+ New** group (active view only) → GroupForm *(sheet)*.
-2. **People balance chips** (`renderBalances`) — friends with non-zero net; tap → `/add/quick?kind=transfer&to={personId}`.
+1. **Header** — title flips "Groups"/"Archived"; a **Friends** icon (`users`, always visible,
+   whichever view) → `/friends`; archive-toggle (only if archived groups exist); **+ New** group
+   (active view only) → GroupForm *(sheet)*. (2026-09-24, `SPEC-2026-09-FEEDBACK.md` §5 T12 — the label everywhere
+   this list is referenced changed People → Friends the same day.)
+2. **Friends balance chips** (`renderBalances`) — friends with non-zero net; tap → `/add/quick?kind=transfer&to={personId}`.
 3. **Group card** (`renderGroup`) — swipeable (swipe-left → Archive/Restore, suppressed for Personal); icon, name, "member count · spend", **AvatarStack**, **BudgetBar** + utilization label + over-budget badge (in `colors.healthRed`, matching the budget-health scale rather than the expense colour), **BalanceChip** with a chevron beneath it when a balance exists. **Tap → `/group/{id}`**.
-4. **New Group sheet** (`SheetModal` + `GroupForm`): emoji/icon, name, type, members, default split. **Create** → `insertGroup` → reload → `/group/{newId}`.
+4. **New Group sheet** (`SheetModal` + `GroupForm`): name, **type as coloured icon tiles** (one
+   `GROUP_TYPES` colour per tile — was a text-only `Chip` row that never used the colour or icon
+   each type already carries), members (a `+` tile opens the same `PersonNameSheet` Friends uses,
+   so a brand-new friend never requires leaving the sheet), **default split as `TabPills`** (was a
+   `Chip` row, which reads as multi-select for what is a single choice — `AGENTS.md` §9). **Create**
+   → `insertGroup` → reload → `/group/{newId}`. (2026-09-24, `SPEC-2026-09-FEEDBACK.md` §5 T14.)
 
 > **Personal card** (pinned first, "Everything involving you") → **`/personal`** (not
 > `/group/{id}`): the unified view (`app/personal.tsx`) — Owe/Lent/Net header + 🔘 tabs
@@ -384,7 +408,7 @@ pull-to-refresh — they're wizards.
 Body order, top to bottom:
 
 1. **ModalHeader** — ✕ left, title centre, **Save** right (a tinted text button, kind-coloured, disabled until `canSave`). AGENTS §5's PrimaryButton rule has a recorded exception for modal headers.
-2. 🔘 **Kind** — `TabPills`: `Expense · Transfer · Invest · Income`. Transfer is hidden unless `flags.splitting` or you're editing an existing transfer; **Invest is not filtered with it** — moving your own money into your own asset needs nobody else, so turning off bill-splitting must not remove a personal-finance feature. Income forces the Personal group. Two of the four store as `settlement` and are told apart by `txn.asset_id` (`SETTLEMENT_ADD_KINDS`).
+2. 🔘 **Kind** — `TabPills`: `Expense · Transfer · Income` (`ADD_KIND_TABS`). **Invest lost its pill for v1** (2026-09-24, `SPEC-2026-09-FEEDBACK.md` §4 — a fourth kind judged unnecessary complexity for a pilot) but stays a real `AddKind`: picking the **Investment** category from Expense offers a Banner that switches into it in place (keeping the amount typed), and it's still reachable by deep link (`?kind=invest`) and voice ("ten thousand into my SIP"). Transfer is hidden unless `flags.splitting` or you're editing an existing transfer. Income forces the Personal group. Two of the four `AddKind`s store as `settlement` and are told apart by `txn.asset_id` (`SETTLEMENT_ADD_KINDS`).
 3. **ContextPill** — one compact centred pill answering "what is this about?", used by **both** kinds. For an **expense** it shows the destination group + "N people · equal" / "just you" → **DestinationSheet** (every group, ordered by `getGroupsByRecentUse` — Personal pinned, then most-recently-used); **rendered even with one group**, unlike the old `GroupSelector` which was gated on `groups.length > 1`. For a **transfer** it shows which debt is being settled + its balance → **ScopeSheet** (All groups + each shared group, each with its outstanding amount). Transfer previously asked this a second time with its own chip row inside `TransferBody`.
 4. **Amount input** (`type.amountXL` SpaceMono) — `sanitizeAmountInput` caps it live, `parseToPaise` on read. Once it holds a value, a **÷ disc** below the field opens `AmountCalculatorSheet`: a *sequential* calculator (not an expression parser — precedence would make "100 + 20 × 3" answer 160 when 360 was meant). `+`/`−` take an amount, `×`/`÷` take a plain factor, so "÷ 3" means split three ways. The accumulator is integer paise and the fraction-producing operators round **once**, explicitly, so the figure shown is the figure saved; non-even divisions warn (₹100 ÷ 3 leaves a paisa). Logic + 22 tests in `lib/amountCalc.ts`.
 5. **Category + date chips** → `CategoryPicker` / `DatePickerSheet`. Both are `ui/Chip` with a trailing chevron — the *same* primitive as the "Other details" chips below, so the screen has one pill shape. Category `grow`s to fill the row (a long name truncates instead of pushing Date off-screen) and shows its own colour+glyph in an `IconCircle`; Date carries a `calendar` glyph it previously had none of. The left chip answers *"where does this belong?"*, and on **Invest** that is an **asset**, not a category — its category is fixed to `INVESTMENT_CATEGORY`, so a picker would ask a question with one legal answer. `AssetPickerSheet` lists the register with balances.
@@ -1327,7 +1351,7 @@ keeps content from painting under the clock/notch.
    reads the signed-in email when there is one, else "Offline-first · sign in to back up"
    (configured builds) or "Offline-first · no accounts" (the default build).
 2. **Account** *(only when `EXPO_PUBLIC_API_URL` is set)* — one row: the signed-in email, or
-   "Sign in — back up beyond this phone" → `/settings/account` (§13.4).
+   "Sign in — Keep a copy on your account" → `/settings/account` (§13.4).
 3. **Getting paid** *(flag `upiSettle`)* — **Your UPI ID** *(sheet, validated by `isValidVpa`; empty clears it)* · **Show my UPI QR** → amount-less `RequestQrSheet`. This is the only place your **own** `upi_vpa` can be set: `friends.tsx` filters out `is_me`, so before this the field was unreachable for you and the request-QR could never be built.
 4. **Manage** — People → `/friends` · Categories → `/categories` · **My Budget** (monthly rollup, or "Not set") → `/budget`.
 5. **Preferences** — Currency (`INR`, no-op) · Default budget cadence *(sheet)* · **Feature management** → `/features`.
@@ -1354,14 +1378,14 @@ above it (`sectionTop(isFirst)`) — Account when configured, else Getting paid,
 | **Account** | `settings/account.tsx` | §13.4. Absent entirely without `EXPO_PUBLIC_API_URL`. | Spinner while the stored session is read · inline error text (not an Alert — the retry is right there) |
 
 ### 13.3 Backup & restore — `app/settings/backup.tsx`
-The highest-consequence flow in the app. There is still **no cloud sync**: this builds a
-passphrase-encrypted snapshot and hands it either to the OS share sheet or, when signed in, to
-your account. Both destinations get the identical envelope — the only difference is transport,
-and the server cannot read what it stores (§13.4).
+The highest-consequence flow in the app. It builds a passphrase-encrypted file of the whole
+database and hands it to the OS share sheet. It is a file of your own, **separate from the
+account**: when signed in, the account already keeps everything (§13.4) and a new phone gets it
+back by signing in, so the file is a second copy, not the way back.
 
-1. **Explainer card** — icon, a note that swaps for the signed-in case ("your transactions live
-   on this device — signing in didn't change that"), and **Last backup: {date}** once one exists
-   (`settings.backupAnchorAt()`).
+1. **Explainer card** — icon and a note that swaps on the signed-in case ("Your account already
+   keeps everything… A backup here is a file of your own, besides that"), plus **Last backup:
+   {date}** once one exists (`settings.backupAnchorAt()`).
 2. **Create backup** ("Encrypted file") → **PassphraseSheet** *(mode `create`)* →
    `readAllTables` → `buildBackupPayload` → `encryptPayload` → write to cache as
    `.bsbackup` → `Sharing.shareAsync`. If sharing isn't available it reports the on-disk path
@@ -1369,22 +1393,19 @@ and the server cannot read what it stores (§13.4).
 3. **Restore from backup** ("Pick a file") → `DocumentPicker` → JSON parse + a `ciphertext`
    shape check → **PassphraseSheet** *(mode `restore`)* → `decryptEnvelope` → a
    **destructive-style confirm Alert** naming the backup's date → `restoreAllTables`.
-4. **Back up to your account** / **Restore from your account** *(signed in only)* — the same
-   two actions over the network. Create runs the identical passphrase → `readAllTables` →
-   `encryptPayload` path and then `uploadBackup(JSON.stringify(envelope))` instead of writing a
-   file. Restore opens `ServerBackupSheet` (date + size per snapshot, newest first; trash icon
-   deletes one; tap downloads it), then rejoins the *same* passphrase → confirm → `restoreAllTables`
-   path a picked file takes. When a server is configured but nobody is signed in, one row
-   ("Back up off this phone · Sign in") points at `/settings/account` instead.
-5. **Standing warning** under the rows: "Restoring replaces ALL current data on this device.
-   This cannot be undone."
+4. **Refused while joined to an account** (`SYNC-F9`). A file restore over a phone that syncs
+   would replace what the account — and everyone sharing a group — holds, from a copy they were
+   never part of. So it is a refusal, not a warning: "Sign out first", with a button to Account.
+   Signing out empties the phone; restore then makes it a phone of its own again.
+5. **Two standing warnings** under the rows: restoring replaces ALL current data on this device;
+   and app preferences (features, reminders, default pay method) are not in the file (`OV-13`).
 
 **Restore replaces, it does not merge.** `restoreAllTables` toggles `PRAGMA foreign_keys=OFF`
 (a no-op inside a transaction, so it's done outside one), then in a single transaction `DELETE`s
-every one of the 15 `BACKUP_TABLES` in reverse dependency order and re-inserts the backup's rows
+every one of the `BACKUP_TABLES` in reverse dependency order and re-inserts the backup's rows
 in forward order. Nothing is preserved from the current DB.
 
-**The passphrase is never stored** (`src/lib/backup.ts:12`) — a Keychain-derived key would be
+**The passphrase is never stored** (`src/lib/backup.ts`) — a Keychain-derived key would be
 lost along with a lost phone, defeating the whole feature. **A forgotten passphrase makes its
 backup permanently unrecoverable, by design.** Failure modes are typed and distinguished:
 `BackupWrongPassphraseError` (shown inline in the sheet so the user can retry) vs
@@ -1414,160 +1435,79 @@ has no account UI at all, and nothing is uploaded. Backed by the Worker in `serv
    when the mail was opened on a laptop.
 3. **Verify** — `POST /auth/verify` spends the token once (guarded `UPDATE … WHERE used_at IS
    NULL`, so a double-tap can't mint two sessions), finds-or-creates the user, and returns a
-   session token stored in **`expo-secure-store`** — a bearer credential does not belong in
-   AsyncStorage next to feature flags. 90-day rolling expiry; a row in `sessions`, not a JWT, so
-   signing out genuinely ends it.
-4. **Signed in** — profile card (device avatar/name + the server's email and created-on date),
-   **Update profile from this device** (pushes `me.name`, then the local avatar as base64 —
-   one-directional on purpose, the device profile is the one the user edits), **Backup & restore**
-   → §13.3, and **Sign out** (confirm Alert; clears the local session even if the network call
-   fails, because looking signed in while every action 401s is worse).
+   session token stored in **`expo-secure-store`**. 90-day rolling expiry; a row in `sessions`,
+   not a JWT, so signing out genuinely ends it.
+4. **First sign-in** (`useEmailSignIn`, `lib/sync/firstSignIn.ts`) — decides how this phone's
+   ledger meets the account's, and shows a full-screen step (`FirstSignInStep`) when it has to:
 
-**What the account is for, and what it is not.** It buys off-device encrypted backups and nothing
-else. The ledger stays local-first, there is no sync (that's phase S2) and no shared groups
-(S3) — see `docs/RELEASE_CHECKLIST.md` §3.1 and §6. Backups are encrypted **on the phone** by
-`lib/backup.ts` before upload, with a passphrase the server never receives, so a leaked bucket is
-unreadable and a leaked D1 gives up email addresses and nothing about anyone's money. The
-server keeps the newest **10** snapshots per account and prunes older ones on upload.
+   | Phone | Account | What happens |
+   |---|---|---|
+   | any | empty | **Upload** — the phone joins the account and queues everything. No screen. |
+   | empty | has data | **Restore** — "Bringing back your data" with a progress bar. Can't be cancelled: it is atomic and short. |
+   | has data | has data | **Ask** — "This phone already has data". *Use my account* saves this phone to a file in Files first, then replaces it; *Not now* signs out and changes nothing. They are never merged (`DQ-94`). |
+
+5. **Signed in** — the sync status line (`SyncStatus`, taps through to Sync), a profile card
+   (avatar, name, email, "Signed in on {device} · account created {date}"), then rows: **Phone**
+   (self-declared, sheet), **Update profile from this device** (pushes the name and picture —
+   one-directional on purpose), **Linked people**, **Backup & restore** → §13.3, **Sign out** and
+   **Delete account**.
+
+**Sign out** sends anything not yet sent, warns if something could not be, then empties the phone
+(`DQ-97`). The account keeps everything; signing in again, here or on a new phone, brings it back.
+
+**Delete account** takes two confirmations. It erases the account's copy of everything that was
+yours alone — your own money, goals, budgets, and any group nobody else is in — and signs every
+device out. The ledger on this phone is not touched, and your entries in groups other people are
+in stay: they are the group's record.
 
 ---
 
 ### 13.6 Sync — `app/settings/sync.tsx` (optional, server-backed)
 
-One switch and four facts. It exists because the honest answers about sync are
-*surprising*, and a user who assumes the opposite of any of them makes a decision
-they would not otherwise have made:
+**No switch.** Signing in is what joins a phone to its account and signing out is what leaves it;
+a second control that could say "off" while the account still held everything would be one more
+thing that looks like a promise and isn't.
 
-1. **Only shared groups travel.** Personal spending, income, goals, budgets and net
-   worth never leave the device.
-2. **The server cannot read it.** Entries are sealed on the phone; the server holds
-   blobs it has no key for.
-3. **Nothing lands without your say-so** — an entry appears in the group but moves
-   none of your numbers until you accept it, unless that person is trusted.
-4. **It is not live.** Changes are exchanged when you open the app. There is no
-   background task runner and push is behind Gate 0.
+1. **Sync status line** (`SyncStatus`) — syncing, up to date, waiting, offline, failed or not
+   connected, with the one action that fixes it (retry, connect, sign in).
+2. **A banner** when there is nothing to sync to: no server in this build, or not signed in (with
+   a button to Account).
+3. **Waiting for you** — group invitations, at the top because someone is waiting on them.
+   *Accept* queues the answer like any other change and kicks off a sync; the group and its whole
+   history arrive with it.
+4. **What this does** — four facts, each one a real surprise rather than reassurance:
+   - **Everything goes to your account** — groups and your own spending, goals, budgets and net
+     worth. A new phone gets it all back. Works offline, catches up when online.
+   - **The server can read it** — stored as it is, not sealed; that is what lets it check who may
+     change what, and bring everything back.
+   - **Nothing lands without your say-so** — someone else's entry shows in the group but moves
+     none of your numbers until you accept it, unless you trust them.
+   - **It isn't live** — changes go up a few seconds after you make them while the app is open,
+     and catch up when you come back.
+5. **Footnote** — what signing out does.
 
-Turning it **on** is the consequential direction, so that is where the confirm
-lives and where the count is named ("2 shared groups"). Turning it **off** is a
-**pause**: nothing already uploaded is deleted, and nothing is removed from anyone
-else's phone. The copy says so, because "off" is widely read as "and take it back".
-
-Shows what is queued when sync is on, from `sync_outbox`, and when it last
-completed. Both rows open **Sync activity** below. Disabled entirely without
-`EXPO_PUBLIC_API_URL` or a signed-in account.
-
----
-
-### 13.9 The roster, and why the cursor sometimes waits
-
-Two coupled mechanisms, both of which exist because their absence lost money
-silently.
-
-**The roster is a living document.** It travels as an ordinary sealed entry under
-the reserved id `__roster__`, so it inherits versioning, compare-and-set, the AAD
-binding and the encryption — and the server needs no change and learns no names.
-It is republished whenever membership changes, a member is renamed, or the group
-is renamed (`markRosterDirty` → `dirtyRosters` → `drainRosters`). Personal groups
-are excluded in the SQL, not at the call site.
-
-Publishing it once, at share time, was the original bug. An entry naming a member
-the other device has never heard of cannot be resolved, so it is refused — which
-meant **adding somebody to a shared group silently broke every entry that
-mentioned them.**
-
-**The pull cursor only advances over what it could actually handle.** Failures are
-split by whether this device could ever succeed:
-
-| Kind | Examples | Cursor |
-|---|---|---|
-| Permanent — a fact about the entry | bad seal, unbalanced, stale version, my own | advances |
-| Recoverable — a fact about what this phone knows | unresolvable person, `not-a-member` | **holds** |
-
-Advancing over a recoverable failure is what lost entries: fetched once, skipped,
-then behind the cursor forever.
-
-The two fixes make each other work. On a stall the group stops and the cursor is
-left before the offending entry; the next sync re-fetches from there, a
-republished roster carries a newer timestamp so it lands in the same page, rosters
-are applied before entries within a page, and the entry succeeds on the retry. It
-heals without anyone noticing it broke.
-
-⚠️ **The bound:** this self-heals only while the roster and the entry that needs
-it fall within one page (`SYNC_PAGE_SIZE`, 200). In practice they always do —
-`drainRosters` runs before the entry drain in the same sync, so a roster is
-published with an *earlier* timestamp than the entries that depend on it. It is
-recorded because it is the one shape that could stall.
+What happens when someone else changes your numbers is `SYNC-MODEL.md`.
 
 ---
 
-### 13.8 Getting a phone back — the restore offer
+### 13.8 Getting a phone back — "Used BudgetSplit before?"
 
-The last step of "keep a copy of everything", and the one without which the
-feature is worthless: snapshots upload on their own, but until this existed,
-getting one back meant knowing to open Settings → Backup → *Restore from your
-account*. Somebody setting up a replacement phone has no reason to look there.
+Somebody setting up a replacement phone has no reason to open Settings → Account, and onboarding
+tells them nothing needs an account. So on launch, `pendingRestoreOffer`
+(`src/lib/restoreOffer.ts`) asks once, only when all of these hold: a server is configured, the
+offer has not been declined, nobody is signed in, and **this phone has no transactions on it**
+(soft-deleted and pending rows count — deleting your only entry does not make the phone new).
 
-On launch, `pendingRestoreOffer` (`src/lib/restoreOffer.ts`) asks four questions
-and offers only if all four pass: a server is configured, someone is signed in,
-the offer has not already been declined, and **this phone has no transactions on
-it**.
-
-That last one is the safety rule, and it is why the prompt can appear unasked. A
-restore is wipe-and-replace, so a prompt that can show up beside real data is one
-somebody eventually taps by accident. "No transactions" deliberately counts
-soft-deleted and pending rows too — deleting your only entry does not make the
-phone new, and offering to wipe it at that moment would be grotesque. Anyone with
-data can still restore deliberately, from the screen built for it, with its own
-confirmation.
-
-Declining is **sticky** (`settings.restoreOfferDismissed`): saying no means this
-phone *is* the fresh start, and asking again every launch would nag someone out of
-a decision they have already made. A completed restore sets the same flag, since
-the question is then moot.
-
-Accepting routes to `/settings/backup?open=account`, which opens the list of
-copies and stops there. The passphrase, the cipher-version check, the sync
-refusal (F9) and the confirm are the same ones every other restore goes
-through — this adds a door, not a second path.
-
----
-
-### 13.7 Sync activity — `app/settings/sync-log.tsx` (optional, server-backed)
-
-The screen that explains a sync doing nothing.
-
-`runSync` swallows every failure on purpose: a background sync must never
-interrupt someone who did not ask for one. The price is that a feature silently
-doing nothing looks exactly like a feature that works. This is where that is paid
-back — and the question it was built for came straight from first use: *"it says
-26 changes waiting to go up, and they never go."*
-
-They never went because the group had **never been shared**, so there was no
-recipient. The count was honest; the sentence under it ("they will go the next
-time you open the app") was not. The queue is now split:
-
-- **Ready to send** — in a group that is published and joined.
-- **Nowhere to go yet** — named group by group, with the fix (share it from
-  Members) and the reassurance that nothing is lost meanwhile.
-
-Which of the two an entry is in depends on the group's server state, so
-`settings.syncGroups` caches it after every run — a screen that must be online to
-explain why nothing is happening is useless in exactly the moment it is wanted.
-
-Below that, the last `SYNC_LOG_MAX` runs: what went up, what came down, groups
-that ended, and conflicts (someone changed it first — the pull brought their
-version in). A skipped run says *why*, because "nothing to do" and "could not
-reach the server" look identical from outside and mean opposite things.
-
-**Sync now** runs it while you watch. The app syncs on open, which is right for a
-ledger and useless for diagnosing one.
+The alert offers **Sign in** (→ Account, where the first sign-in restores) or **Start fresh**.
+Declining is **sticky** (`settings.restoreOfferDismissed`): saying no means this phone *is* the
+fresh start. Offering sign-in promises nothing — it says the door is there.
 
 ---
 
 ### 13.5 Linked people — `app/settings/linked.tsx` (optional, server-backed)
 
 Linking two accounts so they can see details each has chosen to share. Today that is a name,
-an email and — only if switched on — a phone number. It is **not** group sharing or sync
+an email and — only if switched on — a phone number. It is **not** group sharing or sync;
 (S2/S3); nothing about anyone's money crosses a link.
 
 **There is no username, no directory and no lookup** — not by email, not by phone. The only
@@ -1628,7 +1568,7 @@ being listed in the screen, so this table can't drift back.
 | Recurring | `recurring` | Plan **Recurring** header icon → `plan/recurring.tsx` | ✅ wired — tracked rules only; the log-scanning detector was removed in P5 |
 | Recurring suggestions | `recurringSuggest` | Review post-save banner → `RecurringSuggestionsSheet` | ✅ wired — **on** by default (never auto-creates) |
 | Smart category | `smartCategory` | Quick-add title → category guess | ✅ wired — **on** by default (suggestion only) |
-| Reminders | `reminders` | Settings → Notifications, `reminders.tsx`, OS notifications | ✅ wired (dev build needed for OS notifications) |
+| Reminders | `reminders` | Settings → Notifications, `upcoming.tsx`, OS notifications | ✅ wired (dev build needed for OS notifications) |
 | Receipt scanning | `receiptScan` | Itemized **Scan receipt** button (iOS) | ✅ wired — closes DEBT `F7`, which was "no way to hide Scan" |
 | Import & review | `importReview` | Settings → Import transactions → `import.tsx` / `review.tsx` | ✅ wired |
 | Voice entry | `voiceEntry` | Add **mic disc** under the amount → `VoiceEntrySheet` (all three kinds), Settings → **Voice entry** → `settings/voice.tsx`, and the hands-free Siri capture drained by `lib/voiceDrain.ts` | ✅ wired — **on** by default; dictation is the OS keyboard/Siri, never a service |
@@ -1668,11 +1608,11 @@ Absorbed from `AUDIT.md` §3. Each step names the code that does it.
 | 1 | Fonts load, `openDB()` runs the schema + migrations + rebuilds + data fixes | `app/_layout.tsx:43`, `src/db/schema.ts` |
 | 2 | `seedIfNeeded` creates the local `person` (`is_me=1`) and the `Personal` group | `src/db/seed.ts` |
 | 3 | `materializeDueOccurrences` → `runSavingsMaintenance` → `rescheduleReminders` | `app/_layout.tsx:48-50` |
-| 4 | `BrandedLoader` until fonts + DB ready; DB failure → retryable `ErrorState` | `app/_layout.tsx:71-88` |
-| 5 | `LockGate` (biometric, default off) then `OnboardingGate` reads `onboarding_done` | `components/system/{LockGate,OnboardingGate}.tsx` |
-| 6 | 10-stage questionnaire, 8 numbered (§1) | `components/system/Onboarding.tsx`, `src/hooks/useOnboardingForm.ts` |
+| 4 | **One** `BrandedLoader` until fonts, DB, feature flags and `onboarding_done` are all ready — the last two are read in parallel with opening the DB, so `FlagsGate` and `OnboardingGate` mount already resolved instead of each flashing a loader of its own (2026-09-23). DB failure → retryable `ErrorState` | `app/_layout.tsx:67-74`, `:186-188` |
+| 5 | `LockGate` (biometric, default off) then `OnboardingGate` (already holds `onboarding_done`) | `components/system/{LockGate,OnboardingGate}.tsx` |
+| 6 | 12 stages, 8 numbered (§1): hero → welcome → *(sign-in, existing users only)* → intent → name → income → *(payday, only with income)* → money → pay → budget → permissions → summary | `components/system/Onboarding.tsx`, `src/hooks/useOnboardingForm.ts` |
 | 7 | Intent → `onboarding_intent` **and the feature flags it implies** | `lib/personaDefaults.ts`, `lib/onboarding.ts` |
-| 8 | `finalizeOnboarding` writes name, the monthly `Salary` rule anchored by `paydayAnchor`, the `budget_target` preference, **contacts** (no group — see §1 step 6), the money profile, and turns the backup reminder on — each step individually try/caught | `src/lib/onboarding.ts` |
+| 8 | `finalizeOnboarding` writes name, the monthly `Salary` rule anchored by `paydayAnchor`, the `budget_target` preference, the money profile, and turns the backup reminder on — each step individually try/caught. **No contacts**: the `people` step is gone, and who you split with is a Friends question now | `src/lib/onboarding.ts` |
 | 9 | *(folded into step 8 — `setMoneyProfile` is part of the single commit)* | `src/lib/onboarding.ts` |
 | 10 | `onDone()` → `settings.setOnboardingDone(true)` in a `try/finally`; the gate opens regardless | `OnboardingGate.tsx:19-25` |
 | 11 | If the user chose "add my first expense", Home fires a one-shot push to Quick Add and clears the flag | `app/(tabs)/index.tsx:101-108` |
@@ -1859,7 +1799,7 @@ alongside AsyncStorage flags, `settings`, and the `settings` table):
 
 | Type | Pref | Config |
 |---|---|---|
-| Bill / renewal reminders | `renewals` | Lead days + time-of-day (`TimePickerSheet`) |
+| Reminders for upcoming charges | `renewals` | Lead days + time-of-day (`TimePickerSheet`) |
 | Daily log reminder | `daily` | Time-of-day |
 | Backup nudge | `backup` | Monthly, counted from `settings.backupAnchorAt()` — **anchored to `Date.now()` the first time it's enabled**, and re-anchored on every backup *and* restore, so it can never nag right after a real backup |
 
@@ -1908,13 +1848,13 @@ because those ids are already this app's contract for a reminder's source — so
 
 ## 19. Network & data egress
 
-The app is local-first: SQLite on device, no sync, no telemetry, no analytics SDK. Three paths
-can leave the device, all listed below, and **only one is on by default**.
+The app is offline-first: SQLite on device, no telemetry, no analytics SDK. Three paths can
+leave the device, all listed below, and **only one is on by default**.
 
 | # | What | Sends | When |
 |---|---|---|---|
 | 1 | **Receipt OCR, cloud provider** — `server/receipt-ocr-proxy` → Gemini Flash | **The receipt photo**, base64-encoded | Scanning a receipt while `settings.ocrProvider()` is `gemini` — **the default** |
-| 2 | **Account, linking + server backup** — `server/api` (`src/lib/serverApi.ts`) | Your **email address**, a device label ("iPhone 15"), optionally your name, profile picture and phone number, who you are **linked** with, and **encrypted backup blobs** the server cannot read. No transaction, group, budget or goal ever goes up | Only in a build with `EXPO_PUBLIC_API_URL` set, and only after the user signs in and taps a backup, invite or approve action (§13.4, §13.5) |
+| 2 | **Account, linking + sync** — `server/api` (`src/lib/serverApi.ts`, `src/lib/sync/`) | Your **email address**, a device label ("iPhone 15"), optionally your name, profile picture and phone number, who you are **linked** with, and — once signed in — **a readable copy of everything**: transactions, groups, budgets, goals, assets, categories and preferences (`DQ-93`). Receipt photos never go up | Only in a build with `EXPO_PUBLIC_API_URL` set, and only once the user signs in (§13.4, §13.6) |
 | 3 | **pdf.js**, loaded in the off-screen `PdfTextExtractor` WebView to read a compressed PDF | Nothing — the library is **bundled** in the app (`src/assets/pdfjs/`, integrity-checked in `src/lib/pdfjsCache.ts`) and the PDF is parsed locally | Importing a PDF statement |
 
 ### The proxy
@@ -1935,17 +1875,16 @@ set `EXPO_PUBLIC_RECEIPT_OCR_PROXY_URL` in `budgetsplit/.env` or the EAS environ
 user-base growth. `ocrProviders/index.ts` documents Mistral as a possible automatic fallback —
 documented, **not implemented**.
 
-### The account/backup Worker
+### The account Worker
 [server/api/](../../server/api/) is the second Worker: D1 for identity (`users`, `magic_links`,
-`sessions`) and backup metadata, and a blob store for the encrypted snapshots —
-**KV today**, because the `[[r2_buckets]]` block in `wrangler.toml` is commented
-out. That matters: KV caps a value at 25 MiB and the free plan allows ~1k writes a
-day, where R2's ceiling is far higher. It never sees a transaction, and never sees a
-backup passphrase — `lib/backup.ts` encrypts on the phone first, so the stored bytes are opaque
-to it. Phase **S1** only: no sync (S2), no shared groups (S3).
+`sessions`) and for the account's copy of the ledger that every signed-in phone syncs with
+(`server/api/sync/`, schema `migrations/0001_schema.sql`), plus a small blob store for avatars —
+**KV today**, because the `[[r2_buckets]]` block in `wrangler.toml` is commented out. The copy
+is **readable**: the server checks every write against the app's own rules, which it could not
+do to sealed data (`DQ-93`). It never sees a receipt photo or a backup passphrase.
 
-**Config**: `wrangler d1 create` → `d1 migrations apply` → `r2 bucket create` → an email
-provider (see below) → `wrangler deploy` → set `EXPO_PUBLIC_API_URL`.
+**Config**: `wrangler d1 create` → `d1 migrations apply` → an email provider (see below) →
+`wrangler deploy` → set `EXPO_PUBLIC_API_URL`.
 
 **It runs free.** Workers (100k req/day), D1 (5 GB) and R2 (10 GB, once wired) are all on Cloudflare's
 free plan. The one exception is Cloudflare's *own* Email Sending, which is Workers Paid
@@ -1953,7 +1892,7 @@ free plan. The one exception is Cloudflare's *own* Email Sending, which is Worke
 with a free tier and single-sender verification, and falls back to the Cloudflare binding
 when it is configured. Which one is live is reported by `GET /health`.
 Leave that env var unset (the default) and none of this code path is reachable: no Account row,
-no server backup rows, no requests.
+no Sync row, no requests.
 
 ### What this means for the privacy claims
 The default OCR provider is `gemini`, so out of the box a scanned receipt photo does reach a third
@@ -1962,8 +1901,9 @@ everything on the phone (§7.4). Because of that, and now because signing in is 
 any absolute in-app claim ("zero network calls", "nothing ever leaves your device") would be
 false as written. The strings in `app/help.tsx`, `app/(tabs)/settings.tsx`, `app/storage.tsx` and
 `VOICE_SHORTCUT_PRIVACY` are scoped instead: local-first, no tracking, no analytics, nothing
-uploaded **unless you ask** — with receipt scanning and server backup named as the two
-exceptions, and the way out named for each (the OCR toggle; not signing in).
+uploaded **unless you ask** — with receipt scanning and signing in named as the two
+exceptions, and the way out named for each (the OCR toggle; not signing in). Help → *The server
+can read what you sync* says plainly that the account's copy is not end-to-end encrypted.
 
 ---
 
@@ -1997,7 +1937,7 @@ vs. surfaced").
 | `/insights` | none | `ErrorState` + retry | "No insights yet" | ✅ |
 | `/personal` | none | `ErrorState` + retry | "Nothing here yet" **+** "No recurring items" | ✅ |
 | `/plan/recurring` | none | `ErrorState` + retry | "No recurring items yet" | ✅ |
-| `/reminders` | none | `ErrorState` + retry | "Nothing due" | ✅ |
+| `/upcoming` | none | `ErrorState` + retry | "Nothing due" | ✅ |
 | `/report-transactions` | none | `ErrorState` + retry | "No transactions" | ✅ |
 | `/reports` | `Skeleton` behind a **450 ms floor** so it can't flash | `ErrorState` + retry | "Nothing to report yet" | ✅ |
 | `/review` | 4 × `SkeletonCard` (150 pt) | `ErrorState` + retry | "Nothing to review" **+** a distinct "No matches" for a filtered-empty set | ✅ |
@@ -2142,7 +2082,7 @@ Reached via **Settings → tap the version row ×7 → `/storage`**.
     "Weekend Plans" for empty-tab states, and an **archived** "Old Flat") · ~70 transactions / 3 months.
   - **Splits:** equal · exact · shares/weights · itemized (tax + tip + discount). **Settlements:** partial (live balances) + fully-settled, all pay methods. **simplify-debt OFF** on Goa.
   - **TransactionRow states:** note-primary, **category-primary (no note)**, attachment clip, lent/borrowed attribution, income, settlement (two avatars).
-  - **Recurring:** active / paused / ended across daily→weekly→monthly→yearly→**custom**; plus **near-due rules** (1–3 days out) so **Home "Coming up"** + **Plan "Upcoming"** populate.
+  - **Recurring:** active / paused / ended across daily→weekly→monthly→yearly→**custom**; plus **near-due rules** (1–3 days out) so **Plan "Upcoming"** populates (Home shows only a bell badge count, not a list — `DQ-92`).
   - **Budgets:** over / near / under, every cadence (once/daily/monthly/yearly).
   - **Savings — 7 goals:** locked@40% · reached 100% (deadline) · over-funded 120% · partial · 0% empty · withdrawal history · **overdue** (deadline past) · manual + auto funding.
   - **Pending rows:** seeded `pending_txn` from multiple sources so Review's sectioned inbox populates.
@@ -2202,7 +2142,7 @@ widgets; `system/` = onboarding, gates, privacy. `ui/` never imports from `finan
 | `CategoryDonut` | SVG donut of category spend (Reports); centre label auto-shrinks. |
 | `CategoryPicker` | Searchable category grid *(sheet)* + inline create. Add flows, Review. |
 | `GoalCelebration` | Full-screen confetti at 100% goal (auto-dismiss). |
-| `GroupForm` | Create/edit group form — icon, name, type, members, default split. Shared by the create sheet and Edit group. |
+| `GroupForm` | Create/edit group form — name, type (coloured icon tiles), members (with an inline `+` to add a new friend via `PersonNameSheet`), default split (`TabPills`). Shared by the create sheet and Edit group. |
 | `HealthSheet` | Financial-health detail sheet (ring + dimensions + factors). |
 | `InsightText` | Rich/parsed insight text with emphasis. |
 | `MemberAvatar` | Circular avatar (initials or photo), tappable for photo pick. |
@@ -2287,7 +2227,7 @@ pre-stages the data so each is one or two taps from completing. After **Load dem
 | 11 | **Import failure messages** | — | `/import` → paste gibberish → Parse ("No transactions found"); pick a scanned/image PDF → the 0-characters message. |
 | 12 | **Backup → restore round-trip** | any populated app | Settings → **Backup & restore** → Create backup (passphrase) → share to Files → Erase all data → Restore → same file → correct passphrase. Also try a **wrong** passphrase (inline error) and a non-backup file ("Not a valid backup file"). ⚠️ Restore **replaces** everything. |
 | 13 | **Receipt scan** *(iOS, needs camera/library)* | a real receipt photo | Add → expense → Split by items → **Scan receipt** → Take Photo / Choose from Library → `ScanningOverlay` blocks input → `ReceiptScanSheet` → uncheck a bad row → **Add**. Run it once on each provider — Features → Smart capture → **Cloud Receipt Scanning** off to compare, which is also the only way to see the raw-text panel (it's null on `gemini`). Check the row is **not** dimmed in the off state. |
-| 14 | **Coming up / Upcoming** | 3 near-due recurring rules (1–3 days out) | Home **"Coming up"** + Plan **"Upcoming this month"** already show them. |
+| 14 | **Upcoming** | 3 near-due recurring rules (1–3 days out) | Plan's Upcoming list already shows them. Home shows only a bell badge count (`DQ-92`), not a list. |
 | 15 | **Smart-category learning** | flag ON; many noted txns | Add expense → type a title (e.g. "Uber") → category auto-suggests; correct it once → it learns. |
 | 16 | **Itemized split + Service charge** | groups with members | Add → expense → **Split by items** → items → **Service** adjustment → assign → payers (watch "Must equal total ₹X") → review → Save. |
 | 17 | **Budget over/near/under live** | Groceries **over**, Eating Out **near**, Fuel **under** | Personal → Budget tab; or add a Groceries expense to watch a bar flip red. |

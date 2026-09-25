@@ -3,6 +3,7 @@ import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
 import type { TxnKind, TxnSource, PayMethod } from '../../constants/enums';
 import type { ParsedDirection } from '../../lib/importParse';
+import { queueDelete, queueUpsert } from './syncQueue';
 
 /** A parsed-but-unconfirmed transaction shown in the Review inbox. */
 export type PendingTxn = {
@@ -65,12 +66,14 @@ export async function insertPending(db: SQLite.SQLiteDatabase, rows: NewPending[
   const now = Date.now();
   await db.withTransactionAsync(async () => {
     for (const r of rows) {
+      const id = uuid();
       await db.runAsync(
         `INSERT INTO pending_txn (id, date, amount, description, kind, category, direction, raw, created_at, source, pay_method, lat, lng, place_label, counterparty_id)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [uuid(), r.date, r.amount, r.description, r.kind, r.category ?? null, r.direction, r.raw ?? null, now, r.source ?? 'manual', r.pay_method ?? null,
+        [id, r.date, r.amount, r.description, r.kind, r.category ?? null, r.direction, r.raw ?? null, now, r.source ?? 'manual', r.pay_method ?? null,
           r.lat ?? null, r.lng ?? null, r.place_label ?? null, r.counterparty_id ?? null],
       );
+      await queueUpsert(db, 'pending_txn', id);
     }
   });
 }
@@ -101,6 +104,7 @@ export async function updatePendingDraft(
   if (sets.length === 0) return;
   args.push(id);
   await db.runAsync(`UPDATE pending_txn SET ${sets.join(', ')} WHERE id=?`, args);
+  await queueUpsert(db, 'pending_txn', id);
 }
 
 /** Re-insert a pending row verbatim (its id + drafts) — the Undo of a delete or
@@ -127,6 +131,7 @@ export async function restorePending(db: SQLite.SQLiteDatabase, row: PendingTxn)
       row.author_person_id ?? null, row.payer_person_id ?? null,
     ],
   );
+  await queueUpsert(db, 'pending_txn', row.id);
 }
 
 export async function getPendingCount(db: SQLite.SQLiteDatabase): Promise<number> {
@@ -136,8 +141,11 @@ export async function getPendingCount(db: SQLite.SQLiteDatabase): Promise<number
 
 export async function deletePending(db: SQLite.SQLiteDatabase, id: string): Promise<void> {
   await db.runAsync('DELETE FROM pending_txn WHERE id = ?', [id]);
+  await queueDelete(db, 'pending_txn', id, { id });
 }
 
 export async function clearPending(db: SQLite.SQLiteDatabase): Promise<void> {
+  const ids = await db.getAllAsync<{ id: string }>('SELECT id FROM pending_txn');
   await db.runAsync('DELETE FROM pending_txn');
+  for (const { id } of ids) await queueDelete(db, 'pending_txn', id, { id });
 }

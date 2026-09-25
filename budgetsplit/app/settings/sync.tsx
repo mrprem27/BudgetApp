@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { View, Text, ScrollView, Switch, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { colors, type, space, layout } from '../../src/theme';
@@ -8,62 +8,40 @@ import { Card } from '../../src/components/ui/Card';
 import { ListRow } from '../../src/components/ui/ListRow';
 import { Divider } from '../../src/components/ui/Divider';
 import { Banner } from '../../src/components/ui/Banner';
-import { settings } from '../../src/lib/settings';
-import { dateTime } from '../../src/lib/dateFormat';
+import { serverConfigured } from '../../src/lib/serverApi';
 import { haptic } from '../../src/lib/haptics';
-import { serverConfigured, getStoredSession } from '../../src/lib/serverApi';
-import { newRecoveryCode, normalizeRecoveryCode } from '../../src/lib/recoveryCode';
 import { useServerSession } from '../../src/hooks/useServerSession';
-import { pendingUploadCount } from '../../src/db/queries/syncOutbox';
-import { getAllGroups, sharedGroupsOf } from '../../src/db/queries/groups';
-import { pendingGroupInvites, acceptGroupInvite } from '../../src/lib/syncEngine';
-import { rememberSyncPassphrase, forgetSyncPassphrase, maybeSnapshot } from '../../src/lib/syncSnapshot';
-import { RecoveryCodeSheet } from '../../src/components/finance/backup/RecoveryCodeSheet';
-import type { SyncGroup } from '../../src/lib/serverApi';
+import { pendingInvites, answerInvite, type PendingInvite } from '../../src/db/queries/syncApply';
+import { scheduleSync } from '../../src/lib/sync/run';
+import { SyncStatus } from '../../src/components/system/SyncStatus';
+import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
 
 /**
  * What syncing actually means for you — said plainly, in one place.
  *
- * This screen exists because the honest answers are surprising, and every one of
- * them is something a user would otherwise have to discover by being wrong about
- * it: only shared groups travel, the server cannot read any of it, off is a pause
- * rather than a retraction, and it is not live.
+ * This screen exists because the honest answers are surprising, and each is
+ * something a user would otherwise find out by being wrong about it: everything
+ * goes to the account, the server can read it, nobody else's entry moves your
+ * numbers without your say-so, and it isn't a live connection.
+ *
+ * There is no switch. Signing in is what joins a phone to its account
+ * (first sign-in, `SPEC-SERVER.md` §4) and signing out is what leaves it; a
+ * second control that could say "off" while the account still held everything
+ * would be one more thing that looks like a promise and isn't.
  */
 export default function SyncScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
   const { session } = useServerSession();
+  const { refresh } = useDataRefresh();
   const configured = serverConfigured();
 
-  const [enabled, setEnabled] = useState(false);
-  const [waiting, setWaiting] = useState(0);
-  const [sharedCount, setSharedCount] = useState(0);
-  const [invites, setInvites] = useState<SyncGroup[]>([]);
+  const [invites, setInvites] = useState<PendingInvite[]>([]);
   const [joining, setJoining] = useState<string | null>(null);
-  const [lastAt, setLastAt] = useState<number | null>(null);
-  const [note, setNote] = useState<string | null>(null);
-  const [everything, setEverything] = useState(false);
-  /** The code being shown once, before the switch actually flips. */
-  const [recoveryCode, setRecoveryCode] = useState<string | null>(null);
-  const [savingPass, setSavingPass] = useState(false);
 
   const load = useCallback(() => {
     let alive = true;
-    (async () => {
-      const [on, n, groups, pending, at, why] = await Promise.all([
-        settings.syncEnabled(), pendingUploadCount(db), getAllGroups(db), pendingGroupInvites(),
-        settings.lastSyncAt(), settings.lastSyncNote(),
-      ]);
-      const everythingOn = await settings.syncEverything().catch(() => false);
-      if (alive) setEverything(everythingOn);
-      if (!alive) return;
-      setEnabled(on);
-      setWaiting(n);
-      setSharedCount(sharedGroupsOf(groups).length);
-      setInvites(pending);
-      setLastAt(at);
-      setNote(why);
-    })().catch(() => {});
+    pendingInvites(db).then(p => { if (alive) setInvites(p); }).catch(() => {});
     return () => { alive = false; };
   }, [db]);
 
@@ -72,124 +50,30 @@ export default function SyncScreen() {
   /**
    * Accept an invitation.
    *
-   * The group's entries are NOT fetched here — they arrive on the next ordinary
-   * sync, because a cursor of zero already means "everything". Special-casing a
-   * first pull would be a second code path doing what the normal one does.
+   * Queued like any other change (`answerInvite`), so it holds offline and can't
+   * half-fail here. The group and its entries arrive with the sync this kicks off —
+   * a cursor of zero already means "everything", so there is no special first pull.
    */
-  async function accept(g: SyncGroup) {
-    setJoining(g.id);
-    const ok = await acceptGroupInvite(g.id);
-    setJoining(null);
-    if (!ok) {
+  async function accept(g: PendingInvite) {
+    setJoining(g.memberId);
+    try {
+      await answerInvite(db, g, true);
+    } catch {
+      setJoining(null);
       haptic.error();
-      Alert.alert('Could not accept', 'Check your connection and try again.');
+      Alert.alert('Could not accept', 'Please try again.');
       return;
     }
+    setJoining(null);
     haptic.success();
-    setInvites(prev => prev.filter(x => x.id !== g.id));
+    setInvites(prev => prev.filter(x => x.memberId !== g.memberId));
+    // The group then shows up everywhere, not only here.
+    scheduleSync(db, () => { refresh(); load(); }, 0);
     Alert.alert(
       'Joined',
-      'This group will appear the next time the app syncs. Entries other people add show up in '
+      'The group appears as soon as the app syncs — in a few seconds if you’re online. Entries other people add show up in '
       + 'the group straight away, but move none of your own numbers until you accept them — '
       + 'unless you have marked that person trusted.',
-    );
-  }
-
-  /**
-   * The second switch: a whole-app encrypted copy, not entry sync.
-   *
-   * Turning it on GENERATES the key rather than asking for one.
-   *
-   * The passphrase's only job is keeping the server blind, and 20 characters of
-   * real randomness do that better than anything a person types. Asking somebody
-   * to invent — and never forget — an unrecoverable secret is a wall most people
-   * do not climb: they leave the switch off, and "all my data comes with me" is
-   * then quietly false for most users, which is worse than what the passphrase was
-   * protecting against.
-   *
-   * Shown once, with a copy button, and said plainly: losing the phone AND never
-   * saving the code means the copy is unreadable. That is exactly today's position
-   * for anybody with no account — the status quo, with an upside.
-   */
-  async function toggleEverything(next: boolean) {
-    haptic.selection();
-    if (next) {
-      const code = await newRecoveryCode();
-      setRecoveryCode(code);
-      return;
-    }
-
-    setEverything(false);
-    await settings.setSyncEverything(false);
-    await forgetSyncPassphrase();
-    Alert.alert(
-      'Stopped',
-      'No new copies will be made. The ones already on your account stay there until you '
-      + 'delete them under Backup & restore — turning this off is not a deletion.',
-    );
-  }
-
-  /** Called once the user has had the chance to save the code. */
-  async function confirmRecoveryCode(code: string) {
-    setSavingPass(true);
-    const session = await getStoredSession();
-    // Stored WITH its owner, so a phone that changes hands cannot seal the next
-    // person's snapshot with this one — see `storedSyncPassphrase`.
-    const held = await rememberSyncPassphrase(normalizeRecoveryCode(code), session?.user.id);
-    if (!held) {
-      setSavingPass(false);
-      setRecoveryCode(null);
-      haptic.error();
-      Alert.alert('Cannot store the code', 'This device has no secure storage, so an automatic copy could not be opened again.');
-      return;
-    }
-    await settings.setSyncEverything(true);
-    setEverything(true);
-    setRecoveryCode(null);
-    setSavingPass(false);
-    haptic.success();
-    // Take the first one now rather than in six hours: turning it on and having
-    // nothing happen is indistinguishable from it not working.
-    const r = await maybeSnapshot(db);
-    Alert.alert(
-      r.ok ? 'First copy saved' : 'Turned on',
-      r.ok
-        ? 'Everything on this phone is now on your account, encrypted. It refreshes in the background from here on.'
-        : 'The first copy will be made shortly.',
-    );
-    load();
-  }
-
-  async function toggle(next: boolean) {
-    haptic.selection();
-    if (!next) {
-      // Turning it OFF is safe and reversible, so it does not need a confirm — but
-      // it does need the truth, because "off" is widely read as "and take it back".
-      setEnabled(false);
-      await settings.setSyncEnabled(false);
-      Alert.alert(
-        'Sync paused',
-        'Nothing new will go up or come down. What is already on the server stays there — turning sync off cannot take it back.',
-      );
-      return;
-    }
-    // Turning it ON is the consequential direction: this is the moment data leaves
-    // the phone. Name what will travel before it does.
-    Alert.alert(
-      'Turn on sync?',
-      `Entries in your ${sharedCount} shared group${sharedCount === 1 ? '' : 's'} will be encrypted on this phone and sent to your account, so the people in them stay up to date.\n\n`
-      + 'This switch carries nothing else — your personal group, income, goals, budgets and net worth '
-      + 'stay on this device unless you also turn on “Keep a copy of everything”.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Turn on',
-          onPress: async () => {
-            setEnabled(true);
-            await settings.setSyncEnabled(true);
-          },
-        },
-      ],
     );
   }
 
@@ -197,37 +81,40 @@ export default function SyncScreen() {
     <View style={styles.container}>
       <ScreenHeader title="Sync" onBack={() => router.back()} />
       <ScrollView contentContainerStyle={styles.content}>
+        {/* Where this phone's data stands (SPEC-SERVER.md §6.1). Draws nothing
+            when signed out; the Banner below says what to do then. */}
+        <SyncStatus />
         {!configured ? (
           <Banner icon="cloud-off" text="This build has no server configured, so there is nothing to sync to." />
         ) : !session ? (
           <Banner
             icon="user"
-            text="Sign in first — sync needs an account to know which devices are yours."
+            text="Sign in first — sync is your account, on every phone you sign in on."
             actionLabel="Account"
             onAction={() => router.push('/settings/account')}
           />
         ) : null}
 
         {/*
-          Invitations sit at the TOP, above the switch, because they are the one
-          thing here that someone else is waiting on. Accepting is what makes a
-          group start arriving — an invitation that is never answered looks
-          identical to sync not working.
+          Invitations sit at the top because they are the one thing here that
+          someone else is waiting on. Accepting is what makes a group start
+          arriving — an invitation never answered looks identical to sync not
+          working.
         */}
         {invites.length > 0 && (
           <>
             <Text style={styles.heading}>Waiting for you</Text>
             <Card>
               {invites.map((g, i) => (
-                <View key={g.id}>
+                <View key={g.memberId}>
                   {i > 0 && <Divider indent="none" />}
                   <ListRow
                     icon="user-plus"
-                    title="You have been invited to a group"
-                    subtitle="Accepting starts sharing this group's entries between you both."
+                    title={g.invitedBy ? `${g.invitedBy} invited you to ${g.groupName}` : `You're invited to ${g.groupName}`}
+                    subtitle="Accepting starts sharing this group's entries between you."
                     variant="stacked"
                     chevron={false}
-                    value={joining === g.id
+                    value={joining === g.memberId
                       ? <ActivityIndicator color={colors.accent} />
                       : <Text style={styles.accept}>Accept</Text>}
                     onPress={joining ? undefined : () => accept(g)}
@@ -238,81 +125,21 @@ export default function SyncScreen() {
           </>
         )}
 
-        <Card>
-          <ListRow
-            icon="refresh-cw"
-            title="Keep shared groups in sync"
-            subtitle={enabled
-              ? 'On. Changes travel when you open the app.'
-              : 'Off. Everything stays on this phone.'}
-            variant="stacked"
-            chevron={false}
-            value={(
-              <Switch
-                value={enabled}
-                onValueChange={toggle}
-                disabled={!configured || !session}
-                trackColor={{ false: colors.bgMuted, true: colors.accent }}
-                thumbColor={colors.onAccent}
-              />
-            )}
-          />
-        </Card>
-
         {/*
-          The second switch, and deliberately a separate card.
-
-          It is not "more of the same": groups sync entry by entry, this is a
-          whole-app snapshot. Presenting them as one control with a degree setting
-          would hide that they fail differently — and that only this one can bring
-          a phone back from nothing.
-        */}
-        <Card>
-          <ListRow
-            icon="hard-drive"
-            title="Keep a copy of everything"
-            subtitle={everything
-              ? 'On. A fresh phone can become this one again — sign in, enter your passphrase.'
-              : 'Off. Only the groups above would travel.'}
-            variant="stacked"
-            chevron={false}
-            value={(
-              <Switch
-                value={everything}
-                onValueChange={toggleEverything}
-                disabled={!configured || !session}
-                trackColor={{ false: colors.bgMuted, true: colors.accent }}
-                thumbColor={colors.onAccent}
-              />
-            )}
-          />
-        </Card>
-        {everything && (
-          <Text style={styles.footnote}>
-            Sealed on this phone with your passphrase, which is never sent — so the server holds a
-            copy it cannot open, and losing the passphrase means losing the copy. It refreshes in
-            the background, and the newest copy wins: two phones used heavily at the same time will
-            not merge, so this is for getting a phone back, not for working on two at once.
-          </Text>
-        )}
-
-        {/*
-          The four things people get wrong, answered before they have to ask. Each
-          is a real surprise, not reassurance: a user who assumes the opposite of
-          any of these will make a decision they would not have made.
+          The things people get wrong, answered before they have to ask. Each is a
+          real surprise, not reassurance: a user who assumes the opposite of any of
+          these would make a decision they wouldn't otherwise have made.
         */}
         <Text style={styles.heading}>What this does</Text>
         <Card padded>
           <Fact
-            title={everything ? 'Groups sync; everything else is copied' : 'Only shared groups travel'}
-            body={everything
-              ? 'The switch above syncs the groups you split with, entry by entry. “Keep a copy of everything” also sends an encrypted copy of the rest — your own spending, goals, budgets and net worth — so a new phone can become this one. Both are sealed here first.'
-              : 'Your personal spending, income, savings goals, budgets and net worth never leave this phone. Sync carries the groups you split with, and nothing else. Turn on “Keep a copy of everything” to change that.'}
+            title="Everything goes to your account"
+            body="Your groups, and your own spending, goals, budgets and net worth. A new phone gets all of it back when you sign in. It works offline, and catches up when there's a connection."
           />
           <Divider indent="none" />
           <Fact
-            title="We cannot read any of it"
-            body="Everything is encrypted on this phone before it is sent. The server stores sealed blobs it has no key for — not amounts, not who paid, not what it was for."
+            title="The server can read it"
+            body="Your account's copy is stored as it is, not sealed. That's what lets the server check who may change what in a shared group, and bring everything back on a new phone."
           />
           <Divider indent="none" />
           <Fact
@@ -321,88 +148,19 @@ export default function SyncScreen() {
           />
           <Divider indent="none" />
           <Fact
-            title="It is not live"
-            body="Changes are exchanged when you open the app, not the second someone types them. A ledger does not need to be a chat."
+            title="It isn't live"
+            body="Changes go up a few seconds after you make them while the app is open, and catch up when you come back to it. A ledger doesn't need to be a chat."
           />
         </Card>
 
-        {enabled && (
-          <>
-            <Text style={styles.heading}>Right now</Text>
-            <Card>
-              {/*
-                “They will go the next time you open the app” was false whenever
-                the group had not been shared: there is no recipient, so those
-                entries never move however many times you open it. The count was
-                honest and the sentence was not. Details carries the real answer.
-              */}
-              <ListRow
-                icon={waiting > 0 ? 'upload-cloud' : 'check'}
-                title={waiting > 0
-                  ? `${waiting} change${waiting === 1 ? '' : 's'} waiting to go up`
-                  : 'Everything here has been sent'}
-                subtitle={waiting > 0 ? 'Tap to see which can be sent, and which have nowhere to go yet.' : undefined}
-                variant="stacked"
-                onPress={() => router.push('/settings/sync-log')}
-              />
-              <Divider indent="text" />
-              {/*
-                The honest status line.
-
-                `runSync` never throws, deliberately — a failed sync must not put a
-                dialog in front of someone who did not ask for one. The cost is
-                that silently doing nothing looks exactly like working. This is
-                where the two are told apart, and it is the first thing to look at
-                when sync appears dead on a real phone.
-              */}
-              <ListRow
-                icon={NOTE[note ?? 'ok'] ? 'alert-circle' : 'clock'}
-                iconColor={NOTE[note ?? 'ok'] ? colors.healthAmber : colors.textSecondary}
-                title={lastAt ? `Last synced ${dateTime(new Date(lastAt))}` : 'Not synced yet'}
-                subtitle={NOTE[note ?? 'ok'] ?? 'See what went up, what came down, and sync now.'}
-                variant="stacked"
-                onPress={() => router.push('/settings/sync-log')}
-              />
-            </Card>
-          </>
-        )}
-
         <Text style={styles.footnote}>
-          Turning sync off pauses it. It does not delete what is already on the server,
-          and it does not remove anything from anyone else&apos;s phone.
+          Signing out sends anything not yet sent, then empties this phone. Your account keeps
+          everything, and signing in again brings it back.
         </Text>
       </ScrollView>
-
-      <RecoveryCodeSheet
-        visible={recoveryCode !== null}
-        code={recoveryCode}
-        onClose={() => setRecoveryCode(null)}
-        onConfirm={confirmRecoveryCode}
-        submitting={savingPass}
-      />
     </View>
   );
 }
-
-/**
- * Why a sync did nothing, in words rather than a code.
- *
- * Only the states worth explaining are here — 'ok' maps to nothing, because a
- * working sync needs no commentary and a subtitle saying "fine" is noise.
- */
-const NOTE: Record<string, string | undefined> = {
-  ok: undefined,
-  offline: 'Could not reach the server last time. It will try again when you next open the app.',
-  disabled: 'Sync is switched off, so nothing is being exchanged.',
-  'not-configured': 'This build has no server configured.',
-  'no-device-key': 'This device cannot store its own key, so it cannot sync.',
-  'signed-out': 'You are signed out, so there is no account to sync with.',
-  // Its own line, because it used to be reported as `offline` — so the screen
-  // said "could not reach the server" above a banner saying "sign in first", and
-  // the one action that would fix it looked unrelated to the problem.
-  'session-expired': 'Your session ended, so sync stopped. Sign in again under Account.',
-  restoring: 'Paused while a backup is being restored.',
-};
 
 function Fact({ title, body }: { title: string; body: string }) {
   return (

@@ -1,6 +1,5 @@
 import * as SQLite from 'expo-sqlite';
-import { NOT_AWAITING_APPROVAL } from './approvalSql';
-import { AUTHORED_BY_ME } from './syncOutbox';
+import { queueDelete, queueUpsert, queueUpsertWhere } from './syncQueue';
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
 import { TXN_KIND_FOR_CATEGORY, type CategoryKind } from '../../constants/enums';
@@ -139,6 +138,7 @@ export async function insertCategory(
     // tombstone goes — otherwise the seeder would keep refusing to restore it and
     // this row would be the only copy, silently un-restorable from a backup.
     await db.runAsync('DELETE FROM category_tombstone WHERE name = ? AND kind = ?', [name, kind]);
+    await queueUpsert(db, 'category', id);
   });
   return { id, group_id: null, name, icon, color, kind, section };
 }
@@ -165,7 +165,11 @@ export async function renameCategory(db: SQLite.SQLiteDatabase, categoryId: stri
     );
     if (!cat || cat.name === n) return;
     const txnKind = TXN_KIND_FOR_CATEGORY[cat.kind];
+    // On the server a category IS its (kind, name), so a rename retires the old
+    // one and creates the new: a delete keyed on the OLD name, then the row.
+    await queueDelete(db, 'category', `renamed:${cat.kind}:${cat.name}`, { name: cat.name, kind: cat.kind });
     await db.runAsync('UPDATE category SET name = ? WHERE id = ?', [n, categoryId]);
+    await queueUpsert(db, 'category', categoryId);
     // Scoped by kind. `Rent` and `Other` are seeded as **both** expense and
     // transfer, so an unscoped UPDATE renamed the other kind's transactions to a
     // name its own catalog does not contain: they fell out of every category
@@ -185,20 +189,19 @@ export async function renameCategory(db: SQLite.SQLiteDatabase, categoryId: stri
       'UPDATE txn SET category = ?, updated_at = ? WHERE category = ? AND kind = ?',
       [n, now, cat.name, txnKind],
     );
-    // ...and every affected shared entry goes into the outbox for the same reason.
-    await db.runAsync(
-      `INSERT OR REPLACE INTO sync_outbox (entry_id, group_id, queued_at)
-       SELECT t.id, t.group_id, ?
-         FROM txn t JOIN budget_group g ON g.id = t.group_id
-        WHERE t.category = ? AND t.kind = ? AND g.is_personal = 0
-          AND ${AUTHORED_BY_ME}
-          AND ${NOT_AWAITING_APPROVAL}`,
-      [now, n, txnKind],
-    );
+    // ...and every entry I wrote goes up for the same reason, personal ones too.
+    await queueUpsertWhere(db, 'txn',
+      'SELECT id FROM txn WHERE category = ? AND kind = ? AND author_person_id IS NULL', [n, txnKind]);
     // Budgets are an expense-side concept — `getCategorySpending` only ever sums
     // expenses — so a transfer or income rename must leave them alone.
     if (cat.kind === 'expense') {
+      // A budget line is keyed on its category name too: retire the old keys.
+      const lines = await db.getAllAsync<{ id: string; group_id: string; category: string; person_id: string | null }>(
+        'SELECT id, group_id, category, person_id FROM category_budget WHERE category = ?', [cat.name],
+      );
+      for (const l of lines) await queueDelete(db, 'category_budget', `renamed:${l.id}`, l);
       await db.runAsync('UPDATE category_budget SET category = ? WHERE category = ?', [n, cat.name]);
+      for (const l of lines) await queueUpsert(db, 'category_budget', l.id);
     }
   });
 }
@@ -215,10 +218,15 @@ export async function deleteCategory(db: SQLite.SQLiteDatabase, categoryId: stri
     );
     await db.runAsync('DELETE FROM category WHERE id = ?', [categoryId]);
     if (cat) {
+      await queueDelete(db, 'category', categoryId, { name: cat.name, kind: cat.kind });
       // Same kind-blindness as the rename: dropping transfer-`Rent` must not take
       // the *expense* Rent budget with it. Budgets are expense-only.
       if (cat.kind === 'expense') {
+        const lines = await db.getAllAsync<{ id: string; group_id: string; category: string; person_id: string | null }>(
+          'SELECT id, group_id, category, person_id FROM category_budget WHERE category = ?', [cat.name],
+        );
         await db.runAsync('DELETE FROM category_budget WHERE category = ?', [cat.name]);
+        for (const l of lines) await queueDelete(db, 'category_budget', l.id, l);
       }
       // Tombstone, so the launch-time reseed cannot resurrect it. `schema.ts`
       // re-seeds the default catalog on *every* open, which undid the delete but

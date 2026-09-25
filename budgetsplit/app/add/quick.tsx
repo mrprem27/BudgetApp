@@ -1,13 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Keyboard, Platform } from 'react-native';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { View, Text, StyleSheet, Keyboard, Platform } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { colors, type, space, layout } from '../../src/theme';
 import { formatRupees } from '../../src/lib/money';
 import { kindAccent } from '../../src/lib/kindTheme';
-import { ADD_KIND, ADD_KIND_LABEL, AddKind } from '../../src/constants/enums';
+import { ADD_KIND_TABS, ADD_KIND_LABEL, AddKind } from '../../src/constants/enums';
 import { insertCategory } from '../../src/db/queries/categories';
 import { INVESTMENT_EXPENSE_CATEGORY } from '../../src/constants/categories';
 import { Banner } from '../../src/components/ui/Banner';
@@ -16,6 +15,7 @@ import { useAddTxnForm } from '../../src/hooks/useAddTxnForm';
 import { useContentInset } from '../../src/hooks/useContentInset';
 import { useVoiceDeepLink } from '../../src/hooks/useVoiceDeepLink';
 import { Screen } from '../../src/components/ui/Screen';
+import { KeyboardForm } from '../../src/components/ui/KeyboardForm';
 import { AddHeader } from '../../src/components/finance/add/AddHeader';
 import { TabPills } from '../../src/components/ui/TabPills';
 import { CategoryPicker } from '../../src/components/finance/CategoryPicker';
@@ -30,7 +30,9 @@ import { QuickAddSheets, type QuickAddSheet } from '../../src/components/finance
 import { useAttachmentPicker } from '../../src/hooks/useAttachmentPicker';
 import { backOr } from '../../src/lib/nav';
 
-const KIND_TABS = ADD_KIND.map(k => ({ key: k, label: ADD_KIND_LABEL[k] }));
+// Three pills, not four (`SPEC-2026-09-FEEDBACK.md` §4, 2026-09-24) — Invest stays reachable
+// (a category pick below, a deep link, voice) without a pill of its own.
+const KIND_TABS = ADD_KIND_TABS.map(k => ({ key: k, label: ADD_KIND_LABEL[k] }));
 
 export default function QuickAddScreen() {
   const db = useSQLiteContext();
@@ -116,12 +118,9 @@ export default function QuickAddScreen() {
         <AddHeader form={f} accent={accent} onClose={() => backOr(router, '/(tabs)')} onOpenSheet={open} />
       }
     >
-      {/* One behavior, both platforms. Was `'height'` on Android with a magic
-          24pt offset — the jankiest RN mode, chosen because `'padding'` did
-          nothing there. The library's implementation makes `'padding'` work, so
-          the special case and the magic number both go. */}
-      <KeyboardAvoidingView style={styles.fill} behavior="padding">
-        <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: bottomPad }]} keyboardShouldPersistTaps="handled">
+      {/* `KeyboardForm` (AGENTS.md §6b): a focused field scrolls into view above
+          the keyboard. No footer — Save lives in the header. */}
+      <KeyboardForm contentContainerStyle={[styles.scroll, { paddingBottom: bottomPad }]}>
 
           {!isEditing && !isRecurEdit && (
             <View style={styles.formBlock}>
@@ -352,8 +351,7 @@ export default function QuickAddScreen() {
             // so it never repeats. Omitted, not disabled.
             onOpenRecurring={!isEditing && flags.recurring && !isTransfer ? () => open('recurring') : undefined}
           />
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardForm>
 
       <QuickAddSheets
         form={f}
@@ -370,7 +368,6 @@ export default function QuickAddScreen() {
 }
 
 const styles = StyleSheet.create({
-  fill: { flex: 1 },
   // No container `gap` — a block that renders its own top margin (e.g.
   // SplitSummary's header) would silently stack with it (AGENTS.md §3/§12).
   // Each block gets its own `formBlock` margin instead.

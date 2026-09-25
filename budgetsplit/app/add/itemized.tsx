@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import {
   View, Text, TextInput, StyleSheet, TouchableOpacity,
-  FlatList, ScrollView, Platform,
+  FlatList, Platform,
   ActionSheetIOS, ActivityIndicator,
 } from 'react-native';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { KeyboardForm, keyboardAwareScroll } from '../../src/components/ui/KeyboardForm';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -33,6 +33,8 @@ import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvide
  * Itemized-bill wizard (items → assign → payers → review). All state and
  * behaviour live in `useItemizedForm`; this file is the render layer.
  */
+const assignScroll = keyboardAwareScroll();
+
 export default function ItemizedScreen() {
   const { groupId: paramGroupId, editId } = useLocalSearchParams<{ groupId?: string; editId?: string }>();
   const db = useSQLiteContext();
@@ -44,7 +46,7 @@ export default function ItemizedScreen() {
   const [showPayMethod, setShowPayMethod] = useState(false);
 
   return (
-    <KeyboardAvoidingView style={styles.container} behavior="padding">
+    <View style={styles.container}>
       <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
         <TouchableOpacity onPress={() => router.back()} hitSlop={10} accessibilityRole="button" accessibilityLabel="Close">
           <Feather name="chevron-left" size={24} color={colors.accent} />
@@ -86,7 +88,7 @@ export default function ItemizedScreen() {
 
       {/* STEP 1: ITEMS */}
       {f.step === 'items' && (
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        <KeyboardForm contentContainerStyle={styles.scroll}>
           {Platform.OS === 'ios' && flags.receiptScan && (
             <TouchableOpacity
               style={styles.splitRestBtn}
@@ -282,7 +284,7 @@ export default function ItemizedScreen() {
           )}
 
           <PrimaryButton label="Next: Assign items" onPress={() => f.setStep('assign')} disabled={!f.canProceedItems} style={styles.nextBtn} />
-        </ScrollView>
+        </KeyboardForm>
       )}
 
       {/* STEP 2: ASSIGN */}
@@ -291,7 +293,8 @@ export default function ItemizedScreen() {
           data={f.items}
           keyExtractor={i => i.id}
           contentContainerStyle={styles.scroll}
-          keyboardShouldPersistTaps="handled"
+          // Each item's split has amount fields (AGENTS.md §6b).
+          renderScrollComponent={assignScroll}
           ListHeaderComponent={
             <TouchableOpacity style={styles.splitRestBtn} onPress={f.splitRestEqually} accessibilityRole="button">
               <Feather name="users" size={15} color={colors.accent} />
@@ -380,7 +383,7 @@ export default function ItemizedScreen() {
 
       {/* STEP 3: PAYERS */}
       {f.step === 'payers' && (
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        <KeyboardForm contentContainerStyle={styles.scroll}>
           <Text style={styles.fieldLabel}>Who paid? Must equal total {formatRupees(f.total)}</Text>
           <View style={styles.card}>
             {f.members.map((m, i) => (
@@ -411,12 +414,12 @@ export default function ItemizedScreen() {
             </TouchableOpacity>
             <PrimaryButton label="Review" onPress={() => f.setStep('review')} disabled={f.paymentRemainder !== 0 || f.payments.length === 0} style={{ flex: 1 }} />
           </View>
-        </ScrollView>
+        </KeyboardForm>
       )}
 
       {/* STEP 4: REVIEW */}
       {f.step === 'review' && (
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        <KeyboardForm contentContainerStyle={styles.scroll}>
           <Text style={styles.fieldLabel}>Category</Text>
           <CategoryPicker
             categories={f.categories}
@@ -508,7 +511,7 @@ export default function ItemizedScreen() {
               style={{ flex: 1 }}
             />
           </View>
-        </ScrollView>
+        </KeyboardForm>
       )}
 
       {/* Adjustment sheet — keyboard-safe */}
@@ -561,7 +564,7 @@ export default function ItemizedScreen() {
 
       {/* Blocks all interaction (incl. manual "Add item") for the duration of a scan */}
       <ScanningOverlay visible={f.scanning} />
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 

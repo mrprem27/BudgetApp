@@ -25,6 +25,7 @@ import { HISTORY_DAYS } from '../../lib/afford';
 import { budgetEquivalent } from '../../lib/budget';
 import { expandUpcoming } from '../../lib/upcoming';
 import { getMyExposure } from './balances';
+import { queueDelete, queueUpsert } from './syncQueue';
 
 // Domain value sets are defined once in constants/enums.ts; re-exported here for
 // existing importers.
@@ -117,6 +118,7 @@ export async function insertGoal(db: SQLite.SQLiteDatabase, g: NewGoal): Promise
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
     [row.id, row.name, row.target, row.priority, row.category, row.icon, row.color, row.allocation, row.frequency, row.locked, row.target_date, row.sort_order, row.created_at],
   );
+  await queueUpsert(db, 'savings_goal', id);
   return row;
 }
 
@@ -136,6 +138,7 @@ export async function reorderGoals(db: SQLite.SQLiteDatabase, orderedIds: string
   await db.withTransactionAsync(async () => {
     for (let i = 0; i < orderedIds.length; i++) {
       await db.runAsync('UPDATE savings_goal SET sort_order = ? WHERE id = ?', [i, orderedIds[i]]);
+      await queueUpsert(db, 'savings_goal', orderedIds[i]);
     }
     // Everything the caller did not rank keeps its relative order, but strictly
     // after the ranked block. Ordered by (sort_order, created_at) so the result is
@@ -150,6 +153,7 @@ export async function reorderGoals(db: SQLite.SQLiteDatabase, orderedIds: string
       await db.runAsync(
         'UPDATE savings_goal SET sort_order = ? WHERE id = ?', [orderedIds.length + j, rest[j].id],
       );
+      await queueUpsert(db, 'savings_goal', rest[j].id);
     }
   });
 }
@@ -159,17 +163,23 @@ export async function updateGoal(db: SQLite.SQLiteDatabase, id: string, g: NewGo
     `UPDATE savings_goal SET name=?, target=?, priority=?, category=?, icon=?, color=?, allocation=?, frequency=?, locked=?, target_date=? WHERE id=?`,
     [g.name, g.target, g.priority, g.category ?? null, g.icon ?? null, g.color ?? null, g.allocation ?? 0, g.frequency ?? 'none', g.locked ? 1 : 0, g.target_date ?? null, id],
   );
+  await queueUpsert(db, 'savings_goal', id);
 }
 
 export async function setGoalLocked(db: SQLite.SQLiteDatabase, id: string, locked: boolean): Promise<void> {
   await db.runAsync('UPDATE savings_goal SET locked=? WHERE id=?', [locked ? 1 : 0, id]);
+  await queueUpsert(db, 'savings_goal', id);
 }
 
 /** Deletes a goal. Its earmarked savings return to Cash available (ledger rows are dropped). */
 export async function deleteGoal(db: SQLite.SQLiteDatabase, id: string): Promise<void> {
   await db.withTransactionAsync(async () => {
+    const ledger = await db.getAllAsync<{ id: string }>('SELECT id FROM savings_txn WHERE goal_id = ?', [id]);
     await db.runAsync('DELETE FROM savings_txn WHERE goal_id = ?', [id]);
     await db.runAsync('DELETE FROM savings_goal WHERE id = ?', [id]);
+    // The ledger first: on the server its rows point at the goal.
+    for (const t of ledger) await queueDelete(db, 'savings_txn', t.id, { id: t.id });
+    await queueDelete(db, 'savings_goal', id, { id });
   });
 }
 
@@ -181,6 +191,7 @@ export async function restoreGoal(db: SQLite.SQLiteDatabase, goal: SavingsGoal, 
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [goal.id, goal.name, goal.target, goal.priority, goal.category, goal.icon, goal.color, goal.allocation, goal.frequency, goal.locked, goal.is_archived, goal.last_auto_at, goal.target_date, goal.sort_order, goal.created_at],
     );
+    await queueUpsert(db, 'savings_goal', goal.id);
     for (const t of ledger) {
       await db.runAsync(
         // Stays a raw INSERT because it restores the ORIGINAL id and created_at,
@@ -189,6 +200,7 @@ export async function restoreGoal(db: SQLite.SQLiteDatabase, goal: SavingsGoal, 
         `INSERT INTO savings_txn (id, goal_id, amount, kind, source, date, note, source_asset, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [t.id, t.goal_id, t.amount, t.kind, t.source, t.date, t.note ?? null, t.source_asset ?? null, t.created_at],
       );
+      await queueUpsert(db, 'savings_txn', t.id);
     }
   });
 }
@@ -204,11 +216,13 @@ export async function restoreGoal(db: SQLite.SQLiteDatabase, goal: SavingsGoal, 
  * in its provenance is worse than one with none, because the gaps are invisible.
  */
 async function insertSavingsTxn(db: SQLite.SQLiteDatabase, t: Omit<SavingsTxn, 'id' | 'created_at'>): Promise<void> {
+  const id = uuid();
   await db.runAsync(
     `INSERT INTO savings_txn (id, goal_id, amount, kind, source, date, note, source_asset, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [uuid(), t.goal_id, t.amount, t.kind, t.source, t.date, t.note ?? null, t.source_asset ?? null, Date.now()],
+    [id, t.goal_id, t.amount, t.kind, t.source, t.date, t.note ?? null, t.source_asset ?? null, Date.now()],
   );
+  await queueUpsert(db, 'savings_txn', id);
 }
 
 /**
@@ -367,6 +381,7 @@ export async function runAutoFunding(db: SQLite.SQLiteDatabase): Promise<boolean
         });
       }
       await db.runAsync('UPDATE savings_goal SET last_auto_at = ? WHERE id = ?', [a.newAnchor, a.goalId]);
+      await queueUpsert(db, 'savings_goal', a.goalId);
     }
   });
   return true;

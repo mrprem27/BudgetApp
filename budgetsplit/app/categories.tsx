@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert,
 } from 'react-native';
-import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
+import { KeyboardForm } from '../src/components/ui/KeyboardForm';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useRouter } from 'expo-router';
 import { useScreenData } from '../src/hooks/useScreenData';
@@ -198,7 +198,7 @@ export default function CategoriesScreen() {
       // sit anywhere in a long list, and shrinking the container never scrolls a
       // focused field into view — so renaming one near the bottom put the keyboard
       // straight over it.
-      <KeyboardAwareScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
+      <KeyboardForm contentContainerStyle={styles.scroll} refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
         {/* Kind tab: Expense / Income */}
         <View style={styles.kindRow}>
           {CATEGORY_KIND.map(k => (
@@ -395,7 +395,7 @@ export default function CategoriesScreen() {
             </View>
           </View>
         )}
-      </KeyboardAwareScrollView>
+      </KeyboardForm>
       )}
     </View>
   );

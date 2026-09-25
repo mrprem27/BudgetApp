@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert, ActivityIndicator } from 'react-native';
-import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
+import { View, Text, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import { KeyboardForm } from '../../src/components/ui/KeyboardForm';
 import { useRouter } from 'expo-router';
 import { fullDate } from '../../src/lib/dateFormat';
-import { EMAIL_RE } from '../../src/lib/email';
 import { colors, type, space, layout } from '../../src/theme';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { Card } from '../../src/components/ui/Card';
@@ -14,109 +13,49 @@ import { IconCircle } from '../../src/components/ui/IconCircle';
 import { SettingsRow, settingsRowDivider } from '../../src/components/ui/SettingsRow';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { SheetModal } from '../../src/components/ui/SheetModal';
+import { SyncStatus } from '../../src/components/system/SyncStatus';
+import { FirstSignInStep } from '../../src/components/system/FirstSignInStep';
 import { useServerSession } from '../../src/hooks/useServerSession';
+import { useEmailSignIn } from '../../src/hooks/useEmailSignIn';
+import { useSignOut } from '../../src/hooks/useSignOut';
 import { useStore } from '../../src/store';
 import { haptic } from '../../src/lib/haptics';
-import { useSQLiteContext } from 'expo-sqlite';
-import { claimMyAccount } from '../../src/db/queries/persons';
-import { forgetSyncPassphrase } from '../../src/lib/syncSnapshot';
 import { settings } from '../../src/lib/settings';
 import {
-  requestMagicLink, verifyMagicLink, signOut, deleteAccount, updateProfile, uploadAvatar,
-  extractAuthToken, deviceLabel,
+  deleteAccount, updateProfile, uploadAvatar, deviceLabel,
 } from '../../src/lib/serverApi';
-
-// EMAIL_RE moved to `src/lib/email.ts` — onboarding needed the same check, and a
-// second copy of a validation pattern is how two screens end up disagreeing about
-// what a valid address is.
 
 /**
  * The account screen: sign in by email link, see what the server holds about
  * you, sign out.
  *
- * An account buys two things: a backup that survives losing this phone
- * (`settings/backup.tsx`), and the identity that shared groups are exchanged
- * under (`lib/syncEngine`). The ledger itself stays local-first — everything else
- * on this screen works or fails without touching it.
+ * An account holds a copy of everything this phone has (`DQ-93`): a new phone
+ * gets it back by signing in, and shared groups are exchanged through it
+ * (`lib/sync`). The phone stays offline-first — everything on this screen works
+ * or fails without blocking the ledger.
  *
- * Signing in also BINDS this device's own person row to the account, which is
- * what makes an entry this phone writes resolvable on anyone else's. See
- * `claimMyAccount`.
+ * Signing in also settles the first sign-in (`useEmailSignIn`,
+ * `SPEC-SERVER.md` §4): this phone's ledger is uploaded to the account, or —
+ * when both hold data — the user chooses, and "Use my account" replaces it.
  */
 export default function AccountScreen() {
   const router = useRouter();
-  const db = useSQLiteContext();
   const { session, ready, configured, reload } = useServerSession();
   const me = useStore(s => s.me);
 
-  const [email, setEmail] = useState('');
-  const [sentTo, setSentTo] = useState<string | null>(null);
-  const [code, setCode] = useState('');
-  const [sending, setSending] = useState(false);
-  const [verifying, setVerifying] = useState(false);
+  const {
+    email, setEmail, sentTo, code, setCode, sending, verifying, error, setError,
+    sendLink, verifyCode, useDifferentEmail, restoring, asking, answer, connect,
+  } = useEmailSignIn({ onVerified: reload });
+  // Upload first, then empty the phone (`DQ-97`).
+  const { signOut: handleSignOut, signingOut } = useSignOut({ onSignedOut: reload });
   const [syncing, setSyncing] = useState(false);
   const [showPhone, setShowPhone] = useState(false);
   const [phoneText, setPhoneText] = useState('');
   const [savingPhone, setSavingPhone] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const message = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong. Please try again.');
-
-  async function handleSendLink() {
-    const address = email.trim().toLowerCase();
-    if (!EMAIL_RE.test(address)) { setError('That doesn’t look like an email address.'); return; }
-    setSending(true);
-    setError(null);
-    try {
-      await requestMagicLink(address);
-      setSentTo(address);
-      setCode('');
-      haptic.success();
-    } catch (e) {
-      haptic.error();
-      setError(message(e));
-    } finally {
-      setSending(false);
-    }
-  }
-
-  async function handleVerifyCode() {
-    const token = extractAuthToken(code);
-    if (!token) { setError('That code doesn’t look right. Copy the whole code from the email.'); return; }
-    setVerifying(true);
-    setError(null);
-    try {
-      const { user } = await verifyMagicLink(token);
-      /*
-       * Bind the ledger's "me" to the account that just signed in.
-       *
-       * Sync runs this too, but it must also happen HERE: this is the only place
-       * that can tell the user when it is refused, and the two refusals both need
-       * saying. `other-account` means this phone already holds someone else's
-       * ledger — silently rebinding would re-author every entry in it to a
-       * stranger. `ambiguous-me` means the database has two rows claiming to be
-       * you, and guessing which one is the wrong kind of brave.
-       */
-      const claim = await claimMyAccount(db, { uid: user.id, email: user.email });
-      if (!claim.ok) {
-        setError(
-          claim.reason === 'other-account'
-            ? 'This phone already holds another account’s data. Sign in with that account, or start fresh from Settings → Storage.'
-            : 'Signed in, but this phone’s own profile could not be matched to the account. Sharing will not work until that is sorted.',
-        );
-      }
-      setSentTo(null);
-      setCode('');
-      await reload();
-      haptic.success();
-    } catch (e) {
-      haptic.error();
-      setError(message(e));
-    } finally {
-      setVerifying(false);
-    }
-  }
 
   /**
    * Pushes this device's name and picture up. One-directional on purpose: the
@@ -156,44 +95,6 @@ export default function AccountScreen() {
     }
   }
 
-  function handleSignOut() {
-    Alert.alert(
-      'Sign out?',
-      'Your data stays on this device. Server backups stay on the server — sign in again to restore one.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Sign out',
-          style: 'destructive',
-          onPress: async () => {
-            await signOut();
-            /*
-             * The passphrase and the "keep a copy of everything" switch go too.
-             *
-             * They outlived the session, and a phone can change hands: A signs
-             * out, B signs in, and within six hours the unattended snapshot read
-             * A's still-present database, sealed it with A's passphrase and
-             * uploaded it to B's account. B then held a backup of somebody else's
-             * ledger they could never open, and A's data lived on an account A
-             * could not delete it from. `maybeSnapshot` now refuses that outright
-             * by checking who the passphrase belongs to — this is the other half,
-             * so B is not shown a switch reading "On" for something they never
-             * turned on.
-             *
-             * `person.remote_uid` is deliberately NOT cleared. Signing out is a
-             * session change, not an identity change, and clearing it would turn
-             * every entry a peer ever authored into `unknown-author`.
-             */
-            await forgetSyncPassphrase();
-            await settings.setSyncEverything(false).catch(() => {});
-            await reload();
-            haptic.warning();
-          },
-        },
-      ],
-    );
-  }
-
   /**
    * Closing the account. Required by App Store Review 5.1.1(v) — an app that
    * creates an account must let the user delete it from inside the app, not by
@@ -201,20 +102,20 @@ export default function AccountScreen() {
    *
    * Two confirmations, because it cannot be undone and because the first one is
    * a thing people tap while reading the second line. What the copy has to be
-   * exact about is the boundary users get wrong in both directions: the ledger on
-   * this phone is NOT deleted (Settings has its own wipe for that), and the
-   * entries already on other people's phones are not withdrawn — they are the
-   * group's record of what was spent, and no more recallable than a message
-   * somebody already read.
+   * exact about is the boundary users get wrong in both directions: the account's
+   * copy of what was yours alone IS erased (`server/api/sync/erase.ts`), the ledger
+   * on this phone is NOT (Settings has its own wipe for that), and your entries in
+   * groups other people are in are not withdrawn — they are the group's record of
+   * what was spent, and no more recallable than a message somebody already read.
    */
   function handleDeleteAccount() {
     Alert.alert(
       'Delete your account?',
-      'Your email, name, phone and every backup on the server are deleted, and every '
-      + 'signed-in device is signed out.\n\n'
-      + 'Your transactions on this phone stay exactly as they are — this deletes the '
-      + 'account, not your data. Expenses you already shared stay with the people you '
-      + 'shared them with.',
+      'Your email, name and phone are deleted, along with your account’s copy of '
+      + 'everything that was yours alone — your own spending, goals, budgets, and any '
+      + 'group nobody else is in. Every signed-in device is signed out.\n\n'
+      + 'Your transactions on this phone stay exactly as they are. Groups you share with '
+      + 'other people carry on: your entries there are the group’s record, and stay.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -222,8 +123,8 @@ export default function AccountScreen() {
           style: 'destructive',
           onPress: () => Alert.alert(
             'This cannot be undone',
-            'Your backups are deleted from the server and cannot be recovered. You can '
-            + 'sign up again with the same email, but it will be a new, empty account.',
+            'Your account’s copy is erased and cannot be recovered. You can sign up again '
+            + 'with the same email, but it will be a new, empty account.',
             [
               { text: 'Keep my account', style: 'cancel' },
               { text: 'Delete account', style: 'destructive', onPress: runDeleteAccount },
@@ -239,11 +140,6 @@ export default function AccountScreen() {
     setError(null);
     try {
       await deleteAccount();
-      // Same local cleanup as signing out: the passphrase and the unattended
-      // snapshot switch outlive a session otherwise, and this phone now has no
-      // account to snapshot to at all.
-      await forgetSyncPassphrase();
-      await settings.setSyncEverything(false).catch(() => {});
       await reload();
       haptic.warning();
     } catch (e) {
@@ -256,10 +152,22 @@ export default function AccountScreen() {
     }
   }
 
+  // The first sign-in's full-screen step (S15): no header, no way back — the
+  // restore is atomic and short, and the choice has to be made.
+  if (restoring !== null || asking) {
+    return (
+      <View style={styles.container}>
+        {restoring !== null
+          ? <FirstSignInStep kind="restore" progress={restoring} />
+          : <FirstSignInStep kind="ask" onUseAccount={() => answer('use-my-account')} onNotNow={() => answer('not-now')} />}
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <ScreenHeader title="Account" onBack={() => router.back()} />
-      <KeyboardAwareScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <KeyboardForm contentContainerStyle={styles.content}>
         {!configured ? (
           <Card padded>
             <Text style={styles.note}>
@@ -271,6 +179,7 @@ export default function AccountScreen() {
           <ActivityIndicator color={colors.accent} style={styles.loading} />
         ) : session ? (
           <>
+            <SyncStatus onPress={() => router.push('/settings/sync')} onConnect={() => { void connect(); }} />
             <Card padded style={styles.profileCard}>
               <MemberAvatar
                 name={me?.name ?? session.user.name ?? session.user.email}
@@ -317,9 +226,10 @@ export default function AccountScreen() {
               <View style={settingsRowDivider} />
               <SettingsRow
                 icon="log-out"
-                label="Sign out"
+                label={signingOut ? 'Signing out…' : 'Sign out'}
                 tint={colors.expense}
-                onPress={handleSignOut}
+                onPress={signingOut ? undefined : handleSignOut}
+                right={signingOut ? <ActivityIndicator size="small" color={colors.expense} /> : undefined}
               />
               <View style={settingsRowDivider} />
               <SettingsRow
@@ -337,10 +247,9 @@ export default function AccountScreen() {
             </Text>
 
             <Text style={styles.footnote}>
-              Signing in adds one thing: a backup that outlives this phone. Your transactions,
-              groups and goals still live only on this device, and a server backup is encrypted
-              here first — the passphrase never leaves your phone, so nobody at the other end can
-              open it.
+              Your transactions, groups and goals are saved to your account and work offline on
+              this phone. Signing out uploads anything left, then clears this phone — sign in
+              again, here or on a new phone, and everything comes back.
             </Text>
           </>
         ) : sentTo ? (
@@ -366,19 +275,19 @@ export default function AccountScreen() {
                 autoCapitalize="none"
                 autoCorrect={false}
                 returnKeyType="go"
-                onSubmitEditing={handleVerifyCode}
+                onSubmitEditing={verifyCode}
                 accessibilityLabel="Sign-in code"
               />
               <PrimaryButton
                 label="Sign in with code"
-                onPress={handleVerifyCode}
+                onPress={verifyCode}
                 loading={verifying}
                 disabled={code.trim().length === 0}
                 style={styles.cta}
               />
               <SecondaryButton
                 label="Use a different email"
-                onPress={() => { setSentTo(null); setCode(''); setError(null); }}
+                onPress={useDifferentEmail}
                 style={styles.secondaryCta}
               />
             </Card>
@@ -409,12 +318,12 @@ export default function AccountScreen() {
                 autoCapitalize="none"
                 autoCorrect={false}
                 returnKeyType="go"
-                onSubmitEditing={handleSendLink}
+                onSubmitEditing={sendLink}
                 accessibilityLabel="Email address"
               />
               <PrimaryButton
                 label="Email me a sign-in link"
-                onPress={handleSendLink}
+                onPress={sendLink}
                 loading={sending}
                 disabled={email.trim().length === 0}
                 style={styles.cta}
@@ -423,7 +332,7 @@ export default function AccountScreen() {
             {error && <Text style={styles.error}>{error}</Text>}
           </>
         )}
-      </KeyboardAwareScrollView>
+      </KeyboardForm>
 
       <SheetModal visible={showPhone} onClose={() => setShowPhone(false)} title="Your phone number">
         <Input

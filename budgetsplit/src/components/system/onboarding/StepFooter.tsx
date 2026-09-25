@@ -1,7 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { PrimaryButton } from '../../ui/PrimaryButton';
-import { useContentInset } from '../../../hooks/useContentInset';
 import { colors, type, space } from '../../tokens';
 
 type Props = {
@@ -33,12 +32,11 @@ type Props = {
 export function StepFooter({
   primaryLabel, onPrimary, disabled, loading, skipLabel, onSkip, skipDisabled,
 }: Props) {
-  // The same `insets.bottom + space.md` this used to compute by hand — from the hook
-  // that owns the number, so it tracks the tokens (AGENTS §9: never a literal).
-  const bottom = useContentInset();
-
+  // No bottom padding of its own: `StepScaffold` pins this in `KeyboardForm`'s
+  // footer, which clears the home indicator with the keyboard down and keeps a
+  // gap above the keys with it up.
   return (
-    <View style={[styles.footer, { paddingBottom: bottom }]}>
+    <View style={styles.footer}>
       <PrimaryButton label={primaryLabel} onPress={onPrimary} disabled={disabled} loading={loading} />
       {skipLabel && onSkip && (
         <TouchableOpacity
@@ -58,7 +56,7 @@ export function StepFooter({
 const styles = StyleSheet.create({
   // Same geometry as the hero's own footer, declared separately on purpose — see
   // the note above.
-  footer: { gap: space.md, paddingTop: space.md },
+  footer: { gap: space.md, paddingTop: space.sm },
   skipBtn: { alignSelf: 'center', paddingVertical: space.xs },
   skipText: { ...type.body, color: colors.textSecondary },
   skipOff: { opacity: 0.4 },

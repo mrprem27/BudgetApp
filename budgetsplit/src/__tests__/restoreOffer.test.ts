@@ -4,21 +4,18 @@ import { openTestDb } from './dbHarness';
 import { loadDemoData } from '../db/seedDemo';
 
 /**
- * "Your data is on your account — want it back?"
+ * "Used BudgetSplit before? Sign in brings everything back."
  *
- * A restore is wipe-and-replace, so an unasked prompt offering one is an unasked
- * prompt offering to destroy somebody's work. The rule that makes it safe is that
- * it appears ONLY on a phone with nothing on it — and that rule is the whole
- * test, because everything else about the feature is cosmetic by comparison.
+ * Signing in on a phone with data asks before replacing anything (first sign-in,
+ * §4), but an unasked prompt beside real data is one that eventually gets tapped
+ * by accident. The rule that makes it safe is that it appears ONLY on a phone
+ * with nothing on it — and that rule is the whole test.
  */
-function withMocks(opts: {
-  configured?: boolean; signedIn?: boolean; dismissed?: boolean; backups?: Array<{ createdAt: number }>;
-}) {
+function withMocks(opts: { configured?: boolean; signedIn?: boolean; dismissed?: boolean }) {
   jest.resetModules();
   jest.doMock('../lib/serverApi', () => ({
     serverConfigured: () => opts.configured ?? true,
-    getStoredSession: async () => (opts.signedIn ?? true ? { token: 't', user: { id: 'u' } } : null),
-    listServerBackups: async () => opts.backups ?? [{ createdAt: 1_700_000_000_000 }],
+    getStoredSession: async () => (opts.signedIn ? { token: 't', user: { id: 'u' } } : null),
   }));
   jest.doMock('../lib/settings', () => ({
     settings: { restoreOfferDismissed: async () => opts.dismissed ?? false },
@@ -28,11 +25,6 @@ function withMocks(opts: {
 }
 
 describe('offering a restore', () => {
-  it('offers on a phone with nothing on it', async () => {
-    const db = await openTestDb();
-    const offer = await withMocks({})(db);
-    expect(offer).toMatchObject({ count: 1, newestAt: 1_700_000_000_000 });
-  });
 
   it('NEVER offers once the phone has transactions on it', async () => {
     /*
@@ -71,9 +63,9 @@ describe('offering a restore', () => {
     expect(await withMocks({ dismissed: true })(db)).toBeNull();
   });
 
-  it('says nothing when the account holds no copies', async () => {
+  it('says nothing once signed in — the first sign-in already brought the account back', async () => {
     const db = await openTestDb();
-    expect(await withMocks({ backups: [] })(db)).toBeNull();
+    expect(await withMocks({ signedIn: true })(db)).toBeNull();
   });
 
   /**
@@ -96,15 +88,5 @@ describe('offering a restore', () => {
     // Nothing to sign in TO. Offering would be a door with no room behind it.
     const db = await openTestDb();
     expect(await withMocks({ configured: false })(db)).toBeNull();
-  });
-
-  it('reports the NEWEST copy, not the first listed', async () => {
-    // The list is newest-first today; depending on that ordering would make the
-    // prompt quietly wrong the day it changes.
-    const db = await openTestDb();
-    const offer = await withMocks({
-      backups: [{ createdAt: 100 }, { createdAt: 900 }, { createdAt: 500 }],
-    })(db);
-    expect(offer).toMatchObject({ count: 3, newestAt: 900 });
   });
 });

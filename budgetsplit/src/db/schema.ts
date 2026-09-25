@@ -287,44 +287,6 @@ CREATE TABLE IF NOT EXISTS pending_txn (
 );
 CREATE INDEX IF NOT EXISTS idx_pending_created ON pending_txn(created_at);
 
--- MY decision about an entry someone else wrote.
---
--- Keyed on txn_id and deliberately NOT a column on txn_share/txn_payment: both
--- of those are DELETEd and re-INSERTed wholesale on every edit
--- (transactions.ts:466-468, :687-688), so approval state stored there would be
--- silently erased by an ordinary edit — an entry that quietly starts counting,
--- or quietly stops.
---
--- Absent means approved. Every row that exists today, and everything I write
--- myself, has no row here — which is what makes the whole feature a no-op until
--- a peer write path exists.
---
--- Device-local: this is my opinion of someone else's assertion and must never
--- travel to them. It IS included in backup, though — restoring my own device
--- must not silently approve a queue I had left waiting.
--- Entries whose current state has not reached the server yet.
---
--- A TABLE, not a file queue, and that is the whole point: the row has to be
--- appended in the SAME transaction as the write it describes. Neither
--- AsyncStorage nor the filesystem can join a SQLite transaction, so voiceDrain's
--- shape (the app's only other queue) is structurally unavailable here. A write
--- that commits without its outbox row is a divergence nobody is ever told about.
---
--- One row per entry, keyed on entry_id: five edits to one expense collapse to one
--- row, because the drain re-reads the entry's CURRENT state rather than replaying
--- a snapshot. That is deliberately the opposite of pendingSettlement, which stores
--- a resolved plan precisely so it cannot change underneath the user -- there, a
--- stale plan would settle the wrong group; here, a stale snapshot would send an
--- amount the user has since corrected.
---
--- Device-local delivery state, so it is NOT in BACKUP_TABLES. Restoring an outbox
--- onto a new phone would re-broadcast history that has already been delivered.
-CREATE TABLE IF NOT EXISTS sync_outbox (
-  entry_id  TEXT PRIMARY KEY REFERENCES txn(id),
-  group_id  TEXT NOT NULL,
-  queued_at INTEGER NOT NULL
-);
-
 -- A friend request, mirrored locally.
 --
 -- The server is the authority on the request's STATE; this table exists for the
@@ -351,6 +313,22 @@ CREATE TABLE IF NOT EXISTS friend_request (
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
+
+-- MY decision about an entry someone else wrote.
+--
+-- Keyed on txn_id and deliberately NOT a column on txn_share/txn_payment: both
+-- of those are DELETEd and re-INSERTed wholesale on every edit
+-- (transactions.ts:466-468, :687-688), so approval state stored there would be
+-- silently erased by an ordinary edit — an entry that quietly starts counting,
+-- or quietly stops.
+--
+-- Absent means approved. Every row that exists today, and everything I write
+-- myself, has no row here — which is what makes the whole feature a no-op until
+-- a peer write path exists.
+--
+-- Device-local: this is my opinion of someone else's assertion and must never
+-- travel to them. It IS included in backup, though — restoring my own device
+-- must not silently approve a queue I had left waiting.
 CREATE TABLE IF NOT EXISTS txn_approval (
   txn_id     TEXT PRIMARY KEY REFERENCES txn(id),
   state      TEXT NOT NULL CHECK(state IN ('pending','approved','rejected')),
@@ -364,12 +342,8 @@ CREATE TABLE IF NOT EXISTS txn_approval (
   -- cannot bury an entry by back-dating it.
   created_at INTEGER NOT NULL,
   decided_at INTEGER,
-  -- The dispute outbox, one column wide.
-  --
-  -- Rejecting a peer's entry has to reach the person who wrote it, or their
-  -- balance and mine disagree and neither of us is told (F10). NULL means nothing
-  -- to send; 'raise' means tell them I object; 'clear' means I have taken it back.
-  -- The drain clears it once the server has accepted.
+  -- Dead: v1's one-column dispute outbox. Under server sync a rejection is sent as my answer
+  -- and the server raises the dispute (S21). Kept only to avoid a table rebuild.
   dispute_state TEXT,
   -- "They have retracted this, and I have not agreed yet." (F14)
   --
@@ -424,6 +398,42 @@ CREATE TABLE IF NOT EXISTS txn_dispute (
   created_at INTEGER NOT NULL,
   cleared    INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (txn_id, by_uid)
+);
+
+-- Server sync: what this phone has changed and not yet had acknowledged.
+--
+-- Rows name the PHONE'S OWN row (local_table, local_id), not a server id, so a
+-- write needs no account: the queue fills from day one, and the drain turns each
+-- row into server mutations through lib/sync/rowMap when it sends them. One row
+-- per local row -- INSERT OR REPLACE -- so five edits collapse into one send of
+-- the latest state, with a fresh queue_id that keeps the order of last change.
+--
+-- A delete keeps a JSON snapshot of the row it removed: the row is gone by the
+-- time the drain runs, and a server id like a category's (kind, name) cannot be
+-- read back from nothing. sent_ids is the server mutation ids the row went out
+-- as; the row is cleared once the pull's lastMutationId covers the last of them.
+--
+-- Device delivery state, so NEVER backed up (a restored queue re-sends stale
+-- writes). Written in the SAME transaction as the change it records.
+CREATE TABLE IF NOT EXISTS sync_queue (
+  queue_id     INTEGER PRIMARY KEY AUTOINCREMENT,
+  local_table  TEXT NOT NULL,
+  local_id     TEXT NOT NULL,
+  op           TEXT NOT NULL CHECK(op IN ('upsert','delete')),
+  snapshot     TEXT,
+  queued_at    INTEGER NOT NULL,
+  sent_ids     TEXT,
+  UNIQUE (local_table, local_id)
+);
+
+-- The version the server last confirmed for each server row this phone knows.
+-- A money write must name it (compare-and-set); the pull keeps it current.
+-- Device state, never backed up.
+CREATE TABLE IF NOT EXISTS sync_version (
+  entity     TEXT NOT NULL,
+  entity_id  TEXT NOT NULL,
+  version    INTEGER NOT NULL,
+  PRIMARY KEY (entity, entity_id)
 );
 `;
 
@@ -647,6 +657,10 @@ export const COLUMN_MIGRATIONS = [
   "ALTER TABLE txn_approval ADD COLUMN pending_delete INTEGER NOT NULL DEFAULT 0",
   // Who performed an audited action — see the column comment above (F22).
   "ALTER TABLE audit_log ADD COLUMN actor_person_id TEXT",
+  // An account I added who hasn't accepted yet (S21). The server holds the real
+  // status; this lets the members list say "Invited" instead of passing them off
+  // as in. 0 is right for every existing row: v1 had no invitations.
+  "ALTER TABLE group_member ADD COLUMN invited INTEGER NOT NULL DEFAULT 0",
 ];
 
 /**
@@ -1086,22 +1100,17 @@ export const INDEXES = `
     CREATE INDEX IF NOT EXISTS idx_audit_group_created ON audit_log(group_id, created_at DESC);
     DROP INDEX IF EXISTS idx_audit_group;
 
-    -- Every sync drain reads the outbox ordered by queued_at and takes 50; with
-    -- no index that sorts the entire queue first. The group_id index serves the
-    -- three DELETEs (delete group, stop syncing, group vanished) and the
-    -- per-group pending count on the group screen.
-    CREATE INDEX IF NOT EXISTS idx_outbox_queued ON sync_outbox(queued_at);
-    CREATE INDEX IF NOT EXISTS idx_outbox_group  ON sync_outbox(group_id);
+    -- v1's delivery queue, retired with the zero-knowledge sync (S22). Nothing
+    -- reads or writes it; sync queues in sync_queue.
+    DROP TABLE IF EXISTS sync_outbox;
 
     -- idx_txn_approval_pending leads on txn_id, so it filters the pending rows
     -- and then hands them back in txn_id order -- the approvals inbox sorts them
     -- every time. Same partial predicate, ordered the way the screen reads them.
     CREATE INDEX IF NOT EXISTS idx_txn_approval_created
       ON txn_approval(created_at) WHERE state = 'pending';
-    -- pendingDisputes runs on every sync drain and dispute_state has no index at
-    -- all; it is NULL for all but a handful of rows, so a partial index is tiny.
-    CREATE INDEX IF NOT EXISTS idx_txn_approval_dispute
-      ON txn_approval(decided_at) WHERE dispute_state IS NOT NULL;
+    -- Its reader (v1's pendingDisputes) is gone, and so is the column's use (S22).
+    DROP INDEX IF EXISTS idx_txn_approval_dispute;
 
     -- A goal's history is read goal-first and shown newest-first. The date is in
     -- the index so the ledger does not re-sort on every open. Supersedes

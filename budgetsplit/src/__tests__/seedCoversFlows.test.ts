@@ -3,7 +3,7 @@ import { loadDemoData } from '../db/seedDemo';
 import { getPendingApprovalCount } from '../db/queries/approval';
 import { getMyExposure } from '../db/queries/balances';
 import { getTransactionsForGroup } from '../db/queries/transactions';
-import { disputesFor } from '../db/queries/syncDoc';
+import { disputesFor } from '../db/queries/approval';
 
 /**
  * Demo data has to be able to REACH the flows, or the device sweep cannot judge

@@ -20,23 +20,16 @@ import { formatRupees } from '../../src/lib/money';
 
 import type { TxnWithSplits, LineItem } from '../../src/db/queries/transactions';
 import type { Person } from '../../src/db/queries/persons';
-import type { AuditLog, AuditAction } from '../../src/db/queries/audit';
 import { IconCircle } from '../../src/components/ui/IconCircle';
 import { useTxnDetail } from '../../src/hooks/useTxnDetail';
 import { authorLabel } from '../../src/lib/txnDetail';
 import { Chip } from '../../src/components/ui/Chip';
 import { parseTags } from '../../src/lib/tags';
+import { useTxnSyncState } from '../../src/hooks/useTxnSyncState';
+import { ConflictCard } from '../../src/components/finance/txn/ConflictCard';
+import { HistoryList } from '../../src/components/finance/txn/HistoryList';
+import { refusalText } from '../../src/lib/txnHistory';
 
-const ACTION_META: Record<AuditAction, { icon: keyof typeof Feather.glyphMap; color: string; label: string }> = {
-  created:  { icon: 'plus-circle', color: colors.income, label: 'Added' },
-  updated:  { icon: 'edit-2', color: colors.accent, label: 'Edited' },
-  deleted:  { icon: 'trash-2', color: colors.expense, label: 'Deleted' },
-  archived: { icon: 'archive', color: colors.textMuted, label: 'Archived' },
-  settled:  { icon: 'check-circle', color: colors.settle, label: 'Settled' },
-  paused:   { icon: 'pause-circle', color: colors.healthAmber, label: 'Paused' },
-  resumed:  { icon: 'play-circle', color: colors.income, label: 'Resumed' },
-  ended:    { icon: 'x-circle', color: colors.textMuted, label: 'Ended' },
-};
 
 export default function TxnDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -49,6 +42,7 @@ export default function TxnDetailScreen() {
     showAttachment, setShowAttachment,
     chooseReceiptSource, removeReceipt, onDelete,
   } = useTxnDetail(id);
+  const sync = useTxnSyncState(id);
 
   /**
    * Set when the OS fails to decode the attachment — the row points at a file
@@ -150,6 +144,25 @@ export default function TxnDetailScreen() {
         ) : undefined}
       />
       <ScrollView contentContainerStyle={styles.scroll}>
+        {/* What sync said about this transaction (SPEC-SERVER.md §6.3). */}
+        {sync.conflict?.yours && sync.conflict.theirs && (
+          <ConflictCard
+            yours={sync.conflict.yours}
+            theirs={sync.conflict.theirs}
+            onKeepYours={sync.chooseYours}
+            onKeepTheirs={sync.chooseTheirs}
+            busy={sync.busy}
+          />
+        )}
+        {sync.refusal && (
+          <Banner
+            tone={colors.expense}
+            icon="slash"
+            text={refusalText(sync.refusal.message)}
+            actionLabel="OK"
+            onAction={sync.dismissRefusal}
+          />
+        )}
         {isPendingPeer && (
           <Banner
             tone={colors.healthAmber}
@@ -412,28 +425,12 @@ export default function TxnDetailScreen() {
           </>
         )}
 
-        {/* History */}
+        {/* History: the server's saved versions, described, once they can be
+            fetched — this phone's own log until then (S15: the same timeline). */}
         <Text style={styles.sectionLabel}>History</Text>
-        <View style={[styles.card, styles.histCard]}>
-          {history.length === 0 ? (
-            <Text style={styles.emptyHistory}>No changes recorded.</Text>
-          ) : history.map((h, i) => {
-            const meta = ACTION_META[h.action] ?? ACTION_META.updated;
-            const last = i === history.length - 1;
-            return (
-              <View key={h.id} style={styles.histRow}>
-                <View style={styles.histRail}>
-                  <IconCircle icon={meta.icon} size={22} color={meta.color} />
-                  {!last && <View style={styles.histRailLine} />}
-                </View>
-                <View style={[styles.histContent, !last && { paddingBottom: space.md }]}>
-                  <Text style={styles.histText}>{h.summary}</Text>
-                  <Text style={styles.histTime}>{(() => { const d = new Date(h.created_at); return isFinite(d.getTime()) ? dateTime(d) : '—'; })()}</Text>
-                </View>
-              </View>
-            );
-          })}
-        </View>
+        <HistoryList
+          items={sync.history ?? history.map(h => ({ id: h.id, action: h.action, text: h.summary, at: h.created_at }))}
+        />
 
         {!isPendingPeer && (
         <TouchableOpacity style={styles.deleteBtn} onPress={onDelete} accessibilityRole="button">
@@ -521,15 +518,6 @@ const styles = StyleSheet.create({
   settleName: { ...type.body, color: colors.textPrimary, flexShrink: 1 },
   settleAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 15, color: colors.settle, marginLeft: 'auto' },
 
-  // History timeline
-  histCard: { paddingTop: space.sm, paddingBottom: space.md },
-  histRow: { flexDirection: 'row', gap: space.sm },
-  histRail: { width: 24, alignItems: 'center', paddingTop: space.sm },
-  histRailLine: { flex: 1, width: 1.5, backgroundColor: colors.border, marginTop: 2 },
-  histContent: { flex: 1, paddingTop: space.sm },
-  histText: { ...type.label, color: colors.textSecondary },
-  histTime: { ...type.caption, color: colors.textMuted, marginTop: 2 },
-  emptyHistory: { ...type.body, color: colors.textMuted, textAlign: 'center', paddingVertical: space.md },
   itemHint: { ...type.caption, color: colors.textMuted },
   deleteBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, paddingVertical: space.md, marginTop: space.sm },
   deleteText: { ...type.body, color: colors.expense, fontFamily: 'Inter_600SemiBold' },

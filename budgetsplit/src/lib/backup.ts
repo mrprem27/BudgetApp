@@ -136,9 +136,12 @@ export const BACKUP_TABLES = [
  * after a restore. Silently, both ways.
  */
 export const NEVER_BACKED_UP: Record<string, string> = {
-  sync_outbox:
-    'A delivery queue, not user data. Its rows reference txn ids that a restore '
-    + 'deletes, so it is emptied by restoreAllTables rather than carried.',
+  sync_queue:
+    'The v2 delivery queue. Restoring it would re-send writes the server already '
+    + 'has, as if they were new.',
+  sync_version:
+    'What the server last confirmed, per row. A restored file is a different '
+    + 'ledger; its versions are re-learned from the next pull.',
 };
 
 /**

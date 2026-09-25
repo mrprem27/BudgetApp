@@ -1,4 +1,4 @@
-import { NUMBERED_STEPS, numberedSteps, stepPosition } from '../lib/onboardingSteps';
+import { NUMBERED_STEPS, stepPosition } from '../lib/onboardingSteps';
 
 /**
  * The step counter has to agree with the flow it is counting.
@@ -19,28 +19,35 @@ describe('the numbered flow', () => {
 
   it('counts every stage it shows, and no stage it does not', () => {
     for (const stage of NUMBERED_STEPS) {
-      const pos = stepPosition(stage, 'split');
+      const pos = stepPosition(stage);
       expect(pos).not.toBeNull();
       expect(pos!.total).toBe(NUMBERED_STEPS.length);
     }
-    // `hero` and `summary` are not questions, so they carry no number.
-    expect(stepPosition('hero', 'split')).toBeNull();
-    expect(stepPosition('summary', 'split')).toBeNull();
+    // `hero`, `welcome`, `signin` and `summary` are not questions, so they
+    // carry no number.
+    expect(stepPosition('hero')).toBeNull();
+    expect(stepPosition('welcome')).toBeNull();
+    expect(stepPosition('signin')).toBeNull();
+    expect(stepPosition('summary')).toBeNull();
   });
 
   it('numbers run 1..total with no gap or repeat', () => {
-    const seen = NUMBERED_STEPS.map(s => stepPosition(s, 'split')!.step);
+    const seen = NUMBERED_STEPS.map(s => stepPosition(s)!.step);
     expect(seen).toEqual(Array.from({ length: NUMBERED_STEPS.length }, (_, i) => i + 1));
   });
 
-  it('drops “who do you split with” for someone who does not split — and renumbers', () => {
-    const personal = numberedSteps('personal');
-    expect(personal).not.toContain('people');
-    // The count has to shrink with it, or the last screen claims a step that
-    // will never come.
-    expect(stepPosition('permissions', 'personal')!.total).toBe(personal.length);
-    expect(stepPosition('permissions', 'personal')!.step).toBe(personal.length);
-    // ...and pay survives the filter, because everyone pays for things.
-    expect(personal).toContain('pay');
+  it('never asks who you split with — that question moved to Friends', () => {
+    // SPEC-2026-09-FEEDBACK.md §2 O6: the people step is gone for every persona, not filtered
+    // per-persona. Friends is where "who do you split with" is answered now.
+    expect(NUMBERED_STEPS).not.toContain('people');
+    // ...and pay is still here, because everyone pays for things.
+    expect(NUMBERED_STEPS).toContain('pay');
+  });
+
+  it('asks when the next payment lands right after asking how much', () => {
+    // SPEC-2026-09-FEEDBACK.md §2 O4 — the two questions about income sit next to each other.
+    const i = NUMBERED_STEPS.indexOf('payday');
+    expect(i).toBeGreaterThan(-1);
+    expect(NUMBERED_STEPS[i - 1]).toBe('income');
   });
 });

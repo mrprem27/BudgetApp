@@ -38,8 +38,9 @@ describe('an accepted request binds the person I chose', () => {
       id: 'req-1', state: 'accepted', email: 'aarav@example.com', accountId: 'acct-aarav',
     });
 
-    expect(uid(s.db, s.aarav)).toBe('acct-aarav');
-    expect((await requestForPerson(asDb(s.db), s.aarav))?.state).toBe('accepted');
+    // Binding moves them to the account's id (S20); the request follows.
+    expect(uid(s.db, 'user:acct-aarav')).toBe('acct-aarav');
+    expect((await requestForPerson(asDb(s.db), 'user:acct-aarav'))?.state).toBe('accepted');
   });
 
   it('binds nothing when the address is not the one I sent to', async () => {
@@ -67,7 +68,7 @@ describe('an accepted request binds the person I chose', () => {
       id: 'req-1', state: 'accepted', email: '  Aarav@Example.com ', accountId: 'acct-aarav',
     });
 
-    expect(uid(s.db, s.aarav)).toBe('acct-aarav');
+    expect(uid(s.db, 'user:acct-aarav')).toBe('acct-aarav');
   });
 
   it('binds nothing on a decline', async () => {

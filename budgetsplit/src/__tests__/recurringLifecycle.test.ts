@@ -45,11 +45,11 @@ async function seedExpense(db: SQLite.SQLiteDatabase, ageDays: number, id = 'txn
     payments: [{ personId: ME, amount: AMOUNT }],
     shares: [{ personId: ME, amount: AMOUNT }],
   } as Parameters<typeof insertTxnRows>[1], id, Date.now());
-  await db.runAsync('DELETE FROM sync_outbox');
+  await db.runAsync("DELETE FROM sync_queue WHERE local_table = 'txn'");
 }
 
 const queued = async (db: SQLite.SQLiteDatabase) =>
-  (await db.getAllAsync<{ entry_id: string }>('SELECT entry_id FROM sync_outbox')).map(r => r.entry_id);
+  (await db.getAllAsync<{ local_id: string }>("SELECT local_id FROM sync_queue WHERE local_table = 'txn'")).map(r => r.local_id);
 
 /** Everything the ledger and every aggregate can see, in paise. */
 async function ledgerTotal(db: SQLite.SQLiteDatabase): Promise<number> {
@@ -118,7 +118,7 @@ describe('pause, resume and end reach the group', () => {
       payments: [{ personId: ME, amount: AMOUNT }],
       shares: [{ personId: ME, amount: AMOUNT }],
     } as Parameters<typeof insertTxnRows>[1], 'rule', Date.now());
-    await db.runAsync('DELETE FROM sync_outbox');
+    await db.runAsync("DELETE FROM sync_queue WHERE local_table = 'txn'");
   }
 
   it.each([
@@ -135,7 +135,7 @@ describe('pause, resume and end reach the group', () => {
     const db = await freshDb();
     await seedRule(db);
     await pauseRecurring(db, 'rule');
-    await db.runAsync('DELETE FROM sync_outbox');
+    await db.runAsync("DELETE FROM sync_queue WHERE local_table = 'txn'");
 
     await resumeRecurring(db, 'rule');
     expect(await queued(db)).toEqual(['rule']);

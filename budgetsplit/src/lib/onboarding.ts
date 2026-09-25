@@ -1,76 +1,67 @@
 import type * as SQLite from 'expo-sqlite';
-import { getMe, updatePersonName, insertPerson, setPersonContact } from '../db/queries/persons';
+import { getMe, updatePersonName } from '../db/queries/persons';
 import { getAllGroups, personalGroupOf } from '../db/queries/groups';
 import { insertTxn } from '../db/queries/transactions';
 import { setMoneyProfile } from '../db/queries/moneyProfile';
 import { parseToPaise } from './money';
-import { EMAIL_RE, normalizeEmail } from './email';
 import { settings } from './settings';
 import type { PayMethod } from '../constants/enums';
 import { setReminderPrefs } from './reminderPrefsStore';
 import { applyPersona, type OnboardingIntent } from './personaDefaults';
-import { GROUP_COLORS } from '../constants/palette';
 import { insertAsset } from '../db/queries/assets';
-
-/**
- * Someone you split with. The email is optional and is the only field here that
- * is the same string on both phones — it is how a friend request is addressed,
- * so it is what turns a local contact into a linkable account later.
- */
-export type OnboardingPerson = { name: string; email?: string };
 
 /** Everything the onboarding questionnaire collects, ready to persist. */
 export type OnboardingData = {
   intent: OnboardingIntent;
   name: string;
   incomeNum: number;
-  payday: number;
+  /** The exact date the next paycheque lands, epoch ms — not a day-of-month.
+   *  Only meaningful (only used) when `incomeNum > 0`. */
+  firstPayDate: number;
   budgetNum: number;
-  /**
-   * Contacts to create. **No group is made from them.**
-   *
-   * Onboarding used to build one here — name chosen from three chips, icon
-   * inferred from that name string, colour hard-coded — which meant a group
-   * called "Flat" got the generic `users` glyph and no way to change it without
-   * leaving the flow. It also bypassed `GroupForm`, the app's real group form,
-   * so onboarding was the one place a group could be created wrong.
-   *
-   * The step asks who you split with, and that answer is a set of people. Which
-   * groups they belong in is a second question, asked where groups are made.
-   */
-  people: OnboardingPerson[];
   addFirst: boolean;
   /** How this user usually pays — seeds the Add screen's chip. */
   payMethod: PayMethod;
-  /** Opening money position, already in integer paise. */
+  /**
+   * Opening money position, already in integer paise. `openingCash` is the
+   * one always-asked figure — cash is still the money step's hero field, as
+   * it was before `SPEC-2026-09-FEEDBACK.md` §2 O5 (five figures all behind a pick tried, and
+   * cut on your call: more friction than the field it replaced, not less).
+   * The rest are genuinely optional — `undefined`, not 0, for anything the
+   * user never ticked. `investments` is the exception even among those,
+   * always a definite number: it never reaches `setMoneyProfile` (see below),
+   * so its own `> 0` check downstream is what "never ticked" means for it.
+   */
   money: {
-    /**
-     * The single figure the money step asks for. It lands in **bank**, not
-     * cash-in-hand: the question is "what do you have right now", which for almost
-     * everyone is an account balance — and `INCOME_LANDING_DEFAULT` is Bank for the
-     * same reason. Cash and wallet start at zero and are set in Plan → Your money.
-     */
-    openingBank: number;
+    openingBank?: number;
+    openingCash?: number;
+    openingWallet?: number;
     investments: number;
-    creditLimit: number;
-    creditUsed: number;
+    creditLimit?: number;
+    creditUsed?: number;
   };
 };
 
 /**
- * The next time `day`-of-month lands at/after now (9am), clamped to month
- * length. Anchors the recurring salary so it doesn't immediately back-fill.
- * Pure — `now` is injectable for tests.
+ * Floors a chosen date to local midnight.
+ *
+ * Used to compute a "next occurrence of this day-of-month" from `now` —
+ * there was no date to ask for, only a day, so the next occurrence had to be
+ * derived, and it landed at 09:00 for no stated reason. `SPEC-2026-09-FEEDBACK.md` §2 O4
+ * replaced the day-of-month picker with `DatePickerSheet` (`minDate` = today,
+ * so the user can no longer name a day that has already passed this month
+ * the way the old grid could), which means there is no "next occurrence" left
+ * to compute — the user already pointed at the exact date. What's left is
+ * normalising it to the stated default time, **12:00 AM**, defensively:
+ * `DatePickerSheet.pick` preserves whatever time-of-day was already in the
+ * value it was given, so this is what guarantees that value was midnight in
+ * the first place, at the one place it's written. Pure — takes the picked
+ * date rather than "now".
  */
-export function paydayAnchor(day: number, now: Date = new Date()): number {
-  const y = now.getFullYear(), m = now.getMonth();
-  const dimThis = new Date(y, m + 1, 0).getDate();
-  let anchor = new Date(y, m, Math.min(day, dimThis), 9, 0, 0, 0);
-  if (anchor.getTime() < now.getTime()) {
-    const dimNext = new Date(y, m + 2, 0).getDate();
-    anchor = new Date(y, m + 1, Math.min(day, dimNext), 9, 0, 0, 0);
-  }
-  return anchor.getTime();
+export function paydayAnchor(dateMs: number): number {
+  const d = new Date(dateMs);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
 }
 
 /**
@@ -107,19 +98,20 @@ export async function finalizeOnboarding(
     const trimmed = data.name.trim();
     if (trimmed && me) await updatePersonName(db, me.id, trimmed);
 
-    // Auto income recurrence — a monthly salary in Personal, anchored to pay-day.
+    // Auto income recurrence — a monthly salary in Personal, dated to the exact
+    // next-payment date the user picked.
     if (data.incomeNum > 0 && personal && me) {
       const paise = parseToPaise(String(data.incomeNum));
       await insertTxn(db, {
         groupId: personal.id, kind: 'income', entryMode: 'quick',
-        date: paydayAnchor(data.payday), category: 'Salary',
+        date: paydayAnchor(data.firstPayDate), category: 'Salary',
         recurFreq: 'monthly', recurInterval: 1,
         payments: [{ personId: me.id, amount: paise }],
         shares: [{ personId: me.id, amount: paise }],
       });
       // The income figure and pay-day are NOT stored as preferences. Both used to
       // be, and nothing ever read either one. The salary rule above is the real
-      // record of both: its amount is the income, and `paydayAnchor(data.payday)`
+      // record of both: its amount is the income, and `paydayAnchor(data.firstPayDate)`
       // is the pay-day. The afford engine derives monthly income from the last 30
       // days of income transactions (queries/savings.ts), which tracks what
       // actually happens rather than a number typed once during setup.
@@ -132,40 +124,23 @@ export async function finalizeOnboarding(
       try { await settings.setBudgetTarget(parseToPaise(String(data.budgetNum))); } catch { /* best-effort */ }
     }
 
-    // People to split with → contacts. No group: see `OnboardingData.people`.
-    let ci = 0;
-    for (const person of data.people) {
-      const t = person.name.trim();
-      if (!t) continue;
-      try {
-        const p = await insertPerson(db, t, GROUP_COLORS[ci % GROUP_COLORS.length]);
-        ci++;
-        /*
-         * Normalised, and only when it looks like an address.
-         *
-         * Both halves matter. Stored as typed, `Aarav@Example.com` differs from the
-         * lower-cased value `friends.tsx` computes when you open that contact's
-         * rename sheet — so opening it and saving without editing anything reads as
-         * "the email changed" and can fire an unrequested friend request. And an
-         * unchecked typo is stored silently here and only surfaces much later, as a
-         * failed invite with no obvious cause.
-         *
-         * Its own try: an email that fails to save must not lose the contact.
-         */
-        const email = normalizeEmail(person.email);
-        if (email && EMAIL_RE.test(email)) {
-          try { await setPersonContact(db, p.id, { email }); } catch { /* best-effort */ }
-        }
-      } catch { /* skip one bad contact */ }
-    }
+    // Who you split with is a Friends question now, not an onboarding one
+    // (`SPEC-2026-09-FEEDBACK.md` §2 O6) — this used to insert contacts from a `people` step
+    // that no longer exists.
 
     // The backup nudge defaults ON (V2-02): with no sync, a lost phone is total
     // data loss, and a user who skipped the notifications toggle was never even
     // reminded. The reminder itself still respects the OS permission.
     try { await setReminderPrefs({ backup: true }); } catch { /* best-effort */ }
 
-    // Opening money position (cash / credit).
-    try { await setMoneyProfile(db, data.money); } catch { /* best-effort */ }
+    // Opening money position (bank / cash / wallet / credit). `investments`
+    // pulled out explicitly rather than passed through: `MoneyProfileWrite`
+    // omits it on purpose (a write there would be a second source of truth
+    // for a figure the asset register already owns), and passing it anyway
+    // previously worked only because `data.money` is a variable rather than
+    // an object literal, which excess-property checking does not see through.
+    const { investments: _investments, ...profile } = data.money;
+    try { await setMoneyProfile(db, profile); } catch { /* best-effort */ }
 
     /*
      * Investments are a NAMED asset now, so the onboarding answer becomes the

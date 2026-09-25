@@ -1,5 +1,5 @@
 import * as SQLite from 'expo-sqlite';
-import { queueEntry, queueSeries } from './syncOutbox';
+import { queueEntry, queueSeries, queueUpsert } from './syncQueue';
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
 
@@ -315,7 +315,7 @@ export type InsertTxnInput = {
   shares:   Array<{ personId: string; amount: number }>;
 };
 
-/** @internal shared with queries/peerIngest.ts */
+/** This device's IANA time zone, stamped on every transaction it writes. */
 export function localTz(): string {
   try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return ''; }
 }
@@ -398,7 +398,7 @@ export async function insertTxnRows(
     // Queued inside the CALLER's transaction. `insertTxnRows` deliberately does
     // not open one of its own (see its doc), so this rides whichever transaction
     // the caller holds — the only way the entry and its outbox row commit together.
-    await queueEntry(db, id, input.groupId);
+    await queueEntry(db, id);
 
     const totalPaid = input.payments.reduce((a, p) => a + p.amount, 0);
     if (input.kind === 'settlement') {
@@ -517,7 +517,7 @@ export async function insertItemizedTxn(
     // Its own INSERT INTO txn — this function deliberately does NOT reuse
     // `insertTxnRows`, so the queue call there does not cover it. Missing this is
     // how every itemized bill would have gone unsynced with nothing to show for it.
-    await queueEntry(db, id, input.groupId);
+    await queueEntry(db, id);
     for (const item of input.items) {
       await db.runAsync(
         'INSERT INTO line_item (id, txn_id, name, qty, unit_price, assigned_to, split_mode, split_values) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
@@ -574,7 +574,7 @@ export async function updateItemizedTxn(
     );
     // Against the NEW group, so a bill moved into Personal stops queueing and one
     // moved the other way starts. `queueEntry`'s SQL enforces both.
-    await queueEntry(db, id, input.groupId);
+    await queueEntry(db, id);
     await db.runAsync('DELETE FROM line_item WHERE txn_id=?', [id]);
     await db.runAsync('DELETE FROM txn_payment WHERE txn_id=?', [id]);
     await db.runAsync('DELETE FROM txn_share WHERE txn_id=?', [id]);
@@ -637,6 +637,7 @@ async function reverseAssetSide(
     'UPDATE asset SET balance = MAX(0, balance + ?), updated_at = ? WHERE id = ?',
     [sign * amount, Date.now(), assetId],
   );
+  await queueUpsert(db, 'asset', assetId);
 }
 
 export async function restoreTxn(
@@ -657,7 +658,7 @@ export async function restoreTxn(
     // `queueSeries`, not `queueEntry`: a cascade changes N rows in one statement,
     // and queueing only the template leaves every occurrence undelivered — which
     // looks like sync working until someone opens a month that has one.
-    if (row) await queueSeries(db, txnId, row.group_id);
+    if (row) await queueSeries(db, txnId);
   });
 }
 
@@ -713,7 +714,7 @@ export async function softDeleteTxn(
 
     // A soft delete is a change the peer must see, not an absence of one — it
     // travels as the entry's current state, with is_deleted set.
-    if (row) await queueSeries(db, txnId, row.group_id);
+    if (row) await queueSeries(db, txnId);
     if (row) {
       const paid = await db.getFirstAsync<{ total: number }>(
         'SELECT COALESCE(SUM(amount),0) as total FROM txn_payment WHERE txn_id=?', [txnId],
@@ -942,7 +943,7 @@ export async function updateTxn(
     // Queued against the NEW group. `group_id` is editable here — the destination
     // pill is live in edit mode — so an entry moved from a shared group to
     // Personal correctly stops queueing, and one moved the other way starts.
-    await queueEntry(db, input.id, input.groupId);
+    await queueEntry(db, input.id);
     await db.runAsync('DELETE FROM txn_payment WHERE txn_id=?', [input.id]);
     await db.runAsync('DELETE FROM txn_share WHERE txn_id=?', [input.id]);
     for (const p of input.payments) {

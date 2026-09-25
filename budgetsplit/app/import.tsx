@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, ScrollView, Platform, TouchableOpacity, Alert } from 'react-native';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { View, Text, StyleSheet, TextInput, Platform, TouchableOpacity, Alert } from 'react-native';
+import { KeyboardForm } from '../src/components/ui/KeyboardForm';
 import { saveFailureMessage } from '../src/lib/dbErrors';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useRouter } from 'expo-router';
@@ -191,8 +191,7 @@ export default function ImportScreen() {
   return (
     <View style={styles.container}>
       <ScreenHeader title="Import transactions" onBack={() => router.back()} />
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
-        <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + space.xl }]} keyboardShouldPersistTaps="handled">
+      <KeyboardForm contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + space.xl }]}>
           <Text style={styles.intro}>
             Import a Paytm or Google Pay statement, a bank / UPI export, a transaction-alert email,
             or a BudgetSplit CSV export. Pick a file and the format is detected for you — you
@@ -289,8 +288,7 @@ export default function ImportScreen() {
           ) : (
             <PrimaryButton label="Parse" onPress={handleParse} disabled={!text.trim()} style={{ marginTop: space.md }} />
           )}
-        </ScrollView>
-      </KeyboardAvoidingView>
+        </KeyboardForm>
     </View>
   );
 }
