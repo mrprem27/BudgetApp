@@ -874,7 +874,10 @@ user queued ahead of the docs.
   reworded to that and kept open (`DQ-33` is the same question). `D-11` (roster paging) deleted.
 - `@noble/curves` uninstalled (v1's X25519, nothing imports it). `SPEC-SERVER.md` → `docs/history/`.
 
-### Deploy — yours, in this order
+### Deploy — done 2026-09-25
+Dev D1 wiped (it held v1's tables and two test accounts), `0001_schema.sql` applied, Worker deployed to
+`budgetsplit-api.budgetsplit.workers.dev`; `/health` ok, `/sync/*` answer 401 unauthenticated, `/v2/*` and
+`/backups` 404. Still to do: ship an app build, then Checkpoint E on two phones. The steps, for next time:
 1. Reset the dev D1 (it holds v1's tables): delete and recreate it, paste the new id into `wrangler.toml`
 2. `cd server/api && npm run migrate` (applies `0001_schema.sql`)
 3. `npm run deploy`
