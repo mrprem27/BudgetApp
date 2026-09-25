@@ -1,6 +1,7 @@
 import type { Db } from './utils/access';
 import { buildStatements, diagnose, Rejected, type EntitySpec, type Mutation, type PushContext } from './utils/mutation';
-import { isTransient } from './utils/guard';
+import { countQueries, isTransient } from './utils/guard';
+import { errorMessage } from '../lib';
 
 /**
  * `POST /sync/push` (SPEC-SERVER.md §3.2).
@@ -25,7 +26,7 @@ export const MAX_MUTATIONS_PER_PUSH = 100;
 export type { EntitySpec, Mutation, PushContext } from './utils/mutation';
 
 /** Parse and validate a push body. Returns a message on failure. */
-export function parsePush(body: unknown): { deviceId: string; mutations: Mutation[]; resumable: boolean } | string {
+export function parsePush(body: unknown): { deviceId: string; mutations: Mutation[] } | string {
   if (!body || typeof body !== 'object') return 'Invalid JSON body';
   const b = body as Record<string, unknown>;
   if (typeof b.deviceId !== 'string' || !b.deviceId.trim()) return 'deviceId is required';
@@ -48,7 +49,7 @@ export function parsePush(body: unknown): { deviceId: string; mutations: Mutatio
       baseVersion: m.baseVersion as number, data: m.data as Record<string, unknown> | undefined,
     });
   }
-  return { deviceId: b.deviceId.trim(), mutations, resumable: b.resumable === true };
+  return { deviceId: b.deviceId.trim(), mutations };
 }
 
 /**
@@ -56,69 +57,70 @@ export function parsePush(body: unknown): { deviceId: string; mutations: Mutatio
  * Returns the device's last applied mutation id, or null if it belongs to someone else.
  */
 export async function ensureDevice(db: Db, userId: string, deviceId: string, now: number): Promise<number | null> {
-  await db.batch([
+  const results = await db.batch([
     db.prepare("INSERT OR IGNORE INTO sync_scopes (id, kind, seq, created_at) VALUES (?, 'user', 0, ?)").bind(userId, now),
     db.prepare('INSERT OR IGNORE INTO devices (id, user_id, last_mutation_id, created_at, last_seen_at) VALUES (?, ?, 0, ?, ?)')
       .bind(deviceId, userId, now, now),
+    db.prepare('SELECT user_id, last_mutation_id FROM devices WHERE id = ?').bind(deviceId),
   ]);
-  const device = await db.prepare('SELECT user_id, last_mutation_id FROM devices WHERE id = ?')
-    .bind(deviceId).first<{ user_id: string; last_mutation_id: number }>();
+  const device = (results[2].results as Array<{ user_id: string; last_mutation_id: number }>)[0];
   if (!device || device.user_id !== userId) return null;
   return device.last_mutation_id;
 }
 
 /**
+ * The most D1 queries one mutation can cost — its reads, its write, a diagnosis
+ * and a refusal included. A push stops BEFORE a mutation that might not fit its
+ * budget, never inside one.
+ */
+export const MAX_QUERIES_PER_MUTATION = 12;
+
+/**
  * Apply every mutation in order. Returns the last mutation id now acknowledged.
  *
- * A TRANSIENT failure (`isTransient`: a query limit, a dropped connection) is
- * never recorded as a refusal — the mutation is fine, the moment is not. For a
- * phone that says it can resume from the acknowledgement (`resumable`), the push
- * stops there and answers what it applied; the rest comes next time. An older
- * phone sends its next chunk regardless of the answer, which would skip the gap
- * for good, so it gets the failure instead.
+ * `queryBudget`: how many D1 queries this request may still run (a Worker gets 50
+ * in all on Workers Free, 1000 on Paid). The push counts its own and stops cleanly
+ * when the next mutation might not fit; the phone continues from the answer. A
+ * TRANSIENT failure of the platform (`isTransient`) is never recorded as a
+ * refusal — the push fails and the phone retries it.
  */
 export async function applyPush(
   ctx: PushContext,
   mutations: Mutation[],
   lastApplied: number,
   entities: Record<string, EntitySpec>,
-  opts: { resumable?: boolean } = {},
+  opts: { queryBudget?: number } = {},
 ): Promise<number> {
+  const counter = opts.queryBudget === undefined ? null : countQueries(ctx.db);
+  const run: PushContext = counter ? { ...ctx, db: counter.db } : ctx;
   let last = lastApplied;
-  const stopHere = (e: unknown) => {
-    if (isTransient(e) && opts.resumable) return true;
-    throw e;
-  };
   for (const m of mutations) {
     if (m.id <= last) continue;                       // already applied: a retry
+    if (counter && counter.used() + MAX_QUERIES_PER_MUTATION > opts.queryBudget!) break;
     try {
       const spec = entities[m.entity];
       if (!spec) throw new Rejected('invalid', `unknown entity: ${m.entity}`);
-      const statements = spec.custom ? await spec.custom(ctx, m) : await buildStatements(ctx, spec, m);
+      const statements = spec.custom ? await spec.custom(run, m) : await buildStatements(run, spec, m);
       try {
-        await ctx.db.batch([...statements, ack(ctx, m.id)]);
+        await run.db.batch([...statements, ack(run, m.id)]);
       } catch (e) {
-        throw await diagnose(ctx, spec, m, e);
+        throw await diagnose(run, spec, m, e);
       }
     } catch (e) {
-      if (isTransient(e) && stopHere(e)) break;
-      const r = e instanceof Rejected ? e : new Rejected('invalid', e instanceof Error ? e.message : String(e));
-      try {
-        await ctx.db.batch([
-        ctx.db.prepare(
-          `INSERT OR REPLACE INTO sync_rejections (device_id, mutation_id, code, message, current, created_at)
-           VALUES (?, ?, ?, ?, ?, ?)`,
-        ).bind(ctx.deviceId, m.id, r.code, r.message.slice(0, 500),
-          r.current === null ? null : JSON.stringify(r.current), ctx.now),
-          ack(ctx, m.id),
-        ]);
-      } catch (e2) {
-        if (stopHere(e2)) break;
-      }
+      if (isTransient(e)) throw e;
+      await run.db.batch([rejection(run, m.id, e instanceof Rejected ? e : new Rejected('invalid', errorMessage(e))), ack(run, m.id)]);
     }
     last = m.id;
   }
   return last;
+}
+
+/** Record why a mutation was refused, for the phone to read on its next pull. */
+function rejection(ctx: PushContext, mutationId: number, r: Rejected): D1PreparedStatement {
+  return ctx.db.prepare(
+    `INSERT OR REPLACE INTO sync_rejections (device_id, mutation_id, code, message, current, created_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  ).bind(ctx.deviceId, mutationId, r.code, r.message.slice(0, 500), r.current === null ? null : JSON.stringify(r.current), ctx.now);
 }
 
 /** Advance the device's acknowledgement — always in the same batch as the effect. */

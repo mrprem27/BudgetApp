@@ -7,7 +7,7 @@ import {
   type MapContext, type Outgoing, type Row,
 } from '../../lib/sync/rowMap';
 import { selfPersonId, syncIds } from '../../lib/sync/ids';
-import { isQueued, MONEY_PROFILE_ID, queueAnswer, setServerVersion, type QueueRow, type Sent } from './syncQueue';
+import { MONEY_PROFILE_ID, queueAnswer, queuedKeys, rowKey, setServerVersion, type QueueRow, type QueueTable, type Sent } from './syncQueue';
 
 /**
  * The sync engine's SQL (SPEC-SERVER.md §3.4): reading queued rows into
@@ -285,7 +285,6 @@ async function upsert(db: SQLite.SQLiteDatabase, table: string, key: string[], r
   );
 }
 
-/** The pulled row's server version, remembered as the base for the next money write. */
 /**
  * Record the server's version of a row — only once its content is APPLIED here.
  * A row skipped because this phone still has a change waiting must keep its old
@@ -307,12 +306,21 @@ export async function applyScope(db: SQLite.SQLiteDatabase, scope: PulledScope &
 /** Apply server-shaped rows with no cursor move. Runs inside the caller's transaction. */
 export async function applyRows(db: SQLite.SQLiteDatabase, scope: PulledScope, ctx: MapContext): Promise<void> {
   const rows = (t: string) => scope.rows[t] ?? [];
+  // A change this phone has waiting wins over the pulled copy. Read once: nothing
+  // below queues anything.
+  const queued = await queuedKeys(db);
+  const pending = (table: QueueTable, id: string) => queued.has(rowKey(table, id));
+  /** Skip a row with a change waiting; otherwise remember its version. True means: apply it. */
+  const take = async (entity: string, r: Row, table: QueueTable, id: string) => {
+    if (pending(table, id)) return false;
+    await version(db, entity, r);
+    return true;
+  };
 
   // --- me, and the people I have saved ---------------------------------------
   for (const p of rows('profiles')) {
-    await version(db, 'profiles', p);
     const me = profileToMe(p, ctx);
-    if (await isQueued(db, 'person', String(me.id))) continue;
+    if (!(await take('profiles', p, 'person', String(me.id)))) continue;
     // A colour the profile never set leaves the phone's own alone.
     await upsert(db, 'person', ['id'], { ...me, avatar_color: me.avatar_color ?? undefined });
   }
@@ -321,10 +329,9 @@ export async function applyRows(db: SQLite.SQLiteDatabase, scope: PulledScope, c
   // membership, a retired friend — would only bring a person back that is gone.
   const merged = (r: Row) => r.person_merged_into != null;
   for (const f of rows('friends')) {
-    await version(db, 'friends', f);
     if (merged(f)) continue;
     const person = friendToPerson(f, ctx);
-    if (await isQueued(db, 'person', String(person.id))) continue;
+    if (!(await take('friends', f, 'person', String(person.id)))) continue;
     if (f.deleted_at != null) {
       // A friend I removed. The person row stays if any ledger still names them.
       await db.runAsync(
@@ -339,15 +346,14 @@ export async function applyRows(db: SQLite.SQLiteDatabase, scope: PulledScope, c
     await upsert(db, 'person', ['id'], person);
   }
   for (const t of rows('trust_settings')) {
-    await version(db, 'trust_settings', t);
     const personId = String(t.person_id);
     if (t.group_id == null) {
-      if (await isQueued(db, 'person', personId)) continue;
+      if (!(await take('trust_settings', t, 'person', personId))) continue;
       await db.runAsync('UPDATE person SET trust_state = ?, trust_state_at = ? WHERE id = ?',
         [String(t.level), (t.updated_at ?? null) as number | null, personId]);
     } else {
       const groupId = String(t.group_id);
-      if (await isQueued(db, 'person_group_trust', `${personId}|${groupId}`)) continue;
+      if (!(await take('trust_settings', t, 'person_group_trust', `${personId}|${groupId}`))) continue;
       if (t.deleted_at != null) {
         await db.runAsync('DELETE FROM person_group_trust WHERE person_id = ? AND group_id = ?', [personId, groupId]);
       } else {
@@ -360,7 +366,6 @@ export async function applyRows(db: SQLite.SQLiteDatabase, scope: PulledScope, c
   // --- groups, members, my view of each group ----------------------------------
   const members = rows('group_members');
   for (const m of members) {
-    await version(db, 'group_members', m);
     if (merged(m)) continue;
     // Someone I only know through this group: the group's name for them, but only
     // if I have no row for them already — my own naming of a friend wins.
@@ -371,8 +376,7 @@ export async function applyRows(db: SQLite.SQLiteDatabase, scope: PulledScope, c
     );
   }
   for (const g of rows('groups')) {
-    await version(db, 'groups', g);
-    if (await isQueued(db, 'budget_group', String(g.id))) continue;
+    if (!(await take('groups', g, 'budget_group', String(g.id)))) continue;
     const archived = (await db.getFirstAsync<{ is_archived: number }>('SELECT is_archived FROM budget_group WHERE id = ?', [String(g.id)]))?.is_archived ?? 0;
     const local = serverToGroup(g, members.filter(m => m.group_id === g.id), archived, ctx);
     await upsert(db, 'budget_group', ['id'], { ...local, is_archived: g.deleted_at != null ? 1 : local.is_archived });
@@ -380,22 +384,21 @@ export async function applyRows(db: SQLite.SQLiteDatabase, scope: PulledScope, c
   for (const m of members) {
     if (merged(m)) continue;
     const local = serverToMember(m);
-    if (await isQueued(db, 'group_member', `${local.group_id}|${local.person_id}`)) continue;
+    if (!(await take('group_members', m, 'group_member', `${local.group_id}|${local.person_id}`))) continue;
     await upsert(db, 'group_member', ['group_id', 'person_id'], local);
   }
   for (const p of rows('group_preferences')) {
-    await version(db, 'group_preferences', p);
-    if (await isQueued(db, 'budget_group', String(p.group_id))) continue;
+    if (!(await take('group_preferences', p, 'budget_group', String(p.group_id)))) continue;
     await db.runAsync('UPDATE budget_group SET is_archived = ? WHERE id = ?', [Number(p.is_archived ?? 0), String(p.group_id)]);
   }
 
   // --- categories and budgets: matched on their natural key --------------------
   for (const c of rows('categories')) {
-    await version(db, 'categories', c);
     const mapped = serverToCategory(c);
     const name = String(c.name); const kind = String(c.kind);
     const local = await db.getFirstAsync<{ id: string }>('SELECT id FROM category WHERE name = ? AND kind = ?', [name, kind]);
-    if (local && await isQueued(db, 'category', local.id)) continue;
+    if (local && pending('category', local.id)) continue;
+    await version(db, 'categories', c);
     await db.runAsync('DELETE FROM category WHERE name = ? AND kind = ?', [name, kind]);
     if ('tombstone' in mapped) {
       await db.runAsync('INSERT OR IGNORE INTO category_tombstone (name, kind, created_at) VALUES (?, ?, ?)',
@@ -413,9 +416,7 @@ export async function applyRows(db: SQLite.SQLiteDatabase, scope: PulledScope, c
         : 'SELECT id FROM category_budget WHERE group_id = ? AND category = ? AND person_id = ?',
       personId === null ? [String(b.group_id), String(b.category)] : [String(b.group_id), String(b.category), personId],
     );
-    let pending = false;
-    for (const m of matches) if (await isQueued(db, 'category_budget', m.id)) pending = true;
-    if (pending) continue;
+    if (matches.some(m => pending('category_budget', m.id))) continue;
     await version(db, 'budgets', b);
     for (const m of matches) await db.runAsync('DELETE FROM category_budget WHERE id = ?', [m.id]);
     if (b.deleted_at == null) await upsert(db, 'category_budget', ['id'], serverToBudget(b));
@@ -427,8 +428,7 @@ export async function applyRows(db: SQLite.SQLiteDatabase, scope: PulledScope, c
   ];
   for (const [entity, table] of simple) {
     for (const r of rows(entity)) {
-      if (await isQueued(db, table, String(r.id))) continue;
-      await version(db, entity, r);
+      if (!(await take(entity, r, table, String(r.id)))) continue;
       if (r.deleted_at != null) {
         await db.runAsync(`DELETE FROM ${table} WHERE id = ?`, [String(r.id)]);
         continue;
@@ -437,8 +437,7 @@ export async function applyRows(db: SQLite.SQLiteDatabase, scope: PulledScope, c
     }
   }
   for (const p of rows('money_profiles')) {
-    if (await isQueued(db, 'settings', MONEY_PROFILE_ID)) continue;
-    await version(db, 'money_profiles', p);
+    if (!(await take('money_profiles', p, 'settings', MONEY_PROFILE_ID))) continue;
     const money = serverToMoneySettings(p);
     for (const key of Object.keys(MONEY_KEYS)) {
       if (key in money) await setSetting(db, key, money[key]);
@@ -449,8 +448,7 @@ export async function applyRows(db: SQLite.SQLiteDatabase, scope: PulledScope, c
 
   // --- transactions -----------------------------------------------------------------
   for (const t of rows('transactions')) {
-    if (await isQueued(db, 'txn', String(t.id))) continue;
-    await version(db, 'transactions', t);
+    if (!(await take('transactions', t, 'txn', String(t.id)))) continue;
     const b = serverToTxn(t, ctx);
     await upsert(db, 'txn', ['id'], b.txn);
     await db.runAsync('DELETE FROM txn_payment WHERE txn_id = ?', [String(t.id)]);
@@ -468,10 +466,9 @@ export async function applyRows(db: SQLite.SQLiteDatabase, scope: PulledScope, c
 
   // --- written by the server: decisions, objections, the feed ----------------------
   for (const a of rows('approvals')) {
-    await version(db, 'approvals', a);
     const txnId = String(a.transaction_id);
     // An answer I haven't sent yet wins, as any pending change does.
-    if (await isQueued(db, 'txn_approval', txnId)) continue;
+    if (!(await take('approvals', a, 'txn_approval', txnId))) continue;
     // Withdrawn: the entry no longer names me (or is gone). Nothing is left to
     // decide, and a leftover 'pending' would hide the entry from my figures forever.
     if (a.deleted_at != null) {

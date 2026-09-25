@@ -7,7 +7,7 @@ import {
 } from '../../db/queries/syncApply';
 import { adoptPulledAccounts } from '../../db/queries/personRemap';
 import {
-  clearAcknowledged, dropQueueRow, markSent, queueCount, queuedRows, queueRowForMutation, sentOf, serverVersion,
+  clearAcknowledged, dropQueueRow, markSent, queueCount, queuedRows, queueRowForMutation, rowKey, sentOf, serverVersions,
   type QueueRow, type Sent,
 } from '../../db/queries/syncQueue';
 import type { Mutation, PullResult } from '../serverApi';
@@ -26,8 +26,8 @@ import type { Mutation, PullResult } from '../serverApi';
  */
 
 export type Transport = {
-  /** `resumable`: this phone continues from `lastMutationId`, so the server may stop part-way. */
-  push(body: { deviceId: string; mutations: Mutation[]; resumable?: boolean }): Promise<{ lastMutationId: number }>;
+  /** The server may apply only part of it: the answer says how far it got. */
+  push(body: { deviceId: string; mutations: Mutation[] }): Promise<{ lastMutationId: number }>;
   pull(body: { deviceId: string; cursors: Record<string, number>; rejectionsAfter: number }): Promise<PullResult>;
 };
 
@@ -65,10 +65,11 @@ const RANK = [
 const rank = (e: string) => { const i = RANK.indexOf(e); return i < 0 ? RANK.length : i; };
 
 /**
- * Mutations per request. Each costs the server ~10 D1 queries, and a Worker gets
- * 1000 per request on Workers Paid (50 on Free, `DQ-95`), so 25 leaves headroom.
+ * Mutations per request: the server's own cap. How many of them it applies within
+ * its per-request query budget is the server's business — the answer says how far
+ * it got, and the push continues from there.
  */
-const PUSH_CHUNK = 25;
+const PUSH_CHUNK = 100;
 const MAX_PULL_ROUNDS = 10;
 
 type Planned = { out: Outbound; rows: QueueRow[]; id?: number };
@@ -86,14 +87,14 @@ type Planned = { out: Outbound; rows: QueueRow[]; id?: number };
  *     ids — and the server, having applied them, skips them. (The Replicache
  *     rule: a retry must never be a second write.)
  */
-async function plan(db: SQLite.SQLiteDatabase, userId: string): Promise<Planned[]> {
+async function plan(db: SQLite.SQLiteDatabase, userId: string, versions: Map<string, number>): Promise<Planned[]> {
   const byKey = new Map<string, Planned>();
   for (const row of await queuedRows(db, 500)) {
     const built = await buildOutbound(db, row, { userId });
     if (built === null) continue;                      // not sendable yet — stays queued
     if (built.length === 0) { await dropQueueRow(db, row.queue_id); continue; }
     for (const out of built) {
-      const key = `${out.entity}\u0000${out.entityId}`;
+      const key = rowKey(out.entity, out.entityId);
       const prev = byKey.get(key);
       byKey.delete(key);                               // re-insert: order of LAST change
       const already = sentOf(row).find(x => x.e === out.entity && x.i === out.entityId)?.m;
@@ -113,7 +114,7 @@ async function plan(db: SQLite.SQLiteDatabase, userId: string): Promise<Planned[
   const all: Planned[] = [];
   for (const p of byKey.values()) {
     // Deleting something the server never had: nothing to send, nothing to wait for.
-    if (p.out.op === 'delete' && p.id === undefined && (await serverVersion(db, p.out.entity, p.out.entityId)) === 0) {
+    if (p.out.op === 'delete' && p.id === undefined && (versions.get(rowKey(p.out.entity, p.out.entityId)) ?? 0) === 0) {
       for (const r of p.rows) await dropQueueRow(db, r.queue_id);
       continue;
     }
@@ -130,7 +131,8 @@ async function plan(db: SQLite.SQLiteDatabase, userId: string): Promise<Planned[
 async function push(
   db: SQLite.SQLiteDatabase, transport: Transport, device: string, userId: string, onProgress?: SyncProgress,
 ): Promise<number> {
-  const planned = await plan(db, userId);
+  const versions = await serverVersions(db);
+  const planned = await plan(db, userId, versions);
   if (planned.length === 0) return 0;
 
   // Give every new mutation its id, and SAVE the ids, before anything is sent.
@@ -138,15 +140,13 @@ async function push(
   let next = fresh.length ? await reserveMutationIds(db, fresh.length) : 0;
   for (const p of fresh) p.id = next++;
   await db.withTransactionAsync(async () => {
-    const sentByRow = new Map<number, { row: QueueRow; sent: Sent[] }>();
+    const sentByRow = new Map<number, Sent[]>();
     for (const p of planned) {
       for (const r of p.rows) {
-        const entry = sentByRow.get(r.queue_id) ?? { row: r, sent: [] };
-        entry.sent.push({ m: p.id!, e: p.out.entity, i: p.out.entityId });
-        sentByRow.set(r.queue_id, entry);
+        sentByRow.set(r.queue_id, [...(sentByRow.get(r.queue_id) ?? []), { m: p.id!, e: p.out.entity, i: p.out.entityId }]);
       }
     }
-    for (const [queueId, { sent }] of sentByRow) await markSent(db, queueId, sent);
+    for (const [queueId, sent] of sentByRow) await markSent(db, queueId, sent);
   });
 
   // Send in id order: the server applies each exactly once and skips what it has.
@@ -155,8 +155,8 @@ async function push(
   // against the version the first leaves behind.
   const bases = new Map<string, number>();
   for (const p of [...planned].sort((a, b) => a.id! - b.id!)) {
-    const key = `${p.out.entity}\u0000${p.out.entityId}`;
-    const base = bases.has(key) ? bases.get(key)! + 1 : await serverVersion(db, p.out.entity, p.out.entityId);
+    const key = rowKey(p.out.entity, p.out.entityId);
+    const base = bases.has(key) ? bases.get(key)! + 1 : (versions.get(key) ?? 0);
     bases.set(key, base);
     mutations.push({
       id: p.id!, entity: p.out.entity, op: p.out.op, entityId: p.out.entityId,
@@ -173,14 +173,15 @@ async function push(
   let i = 0;
   while (i < mutations.length) {
     const chunk = mutations.slice(i, i + PUSH_CHUNK);
-    const { lastMutationId } = await transport.push({ deviceId: device, mutations: chunk, resumable: true });
+    const { lastMutationId } = await transport.push({ deviceId: device, mutations: chunk });
     // No guess at the new version here: an acknowledged mutation may have been
     // refused. The pull that follows applies the server's copy, version and all.
-    const applied = chunk.filter(m => m.id <= lastMutationId);   // ids ascend, so a prefix
+    const stop = chunk.findIndex(m => m.id > lastMutationId);      // ids ascend, so the rest is a prefix
+    const taken = stop < 0 ? chunk.length : stop;
     // Nothing taken: stop sending for now. The rest stays queued for the next
     // sync, and the pull still runs, so other people's changes still arrive.
-    if (applied.length === 0) break;
-    i += applied.length;
+    if (taken === 0) break;
+    i += taken;
     onProgress?.(0.1 * (i / mutations.length));
   }
   return mutations.length;

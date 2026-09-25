@@ -1,4 +1,4 @@
-import { ensureSelfPerson, mayAdminister, myPersonId } from '../utils/access';
+import { ensureSelfPerson, mayAdminister, meOf } from '../utils/access';
 import { guard } from '../utils/guard';
 import { bumpScope, clean, createdAt, Rejected, SCOPE_SEQ, type CustomSpec, type Mutation, type PushContext } from '../utils/mutation';
 import { syncIds } from '../rules';
@@ -39,7 +39,7 @@ async function writeGroup(ctx: PushContext, m: Mutation): Promise<D1PreparedStat
   if (!existing) {
     if (m.baseVersion !== 0) throw new Rejected('not_found', 'groups: nothing to update');
     if (typeof data.kind !== 'string') throw new Rejected('invalid', 'groups.kind is required');
-    const me = await myPersonId(db, userId);
+    const me = await meOf(ctx);
     const raw = m.data ?? {};
     const ownerName = typeof raw.owner_display_name === 'string' && raw.owner_display_name.trim()
       ? raw.owner_display_name.trim()

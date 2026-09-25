@@ -1,7 +1,7 @@
-import { canReadScope, myPersonId } from '../utils/access';
+import { canRead, meOf } from '../utils/access';
 import { guard, versionIs } from '../utils/guard';
 import { bumpScope, clean, createdAt, Rejected, SCOPE_SEQ, type CustomSpec, type Mutation, type PushContext } from '../utils/mutation';
-import { validateShares } from '../rules';
+import { requiredSides, validateShares } from '../rules';
 import { activity } from './groups';
 import { transactionBundle } from '../pull';
 import { approvalsForDelete, approvalsForWrite } from './approvals';
@@ -50,13 +50,13 @@ function shares(raw: unknown, label: string): Share[] {
 async function writeTransaction(ctx: PushContext, m: Mutation): Promise<D1PreparedStatement[]> {
   const { db, userId, now } = ctx;
   const id = m.entityId;
-  const me = await myPersonId(db, userId);
+  const me = await meOf(ctx);
   const existing = await db.prepare('SELECT group_id, author_id, version, deleted_at, kind, amount FROM transactions WHERE id = ?')
     .bind(id).first<{ group_id: string; author_id: string; version: number; deleted_at: number | null; kind: string; amount: number }>();
 
   const groupId = m.op === 'delete' ? existing?.group_id : (m.data ?? {}).group_id;
   if (typeof groupId !== 'string' || !groupId) throw new Rejected(existing ? 'invalid' : 'not_found', 'transactions.group_id is required');
-  if (!(await canReadScope(db, userId, groupId))) throw new Rejected('forbidden', 'transactions: not a member of that group');
+  if (!(await canRead(ctx, groupId))) throw new Rejected('forbidden', 'transactions: not a member of that group');
 
   if (existing) {
     if (existing.author_id !== me) throw new Rejected('forbidden', "Only the person who wrote a transaction can change it");
@@ -91,23 +91,14 @@ async function writeTransaction(ctx: PushContext, m: Mutation): Promise<D1Prepar
   const amount = data.amount as number;
   const payers = shares(raw.payers, 'payers');
   const splits = shares(raw.splits, 'splits');
-  /*
-   * The shapes the app writes (`DQ-26`, AGENTS §12): an expense has both sides;
-   * income is paid in and consumed by nobody, so it has no splits; a transfer can
-   * be one-sided — money into an asset has no splits, money out of one has no
-   * payers. Whichever sides exist must add up to the amount.
-   */
-  const kind = String(data.kind ?? existing?.kind ?? 'expense');
-  const required = kind === 'expense' ? ['payers', 'splits'] : kind === 'income' ? ['payers'] : [];
-  if (required.includes('payers') && payers.length === 0) throw new Rejected('invalid', 'transactions.payers: at least one is required');
-  if (required.includes('splits') && splits.length === 0) throw new Rejected('invalid', 'transactions.splits: at least one is required');
+  // The shapes the app writes — its own rule, imported (`requiredSides`).
+  const needs = requiredSides(String(data.kind ?? existing?.kind ?? 'expense'));
+  if (needs.payments && payers.length === 0) throw new Rejected('invalid', 'transactions.payers: at least one is required');
+  if (needs.shares && splits.length === 0) throw new Rejected('invalid', 'transactions.splits: at least one is required');
   if (payers.length === 0 && splits.length === 0) throw new Rejected('invalid', 'transactions: a payer or a split is required');
-  if (payers.length > 0 && payers.reduce((a, p) => a + p.amount, 0) !== amount) {
-    throw new Rejected('invalid', 'transactions: payers must add up to the amount');
-  }
-  if (splits.length > 0 && !validateShares(amount, splits.map(s => ({ personId: s.person_id, amount: s.amount }))).ok) {
-    throw new Rejected('invalid', 'transactions: splits must add up to the amount');
-  }
+  const addsUp = (side: Share[]) => side.length === 0 || validateShares(amount, side.map(s => ({ personId: s.person_id, amount: s.amount }))).ok;
+  if (!addsUp(payers)) throw new Rejected('invalid', 'transactions: payers must add up to the amount');
+  if (!addsUp(splits)) throw new Rejected('invalid', 'transactions: splits must add up to the amount');
   const people = [...new Set([...payers, ...splits].map(p => p.person_id))];
   // Invited counts: adding a friend and splitting the bill with them is one
   // motion, and on the adder's phone they are already a member. Their consent is
@@ -139,7 +130,7 @@ async function writeTransaction(ctx: PushContext, m: Mutation): Promise<D1Prepar
 
   const approvals = await approvalsForWrite(ctx, {
     txnId: id, groupId, kind: String(data.kind ?? existing?.kind ?? 'expense'), payers, splits, authorPerson: me,
-  });
+  }, existing !== null);
 
   const statements: D1PreparedStatement[] = [
     ...fences,
@@ -191,7 +182,7 @@ function history(ctx: PushContext, transactionId: string, version: number, snaps
 /** Why a guard tripped: not yours, not a member, a stranger in the split, or a stale version. */
 async function diagnose(ctx: PushContext, m: Mutation): Promise<Rejected> {
   const { db, userId } = ctx;
-  const me = await myPersonId(db, userId);
+  const me = await meOf(ctx);
   const row = await db.prepare('SELECT * FROM transactions WHERE id = ?').bind(m.entityId).first<Record<string, unknown>>();
   if (row && row.author_id !== me) return new Rejected('forbidden', 'Only the person who wrote a transaction can change it');
   if (row && row.version !== m.baseVersion) {

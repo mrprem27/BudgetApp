@@ -1,6 +1,6 @@
-import { ensurePerson, groupContext, myPersonId, personOf } from '../utils/access';
+import { ensurePerson, groupContext, liveAccount, meOf, myPersonId } from '../utils/access';
 import { bumpScope, Rejected, SCOPE_SEQ, type CustomSpec, type Mutation, type PushContext } from '../utils/mutation';
-import { canAddMember, canChangeRole, canRemoveMember, isAdmin, selfPersonId, syncIds } from '../rules';
+import { canAddMember, canChangeRole, canRemoveMember, isAdmin, syncIds } from '../rules';
 import { activity } from './groups';
 
 /**
@@ -37,7 +37,7 @@ async function writeMember(ctx: PushContext, m: Mutation): Promise<D1PreparedSta
   const groupId = text(raw.group_id);
   const inviteeUser = text(raw.user_id);
   // An account's person is the one the server holds for it (derived, `user:<id>`, for any account made since server sync).
-  const personId = inviteeUser ? ((await personOf(db, inviteeUser)) ?? selfPersonId(inviteeUser)) : text(raw.person_id);
+  const personId = inviteeUser ? await myPersonId(db, inviteeUser) : text(raw.person_id);
   if (!groupId || !personId) throw new Rejected('invalid', 'group_members: group_id and person_id are required');
   if (m.entityId !== syncIds.member(groupId, personId)) throw new Rejected('invalid', 'group_members: id does not match the group and person');
   if (raw.status !== undefined && !STATUSES.includes(raw.status as never)) throw new Rejected('invalid', 'group_members: unknown status');
@@ -49,8 +49,8 @@ async function writeMember(ctx: PushContext, m: Mutation): Promise<D1PreparedSta
   if (group.kind === 'personal') throw new Rejected('invalid', 'A personal group has no other members');
 
   const gctx = await groupContext(db, groupId, userId);
-  const me = await myPersonId(db, userId);
-  const isOwner = personId === ((await personOf(db, group.owner_id)) ?? selfPersonId(group.owner_id));
+  const me = await meOf(ctx);
+  const isOwner = personId === (await myPersonId(db, group.owner_id));
   const existing = await db.prepare('SELECT * FROM group_members WHERE id = ?').bind(m.entityId).first<MemberRow>();
   const wanted = raw.status as MemberRow['status'] | undefined;
 
@@ -65,16 +65,11 @@ async function writeMember(ctx: PushContext, m: Mutation): Promise<D1PreparedSta
     // An account id nobody has — a link from before a server reset, or demo data —
     // is still a real person in this group's money. Refusing them would refuse
     // every entry that names them too, so they join as a plain name instead.
-    const realInvitee = inviteeUser
-      && (await db.prepare('SELECT 1 AS n FROM users WHERE id = ? AND deleted_at IS NULL').bind(inviteeUser).first())
-      ? inviteeUser : null;
-    // The person's own account counts only while it exists: a deleted account's
-    // person keeps its user_id (its entries name it), but nobody can accept for it.
-    const account = realInvitee
-      ?? (await db.prepare(
-        `SELECT p.user_id FROM people p JOIN users u ON u.id = p.user_id
-          WHERE p.id = ? AND u.deleted_at IS NULL`,
-      ).bind(personId).first<string | null>('user_id'));
+    // A person's account counts only while it exists: a deleted account's person
+    // keeps its user_id (its entries name it), but nobody can accept for it.
+    const claimed = inviteeUser
+      ?? (await db.prepare('SELECT user_id FROM people WHERE id = ?').bind(personId).first<string | null>('user_id'));
+    const account = claimed && (await liveAccount(db, claimed)) ? claimed : null;
     const status = account ? 'invited' : 'active';
     const name = text(raw.display_name) ?? existing?.display_name;
     if (!name) throw new Rejected('invalid', 'group_members: display_name is required');

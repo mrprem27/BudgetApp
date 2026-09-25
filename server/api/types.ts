@@ -9,6 +9,11 @@
 export interface Env {
   DB: D1Database;
   /**
+   * D1 queries one request may run: 50 on Workers Free (the default), 1000 on Paid.
+   * A push stops within it (`sync/push.ts`). Set it in `[vars]` when the plan changes.
+   */
+  D1_QUERY_BUDGET?: string;
+  /**
    * One bucket, two prefixes: `backups/{user}/…` and `avatars/{user}`.
    *
    * **Optional.** R2 has to be enabled once on the dashboard before a bucket can

@@ -65,9 +65,9 @@ export async function eraseAccount(db: Db, userId: string, now: number): Promise
       'group_preferences', 'friends', 'categories', 'money_profiles', 'user_preferences', 'imported_transactions',
       'profiles', 'activity_log', 'group_members'].map(t => del(`DELETE FROM ${t} WHERE scope_id IN ${inScopes}`, scopes)),
     // Others' rows about a group that is going: their list preference, their trust in me there.
-    del(`DELETE FROM group_preferences WHERE group_id IN (SELECT value FROM json_each(?))`, groups),
-    del(`DELETE FROM trust_settings WHERE group_id IN (SELECT value FROM json_each(?))`, groups),
-    del(`DELETE FROM groups WHERE id IN (SELECT value FROM json_each(?))`, groups),
+    del(`DELETE FROM group_preferences WHERE group_id IN ${inScopes}`, groups),
+    del(`DELETE FROM trust_settings WHERE group_id IN ${inScopes}`, groups),
+    del(`DELETE FROM groups WHERE id IN ${inScopes}`, groups),
     // Groups other people are in carry on without me — and are told, by seq.
     del(
       `UPDATE sync_scopes SET seq = seq + 1 WHERE id IN (
@@ -93,10 +93,10 @@ export async function eraseAccount(db: Db, userId: string, now: number): Promise
       now, userId,
     ),
     del(
-      `UPDATE group_members SET status = 'left', left_at = ?, version = version + 1, updated_at = ?, updated_by = ?,
+      `UPDATE group_members SET status = 'left', left_at = ?1, version = version + 1, updated_at = ?1, updated_by = ?2,
               seq = (SELECT s.seq FROM sync_scopes s WHERE s.id = group_members.scope_id)
-        WHERE person_id IN (SELECT id FROM people WHERE user_id = ?) AND status IN ('active', 'invited') AND deleted_at IS NULL`,
-      now, now, userId, userId,
+        WHERE person_id IN (SELECT id FROM people WHERE user_id = ?2) AND status IN ('active', 'invited') AND deleted_at IS NULL`,
+      now, userId,
     ),
     del('DELETE FROM sync_rejections WHERE device_id IN (SELECT id FROM devices WHERE user_id = ?)', userId),
     del('DELETE FROM devices WHERE user_id = ?', userId),

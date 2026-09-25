@@ -134,9 +134,12 @@ export async function queueCount(db: SQLite.SQLiteDatabase): Promise<number> {
 }
 
 /** Is this row waiting to go up? A pending local change wins over a pulled one. */
-export async function isQueued(db: SQLite.SQLiteDatabase, table: QueueTable, id: string): Promise<boolean> {
-  return !!(await db.getFirstAsync('SELECT 1 AS n FROM sync_queue WHERE local_table = ? AND local_id = ?', [table, id]));
+/** Every row with a change waiting, keyed `rowKey(table, id)` — one read for a whole page. */
+export async function queuedKeys(db: SQLite.SQLiteDatabase): Promise<Set<string>> {
+  const rows = await db.getAllAsync<{ local_table: string; local_id: string }>('SELECT local_table, local_id FROM sync_queue');
+  return new Set(rows.map(r => rowKey(r.local_table, r.local_id)));
 }
+
 
 /** One server mutation a queue row went out as: its id, and the server row it wrote. */
 export type Sent = { m: number; e: string; i: string };
@@ -158,12 +161,9 @@ export async function clearAcknowledged(db: SQLite.SQLiteDatabase, lastMutationI
   const rows = await db.getAllAsync<{ queue_id: number; sent_ids: string }>(
     'SELECT queue_id, sent_ids FROM sync_queue WHERE sent_ids IS NOT NULL',
   );
-  for (const r of rows) {
-    const ids = sentOf(r).map(x => x.m);
-    if (ids.length === 0 || Math.max(...ids) <= lastMutationId) {
-      await db.runAsync('DELETE FROM sync_queue WHERE queue_id = ?', [r.queue_id]);
-    }
-  }
+  const done = rows.filter(r => { const ids = sentOf(r).map(x => x.m); return ids.length === 0 || Math.max(...ids) <= lastMutationId; })
+    .map(r => r.queue_id);
+  if (done.length) await db.runAsync('DELETE FROM sync_queue WHERE queue_id IN (SELECT value FROM json_each(?))', [JSON.stringify(done)]);
 }
 
 /** The queue row a server mutation went out from — if it has not been superseded — and what it wrote. */
@@ -183,11 +183,6 @@ export async function dropQueueRow(db: SQLite.SQLiteDatabase, queueId: number): 
   await db.runAsync('DELETE FROM sync_queue WHERE queue_id = ?', [queueId]);
 }
 
-/** Empty the queue — after a first-sign-in upload made it redundant, or on sign-out. */
-export async function clearQueue(db: SQLite.SQLiteDatabase): Promise<void> {
-  await db.runAsync('DELETE FROM sync_queue');
-}
-
 // --- Confirmed server versions ------------------------------------------------
 
 export async function serverVersion(db: SQLite.SQLiteDatabase, entity: string, entityId: string): Promise<number> {
@@ -196,6 +191,17 @@ export async function serverVersion(db: SQLite.SQLiteDatabase, entity: string, e
   ))?.version ?? 0;
 }
 
+/** Every confirmed version, keyed `rowKey(entity, id)` — one read for a whole push. */
+export async function serverVersions(db: SQLite.SQLiteDatabase): Promise<Map<string, number>> {
+  const rows = await db.getAllAsync<{ entity: string; entity_id: string; version: number }>(
+    'SELECT entity, entity_id, version FROM sync_version',
+  );
+  return new Map(rows.map(r => [rowKey(r.entity, r.entity_id), r.version]));
+}
+
+/** One server row's key: its entity and id. */
+export const rowKey = (entity: string, id: string): string => `${entity}\u0000${id}`;
+
 export async function setServerVersion(db: SQLite.SQLiteDatabase, entity: string, entityId: string, version: number): Promise<void> {
   await db.runAsync(
     'INSERT OR REPLACE INTO sync_version (entity, entity_id, version) VALUES (?, ?, ?)',
@@ -203,6 +209,3 @@ export async function setServerVersion(db: SQLite.SQLiteDatabase, entity: string
   );
 }
 
-export async function clearServerVersions(db: SQLite.SQLiteDatabase): Promise<void> {
-  await db.runAsync('DELETE FROM sync_version');
-}

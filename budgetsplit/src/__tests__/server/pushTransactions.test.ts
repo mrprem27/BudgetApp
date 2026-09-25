@@ -2,6 +2,7 @@ import { createD1, type TestD1 } from './helpers/d1';
 import { addMember, makeGroup, makeUser } from './helpers/fixtures';
 import { applyPush, ensureDevice, type Mutation } from '../../../../server/api/sync/push';
 import { ENTITIES } from '../../../../server/api/sync/routes';
+import { countQueries } from '../../../../server/api/sync/utils/guard';
 
 /**
  * Push for groups and the transaction bundle (SPEC-SERVER.md §2.5, §2.7; task S6).
@@ -45,6 +46,20 @@ async function personalWorld() {
   await push(db, me.userId, [newGroup(1, 'g-personal')]);
   return { db, me, g: 'g-personal' };
 }
+
+describe('push — what a transaction costs in D1 queries (Workers Free allows 50 per request)', () => {
+  it('twenty personal expenses in one push cost about two queries each, not six', async () => {
+    const { db, me, g } = await personalWorld();
+    const counted = countQueries(db);
+    const ms = Array.from({ length: 20 }, (_, k) => txn(10 + k, `t-${k}`, g, me.personId));
+    const last = (await ensureDevice(db, me.userId, `dev-${me.userId}`, T0))!;
+    await applyPush({ db: counted.db, userId: me.userId, deviceId: `dev-${me.userId}`, now: T0 }, ms, last, ENTITIES);
+    expect(await rejections(db)).toEqual([]);
+    // Per push: who I am and whether I can read the group, once. Per expense: its
+    // existing row and its write. No approvals to ask about in a personal group.
+    expect(counted.used()).toBeLessThanOrEqual(2 + 2 * 20);
+  });
+});
 
 describe('push — groups', () => {
   it('creates a group with its own scope and its owner as the first admin', async () => {

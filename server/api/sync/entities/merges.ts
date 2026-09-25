@@ -1,4 +1,4 @@
-import { canReadScope, ensurePerson, myPersonId, personOf } from '../utils/access';
+import { canRead, ensurePerson, liveAccount, meOf, myPersonId } from '../utils/access';
 import { bumpScope, Rejected, SCOPE_SEQ, type CustomSpec, type Mutation, type PushContext } from '../utils/mutation';
 import { askOne } from './approvals';
 
@@ -34,13 +34,13 @@ async function writeMerge(ctx: PushContext, m: Mutation): Promise<D1PreparedStat
   const placeholder = await db.prepare('SELECT user_id, merged_into, created_by FROM people WHERE id = ?')
     .bind(from).first<{ user_id: string | null; merged_into: string | null; created_by: string }>();
   if (!placeholder) return [];
-  const into = (await personOf(db, intoUser)) ?? `user:${intoUser}`;
+  const into = await myPersonId(db, intoUser);
   if (placeholder.merged_into === into || from === into) return [];
-  if (into === (await myPersonId(db, userId))) throw new Rejected('invalid', 'You can’t connect someone to your own account');
+  if (into === (await meOf(ctx))) throw new Rejected('invalid', 'You can’t connect someone to your own account');
   if (placeholder.user_id !== null || placeholder.merged_into !== null) {
     throw new Rejected('invalid', 'That person is already someone else');
   }
-  if (!(await db.prepare('SELECT 1 AS n FROM users WHERE id = ?').bind(intoUser).first())) {
+  if (!(await liveAccount(db, intoUser))) {
     throw new Rejected('not_found', 'No account with that id');
   }
   const [a, b] = userId < intoUser ? [userId, intoUser] : [intoUser, userId];
@@ -51,7 +51,7 @@ async function writeMerge(ctx: PushContext, m: Mutation): Promise<D1PreparedStat
     'SELECT DISTINCT group_id FROM group_members WHERE person_id = ? AND deleted_at IS NULL',
   ).bind(from).all<{ group_id: string }>()).results?.map(r => r.group_id) ?? [];
   let mine = placeholder.created_by === userId;
-  for (const g of groups) if (!mine && (await canReadScope(db, userId, g))) mine = true;
+  for (const g of groups) if (!mine && (await canRead(ctx, g))) mine = true;
   if (!mine) throw new Rejected('forbidden', 'That person isn’t yours to connect');
 
   // Every entry that names the placeholder, read before anything moves.

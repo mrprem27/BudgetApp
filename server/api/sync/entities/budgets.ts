@@ -1,4 +1,4 @@
-import { canReadScope, groupContext } from '../utils/access';
+import { canRead, groupContext } from '../utils/access';
 import { guard, versionIs } from '../utils/guard';
 import { bumpScope, clean, createdAt, Rejected, SCOPE_SEQ, type CustomSpec, type Mutation, type PushContext } from '../utils/mutation';
 import { canEditGroupBudget, canSetOverrideFor, syncIds } from '../rules';
@@ -40,7 +40,7 @@ async function writeBudget(ctx: PushContext, m: Mutation): Promise<D1PreparedSta
     }
   }
 
-  if (!(await canReadScope(db, userId, groupId))) throw new Rejected('forbidden', 'budgets: not a member of that group');
+  if (!(await canRead(ctx, groupId))) throw new Rejected('forbidden', 'budgets: not a member of that group');
   const ctxGroup = await groupContext(db, groupId, userId);
   if (!ctxGroup) throw new Rejected('forbidden', 'budgets: not a member of that group');
   const allowed = personId === null ? canEditGroupBudget(ctxGroup) : canSetOverrideFor(ctxGroup, personId);

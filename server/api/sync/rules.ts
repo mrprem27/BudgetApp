@@ -5,7 +5,7 @@
  * new one on the next deploy, because it is the same function. A copy here would
  * be a second answer to the same question, and the two would drift.
  */
-export { validateShares } from '../../../budgetsplit/src/lib/splitMath';
+export { validateShares, requiredSides } from '../../../budgetsplit/src/lib/splitMath';
 export { requiresMyApproval, appliesImmediately } from '../../../budgetsplit/src/lib/trust';
 export type { TrustSubject, IncomingEntry } from '../../../budgetsplit/src/lib/trust';
 export {

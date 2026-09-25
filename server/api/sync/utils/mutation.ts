@@ -1,4 +1,5 @@
-import { canReadScope, ensurePerson, type Db } from './access';
+import { canRead, ensurePerson, type Db } from './access';
+import { errorMessage } from '../../lib';
 import { guard, isGuardFailure, isTransient, versionIs, type SyncedTable } from './guard';
 
 /**
@@ -161,7 +162,7 @@ export async function buildStatements(ctx: PushContext, spec: GenericSpec, m: Mu
 
   // Validation that needs the database, done before building the write.
   if (spec.readableGroup && typeof data[spec.readableGroup] === 'string') {
-    if (!(await canReadScope(db, userId, data[spec.readableGroup] as string))) {
+    if (!(await canRead(ctx, data[spec.readableGroup] as string))) {
       throw new Rejected('forbidden', `${t}: not a member of that group`);
     }
   }
@@ -202,7 +203,7 @@ export async function buildStatements(ctx: PushContext, spec: GenericSpec, m: Mu
 export async function diagnose(ctx: PushContext, spec: EntitySpec, m: Mutation, e: unknown): Promise<Rejected> {
   if (e instanceof Rejected) return e;
   if (isTransient(e)) throw e;                 // not a verdict on the mutation — see `applyPush`
-  const message = e instanceof Error ? e.message : String(e);
+  const message = errorMessage(e);
   if (!isGuardFailure(e)) return new Rejected('invalid', message.replace(/^D1_ERROR:\s*/, ''));
   if (spec.custom) {
     if (spec.diagnose) return spec.diagnose(ctx, m);

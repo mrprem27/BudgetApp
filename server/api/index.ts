@@ -30,6 +30,7 @@ import {
   MAX_NAME_LEN,
   authenticate,
   badRequest,
+  errorMessage,
   json,
   methodNotAllowed,
   newId,
@@ -79,7 +80,7 @@ export default {
       // Anything reaching here is a bug or an outage, not a client mistake —
       // answer 500 with a short detail rather than letting the runtime return
       // an opaque 1101 that tells the app nothing.
-      const detail = err instanceof Error ? err.message : String(err);
+      const detail = errorMessage(err);
       return json({ error: 'Server error', detail: detail.slice(0, 300) }, 500);
     }
   },
@@ -242,7 +243,7 @@ async function requestLink(request: Request, env: Env, url: URL): Promise<Respon
     // slot spent on nothing — drop the row so the user's retry isn't punished.
     await env.DB.prepare('DELETE FROM magic_links WHERE token = ?').bind(token).run();
     const code = (err as { code?: string }).code;
-    const detail = err instanceof Error ? err.message : String(err);
+    const detail = errorMessage(err);
     return json({ error: 'Could not send the sign-in email', code, detail: detail.slice(0, 300) }, 502);
   }
 

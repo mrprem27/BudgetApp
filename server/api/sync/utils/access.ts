@@ -141,3 +141,35 @@ export function ensurePerson(db: Db, personId: string, account: string | null, b
 export async function myPersonId(db: Db, userId: string): Promise<string> {
   return (await personOf(db, userId)) ?? selfPersonId(userId);
 }
+
+/** Is this an account that exists and has not been deleted? */
+export async function liveAccount(db: Db, userId: string): Promise<boolean> {
+  return (await db.prepare('SELECT 1 AS n FROM users WHERE id = ? AND deleted_at IS NULL').bind(userId).first()) !== null;
+}
+
+/**
+ * Answers that cannot change within one push, looked up once per request instead
+ * of once per mutation — on Workers Free a request gets 50 queries in all. Keyed
+ * on the push's context object, so they last exactly as long as the request.
+ * Safe to cache: every write still fences membership inside its own batch.
+ */
+const perPush = new WeakMap<object, { me?: string; readable: Map<string, boolean> }>();
+const memo = (ctx: object) => {
+  let m = perPush.get(ctx);
+  if (!m) perPush.set(ctx, m = { readable: new Map() });
+  return m;
+};
+
+/** `myPersonId`, once per push. */
+export async function meOf(ctx: { db: Db; userId: string }): Promise<string> {
+  const m = memo(ctx);
+  return (m.me ??= await myPersonId(ctx.db, ctx.userId));
+}
+
+/** `canReadScope`, once per scope per push. */
+export async function canRead(ctx: { db: Db; userId: string }, scopeId: string): Promise<boolean> {
+  const m = memo(ctx);
+  let ok = m.readable.get(scopeId);
+  if (ok === undefined) m.readable.set(scopeId, ok = await canReadScope(ctx.db, ctx.userId, scopeId));
+  return ok;
+}

@@ -1,4 +1,5 @@
 import type { Db } from './access';
+import { errorMessage } from '../../lib';
 
 /**
  * Preconditions that live INSIDE a D1 batch (SPEC-SERVER.md §2.10).
@@ -40,19 +41,48 @@ export function versionIs(db: Db, table: SyncedTable, id: string, baseVersion: n
     : guard(db, `EXISTS (SELECT 1 FROM ${table} WHERE id = ? AND version = ?)`, id, baseVersion);
 }
 
-/** Was this error a guard tripping, rather than anything else going wrong? */
 /**
- * A failure about THIS MOMENT, not about the mutation: a Worker at its per-request
- * query limit (50 on Workers Free), a dropped connection, an overloaded database.
- * The same mutation would succeed later, so it must never be recorded as refused.
+ * The platform failing, not the mutation: D1's own messages for a dropped
+ * connection, an overloaded database, or a Worker past its query limit. The same
+ * mutation would succeed later, so it must never be recorded as refused — the push
+ * fails instead, and the phone retries it. Narrow on purpose: an error this does
+ * not recognise is judged as the mutation's fault, and surfaces as a refusal.
+ * (The query limit itself is kept clear of by `countQueries`, not caught here.)
  */
 export function isTransient(e: unknown): boolean {
-  const message = e instanceof Error ? e.message : String(e);
-  return /too many api requests|subrequest|overloaded|network connection lost|internal error|transient|timed? ?out|connection reset/i
-    .test(message);
+  return /network connection lost|overloaded|too many api requests|storage operation exceeded timeout|cannot resolve d1/i
+    .test(errorMessage(e));
 }
 
+/** Was this error a guard tripping, rather than anything else going wrong? */
 export function isGuardFailure(e: unknown): boolean {
-  const message = e instanceof Error ? e.message : String(e);
-  return /precondition_failed/.test(message);
+  return /precondition_failed/.test(errorMessage(e));
+}
+
+/**
+ * The same database, counting every query it runs — a `first`/`all`/`run`, or a
+ * whole `batch` — so a push can stop cleanly before the Worker's per-request limit
+ * (50 on Workers Free, 1000 on Paid) instead of hitting it part-way through a write.
+ */
+export function countQueries(db: Db): { db: Db; used: () => number } {
+  let n = 0;
+  const inner = new WeakMap<object, D1PreparedStatement>();
+  const wrap = (st: D1PreparedStatement): D1PreparedStatement => {
+    const w = {
+      bind: (...values: unknown[]) => wrap(st.bind(...values)),
+      first: (column?: string) => { n++; return column === undefined ? st.first() : st.first(column); },
+      all: () => { n++; return st.all(); },
+      run: () => { n++; return st.run(); },
+      raw: () => { n++; return st.raw(); },
+    } as unknown as D1PreparedStatement;
+    inner.set(w, st);
+    return w;
+  };
+  return {
+    db: {
+      prepare: (sql: string) => wrap(db.prepare(sql)),
+      batch: (statements: D1PreparedStatement[]) => { n++; return db.batch(statements.map(s => inner.get(s) ?? s)); },
+    } as Db,
+    used: () => n,
+  };
 }

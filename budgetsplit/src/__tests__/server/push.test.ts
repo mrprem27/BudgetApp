@@ -54,21 +54,20 @@ function limited(db: TestD1, budget: number): TestD1 {
   return { ...db, prepare: sql => wrap(db.prepare(sql)), batch: async sts => { spend(); return db.batch(sts); } };
 }
 
-describe('push — a query limit mid-push is a pause, never a refusal', () => {
-  it('a resumable phone gets what was applied, and nothing is recorded as refused', async () => {
+describe('push — the per-request query limit', () => {
+  it('a push stops cleanly within its budget, refuses nothing, and the rest lands next time', async () => {
     const { db, me, deviceId } = await setup();
-    const ms = [1, 2, 3, 4, 5, 6].map(i => asset(i, `a${i}`, 0));
-    const last = await applyPush({ db: limited(db, 5), userId: me.userId, deviceId, now: T0 }, ms, 0, ENTITIES, { resumable: true });
+    const ms = Array.from({ length: 60 }, (_, k) => asset(k + 1, `a${k + 1}`, 0));
+    // A Worker on Workers Free: 50 queries, and the push told so.
+    const last = await applyPush({ db: limited(db, 50), userId: me.userId, deviceId, now: T0 }, ms, 0, ENTITIES, { queryBudget: 50 });
     expect(last).toBeGreaterThan(0);
-    expect(last).toBeLessThan(6);
+    expect(last).toBeLessThan(60);
     expect(await rejections(db)).toEqual([]);
-    // The rest lands on the next request.
-    expect(await push(db, me.userId, deviceId, ms)).toBe(6);
-    expect(await db.prepare('SELECT COUNT(*) AS n FROM assets').first('n')).toBe(6);
-    expect(await rejections(db)).toEqual([]);
+    expect(await push(db, me.userId, deviceId, ms)).toBe(60);
+    expect(await db.prepare('SELECT COUNT(*) AS n FROM assets').first('n')).toBe(60);
   });
 
-  it('an older phone that cannot resume gets a failure, not a partial answer it would skip past', async () => {
+  it('the platform failing anyway is never recorded as a refusal — the push fails, to be retried', async () => {
     const { db, me, deviceId } = await setup();
     const ms = [1, 2, 3, 4, 5, 6].map(i => asset(i, `a${i}`, 0));
     await expect(applyPush({ db: limited(db, 5), userId: me.userId, deviceId, now: T0 }, ms, 0, ENTITIES)).rejects.toThrow(/Too many/);

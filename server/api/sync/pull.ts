@@ -98,6 +98,7 @@ const CHILDREN = {
   recurrence: 'SELECT * FROM recurring_rules',
   skips: 'SELECT rule_id AS transaction_id, occurrence_date FROM recurring_skips',
 } as const;
+const CHILD_KEYS = Object.keys(CHILDREN) as Array<keyof typeof CHILDREN>;
 const childKey = (k: keyof typeof CHILDREN) => (k === 'skips' ? 'rule_id' : 'transaction_id');
 
 type Children = Map<keyof typeof CHILDREN, Array<Record<string, unknown>>>;
@@ -124,12 +125,27 @@ function asBundle(t: Record<string, unknown>, children: Children): Record<string
  * transaction with one that has no payers — the money gone from that phone.
  */
 export async function transactionBundle(db: Db, row: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const keys = Object.keys(CHILDREN) as Array<keyof typeof CHILDREN>;
+  const keys = CHILD_KEYS;
   const results = await db.batch(keys.map(k => db.prepare(`${CHILDREN[k]} WHERE ${childKey(k)} = ?`).bind(row.id)));
   return asBundle(row, new Map(keys.map((k, i) => [k, results[i].results as Array<Record<string, unknown>>])));
 }
 
+/**
+ * One scope's next page. A page never splits a seq, so when one seq holds more
+ * rows than a page (a single write that re-stamps many rows — accepting an
+ * invite, a merge) the page grows until that seq fits, or the phone would be
+ * handed the same empty page forever.
+ */
 async function pullScope(
+  db: Db, scopeId: string, kind: 'user' | 'group', cursor: number, limit: number,
+): Promise<PulledScope> {
+  for (let size = limit; ; size *= 4) {
+    const page = await readPage(db, scopeId, kind, cursor, size);
+    if (page.cursor > cursor || !page.more) return page;
+  }
+}
+
+async function readPage(
   db: Db, scopeId: string, kind: 'user' | 'group', cursor: number, limit: number,
 ): Promise<PulledScope> {
   const tables = kind === 'user' ? USER_TABLES : GROUP_TABLES;
@@ -138,7 +154,7 @@ async function pullScope(
     db.prepare('SELECT seq FROM sync_scopes WHERE id = ?').bind(scopeId),
     ...tables.map(t => db.prepare(selectFor(t)).bind(scopeId, cursor, limit + 1)),
     ...(kind === 'group'
-      ? (Object.keys(CHILDREN) as Array<keyof typeof CHILDREN>).map(k =>
+      ? CHILD_KEYS.map(k =>
         db.prepare(`${CHILDREN[k]} WHERE ${childKey(k)} IN (${txnPage})`).bind(scopeId, cursor, limit + 1))
       : []),
   ];
@@ -164,12 +180,6 @@ async function pullScope(
   const cut = merged.length > limit ? merged[limit - 1].seq : complete;
   const more = cut < serverSeq;
 
-  // No progress possible: one seq holds more rows than a page (a single write
-  // that re-stamps many rows — accepting an invite, a merge). A page never splits
-  // a seq, so read a bigger one until that seq fits whole; otherwise the phone
-  // would be handed the same empty page forever.
-  if (cut <= cursor && more) return pullScope(db, scopeId, kind, cursor, limit * 4);
-
   const rows: Record<string, Row[]> = {};
   for (const t of tables) {
     const kept = (byTable.get(t) ?? []).filter(r => r.seq <= cut);
@@ -177,7 +187,7 @@ async function pullScope(
   }
 
   if (kind === 'group' && rows.transactions) {
-    const keys = Object.keys(CHILDREN) as Array<keyof typeof CHILDREN>;
+    const keys = CHILD_KEYS;
     const children = new Map(keys.map((k, i) => [k, results[1 + tables.length + i].results as Array<Record<string, unknown>>]));
     rows.transactions = rows.transactions.map(t => asBundle(t, children) as Row);
   }

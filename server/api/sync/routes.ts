@@ -21,6 +21,9 @@ export const ENTITIES: Record<string, EntitySpec> = {
 /** A push is at most 100 mutations; this bounds the body before parsing it. */
 const MAX_PUSH_BYTES = 2 * 1024 * 1024;
 
+/** Queries a push request spends before `applyPush`: the session (and its refresh), and the device. */
+const QUERIES_BEFORE_PUSH = 4;
+
 /**
  * `/sync/push` and `/sync/pull` (SPEC-SERVER.md §3.2–3.3). Both are POST and
  * both need a session.
@@ -42,7 +45,10 @@ export async function handleSync(request: Request, env: Env, path: string): Prom
 
     const lastMutationId = await applyPush(
       { db: env.DB, userId: auth.user.id, deviceId: parsed.deviceId, now },
-      parsed.mutations, last, ENTITIES, { resumable: parsed.resumable },
+      parsed.mutations, last, ENTITIES,
+      // What is left of this request's D1 queries once authentication and the
+      // device check have run (`D1_QUERY_BUDGET`: 50 on Workers Free, 1000 on Paid).
+      { queryBudget: Number(env.D1_QUERY_BUDGET ?? 50) - QUERIES_BEFORE_PUSH },
     );
     // A receipt only. What happened to each mutation is read on the next pull.
     return json({ lastMutationId });

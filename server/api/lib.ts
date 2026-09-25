@@ -74,6 +74,11 @@ export const MAX_AVATAR_URL_LEN = 2048;
 
 // --- Responses ------------------------------------------------------------
 
+/** The message of anything thrown — an Error's, or the value itself. */
+export function errorMessage(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
+
 export function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,

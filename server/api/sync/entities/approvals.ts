@@ -28,15 +28,28 @@ export const approvalId = (txnId: string, userId: string) => `${txnId}:${userId}
 export async function approvalsForWrite(
   ctx: PushContext,
   t: { txnId: string; groupId: string; kind: string; payers: Share[]; splits: Share[]; authorPerson: string },
+  /** A new transaction has no approvals yet, so there is nothing to withdraw. */
+  isUpdate: boolean,
 ): Promise<D1PreparedStatement[]> {
-  const { db, userId, now } = ctx;
+  const { db, userId } = ctx;
   const named = [...new Set([...t.payers, ...t.splits].map(p => p.person_id))].filter(p => p !== t.authorPerson);
-  const accounts = (await db.prepare(
+  // Nobody else named (most personal entries): no query at all.
+  const accounts = named.length === 0 ? [] : (await db.prepare(
     `SELECT id, user_id FROM people WHERE id IN (SELECT value FROM json_each(?)) AND user_id IS NOT NULL AND user_id <> ?`,
   ).bind(JSON.stringify(named), userId).all<{ id: string; user_id: string }>()).results ?? [];
 
   const out: D1PreparedStatement[] = [];
-  for (const r of accounts) out.push(...(await askOne(ctx, t, r)));
+  if (accounts.length > 0) {
+    // Everyone's trust in the author, in one read rather than one per recipient.
+    const trust = (await db.prepare(
+      `SELECT user_id, group_id, level FROM trust_settings
+        WHERE person_id = ? AND deleted_at IS NULL AND (group_id IS NULL OR group_id = ?)
+          AND user_id IN (SELECT value FROM json_each(?))`,
+    ).bind(t.authorPerson, t.groupId, JSON.stringify(accounts.map(a => a.user_id)))
+      .all<{ user_id: string; group_id: string | null; level: string }>()).results ?? [];
+    for (const r of accounts) out.push(...(await askOne(ctx, t, r, trust.filter(x => x.user_id === r.user_id))));
+  }
+  if (!isUpdate) return out;
 
   // Someone the edit no longer names has nothing left to decide.
   const stillNamed = new Set(accounts.map(a => a.user_id));
@@ -56,9 +69,11 @@ export async function askOne(
   ctx: PushContext,
   t: { txnId: string; groupId: string; kind: string; payers: Share[]; authorPerson: string },
   r: { id: string; user_id: string },
+  /** This recipient's trust in the author, when the caller already read it. */
+  known?: Array<{ group_id: string | null; level: string }>,
 ): Promise<D1PreparedStatement[]> {
   const { db, userId, now } = ctx;
-  const trust = (await db.prepare(
+  const trust = known ?? (await db.prepare(
     `SELECT group_id, level FROM trust_settings
       WHERE user_id = ? AND person_id = ? AND deleted_at IS NULL AND (group_id IS NULL OR group_id = ?)`,
   ).bind(r.user_id, t.authorPerson, t.groupId).all<{ group_id: string | null; level: string }>()).results ?? [];

@@ -177,6 +177,17 @@ export function computeShares(i: ShareInputs): Share[] {
  *
  * `delta` is what's still unallocated: positive = short, negative = over.
  */
+/**
+ * Which sides a transaction of each kind must have (`DQ-26`, AGENTS §12). An
+ * expense has both: who paid, and who it was for. Income is paid in and consumed
+ * by nobody, so it has no shares. A transfer can be one-sided — money into an asset
+ * has no shares, money out of one has no payments. Whatever sides exist must each
+ * add up to the amount; `validateShares` checks that.
+ */
+export function requiredSides(kind: string): { payments: boolean; shares: boolean } {
+  return { payments: kind === 'expense' || kind === 'income', shares: kind === 'expense' };
+}
+
 export function validateShares(total: number, shares: Share[]): { ok: boolean; assigned: number; delta: number } {
   const assigned = shares.reduce((s, x) => s + x.amount, 0);
   return { ok: shares.length > 0 && assigned === total, assigned, delta: total - assigned };

@@ -114,6 +114,12 @@ a per-scope `seq`, and a phone keeps one cursor per scope.
   they trust the author. A refusal outranks trust — an edit to an entry someone
   refused asks them again (`sync/entities/approvals.ts`).
 
+**Query budget.** A Worker request may run 50 D1 queries on Workers Free (1000 on
+Paid). A push counts its own and stops cleanly before the next mutation might not
+fit; the phone continues from the acknowledgement. A personal expense costs about
+2 queries, so a Free request applies roughly 15–20 of them. Set `D1_QUERY_BUDGET`
+under `[vars]` in `wrangler.toml` to `1000` if the plan changes.
+
 D1 has no interactive transactions, so every write guards itself with a
 `write_guard` row that fails the batch when a precondition no longer holds
 (`sync/utils/guard.ts`).
