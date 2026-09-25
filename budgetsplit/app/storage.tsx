@@ -51,7 +51,7 @@ export default function StorageScreen() {
   function confirmLoadDemo() {
     Alert.alert(
       'Load demo data?',
-      'This REPLACES all current data with a comprehensive test dataset (people, groups, splits, settlements, budgets, recurring rules, savings goals). Your name & avatar are kept.',
+      'This REPLACES all current data with a comprehensive test dataset (people, groups, splits, settlements, budgets, recurring rules, savings goals). Your name & avatar are kept. If you’re signed in, this phone stops syncing — sign out and back in to connect it again.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -80,7 +80,7 @@ export default function StorageScreen() {
   function confirmReset() {
     Alert.alert(
       'Erase all data?',
-      'This permanently deletes ALL transactions, groups, people, budgets and savings, leaving an empty app. Your name & avatar are kept. This cannot be undone.',
+      'This permanently deletes ALL transactions, groups, people, budgets and savings, leaving an empty app. Your name & avatar are kept. If you’re signed in, your account keeps its copy — sign out and back in to restore it. This cannot be undone on this phone.',
       [
         { text: 'Cancel', style: 'cancel' },
         {

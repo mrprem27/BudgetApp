@@ -58,6 +58,39 @@ async function applyRemap(db: SQLite.SQLiteDatabase, plan: RemapResult & { ok: t
     'UPDATE person SET id = ?, remote_uid = ?, email = COALESCE(email, ?) WHERE id = ?',
     [newId, account.userId, account.email ?? null, oldId],
   );
+  await adoptLinkedFriends(db);
+}
+
+/**
+ * Everyone already matched to an account takes that account's id too, as "me"
+ * just did. The server names an account holder `user:<account>` wherever it
+ * appears; a friend still under a local id here would go up as a member under
+ * one id and in every split under another, and the server refuses a split
+ * naming someone who isn't in the group. On a restore the pull would then bring
+ * the account id back as a second person beside the local one.
+ *
+ * Skipped only when two local rows claim the same account — that is for Linked
+ * people to settle, not something to merge silently here.
+ */
+async function adoptLinkedFriends(db: SQLite.SQLiteDatabase): Promise<void> {
+  const friends = await db.getAllAsync<{ id: string; remote_uid: string }>(
+    `SELECT id, remote_uid FROM person p
+      WHERE is_me = 0 AND remote_uid IS NOT NULL AND remote_uid <> ''
+        AND (SELECT COUNT(*) FROM person q WHERE q.remote_uid = p.remote_uid) = 1`,
+  );
+  for (const f of friends) {
+    const newId = selfPersonId(f.remote_uid);
+    if (f.id === newId || await db.getFirstAsync('SELECT 1 AS n FROM person WHERE id = ?', [newId])) continue;
+    await remapPersonRows(db, f.id, newId);
+    await db.runAsync('UPDATE person SET id = ? WHERE id = ?', [newId, f.id]);
+    await db.runAsync(
+      `UPDATE OR REPLACE sync_queue SET local_id = substr(local_id, 1, instr(local_id, '|')) || ?
+        WHERE local_table = 'group_member' AND local_id LIKE '%|' || ?`, [newId, f.id]);
+    await db.runAsync(
+      `UPDATE OR REPLACE sync_queue SET local_id = ? || substr(local_id, instr(local_id, '|'))
+        WHERE local_table = 'person_group_trust' AND local_id LIKE ? || '|%'`, [newId, f.id]);
+    await db.runAsync("UPDATE OR REPLACE sync_queue SET local_id = ? WHERE local_table = 'person' AND local_id = ?", [newId, f.id]);
+  }
 }
 
 export async function remapIdentity(db: SQLite.SQLiteDatabase, account: Account): Promise<RemapResult> {
@@ -93,15 +126,17 @@ export async function linkLedger(
 }
 
 /**
- * Every row this phone holds that the server should have. Group members wait for
- * S18 and shared transactions for S19 (`syncApply.ts` keeps both queued until
- * then), so members are not queued at all and someone else's entries are skipped.
+ * Every row this phone holds that the server should have. Someone else's entries
+ * are skipped — they are theirs to send. Members go up after their group and
+ * before any entry that names them (the engine's RANK), so a split never names
+ * someone the server has not seen join.
  */
 async function backfillQueue(db: SQLite.SQLiteDatabase): Promise<void> {
   const all: Array<[QueueTable, string]> = [
     ['person', 'SELECT id FROM person'],
     ['person_group_trust', "SELECT person_id || '|' || group_id AS id FROM person_group_trust"],
     ['budget_group', 'SELECT id FROM budget_group'],
+    ['group_member', "SELECT group_id || '|' || person_id AS id FROM group_member"],
     ['category', 'SELECT id FROM category'],
     ['category_budget', 'SELECT id FROM category_budget'],
     ['asset', 'SELECT id FROM asset'],

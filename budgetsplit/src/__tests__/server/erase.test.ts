@@ -3,6 +3,7 @@ import { mayAdminister } from '../../../../server/api/sync/utils/access';
 import { insertGroup } from '../../db/queries/groups';
 import { insertTxn } from '../../db/queries/transactions';
 import { insertAsset } from '../../db/queries/assets';
+import { insertPerson } from '../../db/queries/persons';
 import { insertGoal } from '../../db/queries/savings';
 import { convertToRecurring } from '../../db/queries/recurring';
 import { A, B, ME_A, ME_B, sync, aaravJoined } from '../helpers/twoPhones';
@@ -98,5 +99,27 @@ describe('erasing an account', () => {
 
     await sync(w.b, w.d1, B);
     expect(w.b.raw.prepare('SELECT created_by FROM budget_group WHERE id = ?').get(w.flat)).toEqual({ created_by: ME_B });
+  });
+
+  it('takes a group shared only with friends who have no account, and those friends', async () => {
+    // What "Delete account" left behind on the live server: a demo group with
+    // typed-in friends survived, because anyone at all in it counted as "someone
+    // else". Nobody without an account can read it, so nobody keeps it.
+    const w = await world();
+    const ravi = await insertPerson(w.a, 'Ravi', '#F0A500');
+    const trip = await insertGroup(w.a, 'Trip', 'map', '#22D3EE', [ravi.id], 'equal', ME_A);
+    await insertTxn(w.a, {
+      groupId: trip.id, kind: 'expense', entryMode: 'quick', date: Date.now(), category: 'Food',
+      payments: [{ personId: ME_A, amount: 2000 }],
+      shares: [{ personId: ME_A, amount: 1000 }, { personId: ravi.id, amount: 1000 }],
+    });
+    await sync(w.a, w.d1, A);
+    expect(await count(w, 'groups', 'id = ?', trip.id)).toBe(1);
+
+    await w.d1.batch(await eraseAccount(w.d1, A, Date.now()));
+    for (const t of SCOPED) expect([t, await count(w, t, 'scope_id = ?', trip.id)]).toEqual([t, 0]);
+    expect(await count(w, 'people', 'id = ?', ravi.id)).toBe(0);
+    // The flat Aarav keeps still names Prem's person, so that row stays.
+    expect(await count(w, 'people', 'id = ?', ME_A)).toBe(1);
   });
 });

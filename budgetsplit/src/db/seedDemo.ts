@@ -56,6 +56,14 @@ export async function wipeAllData(db: SQLite.SQLiteDatabase): Promise<void> {
   for (const t of ALL_TABLES) {
     await db.runAsync(`DELETE FROM ${t}`);
   }
+  // Sync's record of the ledger just thrown away goes with it: the queue, the
+  // server versions, the pull cursors and the link to an account. Left behind,
+  // a later sign-in resumed from the old cursor and restored only what changed
+  // after it — "half the data came back". Unlinked, the next sign-in decides
+  // afresh (upload, restore or ask) from what is actually on the phone.
+  await db.runAsync('DELETE FROM sync_queue');
+  await db.runAsync('DELETE FROM sync_version');
+  await db.runAsync("DELETE FROM settings WHERE key LIKE 'sync2.%'");
   // OFF, not ON — `applyConnectionPragmas` sets OFF on every connection, and this
   // runs on the shared one. Restoring it to ON here left that connection enforcing
   // constraints the delete paths cannot satisfy for the rest of the session.

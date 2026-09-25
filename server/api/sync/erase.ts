@@ -14,7 +14,10 @@ import type { Db } from './utils/access';
  *   goals, assets, imports, preferences, trust, their answers to other people's
  *   entries, their feed;
  * - every group that is theirs alone — the personal group, and any other group
- *   nobody else is (or was invited to be) in — with all its entries;
+ *   no other live ACCOUNT is (or was invited to be) in — with all its entries.
+ *   Friends typed in without an account don't keep a group alive: they can't
+ *   read it, so it would be a record nobody could ever open;
+ * - the people they typed in that nothing left behind still names;
  * - their devices and what the server kept for each.
  *
  * ## What stays, and why
@@ -39,7 +42,8 @@ export async function eraseAccount(db: Db, userId: string, now: number): Promise
       WHERE g.owner_id = ?1
         AND NOT EXISTS (SELECT 1 FROM group_members m JOIN people p ON p.id = m.person_id
                          WHERE m.group_id = g.id AND m.status IN ('active', 'invited') AND m.deleted_at IS NULL
-                           AND (p.user_id IS NULL OR p.user_id <> ?1))`,
+                           AND p.user_id IS NOT NULL AND p.user_id <> ?1
+                           AND EXISTS (SELECT 1 FROM users u WHERE u.id = p.user_id AND u.deleted_at IS NULL))`,
   ).bind(userId).all<{ id: string }>()).results?.map(r => r.id) ?? [];
   const scopes = JSON.stringify([userId, ...mine]);
   const groups = JSON.stringify(mine);
@@ -97,6 +101,21 @@ export async function eraseAccount(db: Db, userId: string, now: number): Promise
               seq = (SELECT s.seq FROM sync_scopes s WHERE s.id = group_members.scope_id)
         WHERE person_id IN (SELECT id FROM people WHERE user_id = ?2) AND status IN ('active', 'invited') AND deleted_at IS NULL`,
       now, userId,
+    ),
+    // The people I typed in who have no account: nobody else can see them once
+    // my groups are gone, so they go too — unless a group that carries on still
+    // names them (a flat mate I added, in a flat Aarav keeps).
+    del(
+      `DELETE FROM people WHERE created_by = ?1 AND user_id IS NULL
+          AND id NOT IN (SELECT person_id FROM group_members)
+          AND id NOT IN (SELECT person_id FROM friends)
+          AND id NOT IN (SELECT person_id FROM budgets WHERE person_id IS NOT NULL)
+          AND id NOT IN (SELECT author_id FROM transactions)
+          AND id NOT IN (SELECT person_id FROM transaction_payers)
+          AND id NOT IN (SELECT person_id FROM transaction_splits)
+          AND id NOT IN (SELECT person_id FROM trust_settings)
+          AND id NOT IN (SELECT merged_into FROM people WHERE merged_into IS NOT NULL)`,
+      userId,
     ),
     del('DELETE FROM sync_rejections WHERE device_id IN (SELECT id FROM devices WHERE user_id = ?)', userId),
     del('DELETE FROM devices WHERE user_id = ?', userId),

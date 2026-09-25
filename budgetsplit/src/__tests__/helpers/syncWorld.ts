@@ -20,14 +20,18 @@ export type Db = TestDb & SQLite.SQLiteDatabase;
 
 export const NOW = Date.now();
 
-export function transport(d1: TestD1, opts: { failPullAfter?: number; failPush?: boolean } = {}): Transport {
+/**
+ * `queryBudget` runs the push under the Worker's per-request D1 query budget, as
+ * the deployed server does (`D1_QUERY_BUDGET`), so a push stops part-way.
+ */
+export function transport(d1: TestD1, opts: { failPullAfter?: number; failPush?: boolean; queryBudget?: number } = {}): Transport {
   let pulls = 0;
   return {
     async push(body) {
       if (opts.failPush) throw new Error('network: gone');
       const now = Date.now();
       const last = (await ensureDevice(d1, USER, body.deviceId, now))!;
-      return { lastMutationId: await applyPush({ db: d1, userId: USER, deviceId: body.deviceId, now }, body.mutations, last, ENTITIES) };
+      return { lastMutationId: await applyPush({ db: d1, userId: USER, deviceId: body.deviceId, now }, body.mutations, last, ENTITIES, { queryBudget: opts.queryBudget }) };
     },
     async pull(body) {
       if (opts.failPullAfter !== undefined && ++pulls > opts.failPullAfter) throw new Error('network: gone');
