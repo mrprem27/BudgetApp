@@ -6,28 +6,23 @@
  * as money "safe to spend today" is a bigger claim than that slice made, and
  * every persona in `enginePersonas.ts` has a payday inside 30 days, which made
  * counting it there impossible to satisfy against EN2's own accept criterion.
- * `EN3` added the uncertainty band. `EN5` (this slice) adds both income and
- * receivables — but **opt-in**, behind `withIncome`, defaulting `false`:
- * `safeToSpendV2`/`afford()` (`EN2`/`EN4`) and their whole test suite are
- * built and locked against the income-less numbers, and changing the DEFAULT
- * would silently change what they compute. A future task (`EN10`/`EN11`,
- * "switch Safe-to-Spend"/"switch Afford") is where a real screen starts
- * passing `withIncome: true`; until then it's an explicit, tested opt-in.
+ * `EN5` adds income — opt-in behind `withIncome` (default `false`), so EN2's
+ * parity numbers stay put until a real screen switches over (`EN10`/`EN11`).
+ *
+ * **Deterministic only, on purpose.** A 500-path bootstrap band (`EN3`) was
+ * built and then removed: a back-test showed it miscalibrated on every seed
+ * tried, and synthetic fixtures can't honestly validate one — §8 says that
+ * takes real pilot data. Until then the floor (a week of essentials) is the
+ * cushion against a bad week, and every number here can be explained.
+ * `SPEC-ENGINE.md` §12b L7 has the evidence; git history has the code.
  */
-import type { FinanceSnapshot, KnownEvent, PercentileDay, Projection, UncertaintyBand } from './types';
+import type { FinanceSnapshot, KnownEvent, Projection } from './types';
 import { expandUpcoming } from '../upcoming';
 import { STS_HORIZON_DAYS } from '../safeToSpend';
 import { materializeInstances } from '../recurrence';
-import {
-  dailySample, essentialFloor, everydayRate, incomeModel, repaymentModel, IRREGULAR_MIN_HORIZON_DAYS,
-} from './behaviour';
-import { hashSnapshot, mulberry32 } from './rng';
+import { everydayRate, incomeModel, IRREGULAR_MIN_HORIZON_DAYS } from './behaviour';
 
 const DAY_MS = 86_400_000;
-/** §4 E3: "500 paths". */
-export const SIMULATION_PATHS = 500;
-/** §4 E2: "a 7-day block sample for the bootstrap, keeping the weekday rhythm." */
-const BLOCK_DAYS = 7;
 
 /**
  * The safety horizon, sized to the next payday rather than a flat 30 days
@@ -101,8 +96,10 @@ function nextDueDate(fromMs: number, dueDay: number): number {
  *   this task's accept criterion checks: card repayment (or its due day, if
  *   known), goal contributions still due this cycle, and net money I owe.
  *
- * Income and receivables are added only when `withIncome` is true (file
- * header) — absent that, this is exactly `EN2`'s original subset.
+ * Income is added only when `withIncome` is true (file header) — absent that,
+ * this is exactly `EN2`'s original subset. Receivables are never counted as
+ * money (the cautious choice); `afford()` only names one when it would tip
+ * the answer.
  */
 export function knownEvents(snapshot: FinanceSnapshot, horizonEndMs: number, withIncome = false): KnownEvent[] {
   const events: KnownEvent[] = [];
@@ -169,142 +166,4 @@ export function projectKnown(
   }
 
   return { horizonDays, dailyRate: rate, days, lowPoint: low };
-}
-
-/**
- * Every known event's amount, bucketed to its day index (0-based, matching
- * `projectKnown`'s own day windows: `[asOf, asOf+1day)` … with the horizon's
- * last instant inclusive). `knownEvents` already clips to `horizonEndMs`, so
- * the only out-of-range case is an event dated exactly on `horizonEndMs`
- * itself, which belongs to the final day.
- */
-function eventDeltaByDay(events: KnownEvent[], asOf: number, horizonDays: number): number[] {
-  const totals = new Array<number>(horizonDays).fill(0);
-  for (const e of events) {
-    // Plain floor division reproduces `projectKnown`'s exclusive-at-top day
-    // windows exactly; clamping to the last index is what reproduces its one
-    // exception, the horizon's own top instant, which that day claims inclusively.
-    const idx = Math.min(horizonDays - 1, Math.max(0, Math.floor((e.date - asOf) / DAY_MS)));
-    totals[idx] += e.amountPaise;
-  }
-  return totals;
-}
-
-type ReceivableDraw = { personId: string; amountPaise: number; dayIndex: number; probability: number };
-
-/**
- * Each net-positive per-person exposure (§4 E1's `exposure.perPerson`) becomes
- * one uncertain arrival (§4 E3): whether it lands in a given simulated path is
- * a Bernoulli draw at `repaymentModel`'s own probability, landing on the day
- * its typical delay implies — clamped into the horizon's last day if that
- * delay would fall past it, the same clamp `eventDeltaByDay` uses for a known
- * event on the horizon's own edge.
- */
-function receivableDraws(snapshot: FinanceSnapshot, horizonDays: number): ReceivableDraw[] {
-  return snapshot.exposure.perPerson
-    .filter(p => p.net > 0)
-    .map(p => {
-      const model = repaymentModel(snapshot, p.personId);
-      return {
-        personId: p.personId,
-        amountPaise: p.net,
-        dayIndex: Math.min(horizonDays - 1, Math.max(0, model.delayDays)),
-        probability: model.probability,
-      };
-    });
-}
-
-/** One 7-day block, drawn (with replacement) from `sample` starting at a random offset — wrapping circularly, so a short sample still yields a full block. */
-function drawBlock(rng: () => number, sample: number[]): number[] {
-  const start = Math.floor(rng() * sample.length);
-  const block = new Array<number>(BLOCK_DAYS);
-  for (let i = 0; i < BLOCK_DAYS; i++) block[i] = sample[(start + i) % sample.length];
-  return block;
-}
-
-/** Nearest-rank percentile over an already-sorted ascending array. */
-function percentile(sorted: number[], p: number): number {
-  if (sorted.length === 0) return 0;
-  const idx = Math.min(sorted.length - 1, Math.max(0, Math.round((p / 100) * (sorted.length - 1))));
-  return sorted[idx];
-}
-
-/**
- * E3, second slice (`EN3`): the uncertainty band around `projectKnown`'s
- * deterministic path. Every path shares the same known events (§4 E3's
- * "known events" are, by definition, not uncertain); only the everyday-spend
- * draw for each day differs, one 7-day block at a time, from the person's own
- * sample (§4 E2). The PRNG is seeded from the snapshot itself
- * (`hashSnapshot`), so the same ledger always simulates the same 500 futures.
- *
- * **Thin data** (§4 E3): below `everydayRate`'s own 30-day minimum, there is
- * no sample to bootstrap from, so no simulation runs — the band collapses
- * onto the known path exactly, and `cautiousLowPoint` is that path's own low
- * point.
- */
-export function projectBand(
-  snapshot: FinanceSnapshot,
-  horizonDays: number = STS_HORIZON_DAYS,
-  paths: number = SIMULATION_PATHS,
-  extraEvents: KnownEvent[] = [],
-  /** `EN5`, opt-in — see the file header. Also gates receivable arrivals
-   *  (§4 E3's other uncertain event), bundled under this one switch since
-   *  nothing needs one without the other yet — split them if that changes. */
-  withIncome = false,
-): UncertaintyBand {
-  const known = projectKnown(snapshot, horizonDays, extraEvents, withIncome);
-  const floor = essentialFloor(snapshot);
-  const sample = dailySample(snapshot);
-
-  if (everydayRate(snapshot) == null || sample.length === 0) {
-    return {
-      paths: 0,
-      days: known.days.map(d => ({ date: d.date, p10: d.balance, p50: d.balance, p90: d.balance })),
-      cautiousLowPoint: known.lowPoint.amount,
-      floor,
-    };
-  }
-
-  const horizonEndMs = snapshot.asOf + horizonDays * DAY_MS;
-  const deltas = eventDeltaByDay(knownEvents(snapshot, horizonEndMs, withIncome).concat(extraEvents), snapshot.asOf, horizonDays);
-  const rng = mulberry32(hashSnapshot(snapshot));
-  const receivables = withIncome ? receivableDraws(snapshot, horizonDays) : [];
-
-  const balancesByDay: number[][] = Array.from({ length: horizonDays }, () => []);
-  const lowPoints: number[] = [];
-
-  for (let p = 0; p < paths; p++) {
-    let balance = snapshot.cash.available;
-    let low = balance;
-    let block: number[] = [];
-    let blockPos = BLOCK_DAYS;
-
-    // Each receivable's own Bernoulli draw for THIS path, before the day walk
-    // so its arrival (if any) is already known when that day is reached.
-    const arrivals = new Array<number>(horizonDays).fill(0);
-    for (const r of receivables) {
-      if (rng() < r.probability) arrivals[r.dayIndex] += r.amountPaise;
-    }
-
-    for (let d = 0; d < horizonDays; d++) {
-      balance += deltas[d] + arrivals[d];
-      if (blockPos >= BLOCK_DAYS) {
-        block = drawBlock(rng, sample);
-        blockPos = 0;
-      }
-      balance -= block[blockPos++];
-
-      if (balance < low) low = balance;
-      balancesByDay[d].push(balance);
-    }
-    lowPoints.push(low);
-  }
-
-  const days: PercentileDay[] = known.days.map((d, i) => {
-    const sorted = [...balancesByDay[i]].sort((a, b) => a - b);
-    return { date: d.date, p10: percentile(sorted, 10), p50: percentile(sorted, 50), p90: percentile(sorted, 90) };
-  });
-
-  const sortedLows = [...lowPoints].sort((a, b) => a - b);
-  return { paths, days, cautiousLowPoint: percentile(sortedLows, 20), floor };
 }

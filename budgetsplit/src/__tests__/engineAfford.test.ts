@@ -56,19 +56,19 @@ describe('afford — Comfortable ⟺ amount ≤ largestComfortableAmount (no bud
   });
 });
 
-describe('afford — "not affordable" tracks the cautious low point exactly', () => {
-  it('never fires while the after-purchase cautious low point is ≥ 0, and always fires when it is < 0', async () => {
+describe('afford — "not affordable" tracks the projected low point exactly', () => {
+  it('never fires while the after-purchase low point is ≥ 0, and always fires when it is < 0', async () => {
     const snap = await snapshot('salariedRenter');
     const amounts = [0, R(500), R(10_000), R(50_000), R(200_000), R(500_000), R(1_000_000)];
     for (const amountPaise of amounts) {
       const result = afford(snap, { amountPaise, when: 'now' });
-      expect(result.verdict === 'not-affordable').toBe(result.cautiousLowPointAfter < 0);
+      expect(result.verdict === 'not-affordable').toBe(result.lowPointAfter.amount < 0);
     }
   });
 });
 
 describe('afford — a recurring purchase is judged more heavily than the same one-time amount', () => {
-  it('a weekly ₹2,000 habit leaves a worse cautious low point than a single ₹2,000 purchase', async () => {
+  it('a weekly ₹2,000 habit leaves a worse low point than a single ₹2,000 purchase', async () => {
     const snap = await snapshot('salariedRenter');
     // Weekly, not monthly: within the 30-day safety horizon a monthly
     // recurrence typically lands once, same as a one-time purchase — telling
@@ -77,7 +77,7 @@ describe('afford — a recurring purchase is judged more heavily than the same o
     // what actually exercises "recurring is heavier" in this slice.
     const oneTime = afford(snap, { amountPaise: R(2_000), category: 'Shopping', when: 'now' });
     const weekly = afford(snap, { amountPaise: R(2_000), category: 'Shopping', when: 'now', recurrence: 'weekly' });
-    expect(weekly.cautiousLowPointAfter).toBeLessThan(oneTime.cautiousLowPointAfter);
+    expect(weekly.lowPointAfter.amount).toBeLessThan(oneTime.lowPointAfter.amount);
   });
 });
 
@@ -119,7 +119,7 @@ describe('afford — over-budget is a Tight reason on its own', () => {
     expect(result.verdict).toBe('tight');
     expect(result.reasons.some(r => r.code === 'over_budget')).toBe(true);
     // Nothing else should be pushing this to Tight — huge cash, no other bills.
-    expect(result.cautiousLowPointAfter).toBeGreaterThan(0);
+    expect(result.lowPointAfter.amount).toBeGreaterThan(0);
   });
 });
 

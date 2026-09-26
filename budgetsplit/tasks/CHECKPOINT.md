@@ -25,11 +25,16 @@ P3 (person-screen picker sheet), CP2. Commits `cc92562`, `f3910a2`, `61028da`.
   decision made mid-build: income is deliberately excluded from this slice (deferred whole to EN5),
   because every fixture persona gets paid inside 30 days, which made "equals today's figure when no
   bill is in the horizon" (EN2's own accept criterion) unsatisfiable otherwise.
-- **EN3** done (`8fe73ed`): `src/lib/engine/rng.ts` (seeded PRNG), the P10/P50/P90 bootstrap band
-  (`projection.ts`'s `projectBand`), and the essential-spend floor (`behaviour.ts`'s
-  `essentialFloor`, on a hardcoded Need/Want category seed since nothing stores that choice
-  yet — `EN4` should reuse `NEED_CATEGORY_SEED` rather than inventing a second one).
-- **EN4** done (`04b9412`): `afford()` (`assess.ts`) on top of `EN3`'s band — verdict, ranked reasons, an
+- **EN3** done (`8fe73ed`), **reverted 2026-09-26**: the P10/P50/P90 bootstrap band
+  (`rng.ts`, `projection.ts`'s `projectBand`) was pulled after `EN8`'s back-test found it
+  miscalibrated on every seed tried — see `docs/SPEC-ENGINE.md` §12b L7 and `todo.md`'s `EN3` row.
+  **Engine is deterministic-only now**: `afford()`/`safeToSpendV2` read `projectKnown`'s own low
+  point directly, with the essential-spend floor (`behaviour.ts`'s `essentialFloor`, still on the
+  hardcoded `NEED_CATEGORY_SEED`) as the cushion instead of a percentile. `assess.ts`, `explain.ts`
+  and the four dependent test files were updated to match; full suite green, `tsc` clean app+server.
+  Don't rebuild the band until real pilot data exists to validate one against.
+- **EN4** done (`04b9412`): `afford()` (`assess.ts`) — now on the deterministic path (see EN3's
+  revert above), verdict, ranked reasons, an
   explicit-monthly-budget check, `largestComfortableAmount` (binary search), and
   `earliestComfortableDate` for `when: 'can-wait'`. Not the dev screen itself (`EN4`'s scope is
   `afford()`, tested directly) — wiring a real screen to it is `EN10`/`EN11`.
@@ -48,9 +53,11 @@ P3 (person-screen picker sheet), CP2. Commits `cc92562`, `f3910a2`, `61028da`.
 - **Every scoping call/limitation from EN1–EN6, in one place: `docs/SPEC-ENGINE.md` §12b** — a v1
   release gate. Read it before EN7+, and add to it rather than re-explaining a limitation in this file.
 - **EN7** done: `explain.ts` (E6) — `afford().verdict` is now `AffordVerdict | null`, `null` when
-  history is too thin for any verdict (not just low-confidence). Confidence also caps on `irregular`
-  income or a wide P10–P90 band.
-- **EN8–EN12** not started. EN8 (Back-test + ship gates) is next.
+  history is too thin for any verdict (not just low-confidence). Confidence caps on `irregular`
+  income or thin-but-usable history (rewritten during the EN3 revert — no more band width to read).
+- **EN8** ran 2026-09-26: found the band miscalibrated (see EN3 above). Row stays open in `todo.md`
+  — the back-test did its job, but there's no band left to gate. **EN9–EN12** not started; worth a
+  re-read once picked up, since some scope may have assumed the band.
 - **A second, parallel session is doing Phase 4 (UPI) in this same working tree right now** —
   `useUpiHandoff.ts`/`upiIntent.ts`/`ScanPaySheet.tsx`/`TransferBody.tsx` mid-refactor, currently
   failing `tsc` and two doc guards (`deadComponents`, `coverage`). Not engine-related; don't touch

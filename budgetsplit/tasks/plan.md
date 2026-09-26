@@ -179,10 +179,13 @@ reason is recorded.
 for Safe-to-Spend and a few Afford questions, and say whether the new answers make sense. **No switch
 happens before this.**
 
-**EN9 · Behaviour, the rest (M).** Category model, seasonality (13 months), exceptional days
-(modified z), fixed vs variable, Need/Want learning.
-*Accept:* the spec's E2 acceptance (one ₹40k day moves the everyday rate ≤ 2%; seasonality is
-exactly 1.0 below 13 months; a `null` below every minimum).
+**EN9 · Behaviour, the rest — reshaped 2026-09-26, not a standalone task.** Category model,
+seasonality (13 months), exceptional days (modified z), fixed vs variable, Need/Want learning: none
+of these have a screen consumer until `EN12`, so none get built ahead of it (see
+`feedback_avoid_overengineering` memory) — building all five now, unconsumed, is the same shape of
+mistake `EN3`'s reverted band was. Each `EN12` commit builds only the E2 sub-model it needs, at the
+point it needs it. Fixed vs variable additionally needs a `description` field on `FinanceSnapshot`
+that doesn't exist yet — parked until something asks for it.
 
 **EN10 · Switch Safe-to-Spend (S).** Home hero and `StsSheet` read the engine; the sheet's lines
 tap through to their rows (`DQ-103`). Layout follows O-103 (Phase 5).

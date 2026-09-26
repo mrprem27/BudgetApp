@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, Alert, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, Alert, TouchableOpacity, ScrollView } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useScreenData } from '../src/hooks/useScreenData';
@@ -137,7 +137,7 @@ export default function StorageScreen() {
   return (
     <View style={styles.container}>
       <ScreenHeader title="Developer tools" onBack={() => router.back()} />
-      <View style={styles.content}>
+      <ScrollView contentContainerStyle={styles.content}>
         {/*
           Named, not hidden. This screen is deliberately reachable in pilot builds,
           and a tester who finds it by accident must see immediately that it is not
@@ -200,7 +200,7 @@ export default function StorageScreen() {
             <Text style={styles.eraseText}>Erase all data</Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </ScrollView>
     </View>
   );
 }

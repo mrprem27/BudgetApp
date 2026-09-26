@@ -281,7 +281,7 @@ export function trueExpenses(snapshot: FinanceSnapshot, months = 12): TrueExpens
 
 /**
  * Coarse monthly view over the 12-month commitment horizon (§4 E3/E4) —
- * separate from the daily safety-horizon walk (`projectKnown`/`projectBand`),
+ * separate from the daily safety-horizon walk (`projectKnown`),
  * never summed into it. `surplusPaise` is `null` (nothing judgeable) when
  * income is `irregular` — no monthly income figure to compare against.
  */

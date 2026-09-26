@@ -400,21 +400,40 @@ spec removes.
 
 ## 12b · Engine limitations — review before v1 ships
 
-Scoping calls from EN1–EN5, gathered in one place. Ship gate: each row accepted as good enough, or fixed,
+Scoping calls from EN1–EN7, gathered in one place. Ship gate: each row accepted as good enough, or fixed,
 before EN10/EN11 switch real screens onto this engine.
+
+**The uncertainty band (E3's P10/P50/P90, `EN3`) was built, back-tested (L7), and reverted rather than
+fixed** — synthetic fixtures can't validate a band honestly; that takes real pilot data, which doesn't
+exist yet. The engine is deterministic-only until it does: `afford()`/`safeToSpend()` read the
+day-by-day projection's own low point directly, with the essential floor as the cushion. Everywhere
+below that still reads "cautious low point" or "P10–P90 band" describes the pre-revert design, kept as
+the record of what was tried; it is not what's running.
 
 | # | Limitation | Where | Status |
 |---|---|---|---|
 | L1 | Need/Want is one hardcoded seed list, no per-category stored override | `behaviour.ts` `NEED_CATEGORY_SEED` | OK for now; real store is `EN10`/`EN11` work |
-| L2 | `afford()` has no goal-delay or 12-month-unfundable trigger | `assess.ts` `evaluate()` | Needs `EN6`/`goalForecast` — must land before the real switch |
+| L2 | `afford()` has no goal-delay trigger (a Want pushing a dated goal past its target) | `assess.ts` `evaluate()` | Needs `goalForecast`, not built. (The 12-month-unfundable half of this row is done — `EN6`) |
 | L3 | Over-budget check only covers explicit monthly budgets | `assess.ts` `overBudgetReason` | Minor, cheap follow-up |
 | L4 | One-time purchase's `earliestComfortableDate` never differs from today's answer (no income in that path) | `assess.ts` | Real gap — "can wait" is a headline feature |
 | L5 | Beta-binomial repayment has no "failure" case — can't tell "always settles slowly" from "settles fast" | `behaviour.ts` `repaymentModel` | Open. See idea below |
 | L6 | Variable income's inferred date only widens the horizon, never places a projection event | `projection.ts` | Settled (deliberate, not pending) |
+| L7 | **The projection consistently predicts less cash than reality** — confirmed via a back-test across 6 independent random seeds, every one of 72 test points missed the same direction | `behaviour.ts` (`everydayRate`/`dailySample`) or `projection.ts`'s bootstrap — not yet pinned to one line. Isolated to the everyday-spend rate/bootstrap specifically: an income-only test (no everyday spend) matched reality exactly | **Resolved by reverting the band outright (2026-09-26)**, not by fixing the bias — see the note above this table. The deterministic path this bias lived in is gone; nothing left to pin the fix to until a band is rebuilt on real pilot data |
 
 **Open idea for L5, not built:** weight the prior by how much history backs it (a friend with 1
 settlement shouldn't read as confidently as one with 20) — a decay factor (~0.5 floated, not decided)
 on how fast the posterior moves per settlement. Needs its own pass before it's a task.
+
+**L7, how to reproduce:** build a fixture with a recurring income rule (deep-anchored) plus matching
+real logged occurrences on the same schedule (a rule alone never re-materializes real rows, so "actual"
+needs both), and randomly-seeded (not `wobble()` — a first attempt with personas' deterministic
+`wobble()` sequence showed the same bias and couldn't rule out "not really random" as the cause) daily
+spend via `mulberry32`. Project from several past dates with `withIncome: true`, compare the predicted
+P10–P90 against the real cash at the horizon's end (`getCashPosition`'s new `asOfMs` param, `4ba8352`,
+makes this possible at all). Next step when picked back up: compare the bootstrap's raw sample mean
+against the deterministic path's trimmed-mean rate for the same snapshot — they diverged in the one
+data point pulled mid-investigation (47,050 vs 44,114 for the same window), which may or may not be
+where the bias actually enters.
 
 ## Sources
 

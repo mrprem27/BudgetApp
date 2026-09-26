@@ -6,7 +6,7 @@
  * `goalForecast()` are not yet built.
  */
 import type { AffordReason, AffordVerdict, FinanceSnapshot, KnownEvent, Projection, Purchase, AffordResult, TippingReceivable } from './types';
-import { projectKnown, projectBand, SIMULATION_PATHS } from './projection';
+import { projectKnown } from './projection';
 import { essentialFloor, defaultNecessity, repaymentModel, monthlyAffordability } from './behaviour';
 import { explain } from './explain';
 import { STS_HORIZON_DAYS } from '../safeToSpend';
@@ -112,12 +112,10 @@ function overBudgetReason(snapshot: FinanceSnapshot, purchase: Purchase): Afford
 }
 
 type Evaluation = {
-  cautiousLowPointAfter: number;
+  lowPointAfter: number;
   overBudget: AffordReason | null;
   unfundable: AffordReason | null;
   verdict: AffordVerdict;
-  bandP10: number;
-  bandP90: number;
 };
 
 /**
@@ -134,10 +132,11 @@ type Evaluation = {
 function evaluate(snapshot: FinanceSnapshot, purchase: Purchase, startMs: number, horizonDays: number, floor: number, withIncome: boolean): Evaluation {
   const horizonEndMs = snapshot.asOf + horizonDays * DAY_MS;
   const events = purchaseEvents(purchase, startMs, horizonEndMs);
-  const band = projectBand(snapshot, horizonDays, SIMULATION_PATHS, events, withIncome);
-  const cashShort = band.cautiousLowPoint < 0;
+  const projection = projectKnown(snapshot, horizonDays, events, withIncome);
+  const lowPointAfter = projection.lowPoint.amount;
+  const cashShort = lowPointAfter < 0;
   const overBudget = overBudgetReason(snapshot, purchase);
-  const belowFloor = !cashShort && band.cautiousLowPoint < floor;
+  const belowFloor = !cashShort && lowPointAfter < floor;
 
   const brokenMonth = withIncome ? monthlyAffordability(snapshot).find(m => m.unfundable) : undefined;
   const unfundable = brokenMonth
@@ -145,11 +144,7 @@ function evaluate(snapshot: FinanceSnapshot, purchase: Purchase, startMs: number
     : null;
 
   const verdict: AffordVerdict = (cashShort || unfundable) ? 'not-affordable' : (belowFloor || overBudget) ? 'tight' : 'comfortable';
-  const lastDay = band.days[band.days.length - 1];
-  return {
-    cautiousLowPointAfter: band.cautiousLowPoint, overBudget, unfundable, verdict,
-    bandP10: lastDay?.p10 ?? 0, bandP90: lastDay?.p90 ?? 0,
-  };
+  return { lowPointAfter, overBudget, unfundable, verdict };
 }
 
 /**
@@ -235,7 +230,6 @@ export function afford(
   const resolved: Purchase = { ...purchase, necessity: purchase.necessity ?? defaultNecessity(purchase.category) };
   const floor = essentialFloor(snapshot);
 
-  const beforeBand = projectBand(snapshot, horizonDays, SIMULATION_PATHS, [], withIncome);
   const beforeKnown = projectKnown(snapshot, horizonDays, [], withIncome);
 
   const horizonEndMs = snapshot.asOf + horizonDays * DAY_MS;
@@ -245,19 +239,19 @@ export function afford(
 
   const reasons: AffordReason[] = [];
   if (evalNow.verdict === 'not-affordable') {
-    if (evalNow.cautiousLowPointAfter < 0) {
-      reasons.push({ code: 'cash_short', amountPaise: Math.abs(evalNow.cautiousLowPointAfter), label: 'Would go below zero' });
+    if (evalNow.lowPointAfter < 0) {
+      reasons.push({ code: 'cash_short', amountPaise: Math.abs(evalNow.lowPointAfter), label: 'Would go below zero' });
     }
     if (evalNow.unfundable) reasons.push(evalNow.unfundable);
   } else if (evalNow.verdict === 'tight') {
-    if (evalNow.cautiousLowPointAfter < floor) {
-      reasons.push({ code: 'below_floor', amountPaise: floor - evalNow.cautiousLowPointAfter, label: 'Leaves less than a safe week of essentials' });
+    if (evalNow.lowPointAfter < floor) {
+      reasons.push({ code: 'below_floor', amountPaise: floor - evalNow.lowPointAfter, label: 'Leaves less than a safe week of essentials' });
     }
     if (evalNow.overBudget) reasons.push(evalNow.overBudget);
   }
   reasons.sort((a, b) => b.amountPaise - a.amountPaise);
 
-  const explanation = explain(snapshot, evalNow.bandP10, evalNow.bandP90, resolved.amountPaise);
+  const explanation = explain(snapshot);
 
   const result: AffordResult = {
     verdict: explanation.suppressVerdict ? null : evalNow.verdict,
@@ -267,8 +261,6 @@ export function afford(
       : headlineFor(evalNow.verdict, afterKnown.lowPoint.amount),
     lowPointBefore: { amount: beforeKnown.lowPoint.amount, date: beforeKnown.lowPoint.date },
     lowPointAfter: { amount: afterKnown.lowPoint.amount, date: afterKnown.lowPoint.date },
-    cautiousLowPointBefore: beforeBand.cautiousLowPoint,
-    cautiousLowPointAfter: evalNow.cautiousLowPointAfter,
     floor,
     reasons,
     largestComfortableAmount: largestComfortableAmount(snapshot, resolved, horizonDays, floor, withIncome),

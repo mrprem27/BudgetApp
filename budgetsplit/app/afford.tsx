@@ -213,7 +213,14 @@ export default function AffordScreen() {
           {(snap?.categories.length ?? 0) > 0 && (
             <View>
               <Text style={styles.label}>What's it for? <Text style={styles.labelHint}>(optional)</Text></Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow} keyboardShouldPersistTaps="handled">
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.chipRow}
+                keyboardShouldPersistTaps="handled"
+                directionalLockEnabled
+                nestedScrollEnabled
+              >
                 {snap!.categories.map(c => (
                   <CategoryChip
                     key={c.id}

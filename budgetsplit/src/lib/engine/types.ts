@@ -168,37 +168,6 @@ export type Projection = {
   lowPoint: { amount: number; date: number; events: string[] };
 };
 
-/** One day's simulated balance spread, P10/P50/P90 across all 500 paths (§4 E3). */
-export type PercentileDay = {
-  date: number;
-  p10: number;
-  p50: number;
-  p90: number;
-};
-
-/**
- * E3, second slice (`EN3`): the uncertainty band around the deterministic
- * path — 500 bootstrapped futures over the same known events, differing only
- * in the everyday-spend draw for each day.
- *
- * **Thin data** (`sample.length === 0`, matching `Behaviour.everydayRatePaise
- * === null`): no simulation runs. The band collapses onto the known path
- * exactly — `paths` is 0 and every day's P10/P50/P90 equal that day's
- * deterministic balance — and `cautiousLowPoint` equals the known path's own
- * low point (§4 E3 "Thin data").
- */
-export type UncertaintyBand = {
-  /** 500 normally, 0 when there wasn't enough history to simulate at all. */
-  paths: number;
-  days: PercentileDay[];
-  /** The 20th percentile of each path's own low point — "four in five
-   *  simulated futures do better than this" (§4 E3). */
-  cautiousLowPoint: number;
-  /** `Behaviour.essentialFloorPaise`, carried alongside the band because every
-   *  caller that reads one reads the other in the same breath (§4 E4). */
-  floor: number;
-};
-
 /**
  * E4, first slice (`EN4`): a prospective purchase (§4 E4, §5). `necessity`
  * left unset takes the Afford screen's own pre-fill (`behaviour.ts`'s
@@ -215,10 +184,8 @@ export type Purchase = {
   category?: string;
   necessity?: 'need' | 'want';
   when: 'now' | 'can-wait';
-  /** Absent = one-time. `EN6`'s 12-month sinking-fund view (yearly true
-   *  expenses, "unfundable" months) isn't built yet, so a yearly recurrence
-   *  here behaves like a one-time purchase within the 30-day safety horizon —
-   *  only `weekly`/`monthly` land more than once inside it. */
+  /** Absent = one-time. A yearly recurrence lands once inside the safety
+   *  horizon, like a one-time purchase — only `weekly`/`monthly` repeat in it. */
   recurrence?: 'weekly' | 'monthly' | 'yearly';
 };
 
@@ -256,12 +223,10 @@ export type AffordResult = {
   explanation: Explanation;
   headline: string;
   lowPointBefore: { amount: number; date: number };
+  /** The projected low point with the purchase — what the verdict is judged on
+   *  directly (< 0 → No, < floor → Tight). No more band, so no separate
+   *  "cautious" figure — this IS the number the verdict reads. */
   lowPointAfter: { amount: number; date: number };
-  /** `UncertaintyBand.cautiousLowPoint`, before and after the purchase — the
-   *  number the verdict is actually judged on, not the deterministic low point
-   *  above (which is what the headline quotes, matching `safeToSpendV2`). */
-  cautiousLowPointBefore: number;
-  cautiousLowPointAfter: number;
   floor: number;
   reasons: AffordReason[];
   /** The largest amount of this same kind of purchase (same category,
