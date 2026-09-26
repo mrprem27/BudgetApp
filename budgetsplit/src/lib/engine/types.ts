@@ -74,4 +74,55 @@ export type FinanceSnapshot = {
     amountPaise: number;
     isRecurringLinked: boolean;
   }>;
+
+  /**
+   * Already-logged future one-offs (not yet due), oldest first — disjoint from
+   * `recurring.rules`' occurrences, which are expanded rather than materialized
+   * ahead of now (the same basis `getSafeToSpend`'s `upcomingBills` uses).
+   */
+  futureOneOffs: Array<{
+    id: string;
+    date: number;
+    kind: 'expense' | 'income';
+    category: string;
+    amountPaise: number;
+  }>;
+};
+
+/**
+ * E2 — statistics over this person's own history (`SPEC-ENGINE.md` §4). This
+ * first slice (`EN2`) carries only the everyday rate; the rest of the table
+ * (income, seasonality, category, repayment, …) arrives with EN5/EN9.
+ */
+export type Behaviour = {
+  /** Trimmed-mean daily non-recurring expense (paise), or `null` below 30 days
+   *  of qualifying history — never a guess (§4 E2). */
+  everydayRatePaise: number | null;
+};
+
+/** One deterministic, dated claim on cash between now and the horizon (§4 E3). */
+export type KnownEvent = {
+  date: number;
+  /** Negative = money out, positive = money in. */
+  amountPaise: number;
+  label: string;
+};
+
+export type ProjectedDay = {
+  date: number;
+  /** Running balance at the END of this day, after its events and the everyday rate. */
+  balance: number;
+  events: KnownEvent[];
+};
+
+/**
+ * E3, first slice: the deterministic path only — known events plus the everyday
+ * rate, day by day to the horizon. No uncertainty band yet (`EN3`), so the "low
+ * point" here is exactly the path's minimum, not a percentile.
+ */
+export type Projection = {
+  horizonDays: number;
+  dailyRate: number | null;
+  days: ProjectedDay[];
+  lowPoint: { amount: number; date: number; events: string[] };
 };

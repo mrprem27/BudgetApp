@@ -189,7 +189,7 @@ right-slide push.
 
 ## 3. Screen index (S-XX)
 
-Absorbed from `AUDIT.md` §2 so the IDs cited elsewhere resolve here. 45 route files under
+Absorbed from `AUDIT.md` §2 so the IDs cited elsewhere resolve here. 46 route files under
 `app/`; expo-router registers each implicitly by filename.
 
 ### 3.1 Shell / layout (not user-visible screens)
@@ -262,6 +262,7 @@ Absorbed from `AUDIT.md` §2 so the IDs cited elsewhere resolve here. 45 route f
 | S-26 | **People / Friends** | `app/friends.tsx` | Name-only contacts, no accounts. Add, rename, avatar, per-person net, search. |
 | S-26a | **Person detail** | `app/person/[id].tsx` | Everything shared with one person, across every group: the net (with the per-group breakdown behind it, from `computeTransferScopes`), how often they settle up, and every transaction you are **both** on — payer or sharer, expenses, settlements and income alike. Settle from here. Reached from S-26 and from the Groups-tab balance chips; personal-group rows are excluded, since a personal settlement is deliberately one-sided. |
 | S-27 | **Storage (dev)** | `app/storage.tsx` | Hidden QA screen: attachment stats, clear attachments, **load demo data, erase all data**. Settings → version ×7. Kept separate from S-27a precisely so those two destructive actions are never one tap from Settings. |
+| SC-47 | **Money engine (dev)** | `app/dev/engine.tsx` | Old Safe-to-Spend beside the new engine's day-by-day projection (`EN2`, `SPEC-ENGINE.md`), one card per fixture persona plus this device's own ledger — matching figures read "Matches", a mid-horizon bill reads "Differs" with the day and amount named below it. Read-only. Reached from S-27's TESTING section. |
 | S-27a | **Storage** | `app/settings/storage.tsx` | User-facing: free space on the device (hero), what BudgetSplit uses broken out (receipts / cached exports / pdf.js reader / profile photos), and two safe reclaim actions — **Clear cached exports** and **Delete all receipt photos**. Nothing here can lose a transaction. Reached from Settings → Data & Help, and from the low-storage banner on Home. |
 | S-35 | **Voice entry** | `app/settings/voice.tsx` | Sets up hands-free capture: what to say, which words route to a split, and the one-time Siri-shortcut setup (one-tap iCloud install when `VOICE_SHORTCUT_URL` is set, otherwise the four manual Shortcuts actions). Creates the `voice-inbox` folder the shortcut writes into, and shows how many captures are waiting. Gated on `voiceEntry`. |
 | S-28 | **Audit log** | `app/history.tsx` | Paged (30/page) date-grouped log of created/updated/deleted/settled/paused/resumed/ended. `?groupId=` scopes it. |

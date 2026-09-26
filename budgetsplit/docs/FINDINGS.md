@@ -661,7 +661,7 @@ OV-06 · Categories are referenced by NAME, not by id            [split-storage]
               is a product decision, not a schema one.  → DQ-16
   Verdict. NEEDS-DECISION.
 
-OV-10 · backOr is used in 6 of 45 route files            [path-duplication]
+OV-10 · backOr is used in 6 of 46 route files            [path-duplication]
   lib/nav.ts documents exactly the cold-start-empty-stack failure it fixes. ~40
   bare router.back() calls remain. Safe today only because nothing deep-links into
   those screens — and FL-44 adds deep links.

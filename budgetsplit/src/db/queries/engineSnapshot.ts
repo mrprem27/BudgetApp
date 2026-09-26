@@ -14,6 +14,9 @@ import { getGoalFundingStatus } from './spendPower';
 
 const DAY_MS = 86_400_000;
 const HISTORY_MONTHS = 24;
+/** Forward window for already-logged future one-offs — wide enough to cover the
+ *  12-month commitment horizon (§3), not just the 30-day safety one. */
+const FUTURE_DAYS = 400;
 
 const EMPTY: FinanceSnapshot = {
   asOf: 0,
@@ -25,7 +28,17 @@ const EMPTY: FinanceSnapshot = {
   receivables: [],
   budgets: [],
   history: [],
+  futureOneOffs: [],
 };
+
+/**
+ * My amount on one transaction — income reads `payments` (it is never split,
+ * AGENTS.md §12: `myShareOf`, which reads `shares`, would silently read 0),
+ * everything else reads `shares`.
+ */
+function myAmount(t: { kind: string; payments: Array<{ personId: string; amount: number }>; shares: Array<{ personId: string; amount: number }> }, meId: string): number {
+  return t.kind === 'income' ? (t.payments.find(p => p.personId === meId)?.amount ?? 0) : myShareOf(t, meId);
+}
 
 /**
  * `money.card_due_day` — new, optional, asked once (`SPEC-ENGINE.md` §4 E1,
@@ -63,12 +76,15 @@ export async function getFinanceSnapshot(db: SQLite.SQLiteDatabase, nowMs: numbe
   ]);
   const money = computeTotalMoney(pos, profile);
 
-  const [recurRulesByGroup, goals, savedByGoal, funding, history] = await Promise.all([
+  const [recurRulesByGroup, goals, savedByGoal, funding, history, future] = await Promise.all([
     Promise.all(groups.map(g => getRecurringForGroup(db, g.id))),
     getGoals(db),
     getGoalSavedMap(db),
     getGoalFundingStatus(db, nowMs),
     getTransactionsInRange(db, null, nowMs - HISTORY_MONTHS * 30 * DAY_MS, nowMs),
+    // Already-logged future one-offs — disjoint from `recurring.rules`'
+    // occurrences, which are expanded, never materialized ahead of now.
+    getTransactionsInRange(db, null, nowMs, nowMs + FUTURE_DAYS * DAY_MS),
   ]);
   const rules = recurRulesByGroup.flat();
   const skipsBySeries = await getSkipsMap(db, rules.map(r => r.id));
@@ -98,11 +114,14 @@ export async function getFinanceSnapshot(db: SQLite.SQLiteDatabase, nowMs: numbe
       date: t.date,
       kind: t.kind,
       category: t.category,
-      // Income is never split (AGENTS.md §12): the full amount lands in `payments`,
-      // never `shares`, so `myShareOf` (which reads `shares`) would silently read 0.
-      amountPaise: t.kind === 'income' ? (t.payments.find(p => p.personId === me.id)?.amount ?? 0) : myShareOf(t, me.id),
+      amountPaise: myAmount(t, me.id),
       isRecurringLinked: t.parent_recur_id != null,
     }))
+    .sort((a, b) => a.date - b.date);
+
+  const futureOneOffs = future
+    .filter((t): t is typeof t & { kind: 'expense' | 'income' } => t.kind === 'expense' || t.kind === 'income')
+    .map(t => ({ id: t.id, date: t.date, kind: t.kind, category: t.category, amountPaise: myAmount(t, me.id) }))
     .sort((a, b) => a.date - b.date);
 
   return {
@@ -115,5 +134,6 @@ export async function getFinanceSnapshot(db: SQLite.SQLiteDatabase, nowMs: numbe
     receivables,
     budgets,
     history: historyRows,
+    futureOneOffs,
   };
 }

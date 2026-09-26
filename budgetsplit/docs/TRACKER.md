@@ -69,7 +69,7 @@ is defined in two places.
 | `OV-22` | Six vocabularies over daily/weekly/monthly/yearly | `OPEN` |
 | `OV-11` | A group has three end states that get conflated | `OPEN` |
 | `OV-06` | Categories are referenced by NAME, not by id | `DECIDE` |
-| `OV-10` | backOr is used in 6 of 45 route files | `DECIDE` |
+| `OV-10` | backOr is used in 6 of 46 route files | `DECIDE` |
 | `OV-14` | E-50 is recomputed on every read, with no memo boundary | `DECIDE` |
 | `OV-15` | /personal is a stack route pretending to be a tab | `DECIDE` |
 | `OV-19` | category_budget.period AND .cadence | `DECIDE` |

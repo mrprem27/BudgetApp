@@ -1928,7 +1928,7 @@ that the server could not read.
 
 `Last verified: 2026-09-01 · Guarded by: docCoverage.test.ts, deadRouteRef.test.ts, screenIdMap.test.ts, entryPointCount.test.ts`
 
-45 routes. `SC-xx` numbers are the existing `S-xx` numbers — the same screen, the same digits, so old
+46 routes. `SC-xx` numbers are the existing `S-xx` numbers — the same screen, the same digits, so old
 citations still resolve (§12). `SC-42` and `SC-43` are new: `/assets` and `/settings/sync` had no ID
 and no behaviour section anywhere before this document. `SC-44`, the sync log, was retired in S22
 with the sync it logged; its number is not reused.
@@ -2039,6 +2039,7 @@ taps are listed separately below and are not in the count.
 |---|---|---|---|
 | `SC-24` | `/features` | 1 | 16 flags + 3 non-flag prefs |
 | `SC-27` | `/storage` | 1 | Dev only: demo data, **erase all**. Live in release (`DQ-21`) |
+| `SC-47` | `/dev/engine` | 1 | Dev only, from `SC-27`: old Safe-to-Spend beside the new engine's projection, per persona (`EN2`, `SPEC-ENGINE.md`). Read-only — never writes to the signed-in device's ledger |
 | `SC-27a` | `/settings/storage` | 5 | Safe. Nothing here can lose a transaction |
 | `SC-29` | `/help` | 1 | A third collapsible pattern (`DQ-17`) |
 | `SC-30` | `/upcoming` | 1 | Read-only "what's coming". Renamed 2026-09-24 from the old reminders path (`SPEC-2026-09-FEEDBACK.md` §6) |
@@ -2085,6 +2086,7 @@ open. The walkthrough shows these instead of the paths.
 | `SC-26` | **Settings → Friends**, or **Groups** → the Friends icon at the top right (2026-09-24, `SPEC-2026-09-FEEDBACK.md` §5) |
 | `SC-26a` | **Friends** → tap someone, or **Groups** → a balance chip |
 | `SC-27` | **Settings** → tap the version number **seven times** |
+| `SC-47` | `SC-27` → **Money engine comparison** |
 | `SC-27a` | **Settings → Storage**, or Home's low-disk banner |
 | `SC-28` | **Settings → Activity**, or a group → **⋯ → History** |
 | `SC-29` | **Settings → Help** |
@@ -2140,7 +2142,7 @@ nowhere to go.
 
 `lib/nav.ts` exports `backOr(router, fallback)` — `back()` if there is a stack, otherwise
 `replace(fallback)`. It exists because a deep-linked or cold-started screen has an empty stack and a
-dead ✕. **It is used in 6 of 45 route files**; the other ~40 call bare `router.back()` (`OV-10`).
+dead ✕. **It is used in 6 of 46 route files**; the other ~40 call bare `router.back()` (`OV-10`).
 Today that is only safe because nothing deep-links into those screens.
 
 Four sites were pushing a *tab* route onto the stack, which stacks a duplicate tab instead of

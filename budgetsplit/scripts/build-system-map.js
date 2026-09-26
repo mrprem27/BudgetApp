@@ -352,7 +352,7 @@ const AREAS = [
     blurb: 'First run, settings, feature switches, the lock screen, storage and the history log — plus the navigation shell everything else sits inside.',
     ent: ['E-13','E-80','E-81'],
     fl:  ['FL-01','FL-02','FL-03','FL-50','FL-51','FL-54'],
-    sc:  ['SC-01','SC-02','SC-06','SC-24','SC-27','SC-27a','SC-28','SC-29'],
+    sc:  ['SC-01','SC-02','SC-06','SC-24','SC-27','SC-27a','SC-28','SC-29','SC-47'],
     fe:  ['FE-39','FE-41','FE-61','FE-62','FE-63','FE-64','FE-65','FE-66','FE-67','FE-68','FE-69','FE-70'],
     ov:  ['OV-09','OV-10','OV-13','OV-15','OV-16','OV-17','OV-23','OV-25','OV-26','OV-29','OV-31','OV-32'],
     dq:  ['DQ-01','DQ-03','DQ-06','DQ-17','DQ-19','DQ-21','DQ-23','DQ-80','DQ-88','DQ-101','DQ-102'],

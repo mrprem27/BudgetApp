@@ -143,7 +143,8 @@ async function thinData(db: SQLite.SQLiteDatabase) {
     groupId: g, kind: 'income', entryMode: 'quick', date: PERSONA_NOW - 20 * DAY_MS, category: 'Salary',
     payments: [{ personId: ME_ID, amount: R(40_000) }], shares: [],
   });
-  await everydaySpend(db, g, PERSONA_NOW - 55 * DAY_MS, PERSONA_NOW, R(400), 'Food');
+  // Under E2's 30-day everyday-spend minimum on purpose — "thin" means thin.
+  await everydaySpend(db, g, PERSONA_NOW - 25 * DAY_MS, PERSONA_NOW, R(400), 'Food');
 }
 
 /** 14 months of history with one Diwali-month spending spike (§7). */
