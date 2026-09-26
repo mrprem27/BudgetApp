@@ -7,6 +7,8 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getDate, getDaysInMonth } from 'date-fns';
 import { colors, type, space, radius, layout, alpha } from '../../src/theme';
+import { formatCompact } from '../../src/lib/money';
+import { shortDate } from '../../src/lib/dateFormat';
 import { useStore } from '../../src/store';
 
 import { getAllGroups } from '../../src/db/queries/groups';
@@ -324,6 +326,20 @@ export default function DashboardScreen() {
               </>
             ) : (
             <>
+            {/* `EN12` — the engine's one signal: a dip below a week of essentials
+                within 14 days, not just "below zero" (that's the verdict in
+                Afford, this is a heads-up). Silent below the floor's own
+                30-day minimum — `lowPointWarning` returns null, not a guess. */}
+            {sts?.warning && !hideAmounts && (
+              <Banner
+                icon="alert-triangle"
+                tone={colors.healthAmber}
+                text={`Below a week of essentials on ${shortDate(sts.warning.date)} — ${sts.warning.label} ${formatCompact(Math.abs(sts.warning.amountPaise))}`}
+                onPress={() => setShowSts(true)}
+                inset={false}
+              />
+            )}
+
             {/* Horizon-scoped, so it sits *outside* the card the period pills
                 drive — see StsStrip's header for why it stopped being the hero. */}
             <StsStrip sts={sts} onPress={() => setShowSts(true)} obfuscate={hideAmounts} />

@@ -9,6 +9,7 @@ import {
 } from '../../lib/safeToSpend';
 import { getFinanceSnapshot } from './engineSnapshot';
 import { safeToSpendV2 } from '../../lib/engine/assess';
+import { lowPointWarning } from '../../lib/engine/signals';
 import { DAILY_SPEND_SQL, bucketsFromDailyRows, type DailySpendRow } from './spendRateQuery';
 import { expandUpcoming } from '../../lib/upcoming';
 import { myShareOf } from '../../lib/splitMath';
@@ -173,6 +174,7 @@ export async function getSafeToSpendV2(db: SQLite.SQLiteDatabase, nowMs: number 
     dailyRate: v2.dailyRate,
     untilMs,
     events: v2.projection.days.flatMap(d => d.events),
+    warning: lowPointWarning(snapshot),
   };
 }
 

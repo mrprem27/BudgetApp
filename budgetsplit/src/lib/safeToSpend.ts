@@ -48,6 +48,7 @@
  */
 
 import type { KnownEvent } from './engine/types';
+import type { LowPointWarning } from './engine/signals';
 
 export type SafeToSpendParts = {
   /** Liquid cash right now (paise). */
@@ -87,6 +88,8 @@ export type SafeToSpendBreakdown = SafeToSpend & {
   untilMs: number;
   /** Every event on the projection, the whole horizon — the rows each line taps through to. */
   events: KnownEvent[];
+  /** `EN12` — a dip below the essential floor within 14 days, `null` otherwise. */
+  warning: LowPointWarning | null;
 };
 
 /** My-share bills in the next `days` days, off the same projection — the old

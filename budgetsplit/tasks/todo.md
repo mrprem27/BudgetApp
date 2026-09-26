@@ -155,7 +155,10 @@ Old F1 (cushion patch) dropped: the engine removes the threshold it would have f
   - Gates: `tsc` clean app+server; full suite 215/215, 2703/2703
 - [ ] **EN11 · Afford on the engine, "number first" (M)** — decided 2026-09-27 · headline + verdict, ≤ 2 reasons, most-comfortable amount, can-wait date, breakdown behind "How we got this"; Need/Want chip removed; Add hint on `afford()`; `lib/afford.ts` deleted · Accept: guard no `evaluateAfford` caller; property Not affordable ⟺ amount > Safe to spend
   - Earlier attempt 2026-09-27 stopped because the old layout was built on fields the engine doesn't have — resolved by the "number first" pick
-- [ ] **EN12 · Low-point warning (S)** — the only signal kept (spec §2 cuts the rest) · `lib/engine/signals.ts` + one Home line · Accept: fires on a dipping persona, silent otherwise and below the rate's minimum
+- [x] **EN12 · Low-point warning (S)** — done 2026-09-27 (the only signal kept, spec §2 cuts the rest)
+  - `lib/engine/signals.ts` (new): `lowPointWarning` — a dip below the essential floor within 14 days, naming the day and the single biggest event that day (not the cumulative path). `null` below the floor's own cold-start minimum, silent past 14 days. Wired into `getSafeToSpendV2`'s `warning` field (same snapshot, no extra query) and rendered as one `Banner` on Home, above `StsStrip`, opening the sheet on tap
+  - Accept: `engineSignals.test.ts` — silent cold-start, silent when comfortably above floor, fires with the right date/label/sign on a real dip, silent past the 14-day window, runs clean on all 5 personas; revert-proven
+  - Gates: `tsc` clean app+server; full suite 216/216, 2712/2712
 - [ ] **B-103 · StS sheet you can check (M)** — every line taps through; "Cash last confirmed · Update"; thin history said plainly · Accept: each line's rows sum to the line
 - [ ] **CP3b** — gates, commit, push after each switch; device look at Home, Afford and Insights after EN11
 
