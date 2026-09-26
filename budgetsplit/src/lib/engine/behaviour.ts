@@ -3,8 +3,11 @@
  *
  * First slice (`EN2`): the everyday rate only. Pure — no React, no database.
  */
-import type { FinanceSnapshot, Behaviour } from './types';
+import type { FinanceSnapshot, Behaviour, IncomeModel, RepaymentModel } from './types';
 import { dailySpendTotals, typicalDailySpend, EVERYDAY_WINDOW_DAYS, EVERYDAY_MIN_DAYS } from '../safeToSpend';
+import { nextUnskippedOccurrence, materializeInstances } from '../recurrence';
+
+const DAY_MS = 86_400_000;
 
 /**
  * `dailySpendTotals` wants the raw shape it already knows how to filter
@@ -101,4 +104,143 @@ export function essentialFloor(snapshot: FinanceSnapshot): number {
 
 export function behaviourOf(snapshot: FinanceSnapshot): Behaviour {
   return { everydayRatePaise: everydayRate(snapshot), essentialFloorPaise: essentialFloor(snapshot) };
+}
+
+/** Minimum months of income *rows* (no rule) to compute a consistency reading from — the "3 months of income rows" half of §4 E2's own minimum. */
+const INCOME_HISTORY_MIN_MONTHS = 3;
+/** Trailing months of income considered when computing the coefficient of variation. */
+const INCOME_HISTORY_WINDOW_MONTHS = 12;
+
+function monthKey(dateMs: number): string {
+  const d = new Date(dateMs);
+  return `${d.getUTCFullYear()}-${d.getUTCMonth()}`;
+}
+
+/** Coefficient of variation (stdev / mean) — `null` below 2 data points or a non-positive mean, where "spread relative to the average" is meaningless. */
+function coefficientOfVariation(values: number[]): number | null {
+  if (values.length < 2) return null;
+  const mean = values.reduce((s, v) => s + v, 0) / values.length;
+  if (mean <= 0) return null;
+  const variance = values.reduce((s, v) => s + (v - mean) ** 2, 0) / values.length;
+  return Math.sqrt(variance) / mean;
+}
+
+/** My amount on an income rule/row: income reads `payments` only, never split (AGENTS.md §12, `myAmount` in `engineSnapshot.ts`). */
+function myIncomeAmount(row: { payments: ReadonlyArray<{ personId: string; amount: number }> }, meId: string): number {
+  return row.payments.find(p => p.personId === meId)?.amount ?? 0;
+}
+
+/**
+ * E2's income model (§4): an active recurring income rule is trusted directly
+ * (its own date and amount); absent one, consistency comes from the
+ * coefficient of variation of trailing monthly income totals, and — only when
+ * that reads `variable` — a next date is inferred from the median gap between
+ * recent income rows (the closest read of "the 20th percentile of recent
+ * amounts... [on] the expected date" §4 E3 can give without a rule to name an
+ * actual date). Below both minimums (no rule, fewer than
+ * `INCOME_HISTORY_MIN_MONTHS` months of rows): `irregular` with nothing
+ * knowable, matching every other E2 model's "return null, never guess" rule.
+ */
+export function incomeModel(snapshot: FinanceSnapshot): IncomeModel {
+  const rule = snapshot.recurring.rules.find(
+    r => r.kind === 'income' && r.recur_freq && !r.pendingApproval && (!r.recur_state || r.recur_state === 'active'),
+  );
+
+  const incomeRows = snapshot.history.filter(h => h.kind === 'income').sort((a, b) => a.date - b.date);
+  const fromMs = snapshot.asOf - INCOME_HISTORY_WINDOW_MONTHS * 30 * DAY_MS;
+  const byMonth = new Map<string, number>();
+  for (const h of incomeRows) {
+    if (h.date < fromMs) continue;
+    byMonth.set(monthKey(h.date), (byMonth.get(monthKey(h.date)) ?? 0) + h.amountPaise);
+  }
+  const monthlyTotals = [...byMonth.values()];
+  const cv = coefficientOfVariation(monthlyTotals);
+  const hasHistory = monthlyTotals.length >= INCOME_HISTORY_MIN_MONTHS;
+
+  const last3 = incomeRows.slice(-3).map(h => h.amountPaise);
+  const medianRecentPaise = last3.length > 0 ? median(last3) : null;
+  // §4 E3: variable income's known-event amount is the 20th percentile of
+  // recent amounts, a conservative read — never the median above, which is
+  // display-only ("what do you typically get paid").
+  const recentSorted = [...last3].sort((a, b) => a - b);
+  const p20RecentPaise = recentSorted.length > 0
+    ? recentSorted[Math.max(0, Math.min(recentSorted.length - 1, Math.round(0.2 * (recentSorted.length - 1))))]
+    : null;
+
+  if (!rule && !hasHistory) {
+    return { consistency: 'irregular', nextDate: null, eventAmountPaise: null, medianRecentPaise };
+  }
+
+  const consistency = rule && cv == null
+    ? 'regular' // a rule with too little history yet to compute a CV: trust the rule itself.
+    : cv == null ? 'irregular' : cv < 0.15 ? 'regular' : cv < 0.5 ? 'variable' : 'irregular';
+
+  if (rule) {
+    const skips = new Set(snapshot.recurring.skips[rule.id] ?? []);
+    return {
+      consistency,
+      nextDate: nextUnskippedOccurrence(rule, snapshot.asOf, skips),
+      eventAmountPaise: myIncomeAmount(rule, snapshot.meId),
+      medianRecentPaise,
+    };
+  }
+
+  if (consistency === 'irregular' || incomeRows.length < 2) {
+    return { consistency, nextDate: null, eventAmountPaise: null, medianRecentPaise };
+  }
+
+  // No rule, but a `variable` reading: infer a next date from the median gap
+  // between the last few income rows (own history, not a promise) — the
+  // closest this slice gets to "the expected date" without one being written
+  // down anywhere.
+  const recent = incomeRows.slice(-4);
+  const gaps: number[] = [];
+  for (let i = 1; i < recent.length; i++) gaps.push(recent[i].date - recent[i - 1].date);
+  const gapDays = gaps.length > 0 ? median(gaps) / DAY_MS : null;
+  const lastDate = incomeRows[incomeRows.length - 1].date;
+  const inferredNext = gapDays != null ? lastDate + Math.round(gapDays) * DAY_MS : null;
+
+  return {
+    consistency,
+    nextDate: inferredNext != null && inferredNext > snapshot.asOf ? inferredNext : null,
+    eventAmountPaise: p20RecentPaise,
+    medianRecentPaise,
+  };
+}
+
+/** §4 E3: irregular income gets a 60-day safety horizon instead of 30 ("freelancer 60 d") — there is no known next payday to size the horizon to, so the floor itself is wider. */
+export const IRREGULAR_MIN_HORIZON_DAYS = 60;
+
+/**
+ * §4 E2's repayment-likelihood model, one friend at a time: Beta-binomial,
+ * prior Beta(1, 2) (≈33% before any history — cautious, not neutral). Every
+ * past settlement with this person counts as a success; this app's data model
+ * has no representation of a debt that was *never* repaid (there is no
+ * "forgiven"/written-off state), so there is nothing to count as a failure —
+ * the honest limit that follows is that "always eventually settles, just
+ * slowly" and "reliably settles fast" read identically here. Telling them
+ * apart needs each settlement paired with the debt date it closes, which
+ * isn't part of `FinanceSnapshot.receivables` (only settlement dates/amounts
+ * are) — a real, scoped-out follow-up, not silently assumed away.
+ *
+ * `delayDays` — "the median days-to-settle" (§4 E2) — is approximated as the
+ * median gap between this person's own past settlements (a typical cycle
+ * length), for the same reason: no paired debt date to measure the true delay
+ * from. Default 30, per spec, below 2 settlements.
+ *
+ * **Never synced, never shown as a score** (§4 E2) — this function is pure,
+ * reads only from an in-memory `FinanceSnapshot`, and nothing under
+ * `db/queries/`, `lib/sync/` or `server/` may import it
+ * (`repaymentNeverSyncs.test.ts` is the guard).
+ */
+export function repaymentModel(snapshot: FinanceSnapshot, personId: string): RepaymentModel {
+  const settlements = snapshot.receivables.find(r => r.personId === personId)?.settlements ?? [];
+  const successes = settlements.length;
+  const probability = (1 + successes) / (1 + 2 + successes);
+
+  if (settlements.length < 2) return { probability, delayDays: 30 };
+  const sorted = [...settlements].sort((a, b) => a.date - b.date);
+  const gapsDays: number[] = [];
+  for (let i = 1; i < sorted.length; i++) gapsDays.push((sorted[i].date - sorted[i - 1].date) / DAY_MS);
+  return { probability, delayDays: Math.max(1, Math.round(median(gapsDays))) };
 }

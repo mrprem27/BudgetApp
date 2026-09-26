@@ -11,6 +11,7 @@ import { getTransactionsInRange, getSharedActivityWith } from './transactions';
 import { getMyExposure } from './balances';
 import { getMyGlobalBudgetRows } from './categoryBudgets';
 import { getGoalFundingStatus } from './spendPower';
+import { settlementView } from '../../lib/settlementView';
 
 const DAY_MS = 86_400_000;
 const HISTORY_MONTHS = 24;
@@ -94,17 +95,28 @@ export async function getFinanceSnapshot(db: SQLite.SQLiteDatabase, nowMs: numbe
   const skips: Record<string, number[]> = {};
   for (const [seriesId, dates] of skipsBySeries) skips[seriesId] = [...dates].sort((a, b) => a - b);
 
-  // Settlement dates per person I have a receivable or payable with — the raw
-  // material for E2's repayment model. `getSharedActivityWith` already excludes
-  // the Personal group and unaccepted rows the same way the person screen does.
+  // Past person-to-person settlements with each person I have a receivable or
+  // payable with — the raw material for E2's repayment model (`EN5`).
+  // `getSharedActivityWith` already excludes the Personal group and unaccepted
+  // rows the same way the person screen does. `settlementView(...).kind ===
+  // 'transfer'` is what excludes an asset movement or a card repayment —
+  // neither settles a debt between two people, so neither bears on either
+  // person's repayment behaviour. Asking the presenter (rather than reading
+  // `asset_id` here directly) is what `settlementSurfaces.test.ts` enforces:
+  // classifying a settlement is `settlementView.ts`'s job alone.
   const withExposure = exposure.perPerson.filter(p => p.net !== 0);
   const receivables = await Promise.all(withExposure.map(async p => {
     const activity = await getSharedActivityWith(db, me.id, p.personId);
-    const settlementDates = activity
-      .filter(t => t.kind === 'settlement' && !t.pendingApproval)
-      .map(t => t.date)
-      .sort((a, b) => b - a);
-    return { personId: p.personId, settlementDates };
+    const settlements = activity
+      .filter(t => t.kind === 'settlement' && !t.pendingApproval && settlementView(t).kind === 'transfer')
+      .map(t => ({
+        date: t.date,
+        amountPaise: t.payments.length > 0
+          ? t.payments.reduce((s, pay) => s + pay.amount, 0)
+          : t.shares.reduce((s, sh) => s + sh.amount, 0),
+      }))
+      .sort((a, b) => b.date - a.date);
+    return { personId: p.personId, settlements };
   }));
 
   const historyRows = history

@@ -50,12 +50,12 @@ export type FinanceSnapshot = {
   exposure: MyExposure;
 
   /**
-   * Per person I have a receivable or payable with: their past settlement dates
-   * (approved only, most recent first) — the raw material E2's repayment model
-   * (Beta-binomial, §4 E2) is built from. No likelihood is computed here; E1 only
-   * gathers facts.
+   * Per person I have a receivable or payable with: their past person-to-person
+   * settlements (approved only, most recent first) — the raw material E2's
+   * repayment model (Beta-binomial, §4 E2) is built from. No likelihood is
+   * computed here; E1 only gathers facts.
    */
-  receivables: Array<{ personId: string; settlementDates: number[] }>;
+  receivables: Array<{ personId: string; settlements: Array<{ date: number; amountPaise: number }> }>;
 
   /** My Budget — the personal category lines I set for myself, resolved. */
   budgets: CategoryBudget[];
@@ -101,6 +101,28 @@ export type Behaviour = {
   /** One week of essential (Need-category) spend — the floor E3 protects
    *  (§4 E3). 0 below its own minimum ("cold start"), never a guess either. */
   essentialFloorPaise: number;
+};
+
+/** Income's own consistency reading (§4 E2): drives both the known-event shape (E3) and the safety horizon (`EN5`'s "payday horizon"). */
+export type IncomeConsistency = 'regular' | 'variable' | 'irregular';
+
+/**
+ * E2's income model (`EN5`). `nextDate`/`eventAmountPaise` are what E3's known
+ * event actually uses (the rule's own amount when regular, a conservative P20
+ * of recent amounts when variable) — `medianRecentPaise` is display-only
+ * ("what you typically get paid"), never fed into the projection.
+ */
+export type IncomeModel = {
+  consistency: IncomeConsistency;
+  nextDate: number | null;
+  eventAmountPaise: number | null;
+  medianRecentPaise: number | null;
+};
+
+/** E2's per-friend repayment-likelihood model (`EN5`, Beta-binomial, §4 E2). Never synced, never shown as a score. */
+export type RepaymentModel = {
+  probability: number;
+  delayDays: number;
 };
 
 /** One deterministic, dated claim on cash between now and the horizon (§4 E3). */
@@ -194,6 +216,14 @@ export type AffordReason = {
 
 export type AffordVerdict = 'not-affordable' | 'tight' | 'comfortable';
 
+/** §4 E4: "receivables called out when they tip the answer" (`EN5`). Named as a conditional, not a promise — `probability`/`delayDays` are `RepaymentModel`'s own numbers, never shown as a bare score (§4 E2). */
+export type TippingReceivable = {
+  personId: string;
+  amountPaise: number;
+  probability: number;
+  delayDays: number;
+};
+
 export type AffordResult = {
   verdict: AffordVerdict;
   headline: string;
@@ -212,4 +242,7 @@ export type AffordResult = {
   /** Set only for `when: 'can-wait'`, and only when today's verdict isn't
    *  already Comfortable. `undefined` if no day within the horizon works. */
   earliestComfortableDate?: number;
+  /** Always `[]` unless `withIncome` is set — receivables aren't in the
+   *  projection at all otherwise. */
+  tippingReceivables: TippingReceivable[];
 };

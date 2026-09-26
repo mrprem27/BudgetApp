@@ -1,20 +1,26 @@
 /**
  * E3 — the balance, day by day (`SPEC-ENGINE.md` §4). Pure.
  *
- * First slice (`EN2`): the deterministic path only — known events plus the
- * everyday rate, over a fixed 30-day horizon. No uncertainty band yet (that's
- * `EN3`); no income or receivables as events yet (that's `EN5` — matching
- * today's `upcomingBills`, which is bills only, on purpose: crediting a payday
- * that hasn't happened as money "safe to spend today" is a different, larger
- * claim than this slice makes, and it's the one this task's own accept
- * criterion is written against — every persona in `enginePersonas.ts` has a
- * payday inside 30 days, so income counting here would make it impossible to
- * satisfy).
+ * `EN2` built the deterministic path over a fixed 30-day horizon, with no
+ * income or receivables as events — crediting a payday that hasn't happened
+ * as money "safe to spend today" is a bigger claim than that slice made, and
+ * every persona in `enginePersonas.ts` has a payday inside 30 days, which made
+ * counting it there impossible to satisfy against EN2's own accept criterion.
+ * `EN3` added the uncertainty band. `EN5` (this slice) adds both income and
+ * receivables — but **opt-in**, behind `withIncome`, defaulting `false`:
+ * `safeToSpendV2`/`afford()` (`EN2`/`EN4`) and their whole test suite are
+ * built and locked against the income-less numbers, and changing the DEFAULT
+ * would silently change what they compute. A future task (`EN10`/`EN11`,
+ * "switch Safe-to-Spend"/"switch Afford") is where a real screen starts
+ * passing `withIncome: true`; until then it's an explicit, tested opt-in.
  */
 import type { FinanceSnapshot, KnownEvent, PercentileDay, Projection, UncertaintyBand } from './types';
 import { expandUpcoming } from '../upcoming';
 import { STS_HORIZON_DAYS } from '../safeToSpend';
-import { dailySample, essentialFloor, everydayRate } from './behaviour';
+import { materializeInstances } from '../recurrence';
+import {
+  dailySample, essentialFloor, everydayRate, incomeModel, repaymentModel, IRREGULAR_MIN_HORIZON_DAYS,
+} from './behaviour';
 import { hashSnapshot, mulberry32 } from './rng';
 
 const DAY_MS = 86_400_000;
@@ -22,6 +28,51 @@ const DAY_MS = 86_400_000;
 export const SIMULATION_PATHS = 500;
 /** §4 E2: "a 7-day block sample for the bootstrap, keeping the weekday rhythm." */
 const BLOCK_DAYS = 7;
+
+/**
+ * The safety horizon, sized to the next payday rather than a flat 30 days
+ * (`EN5`, "horizon to next income"): at least 30 days regardless, extended to
+ * cover a known/inferred payday further out, and at least
+ * `IRREGULAR_MIN_HORIZON_DAYS` (60) when income is `irregular` — there is no
+ * next date to size to, so the floor widens instead ("freelancer 60 d").
+ * Callers opt into this explicitly (see the file header) rather than it
+ * becoming every function's default.
+ */
+export function horizonDaysFor(snapshot: FinanceSnapshot): number {
+  const income = incomeModel(snapshot);
+  if (income.consistency === 'irregular') return Math.max(STS_HORIZON_DAYS, IRREGULAR_MIN_HORIZON_DAYS);
+  if (income.nextDate == null) return STS_HORIZON_DAYS;
+  const daysUntil = Math.ceil((income.nextDate - snapshot.asOf) / DAY_MS);
+  return Math.max(STS_HORIZON_DAYS, daysUntil);
+}
+
+/**
+ * Income's own known events (§4 E3): every occurrence of an active recurring
+ * income rule inside the horizon, my-share amount; absent a rule but a
+ * `variable` reading, one event at the inferred next date, at the
+ * conservative P20 amount `incomeModel` already computed. `irregular`
+ * contributes nothing, matching §4 E3's own rule ("nothing, unless a rule
+ * exists") — and a rule, if one exists, is exactly what makes `incomeModel`
+ * read `regular` instead.
+ */
+function incomeEvents(snapshot: FinanceSnapshot, horizonEndMs: number): KnownEvent[] {
+  const income = incomeModel(snapshot);
+  if (income.consistency === 'irregular') return [];
+
+  const rule = snapshot.recurring.rules.find(
+    r => r.kind === 'income' && r.recur_freq && !r.pendingApproval && (!r.recur_state || r.recur_state === 'active'),
+  );
+  if (rule) {
+    const skips = new Set(snapshot.recurring.skips[rule.id] ?? []);
+    const amount = rule.payments.find(p => p.personId === snapshot.meId)?.amount ?? 0;
+    return materializeInstances(rule, snapshot.asOf, horizonEndMs, skips)
+      .map(inst => ({ date: inst.date, amountPaise: amount, label: 'Income' }));
+  }
+  if (income.nextDate != null && income.nextDate <= horizonEndMs && income.eventAmountPaise != null) {
+    return [{ date: income.nextDate, amountPaise: income.eventAmountPaise, label: 'Income' }];
+  }
+  return [];
+}
 
 function skipsToMap(skips: Record<string, number[]>): Map<string, Set<number>> {
   return new Map(Object.entries(skips).map(([id, dates]) => [id, new Set(dates)]));
@@ -51,10 +102,10 @@ function nextDueDate(fromMs: number, dueDay: number): number {
  *   this task's accept criterion checks: card repayment (or its due day, if
  *   known), goal contributions still due this cycle, and net money I owe.
  *
- * Income (regular, variable or irregular) and receivables are deliberately
- * absent — see the file header — as is everything EN5's income model would add.
+ * Income and receivables are added only when `withIncome` is true (file
+ * header) — absent that, this is exactly `EN2`'s original subset.
  */
-export function knownEvents(snapshot: FinanceSnapshot, horizonEndMs: number): KnownEvent[] {
+export function knownEvents(snapshot: FinanceSnapshot, horizonEndMs: number, withIncome = false): KnownEvent[] {
   const events: KnownEvent[] = [];
   const skips = skipsToMap(snapshot.recurring.skips);
 
@@ -75,16 +126,17 @@ export function knownEvents(snapshot: FinanceSnapshot, horizonEndMs: number): Kn
   if (snapshot.exposure.owe > 0) {
     events.push({ date: snapshot.asOf, amountPaise: -snapshot.exposure.owe, label: 'What I owe' });
   }
+  if (withIncome) events.push(...incomeEvents(snapshot, horizonEndMs));
   return events.sort((a, b) => a.date - b.date);
 }
 
 /**
  * The deterministic path: `available` today, walked forward one day at a time,
- * each day taking its known events and the everyday rate. `lowPoint` is the
- * path's minimum — with no income modelled yet (see the file header) every
- * event only ever takes money out, so the path never rises and the low point
- * is always the final day. Found by walking rather than assumed, so this
- * keeps working unchanged once `EN5` adds events that DO raise the balance.
+ * each day taking its known events and the everyday rate. `lowPoint` is found
+ * by walking (the actual minimum balance seen), not assumed to be the final
+ * day — true with `withIncome: false` (every event only takes money out, so
+ * the path never rises), and still correct once `withIncome: true` lets a
+ * payday raise it mid-horizon.
  */
 export function projectKnown(
   snapshot: FinanceSnapshot,
@@ -92,9 +144,11 @@ export function projectKnown(
   /** A hypothetical purchase's own events (§4 E4, `EN4`'s `afford()`) — merged
    *  in alongside the snapshot's real known events, never persisted anywhere. */
   extraEvents: KnownEvent[] = [],
+  /** `EN5`, opt-in — see the file header. */
+  withIncome = false,
 ): Projection {
   const horizonEndMs = snapshot.asOf + horizonDays * DAY_MS;
-  const events = knownEvents(snapshot, horizonEndMs).concat(extraEvents).sort((a, b) => a.date - b.date);
+  const events = knownEvents(snapshot, horizonEndMs, withIncome).concat(extraEvents).sort((a, b) => a.date - b.date);
   const rate = everydayRate(snapshot);
 
   let balance = snapshot.cash.available;
@@ -137,6 +191,30 @@ function eventDeltaByDay(events: KnownEvent[], asOf: number, horizonDays: number
   return totals;
 }
 
+type ReceivableDraw = { personId: string; amountPaise: number; dayIndex: number; probability: number };
+
+/**
+ * Each net-positive per-person exposure (§4 E1's `exposure.perPerson`) becomes
+ * one uncertain arrival (§4 E3): whether it lands in a given simulated path is
+ * a Bernoulli draw at `repaymentModel`'s own probability, landing on the day
+ * its typical delay implies — clamped into the horizon's last day if that
+ * delay would fall past it, the same clamp `eventDeltaByDay` uses for a known
+ * event on the horizon's own edge.
+ */
+function receivableDraws(snapshot: FinanceSnapshot, horizonDays: number): ReceivableDraw[] {
+  return snapshot.exposure.perPerson
+    .filter(p => p.net > 0)
+    .map(p => {
+      const model = repaymentModel(snapshot, p.personId);
+      return {
+        personId: p.personId,
+        amountPaise: p.net,
+        dayIndex: Math.min(horizonDays - 1, Math.max(0, model.delayDays)),
+        probability: model.probability,
+      };
+    });
+}
+
 /** One 7-day block, drawn (with replacement) from `sample` starting at a random offset — wrapping circularly, so a short sample still yields a full block. */
 function drawBlock(rng: () => number, sample: number[]): number[] {
   const start = Math.floor(rng() * sample.length);
@@ -170,8 +248,12 @@ export function projectBand(
   horizonDays: number = STS_HORIZON_DAYS,
   paths: number = SIMULATION_PATHS,
   extraEvents: KnownEvent[] = [],
+  /** `EN5`, opt-in — see the file header. Also gates receivable arrivals
+   *  (§4 E3's other uncertain event), bundled under this one switch since
+   *  nothing needs one without the other yet — split them if that changes. */
+  withIncome = false,
 ): UncertaintyBand {
-  const known = projectKnown(snapshot, horizonDays, extraEvents);
+  const known = projectKnown(snapshot, horizonDays, extraEvents, withIncome);
   const floor = essentialFloor(snapshot);
   const sample = dailySample(snapshot);
 
@@ -185,8 +267,9 @@ export function projectBand(
   }
 
   const horizonEndMs = snapshot.asOf + horizonDays * DAY_MS;
-  const deltas = eventDeltaByDay(knownEvents(snapshot, horizonEndMs).concat(extraEvents), snapshot.asOf, horizonDays);
+  const deltas = eventDeltaByDay(knownEvents(snapshot, horizonEndMs, withIncome).concat(extraEvents), snapshot.asOf, horizonDays);
   const rng = mulberry32(hashSnapshot(snapshot));
+  const receivables = withIncome ? receivableDraws(snapshot, horizonDays) : [];
 
   const balancesByDay: number[][] = Array.from({ length: horizonDays }, () => []);
   const lowPoints: number[] = [];
@@ -197,8 +280,15 @@ export function projectBand(
     let block: number[] = [];
     let blockPos = BLOCK_DAYS;
 
+    // Each receivable's own Bernoulli draw for THIS path, before the day walk
+    // so its arrival (if any) is already known when that day is reached.
+    const arrivals = new Array<number>(horizonDays).fill(0);
+    for (const r of receivables) {
+      if (rng() < r.probability) arrivals[r.dayIndex] += r.amountPaise;
+    }
+
     for (let d = 0; d < horizonDays; d++) {
-      balance += deltas[d];
+      balance += deltas[d] + arrivals[d];
       if (blockPos >= BLOCK_DAYS) {
         block = drawBlock(rng, sample);
         blockPos = 0;

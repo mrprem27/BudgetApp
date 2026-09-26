@@ -5,9 +5,9 @@
  * adds `afford()`, on `EN3`'s uncertainty band. `budgetForecast()` and
  * `goalForecast()` are not yet built.
  */
-import type { AffordReason, AffordVerdict, FinanceSnapshot, KnownEvent, Projection, Purchase, AffordResult } from './types';
+import type { AffordReason, AffordVerdict, FinanceSnapshot, KnownEvent, Projection, Purchase, AffordResult, TippingReceivable } from './types';
 import { projectKnown, projectBand, SIMULATION_PATHS } from './projection';
-import { essentialFloor, defaultNecessity } from './behaviour';
+import { essentialFloor, defaultNecessity, repaymentModel } from './behaviour';
 import { STS_HORIZON_DAYS } from '../safeToSpend';
 import { recurringMonthlyEquivalent } from '../recurrence';
 import { windowForCadence } from '../budget';
@@ -123,10 +123,10 @@ type Evaluation = {
  * been built yet. Documented here rather than silently absent: those two paths
  * to "Tight"/"Not affordable" simply never fire in this slice.
  */
-function evaluate(snapshot: FinanceSnapshot, purchase: Purchase, startMs: number, horizonDays: number, floor: number): Evaluation {
+function evaluate(snapshot: FinanceSnapshot, purchase: Purchase, startMs: number, horizonDays: number, floor: number, withIncome: boolean): Evaluation {
   const horizonEndMs = snapshot.asOf + horizonDays * DAY_MS;
   const events = purchaseEvents(purchase, startMs, horizonEndMs);
-  const band = projectBand(snapshot, horizonDays, SIMULATION_PATHS, events);
+  const band = projectBand(snapshot, horizonDays, SIMULATION_PATHS, events, withIncome);
   const cashShort = band.cautiousLowPoint < 0;
   const overBudget = overBudgetReason(snapshot, purchase);
   const belowFloor = !cashShort && band.cautiousLowPoint < floor;
@@ -143,8 +143,8 @@ function evaluate(snapshot: FinanceSnapshot, purchase: Purchase, startMs: number
  * Holds the purchase's own category/recurrence/necessity fixed and varies only
  * the amount — "how much more of this same kind of purchase, comfortably".
  */
-function largestComfortableAmount(snapshot: FinanceSnapshot, purchase: Purchase, horizonDays: number, floor: number): number {
-  const isOk = (amt: number) => evaluate(snapshot, { ...purchase, amountPaise: Math.max(0, amt) }, snapshot.asOf, horizonDays, floor).verdict === 'comfortable';
+function largestComfortableAmount(snapshot: FinanceSnapshot, purchase: Purchase, horizonDays: number, floor: number, withIncome: boolean): number {
+  const isOk = (amt: number) => evaluate(snapshot, { ...purchase, amountPaise: Math.max(0, amt) }, snapshot.asOf, horizonDays, floor, withIncome).verdict === 'comfortable';
   if (!isOk(0)) return 0;
 
   let lo = 0;
@@ -158,12 +158,46 @@ function largestComfortableAmount(snapshot: FinanceSnapshot, purchase: Purchase,
 }
 
 /** Only for `when: 'can-wait'`: the earliest day within the horizon this same purchase would be Comfortable, scanning forward one day at a time. `undefined` if none is. */
-function findEarliestComfortableDate(snapshot: FinanceSnapshot, purchase: Purchase, horizonDays: number, floor: number): number | undefined {
+function findEarliestComfortableDate(snapshot: FinanceSnapshot, purchase: Purchase, horizonDays: number, floor: number, withIncome: boolean): number | undefined {
   const horizonEndMs = snapshot.asOf + horizonDays * DAY_MS;
   for (let d = snapshot.asOf; d <= horizonEndMs; d += DAY_MS) {
-    if (evaluate(snapshot, purchase, d, horizonDays, floor).verdict === 'comfortable') return d;
+    if (evaluate(snapshot, purchase, d, horizonDays, floor, withIncome).verdict === 'comfortable') return d;
   }
   return undefined;
+}
+
+/**
+ * §4 E4: "receivables called out when they tip the answer". Reads as a
+ * conditional promise ("Comfortable IF Aarav pays you") rather than the
+ * probabilistic band itself, so it's checked on the DETERMINISTIC path
+ * (`projectKnown`), not by re-running the stochastic band: assume this one
+ * receivable arrives for certain, at its typical delay, and see whether that
+ * alone is what closes the gap to the floor. Only meaningful — and only
+ * checked — when `withIncome` is set; without it, receivables aren't in the
+ * projection at all (see the file header).
+ */
+function tippingReceivables(
+  snapshot: FinanceSnapshot, purchase: Purchase, horizonDays: number, floor: number, withIncome: boolean,
+): TippingReceivable[] {
+  if (!withIncome) return [];
+  const owedToMe = snapshot.exposure.perPerson.filter(p => p.net > 0);
+  if (owedToMe.length === 0) return [];
+
+  const horizonEndMs = snapshot.asOf + horizonDays * DAY_MS;
+  const purchaseEv = purchaseEvents(purchase, snapshot.asOf, horizonEndMs);
+  const baseline = projectKnown(snapshot, horizonDays, purchaseEv, withIncome);
+  if (baseline.lowPoint.amount >= floor) return []; // already fine without assuming any of them
+
+  const tipping: TippingReceivable[] = [];
+  for (const p of owedToMe) {
+    const model = repaymentModel(snapshot, p.personId);
+    const arrival: KnownEvent = { date: snapshot.asOf + model.delayDays * DAY_MS, amountPaise: p.net, label: 'Receivable' };
+    const withThis = projectKnown(snapshot, horizonDays, [...purchaseEv, arrival], withIncome);
+    if (withThis.lowPoint.amount >= floor) {
+      tipping.push({ personId: p.personId, amountPaise: p.net, probability: model.probability, delayDays: model.delayDays });
+    }
+  }
+  return tipping;
 }
 
 function headlineFor(verdict: AffordVerdict, lowPointAfter: number): string {
@@ -172,17 +206,25 @@ function headlineFor(verdict: AffordVerdict, lowPointAfter: number): string {
   return `You'd still have about ${formatRupees(lowPointAfter)} left at the low point`;
 }
 
-export function afford(snapshot: FinanceSnapshot, purchase: Purchase, horizonDays: number = STS_HORIZON_DAYS): AffordResult {
+export function afford(
+  snapshot: FinanceSnapshot,
+  purchase: Purchase,
+  horizonDays: number = STS_HORIZON_DAYS,
+  /** `EN5`, opt-in (see `projection.ts`'s file header) — income and
+   *  receivables only enter the projection, and `tippingReceivables` only
+   *  ever finds anything, when this is set. */
+  withIncome = false,
+): AffordResult {
   const resolved: Purchase = { ...purchase, necessity: purchase.necessity ?? defaultNecessity(purchase.category) };
   const floor = essentialFloor(snapshot);
 
-  const beforeBand = projectBand(snapshot, horizonDays);
-  const beforeKnown = projectKnown(snapshot, horizonDays);
+  const beforeBand = projectBand(snapshot, horizonDays, SIMULATION_PATHS, [], withIncome);
+  const beforeKnown = projectKnown(snapshot, horizonDays, [], withIncome);
 
   const horizonEndMs = snapshot.asOf + horizonDays * DAY_MS;
   const afterEvents = purchaseEvents(resolved, snapshot.asOf, horizonEndMs);
-  const afterKnown = projectKnown(snapshot, horizonDays, afterEvents);
-  const evalNow = evaluate(snapshot, resolved, snapshot.asOf, horizonDays, floor);
+  const afterKnown = projectKnown(snapshot, horizonDays, afterEvents, withIncome);
+  const evalNow = evaluate(snapshot, resolved, snapshot.asOf, horizonDays, floor, withIncome);
 
   const reasons: AffordReason[] = [];
   if (evalNow.verdict === 'not-affordable') {
@@ -204,11 +246,12 @@ export function afford(snapshot: FinanceSnapshot, purchase: Purchase, horizonDay
     cautiousLowPointAfter: evalNow.cautiousLowPointAfter,
     floor,
     reasons,
-    largestComfortableAmount: largestComfortableAmount(snapshot, resolved, horizonDays, floor),
+    largestComfortableAmount: largestComfortableAmount(snapshot, resolved, horizonDays, floor, withIncome),
+    tippingReceivables: tippingReceivables(snapshot, resolved, horizonDays, floor, withIncome),
   };
 
   if (resolved.when === 'can-wait' && evalNow.verdict !== 'comfortable') {
-    result.earliestComfortableDate = findEarliestComfortableDate(snapshot, resolved, horizonDays, floor);
+    result.earliestComfortableDate = findEarliestComfortableDate(snapshot, resolved, horizonDays, floor, withIncome);
   }
 
   return result;
