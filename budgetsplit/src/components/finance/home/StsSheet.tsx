@@ -5,12 +5,13 @@ import { SheetModal } from '../../ui/SheetModal';
 import { Card } from '../../ui/Card';
 import { Divider } from '../../ui/Divider';
 import { formatRupees } from '../../../lib/money';
-import type { SafeToSpend } from '../../../lib/safeToSpend';
+import type { SafeToSpendBreakdown } from '../../../lib/safeToSpend';
+import { shortDate } from '../../../lib/dateFormat';
 
 type Props = {
   visible: boolean;
   onClose: () => void;
-  sts: SafeToSpend | null;
+  sts: SafeToSpendBreakdown | null;
 };
 
 /**
@@ -25,16 +26,18 @@ type Props = {
  */
 export function StsSheet({ visible, onClose, sts }: Props) {
   if (!sts) return null;
+  const until = shortDate(sts.untilMs);
   const everydayHint = sts.dailyRate == null
     ? 'Needs a few weeks of history before this can be estimated'
-    : `About ${formatRupees(sts.dailyRate)}/day — your usual, ignoring one-off days — over ${sts.daysLeft} days`;
-  const rows: Array<{ label: string; hint: string; amount: number; sign: '' | '−' }> = [
+    : `About ${formatRupees(sts.dailyRate)}/day — your usual, ignoring one-off days — until ${until}`;
+  const rows: Array<{ label: string; hint: string; amount: number; sign: '' | '+' | '−' }> = [
     { label: 'Cash available', hint: 'Money you actually hold right now', amount: sts.available, sign: '' },
-    { label: 'Bills still due', hint: `Your share of recurring + logged bills over the next ${sts.daysLeft} days`, amount: sts.upcomingBills, sign: '−' },
-    { label: 'Card to repay', hint: 'Card spend never left your cash — the bill still will', amount: sts.cardRepayment, sign: '−' },
-    { label: 'Goal contributions', hint: 'This month’s goal funding not yet set aside', amount: sts.goalRemaining, sign: '−' },
-    { label: 'You owe people', hint: 'Net of settlements — their money, not yours', amount: sts.netIOwe, sign: '−' },
-    { label: 'Everyday spending', hint: everydayHint, amount: sts.everydaySpend, sign: '−' },
+    ...(sts.income > 0 ? [{ label: 'Salary before then', hint: `Your pay, landing on or before ${until}`, amount: sts.income, sign: '+' as const }] : []),
+    { label: 'Bills still due', hint: `Your share of recurring + logged bills until ${until}`, amount: sts.upcomingBills, sign: '−' as const },
+    { label: 'Card to repay', hint: 'Card spend never left your cash — the bill still will', amount: sts.cardRepayment, sign: '−' as const },
+    { label: 'Goal contributions', hint: 'This month’s goal funding not yet set aside', amount: sts.goalRemaining, sign: '−' as const },
+    { label: 'You owe people', hint: 'Net of settlements — their money, not yours', amount: sts.netIOwe, sign: '−' as const },
+    { label: 'Everyday spending', hint: everydayHint, amount: sts.everydaySpend, sign: '−' as const },
   ];
   // The largest single claim, for the over-committed note. The sheet has already
   // computed every subtraction, so restating "they add up to more than your cash"
@@ -54,8 +57,12 @@ export function StsSheet({ visible, onClose, sts }: Props) {
                 <Text style={styles.label}>{r.label}</Text>
                 <Text style={styles.hint}>{r.hint}</Text>
               </View>
-              <Text style={[styles.amount, r.sign === '−' && r.amount > 0 && { color: colors.expense }]}>
-                {r.sign === '−' && r.amount > 0 ? '−' : ''}{formatRupees(r.amount)}
+              <Text style={[
+                styles.amount,
+                r.sign === '−' && r.amount > 0 && { color: colors.expense },
+                r.sign === '+' && r.amount > 0 && { color: colors.income },
+              ]}>
+                {r.amount > 0 ? r.sign : ''}{formatRupees(r.amount)}
               </Text>
             </View>
           </React.Fragment>
@@ -64,7 +71,7 @@ export function StsSheet({ visible, onClose, sts }: Props) {
         <View style={styles.row}>
           <View style={styles.left}>
             <Text style={styles.totalLabel}>Yours to spend</Text>
-            <Text style={styles.hint}>Over the next {sts.daysLeft} days, on top of everything above</Text>
+            <Text style={styles.hint}>Until {until}, on top of everything above</Text>
           </View>
           <Text style={[styles.total, { color: sts.amount < 0 ? colors.healthRed : colors.income }]}>
             {formatRupees(sts.amount)}

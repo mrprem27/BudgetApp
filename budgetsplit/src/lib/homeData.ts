@@ -7,6 +7,7 @@ import { getAllPersons } from '../db/queries/persons';
 import { getAllGroups, sharedGroupsOf } from '../db/queries/groups';
 import { getMyExposure } from '../db/queries/balances';
 import { getSafeToSpendV2 } from '../db/queries/spendPower';
+import { billsWithin } from './safeToSpend';
 import { getPendingCount } from '../db/queries/pending';
 import { getPendingApprovalCount } from '../db/queries/approval';
 import { getCategories } from '../db/queries/categories';
@@ -298,7 +299,10 @@ export async function loadHomeData(
       // `owedExpected`, not `owed`: a written-off balance must not net against
       // what you owe. See `debtLoad`.
       owedToMe: exp.owedExpected,
-      upcomingBills: sts.upcomingBills,
+      // Month-scoped, not the Safe-to-Spend window (which now runs to payday,
+      // not month-end) — `billsWithin` reads the same projection over the
+      // right days instead.
+      upcomingBills: billsWithin(sts, nowMs2, getDaysInMonth(now2) - getDate(now2)),
       goalsCount: funding.goalsCount,
       hasBudget: monthlyAllocated > 0,
       dataDays: ledger.firstTxnMs != null ? Math.floor((nowMs2 - ledger.firstTxnMs) / 86400000) : 0,
@@ -327,7 +331,7 @@ export async function loadHomeData(
       }
       // Known committed bills still due this month floor the forecast — the
       // same figure Safe-to-Spend subtracts, so the two can't disagree.
-      forecast = forecastMonthEnd(sp, getDate(now), getDaysInMonth(now), lmSpend, sts.upcomingBills);
+      forecast = forecastMonthEnd(sp, getDate(now), getDaysInMonth(now), lmSpend, billsWithin(sts, now.getTime(), getDaysInMonth(now) - getDate(now)));
       // Biggest shift among categories present in BOTH months (avoids "new"/∞%).
       topShift = Object.entries(catMap)
         .filter(([cat]) => lmCat[cat])

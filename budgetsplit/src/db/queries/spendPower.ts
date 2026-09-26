@@ -5,7 +5,7 @@ import { INVESTMENT_CATEGORY } from '../../constants/categories';
 import { startOfMonth } from 'date-fns';
 import {
   computeSafeToSpend, goalRemainingThisCycle, typicalDailySpend,
-  everydaySpendAhead, STS_HORIZON_DAYS, EVERYDAY_WINDOW_DAYS, type SafeToSpend,
+  everydaySpendAhead, STS_HORIZON_DAYS, EVERYDAY_WINDOW_DAYS, type SafeToSpend, type SafeToSpendBreakdown,
 } from '../../lib/safeToSpend';
 import { getFinanceSnapshot } from './engineSnapshot';
 import { safeToSpendV2 } from '../../lib/engine/assess';
@@ -79,10 +79,8 @@ const EMPTY_PARTS = {
  * each term has exactly one source). Horizon: a rolling `STS_HORIZON_DAYS`, so
  * the figure can't peak on the 28th with rent three days out.
  *
- * `EN10`: Home switched to `getSafeToSpendV2` below, off the money engine.
- * This function stays as it was — it's still `useEngineDevComparison.ts`'s
- * independent "Old" reference, and still Afford's/the Add screen's basis
- * until `EN11` switches those.
+ * The old formula. Only the dev comparison screen reads it now, as the
+ * independent reference `getSafeToSpendV2` is compared against.
  */
 export async function getSafeToSpend(db: SQLite.SQLiteDatabase, nowMs: number = Date.now()): Promise<SafeToSpend> {
   const me = await getMe(db);
@@ -109,8 +107,7 @@ export async function getSafeToSpend(db: SQLite.SQLiteDatabase, nowMs: number = 
     // materialized ahead of now, so these are disjoint from the expansion).
     getTransactionsInRange(db, null, nowMs, horizonMs),
     // Trailing window for the everyday rate, aggregated in SQL rather than
-    // loading 90 days of rows + splits — this function runs on Afford and
-    // after every expense save (Home reads `getSafeToSpendV2` since `EN10`).
+    // loading 90 days of rows + splits.
     db.getAllAsync<DailySpendRow>(DAILY_SPEND_SQL, [windowStartMs, me.id, windowStartMs, nowMs]),
   ]);
 
@@ -140,48 +137,42 @@ export async function getSafeToSpend(db: SQLite.SQLiteDatabase, nowMs: number = 
 }
 
 /**
- * Safe-to-Spend, `EN10`: Home's own read, off the money engine instead of the
- * arithmetic formula above. `getSafeToSpend` (above) is deliberately left
- * untouched — it's still `useEngineDevComparison.ts`'s independent "Old"
- * column, and `afford.ts`/`useAddTxnForm.ts`'s basis until `EN11` switches
- * those too. Two different callers reading two different things on purpose,
- * not drift: this one is Home's, and only Home's, until the next switch.
+ * Safe-to-Spend off the money engine (`SPEC-ENGINE.md` §4.1) — Home, its sheet
+ * and the Add screen's toast. The v1 policy (horizon to payday, salary counted)
+ * comes from `safeToSpendV2`'s own defaults, the same ones `afford()` uses.
  *
- * `amount` is `projectKnown`'s own walked low point (`safeToSpendV2`), not
- * re-derived through `computeSafeToSpend`'s arithmetic — the whole point of
- * "no screen calls the old formula". The breakdown fields the sheet still
- * shows (`SafeToSpendParts`) are read back off the same projection's known
- * events rather than queried a second time, by label — `projection.ts`'s
- * `knownEvents()` names its three special claims exactly this way, and
- * everything else it puts on the path is a bill. One walk, no duplicate
- * queries, no second formula to keep in sync with the first.
+ * The parts are read **up to the low point**: cash, plus income before it, minus
+ * every claim before it and the everyday rate for those days. That is the walk
+ * itself, so the lines always add up to the figure. Events are filed by `kind`,
+ * never by label — a bill named "Card repayment" is still a bill.
+ *
+ * `getSafeToSpend` (above) stays as the dev comparison screen's independent
+ * reference; nothing user-facing reads it.
  */
-export async function getSafeToSpendV2(db: SQLite.SQLiteDatabase, nowMs: number = Date.now()): Promise<SafeToSpend> {
+export async function getSafeToSpendV2(db: SQLite.SQLiteDatabase, nowMs: number = Date.now()): Promise<SafeToSpendBreakdown> {
   const snapshot = await getFinanceSnapshot(db, nowMs);
   const v2 = safeToSpendV2(snapshot);
-  const horizonDays = v2.projection.horizonDays;
+  const untilMs = v2.lowPoint.date;
+  const toLow = v2.projection.days.filter(d => d.date <= untilMs);
 
-  let upcomingBills = 0;
-  let cardRepayment = 0;
-  let goalRemaining = 0;
-  let netIOwe = 0;
-  for (const day of v2.projection.days) {
-    for (const e of day.events) {
-      const amt = -e.amountPaise; // every known event is money leaving; parts are positive magnitudes
-      if (e.label === 'Card repayment') cardRepayment += amt;
-      else if (e.label === 'Goal contributions due') goalRemaining += amt;
-      else if (e.label === 'What I owe') netIOwe += amt;
-      else upcomingBills += amt;
-    }
+  const parts = { income: 0, upcomingBills: 0, cardRepayment: 0, goalRemaining: 0, netIOwe: 0 };
+  for (const e of toLow.flatMap(d => d.events)) {
+    if (e.kind === 'income') parts.income += e.amountPaise;
+    else if (e.kind === 'card') parts.cardRepayment -= e.amountPaise;
+    else if (e.kind === 'goals') parts.goalRemaining -= e.amountPaise;
+    else if (e.kind === 'owe') parts.netIOwe -= e.amountPaise;
+    else parts.upcomingBills -= e.amountPaise;
   }
 
   return {
     available: snapshot.cash.available,
-    upcomingBills, cardRepayment, goalRemaining, netIOwe,
-    everydaySpend: everydaySpendAhead(v2.dailyRate, horizonDays),
+    ...parts,
+    everydaySpend: (v2.dailyRate ?? 0) * toLow.length,
     amount: v2.amount,
-    daysLeft: horizonDays,
+    daysLeft: toLow.length,
     dailyRate: v2.dailyRate,
+    untilMs,
+    events: v2.projection.days.flatMap(d => d.events),
   };
 }
 

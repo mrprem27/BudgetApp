@@ -47,6 +47,8 @@
  * The amount may be negative — that is the honest answer, not an error.
  */
 
+import type { KnownEvent } from './engine/types';
+
 export type SafeToSpendParts = {
   /** Liquid cash right now (paise). */
   available: number;
@@ -72,6 +74,29 @@ export type SafeToSpend = SafeToSpendParts & {
    *  is zero — the two must not look alike. */
   dailyRate: number | null;
 };
+
+/**
+ * Safe-to-Spend off the money engine (`getSafeToSpendV2`, `SPEC-ENGINE.md` §4.1).
+ * The parts are read **up to the low point**, so they always add up:
+ * `amount = available + income − bills − card − goals − owe − everydaySpend`.
+ */
+export type SafeToSpendBreakdown = SafeToSpend & {
+  /** Salary landing on or before `untilMs` (paise, ≥ 0). */
+  income: number;
+  /** The low point's day — what the figure is safe until. */
+  untilMs: number;
+  /** Every event on the projection, the whole horizon — the rows each line taps through to. */
+  events: KnownEvent[];
+};
+
+/** My-share bills in the next `days` days, off the same projection — the old
+ *  `upcomingBills` meaning, which the health score and month-end forecast keep. */
+export function billsWithin(sts: SafeToSpendBreakdown, nowMs: number, days: number): number {
+  const end = nowMs + days * 86_400_000;
+  return sts.events
+    .filter(e => e.kind === 'bill' && e.date <= end)
+    .reduce((s, e) => s - e.amountPaise, 0);
+}
 
 /** Rolling horizon, in days. Not `endOfMonth` — see the header. */
 export const STS_HORIZON_DAYS = 30;

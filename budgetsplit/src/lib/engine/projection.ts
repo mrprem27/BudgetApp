@@ -65,7 +65,7 @@ function incomeEvents(snapshot: FinanceSnapshot, horizonEndMs: number): KnownEve
   const skips = new Set(snapshot.recurring.skips[rule.id] ?? []);
   const amount = rule.payments.find(p => p.personId === snapshot.meId)?.amount ?? 0;
   return materializeInstances(rule, snapshot.asOf, horizonEndMs, skips)
-    .map(inst => ({ date: inst.date, amountPaise: amount, label: 'Income' }));
+    .map(inst => ({ date: inst.date, amountPaise: amount, label: 'Income', kind: 'income' as const, ref: rule.id }));
 }
 
 function skipsToMap(skips: Record<string, number[]>): Map<string, Set<number>> {
@@ -106,21 +106,21 @@ export function knownEvents(snapshot: FinanceSnapshot, horizonEndMs: number, wit
   const skips = skipsToMap(snapshot.recurring.skips);
 
   for (const o of expandUpcoming(snapshot.recurring.rules, snapshot.meId, snapshot.asOf, horizonEndMs, skips)) {
-    events.push({ date: o.dateMs, amountPaise: -o.amount, label: o.name });
+    events.push({ date: o.dateMs, amountPaise: -o.amount, label: o.name, kind: 'bill', ref: o.seriesId });
   }
   for (const t of snapshot.futureOneOffs) {
     if (t.kind !== 'expense' || t.date > horizonEndMs) continue;
-    events.push({ date: t.date, amountPaise: -t.amountPaise, label: t.category });
+    events.push({ date: t.date, amountPaise: -t.amountPaise, label: t.category, kind: 'bill', ref: t.id });
   }
   if (snapshot.cash.creditUsed > 0) {
     const due = snapshot.cash.cardDueDay != null ? nextDueDate(snapshot.asOf, snapshot.cash.cardDueDay) : snapshot.asOf;
-    events.push({ date: Math.min(due, horizonEndMs), amountPaise: -snapshot.cash.creditUsed, label: 'Card repayment' });
+    events.push({ date: Math.min(due, horizonEndMs), amountPaise: -snapshot.cash.creditUsed, label: 'Card repayment', kind: 'card' });
   }
   if (snapshot.goals.funding.remaining > 0) {
-    events.push({ date: snapshot.asOf, amountPaise: -snapshot.goals.funding.remaining, label: 'Goal contributions due' });
+    events.push({ date: snapshot.asOf, amountPaise: -snapshot.goals.funding.remaining, label: 'Goal contributions due', kind: 'goals' });
   }
   if (snapshot.exposure.owe > 0) {
-    events.push({ date: snapshot.asOf, amountPaise: -snapshot.exposure.owe, label: 'What I owe' });
+    events.push({ date: snapshot.asOf, amountPaise: -snapshot.exposure.owe, label: 'What I owe', kind: 'owe' });
   }
   if (withIncome) events.push(...incomeEvents(snapshot, horizonEndMs));
   return events.sort((a, b) => a.date - b.date);

@@ -141,12 +141,18 @@ export type MonthlyAffordability = {
   unfundable: boolean;
 };
 
+/** What a known event is — how the Safe-to-Spend breakdown files it, never inferred from `label`. */
+export type EventKind = 'bill' | 'card' | 'goals' | 'owe' | 'income' | 'purchase' | 'receivable';
+
 /** One deterministic, dated claim on cash between now and the horizon (§4 E3). */
 export type KnownEvent = {
   date: number;
   /** Negative = money out, positive = money in. */
   amountPaise: number;
   label: string;
+  kind: EventKind;
+  /** The row behind it (a rule's series id, or a logged transaction's id) — what a breakdown line taps through to. */
+  ref?: string;
 };
 
 export type ProjectedDay = {

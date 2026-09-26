@@ -1,15 +1,14 @@
 /**
  * E4 — the questions, answered on the projection (`SPEC-ENGINE.md` §4). Pure.
  *
- * `EN2` built `safeToSpend` on the deterministic projection. `EN4` (this slice)
- * adds `afford()`, on `EN3`'s uncertainty band. `budgetForecast()` and
- * `goalForecast()` are not yet built.
+ * Both answers default to the v1 policy (spec §2): the horizon runs to the next
+ * payday (`horizonDaysFor`, at least 30 days) and the salary is counted. Same
+ * defaults on both, so Safe-to-Spend and Afford can't disagree.
  */
 import type { AffordReason, AffordVerdict, FinanceSnapshot, KnownEvent, Projection, Purchase, AffordResult, TippingReceivable } from './types';
-import { projectKnown } from './projection';
+import { projectKnown, horizonDaysFor } from './projection';
 import { essentialFloor, defaultNecessity, repaymentModel, monthlyAffordability } from './behaviour';
 import { explain } from './explain';
-import { STS_HORIZON_DAYS } from '../safeToSpend';
 import { recurringMonthlyEquivalent } from '../recurrence';
 import { windowForCadence } from '../budget';
 import { formatRupees } from '../money';
@@ -28,18 +27,16 @@ export type SafeToSpendV2 = {
 
 /**
  * `safeToSpend()` = the largest `x` such that spending `x` today keeps the
- * projected low point ≥ 0. Spending `x` today only ever changes the STARTING
- * balance (`available − x`); every later day's balance is that starting point
- * plus the same events regardless of `x`, so the whole path — and therefore
- * its low point — shifts down by exactly `x`. The largest safe `x` is thus
- * exactly the unshifted path's own low point. `SPEC-ENGINE.md` §4 E4 still
- * describes this as a binary search over `afford()`, for once `afford()`
- * itself stops being linear in the purchase amount (a Want past a goal's
- * target date, a budget line crossed) — not yet true here, since `afford()`
- * doesn't exist yet (`EN4`).
+ * projected low point ≥ 0. Spending `x` today only shifts the starting
+ * balance, so the whole path — and its low point — shifts down by exactly
+ * `x`: the answer is the unshifted path's own low point.
  */
-export function safeToSpendV2(snapshot: FinanceSnapshot, horizonDays: number = STS_HORIZON_DAYS): SafeToSpendV2 {
-  const projection = projectKnown(snapshot, horizonDays);
+export function safeToSpendV2(
+  snapshot: FinanceSnapshot,
+  horizonDays: number = horizonDaysFor(snapshot),
+  withIncome = true,
+): SafeToSpendV2 {
+  const projection = projectKnown(snapshot, horizonDays, [], withIncome);
   return {
     amount: projection.lowPoint.amount,
     lowPoint: projection.lowPoint,
@@ -68,16 +65,16 @@ function purchaseEvents(purchase: Purchase, startMs: number, horizonEndMs: numbe
   if (startMs > horizonEndMs) return events;
 
   if (purchase.recurrence === 'weekly') {
-    for (let d = startMs; d <= horizonEndMs; d += 7 * DAY_MS) events.push({ date: d, amountPaise: -purchase.amountPaise, label });
+    for (let d = startMs; d <= horizonEndMs; d += 7 * DAY_MS) events.push({ date: d, amountPaise: -purchase.amountPaise, label, kind: 'purchase' });
   } else if (purchase.recurrence === 'monthly') {
     for (let d = startMs; d <= horizonEndMs;) {
-      events.push({ date: d, amountPaise: -purchase.amountPaise, label });
+      events.push({ date: d, amountPaise: -purchase.amountPaise, label, kind: 'purchase' });
       const dt = new Date(d);
       d = Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth() + 1, dt.getUTCDate());
     }
   } else {
     // No recurrence, or `yearly` — see the file-header note above.
-    events.push({ date: startMs, amountPaise: -purchase.amountPaise, label });
+    events.push({ date: startMs, amountPaise: -purchase.amountPaise, label, kind: 'purchase' });
   }
   return events;
 }
@@ -203,7 +200,7 @@ function tippingReceivables(
   const tipping: TippingReceivable[] = [];
   for (const p of owedToMe) {
     const model = repaymentModel(snapshot, p.personId);
-    const arrival: KnownEvent = { date: snapshot.asOf + model.delayDays * DAY_MS, amountPaise: p.net, label: 'Receivable' };
+    const arrival: KnownEvent = { date: snapshot.asOf + model.delayDays * DAY_MS, amountPaise: p.net, label: 'Receivable', kind: 'receivable', ref: p.personId };
     const withThis = projectKnown(snapshot, horizonDays, [...purchaseEv, arrival], withIncome);
     if (withThis.lowPoint.amount >= floor) {
       tipping.push({ personId: p.personId, amountPaise: p.net, probability: model.probability, delayDays: model.delayDays });
@@ -221,11 +218,10 @@ function headlineFor(verdict: AffordVerdict, lowPointAfter: number): string {
 export function afford(
   snapshot: FinanceSnapshot,
   purchase: Purchase,
-  horizonDays: number = STS_HORIZON_DAYS,
-  /** `EN5`, opt-in (see `projection.ts`'s file header) — income and
-   *  receivables only enter the projection, and `tippingReceivables` only
-   *  ever finds anything, when this is set. */
-  withIncome = false,
+  horizonDays: number = horizonDaysFor(snapshot),
+  /** Salary counted (spec §2). `false` is the cautious income-less path the
+   *  EN2–EN7 tests were written against; `tippingReceivables` needs `true`. */
+  withIncome = true,
 ): AffordResult {
   const resolved: Purchase = { ...purchase, necessity: purchase.necessity ?? defaultNecessity(purchase.category) };
   const floor = essentialFloor(snapshot);

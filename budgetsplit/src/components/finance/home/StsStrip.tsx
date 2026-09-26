@@ -4,10 +4,11 @@ import { Feather } from '@expo/vector-icons';
 import { PressableScale } from '../../ui/PressableScale';
 import { colors, type, space, radius } from '../../tokens';
 import { formatCompact, formatRupees } from '../../../lib/money';
-import type { SafeToSpend } from '../../../lib/safeToSpend';
+import type { SafeToSpendBreakdown } from '../../../lib/safeToSpend';
+import { shortDate } from '../../../lib/dateFormat';
 
 type Props = {
-  sts: SafeToSpend | null;
+  sts: SafeToSpendBreakdown | null;
   onPress: () => void;
   /** Privacy mode — amounts become ₹ ••••, and the affordance goes with them. */
   obfuscate?: boolean;
@@ -53,19 +54,11 @@ export function StsStrip({ sts, onPress, obfuscate = false }: Props) {
               {formatCompact(sts.amount)}
             </Text>
             <Text style={styles.label} numberOfLines={1}>
-              {over ? 'over-committed' : 'yours to spend'}
+              {/* `EN13`: the horizon runs to the next payday, not a flat 30
+                  days, so "yours to spend" now needs its own end date — a bare
+                  amount reads as good for however long you like. */}
+              {over ? 'over-committed' : `yours to spend until ${shortDate(sts.untilMs)}`}
             </Text>
-            {/* The rate shows in BOTH states. It used to render only when
-                positive, which handed the actionable framing to the user who
-                needed it least: someone in good shape got "₹1,050/day" and
-                someone over-committed got a bare negative figure and no way to
-                think about it. Still gated on real history — an invented rate is
-                exactly the kind of number that costs trust when it's wrong. */}
-            {sts.dailyRate != null && (
-              <Text style={styles.detail} numberOfLines={1}>
-                · {formatRupees(sts.dailyRate)}/day usual
-              </Text>
-            )}
           </>
         )}
         <View style={styles.spacer} />

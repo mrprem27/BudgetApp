@@ -22,13 +22,14 @@ import { parseToPaise, formatRupees, paiseToInput } from '../lib/money';
 import { computeShares as calcShares, computePayments as calcPayments, validateShares } from '../lib/splitMath';
 import { getAffordSnapshot, type AffordSnapshot } from '../db/queries/savings';
 import { evaluateAfford } from '../lib/afford';
+import { shortDate } from '../lib/dateFormat';
 import { haptic } from '../lib/haptics';
 import { saveFailureMessage } from '../lib/dbErrors';
 import { composeTitleNote } from '../lib/txnNote';
 import { useFeatureFlags } from '../components/system/FeatureFlagsProvider';
 import { useDataRefresh } from '../components/system/DataRefreshProvider';
 import { useToast } from '../components/system/Toast';
-import { getSafeToSpend } from '../db/queries/spendPower';
+import { getSafeToSpendV2 } from '../db/queries/spendPower';
 import { getAssets, transferToAsset, defaultInvestmentAsset, type Asset } from '../db/queries/assets';
 import { setPendingSettlement } from '../lib/pendingSettlement';
 import { useStore } from '../store';
@@ -650,12 +651,13 @@ export function useAddTxnForm(params: AddTxnParams) {
    */
   function showSpendConsequence() {
     if (kind !== 'expense') return;
-    getSafeToSpend(db)
+    // `EN13`: same engine, same horizon (to payday) Home and Afford read.
+    getSafeToSpendV2(db)
       .then(sts => {
         if (sts.amount < 0) {
           showToast({ message: `That puts you ${formatRupees(-sts.amount)} over what's yours to spend.`, icon: 'alert-triangle', tone: 'bad' });
         } else {
-          showToast({ message: `${formatRupees(sts.amount)} left to spend over ${sts.daysLeft} days.`, icon: 'trending-down' });
+          showToast({ message: `${formatRupees(sts.amount)} left to spend until ${shortDate(sts.untilMs)}.`, icon: 'trending-down' });
         }
       })
       .catch(() => {});

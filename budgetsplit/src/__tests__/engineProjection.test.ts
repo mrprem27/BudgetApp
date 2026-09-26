@@ -3,6 +3,7 @@ import { getSafeToSpend } from '../db/queries/spendPower';
 import { createTestDb } from './helpers/testDb';
 import { buildPersona, PERSONA_NOW } from '../db/enginePersonas';
 import { projectKnown, knownEvents } from '../lib/engine/projection';
+import { STS_HORIZON_DAYS } from '../lib/safeToSpend';
 import { safeToSpendV2 } from '../lib/engine/assess';
 import { everydayRate } from '../lib/engine/behaviour';
 
@@ -33,7 +34,7 @@ describe('safeToSpendV2 — parity when no bill falls inside the horizon', () =>
     expect(events.filter(e => e.amountPaise < 0 && e.label !== 'Card repayment'
       && e.label !== 'Goal contributions due' && e.label !== 'What I owe')).toEqual([]);
 
-    const v2 = safeToSpendV2(snapshot);
+    const v2 = safeToSpendV2(snapshot, STS_HORIZON_DAYS, false); // the old policy: 30 days, no income
     expect(v2.amount).toBe(old.amount);
     expect(v2.dailyRate).toBe(old.dailyRate);
   });
@@ -42,7 +43,7 @@ describe('safeToSpendV2 — parity when no bill falls inside the horizon', () =>
 describe('safeToSpendV2 — a bill inside the horizon still names itself', () => {
   it('a bill dated inside the horizon still gives the same headline figure, but the day it lands on names it', async () => {
     const { snapshot, old } = await snapshotAndOld('salariedRenter');
-    const v2 = safeToSpendV2(snapshot);
+    const v2 = safeToSpendV2(snapshot, STS_HORIZON_DAYS, false); // the old policy: 30 days, no income
 
     // With no income modelled yet (the file header explains why), a dated walk
     // and a flat subtraction reach the same total by the horizon's end — moving
