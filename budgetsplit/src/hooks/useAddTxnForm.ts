@@ -21,7 +21,9 @@ import { deleteAttachment } from '../lib/attachment';
 import { parseToPaise, formatRupees, paiseToInput } from '../lib/money';
 import { computeShares as calcShares, computePayments as calcPayments, validateShares } from '../lib/splitMath';
 import { getAffordSnapshot, type AffordSnapshot } from '../db/queries/savings';
-import { evaluateAfford } from '../lib/afford';
+import { getFinanceSnapshot } from '../db/queries/engineSnapshot';
+import { afford } from '../lib/engine/assess';
+import type { FinanceSnapshot, AffordResult } from '../lib/engine/types';
 import { shortDate } from '../lib/dateFormat';
 import { haptic } from '../lib/haptics';
 import { saveFailureMessage } from '../lib/dbErrors';
@@ -171,6 +173,7 @@ export function useAddTxnForm(params: AddTxnParams) {
    */
   const [currency, setCurrency] = useState<CurrencyCode>(DEFAULT_CURRENCY);
   const [snapshot, setSnapshot] = useState<AffordSnapshot | null>(null);
+  const [engineSnapshot, setEngineSnapshot] = useState<FinanceSnapshot | null>(null);
 
   const { place, setPlace, locEnabled, capturing: capturingLoc, capture: captureLocation } = useLocationCapture(isEditing);
 
@@ -209,6 +212,7 @@ export function useAddTxnForm(params: AddTxnParams) {
       const meRow = me ?? await getMe(db);
       loadLearned().then(setLearned).catch(() => {});
       getAffordSnapshot(db).then(setSnapshot).catch(() => {});
+      getFinanceSnapshot(db).then(setEngineSnapshot).catch(() => {});
       // Fire-and-forget: the destination row renders from the selected group, so
       // it doesn't wait on this — only the sheet's ordering does.
       getGroupsByRecentUse(db).then(setPickerGroups).catch(() => {});
@@ -410,28 +414,13 @@ export function useAddTxnForm(params: AddTxnParams) {
   const nudgeRemaining = nudgeStat?.budget != null ? nudgeStat.budget - nudgeStat.spentThisMonth : null;
   const nudgePct = nudgeRemaining != null && nudgeStat?.budget ? nudgeRemaining / nudgeStat.budget : null;
 
-  // Same engine as /afford, so the answer reaches everyone at the moment of
-  // spending rather than only those who find the Plan header icon. Only the
-  // verdict is surfaced here; the screen is where the reasoning lives.
-  const affordResult = useMemo(() => {
-    if (kind !== 'expense' || !snapshot || total <= 0) return null;
-    return evaluateAfford({
-      amount: total,
-      available: snapshot.available,
-      upcomingBills: snapshot.upcomingBills,
-      monthlyIncome: snapshot.incomeSource !== 'none' && snapshot.monthlyIncome > 0 ? snapshot.monthlyIncome : undefined,
-      category: selectedCategory && nudgeStat
-        ? {
-            name: selectedCategory.name, spentThisMonth: nudgeStat.spentThisMonth,
-            norm: nudgeStat.norm, budget: nudgeStat.budget, typicalBasket: nudgeStat.typicalBasket,
-          }
-        : undefined,
-      projection: snapshot.projection ?? undefined,
-      goalImpact: snapshot.goalPacing
-        ? { name: snapshot.goalPacing.name, monthsDelayed: total / snapshot.goalPacing.monthlyRate }
-        : undefined,
-    });
-  }, [kind, snapshot, total, selectedCategory, nudgeStat]);
+  // Same engine as /afford (`EN11`), so the answer reaches everyone at the
+  // moment of spending rather than only those who find the Plan header icon.
+  // Only the verdict is surfaced here; the screen is where the reasoning lives.
+  const affordResult: AffordResult | null = useMemo(() => {
+    if (kind !== 'expense' || !engineSnapshot || total <= 0) return null;
+    return afford(engineSnapshot, { amountPaise: total, category: selectedCategory?.name, when: 'now' });
+  }, [kind, engineSnapshot, total, selectedCategory]);
 
   const canSave = kind === AddKind.Invest
     // An amount and somewhere for it to go. No category (it is always

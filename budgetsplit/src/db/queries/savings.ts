@@ -21,7 +21,6 @@ import { getMyGlobalBudgetRows, type BudgetCadence } from './categoryBudgets';
 import { startOfMonth, endOfMonth, getDaysInMonth, getDate, subMonths } from 'date-fns';
 import { forecastMonthEnd } from '../../lib/forecast';
 import { monthlyContribution } from '../../lib/savings';
-import { HISTORY_DAYS } from '../../lib/afford';
 import { budgetEquivalent } from '../../lib/budget';
 import { expandUpcoming } from '../../lib/upcoming';
 import { getMyExposure } from './balances';
@@ -692,6 +691,8 @@ export type AffordSnapshot = {
 };
 
 const AFFORD_DAY_MS = 86_400_000;
+/** Trailing window `getAffordSnapshot`'s category stats/everyday rate read over. */
+const AFFORD_HISTORY_DAYS = 90;
 
 /**
  * Everything the "Can I afford this?" engine needs, in one round-trip: cash,
@@ -735,7 +736,7 @@ export async function getAffordSnapshot(db: SQLite.SQLiteDatabase): Promise<Affo
     Promise.all(groups.map(g => getRecurringForGroup(db, g.id))).then(by => by.flat()),
     // 90 days for typical-basket size: a monthly norm can hide a wildly atypical
     // single purchase (a ₹8k dinner inside a ₹10k/mo norm).
-    getTransactionsInRange(db, null, now - HISTORY_DAYS * AFFORD_DAY_MS, now),
+    getTransactionsInRange(db, null, now - AFFORD_HISTORY_DAYS * AFFORD_DAY_MS, now),
     // Prior month feeds the forecast's credibility weighting — same model as Home.
     getTransactionsInRange(db, null, startOfMonth(subMonths(today, 1)).getTime(), endOfMonth(subMonths(today, 1)).getTime()),
     getGoals(db),

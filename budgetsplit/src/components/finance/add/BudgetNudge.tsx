@@ -3,7 +3,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { colors, type, space } from '../../tokens';
 import { formatCompact } from '../../../lib/money';
-import { AffordVerdict, AffordReason, type AffordResult } from '../../../lib/afford';
+import type { AffordResult } from '../../../lib/engine/types';
 
 type Props = {
   color: string;
@@ -14,31 +14,15 @@ type Props = {
 };
 
 /**
- * The single worst thing about this purchase, from the /afford engine. Silent when
- * the verdict is comfortable — "you're fine" is noise on a form.
+ * The single worst thing about this purchase, from the same engine `/afford`
+ * reads (`EN11`). Silent when the verdict is Comfortable or unknown (thin
+ * data) — "you're fine" and "we don't know yet" are both noise on a form.
+ * Reasons already carry their own plain-English label, ranked by rupee
+ * effect — no second copy of the sentence to keep in sync with the screen's.
  */
-function affordLine(r: AffordResult, categoryName: string): string | null {
-  if (r.verdict === AffordVerdict.Comfortable) return null;
-  switch (r.reasons.find(x => x !== AffordReason.Healthy)) {
-    case AffordReason.CashShort:
-      return `You'd be short ${formatCompact(-r.remaining)} once this month's bills are covered`;
-    case AffordReason.OverCategoryBudget:
-      return `Puts ${categoryName} over its budget`;
-    case AffordReason.MonthAlreadyOver:
-      return 'This month is already tracking over budget';
-    case AffordReason.AboveCategoryNorm:
-      return `More than you usually spend on ${categoryName}`;
-    case AffordReason.DelaysGoal:
-      return `Sets ${r.goalImpact?.name} back`;
-    case AffordReason.LargeIncomeShare:
-      return "A big slice of a month's income in one go";
-    case AffordReason.UnusualForCategory:
-      return `Bigger than usual for ${categoryName}`;
-    case AffordReason.ThinBuffer:
-      return 'Leaves little cushion';
-    default:
-      return null;
-  }
+function affordLine(r: AffordResult): string | null {
+  if (r.verdict == null || r.verdict === 'comfortable') return null;
+  return r.reasons[0]?.label ?? null;
 }
 
 /**
@@ -52,10 +36,10 @@ function affordLine(r: AffordResult, categoryName: string): string | null {
  * could already infer. Now: the warning when there is one, otherwise the remainder.
  */
 export function BudgetNudge({ color, remaining, categoryName, afford }: Props) {
-  const warning = afford ? affordLine(afford, categoryName) : null;
+  const warning = afford ? affordLine(afford) : null;
 
   if (warning) {
-    const tint = afford?.verdict === AffordVerdict.No ? colors.expense : colors.healthAmber;
+    const tint = afford?.verdict === 'not-affordable' ? colors.expense : colors.healthAmber;
     return (
       <View style={styles.row}>
         <Feather name="alert-triangle" size={13} color={tint} />
