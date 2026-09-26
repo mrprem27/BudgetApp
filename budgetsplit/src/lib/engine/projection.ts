@@ -48,30 +48,29 @@ export function horizonDaysFor(snapshot: FinanceSnapshot): number {
 
 /**
  * Income's own known events (§4 E3): every occurrence of an active recurring
- * income rule inside the horizon, my-share amount; absent a rule but a
- * `variable` reading, one event at the inferred next date, at the
- * conservative P20 amount `incomeModel` already computed. `irregular`
- * contributes nothing, matching §4 E3's own rule ("nothing, unless a rule
- * exists") — and a rule, if one exists, is exactly what makes `incomeModel`
- * read `regular` instead.
+ * income rule inside the horizon, my-share amount. `irregular` contributes
+ * nothing, matching §4 E3's own rule ("nothing, unless a rule exists").
+ *
+ * A `variable` reading with **no rule** also contributes nothing here, on
+ * purpose — narrower than the spec's own "20th percentile of recent amounts"
+ * line reads. `incomeModel`'s inferred next date, for that case, comes from
+ * the median gap between a handful of irregular income rows: a genuinely
+ * thin basis for a specific claimed DATE. `horizonDaysFor` still uses it, but
+ * only to widen the safety window — the conservative direction, since a wrong
+ * guess there just means looking further ahead than strictly needed. Placing
+ * a dated, positive event on the projection from the same guess is the other
+ * direction: a wrong guess would silently relieve a real low-point warning.
+ * That asymmetry is why the two uses were split rather than sharing one gate.
  */
 function incomeEvents(snapshot: FinanceSnapshot, horizonEndMs: number): KnownEvent[] {
-  const income = incomeModel(snapshot);
-  if (income.consistency === 'irregular') return [];
-
   const rule = snapshot.recurring.rules.find(
     r => r.kind === 'income' && r.recur_freq && !r.pendingApproval && (!r.recur_state || r.recur_state === 'active'),
   );
-  if (rule) {
-    const skips = new Set(snapshot.recurring.skips[rule.id] ?? []);
-    const amount = rule.payments.find(p => p.personId === snapshot.meId)?.amount ?? 0;
-    return materializeInstances(rule, snapshot.asOf, horizonEndMs, skips)
-      .map(inst => ({ date: inst.date, amountPaise: amount, label: 'Income' }));
-  }
-  if (income.nextDate != null && income.nextDate <= horizonEndMs && income.eventAmountPaise != null) {
-    return [{ date: income.nextDate, amountPaise: income.eventAmountPaise, label: 'Income' }];
-  }
-  return [];
+  if (!rule) return [];
+  const skips = new Set(snapshot.recurring.skips[rule.id] ?? []);
+  const amount = rule.payments.find(p => p.personId === snapshot.meId)?.amount ?? 0;
+  return materializeInstances(rule, snapshot.asOf, horizonEndMs, skips)
+    .map(inst => ({ date: inst.date, amountPaise: amount, label: 'Income' }));
 }
 
 function skipsToMap(skips: Record<string, number[]>): Map<string, Set<number>> {

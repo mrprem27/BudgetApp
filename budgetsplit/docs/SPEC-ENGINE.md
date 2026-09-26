@@ -398,6 +398,24 @@ spec removes.
 3. **Floor = one week of essentials:** right for the pilot? It's derived rather than arbitrary, but
    it's still a choice.
 
+## 12b · Engine limitations — review before v1 ships
+
+Scoping calls from EN1–EN5, gathered in one place. Ship gate: each row accepted as good enough, or fixed,
+before EN10/EN11 switch real screens onto this engine.
+
+| # | Limitation | Where | Status |
+|---|---|---|---|
+| L1 | Need/Want is one hardcoded seed list, no per-category stored override | `behaviour.ts` `NEED_CATEGORY_SEED` | OK for now; real store is `EN10`/`EN11` work |
+| L2 | `afford()` has no goal-delay or 12-month-unfundable trigger | `assess.ts` `evaluate()` | Needs `EN6`/`goalForecast` — must land before the real switch |
+| L3 | Over-budget check only covers explicit monthly budgets | `assess.ts` `overBudgetReason` | Minor, cheap follow-up |
+| L4 | One-time purchase's `earliestComfortableDate` never differs from today's answer (no income in that path) | `assess.ts` | Real gap — "can wait" is a headline feature |
+| L5 | Beta-binomial repayment has no "failure" case — can't tell "always settles slowly" from "settles fast" | `behaviour.ts` `repaymentModel` | Open. See idea below |
+| L6 | Variable income's inferred date only widens the horizon, never places a projection event | `projection.ts` | Settled (deliberate, not pending) |
+
+**Open idea for L5, not built:** weight the prior by how much history backs it (a friend with 1
+settlement shouldn't read as confidently as one with 20) — a decay factor (~0.5 floated, not decided)
+on how fast the posterior moves per settlement. Needs its own pass before it's a task.
+
 ## Sources
 
 - [Quicken Simplifi — Using Projected Cash Flow](https://support.simplifi.quicken.com/en/articles/3357429-using-projected-cash-flow) · [Projected Cash Flow feature](https://www.quicken.com/features/projected-cashflow/) · [Bills & Income](https://support.simplifi.quicken.com/en/articles/4109588-using-the-bills-income-section)
