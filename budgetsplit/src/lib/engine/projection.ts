@@ -19,7 +19,7 @@ import { hashSnapshot, mulberry32 } from './rng';
 
 const DAY_MS = 86_400_000;
 /** §4 E3: "500 paths". */
-const SIMULATION_PATHS = 500;
+export const SIMULATION_PATHS = 500;
 /** §4 E2: "a 7-day block sample for the bootstrap, keeping the weekday rhythm." */
 const BLOCK_DAYS = 7;
 
@@ -86,9 +86,15 @@ export function knownEvents(snapshot: FinanceSnapshot, horizonEndMs: number): Kn
  * is always the final day. Found by walking rather than assumed, so this
  * keeps working unchanged once `EN5` adds events that DO raise the balance.
  */
-export function projectKnown(snapshot: FinanceSnapshot, horizonDays: number = STS_HORIZON_DAYS): Projection {
+export function projectKnown(
+  snapshot: FinanceSnapshot,
+  horizonDays: number = STS_HORIZON_DAYS,
+  /** A hypothetical purchase's own events (§4 E4, `EN4`'s `afford()`) — merged
+   *  in alongside the snapshot's real known events, never persisted anywhere. */
+  extraEvents: KnownEvent[] = [],
+): Projection {
   const horizonEndMs = snapshot.asOf + horizonDays * DAY_MS;
-  const events = knownEvents(snapshot, horizonEndMs);
+  const events = knownEvents(snapshot, horizonEndMs).concat(extraEvents).sort((a, b) => a.date - b.date);
   const rate = everydayRate(snapshot);
 
   let balance = snapshot.cash.available;
@@ -163,8 +169,9 @@ export function projectBand(
   snapshot: FinanceSnapshot,
   horizonDays: number = STS_HORIZON_DAYS,
   paths: number = SIMULATION_PATHS,
+  extraEvents: KnownEvent[] = [],
 ): UncertaintyBand {
-  const known = projectKnown(snapshot, horizonDays);
+  const known = projectKnown(snapshot, horizonDays, extraEvents);
   const floor = essentialFloor(snapshot);
   const sample = dailySample(snapshot);
 
@@ -178,7 +185,7 @@ export function projectBand(
   }
 
   const horizonEndMs = snapshot.asOf + horizonDays * DAY_MS;
-  const deltas = eventDeltaByDay(knownEvents(snapshot, horizonEndMs), snapshot.asOf, horizonDays);
+  const deltas = eventDeltaByDay(knownEvents(snapshot, horizonEndMs).concat(extraEvents), snapshot.asOf, horizonDays);
   const rng = mulberry32(hashSnapshot(snapshot));
 
   const balancesByDay: number[][] = Array.from({ length: horizonDays }, () => []);

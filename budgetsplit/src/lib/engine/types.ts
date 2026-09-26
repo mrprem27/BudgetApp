@@ -160,3 +160,56 @@ export type UncertaintyBand = {
    *  caller that reads one reads the other in the same breath (§4 E4). */
   floor: number;
 };
+
+/**
+ * E4, first slice (`EN4`): a prospective purchase (§4 E4, §5). `necessity`
+ * left unset takes the Afford screen's own pre-fill (`behaviour.ts`'s
+ * `defaultNecessity`) — a caller building its own scenario (tests, a future
+ * screen) can always override it.
+ *
+ * `when: 'can-wait'` doesn't change how the purchase itself is judged — it
+ * only asks `afford()` to additionally search forward for the earliest date
+ * it would be Comfortable (§5: "the engine also finds the earliest Comfortable
+ * date").
+ */
+export type Purchase = {
+  amountPaise: number;
+  category?: string;
+  necessity?: 'need' | 'want';
+  when: 'now' | 'can-wait';
+  /** Absent = one-time. `EN6`'s 12-month sinking-fund view (yearly true
+   *  expenses, "unfundable" months) isn't built yet, so a yearly recurrence
+   *  here behaves like a one-time purchase within the 30-day safety horizon —
+   *  only `weekly`/`monthly` land more than once inside it. */
+  recurrence?: 'weekly' | 'monthly' | 'yearly';
+};
+
+/** One reason the verdict landed where it did, ranked by `amountPaise` (§4 E4: "reasons, ranked by rupee effect, each carrying its number"). */
+export type AffordReason = {
+  code: 'cash_short' | 'below_floor' | 'over_budget';
+  /** The rupee effect this reason is ranked by (always positive). */
+  amountPaise: number;
+  label: string;
+};
+
+export type AffordVerdict = 'not-affordable' | 'tight' | 'comfortable';
+
+export type AffordResult = {
+  verdict: AffordVerdict;
+  headline: string;
+  lowPointBefore: { amount: number; date: number };
+  lowPointAfter: { amount: number; date: number };
+  /** `UncertaintyBand.cautiousLowPoint`, before and after the purchase — the
+   *  number the verdict is actually judged on, not the deterministic low point
+   *  above (which is what the headline quotes, matching `safeToSpendV2`). */
+  cautiousLowPointBefore: number;
+  cautiousLowPointAfter: number;
+  floor: number;
+  reasons: AffordReason[];
+  /** The largest amount of this same kind of purchase (same category,
+   *  recurrence, necessity) that would still be Comfortable. */
+  largestComfortableAmount: number;
+  /** Set only for `when: 'can-wait'`, and only when today's verdict isn't
+   *  already Comfortable. `undefined` if no day within the horizon works. */
+  earliestComfortableDate?: number;
+};

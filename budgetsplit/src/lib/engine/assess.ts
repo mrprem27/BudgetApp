@@ -1,12 +1,19 @@
 /**
  * E4 — the questions, answered on the projection (`SPEC-ENGINE.md` §4). Pure.
  *
- * First slice (`EN2`): `safeToSpend` only, on the deterministic projection.
- * `afford()`, `budgetForecast()` and `goalForecast()` arrive with `EN4`.
+ * `EN2` built `safeToSpend` on the deterministic projection. `EN4` (this slice)
+ * adds `afford()`, on `EN3`'s uncertainty band. `budgetForecast()` and
+ * `goalForecast()` are not yet built.
  */
-import type { FinanceSnapshot, Projection } from './types';
-import { projectKnown } from './projection';
+import type { AffordReason, AffordVerdict, FinanceSnapshot, KnownEvent, Projection, Purchase, AffordResult } from './types';
+import { projectKnown, projectBand, SIMULATION_PATHS } from './projection';
+import { essentialFloor, defaultNecessity } from './behaviour';
 import { STS_HORIZON_DAYS } from '../safeToSpend';
+import { recurringMonthlyEquivalent } from '../recurrence';
+import { windowForCadence } from '../budget';
+import { formatRupees } from '../money';
+
+const DAY_MS = 86_400_000;
 
 export type SafeToSpendV2 = {
   /** The largest amount spendable today while the projected path never goes
@@ -38,4 +45,171 @@ export function safeToSpendV2(snapshot: FinanceSnapshot, horizonDays: number = S
     dailyRate: projection.dailyRate,
     projection,
   };
+}
+
+/**
+ * `afford()`, first slice (`EN4`). A prospective purchase's own events (§4 E4:
+ * "adds the purchase as an event ... and re-projects").
+ *
+ * Recurring purchases repeat at their own interval up to the horizon — the
+ * exact mechanism real recurring bills already use (`expandUpcoming`), just
+ * for a purchase that doesn't exist as a transaction yet. `startMs` is
+ * `snapshot.asOf` for the purchase actually happening now; `earliestComfortableDate`
+ * below calls this with a later `startMs` to ask "what if it happened then instead".
+ *
+ * A `yearly` recurrence only ever lands once inside the 30-day safety horizon
+ * — telling it apart from a one-time purchase needs the 12-month commitment
+ * view, which is `EN6`'s sinking-fund machinery, not built yet.
+ */
+function purchaseEvents(purchase: Purchase, startMs: number, horizonEndMs: number): KnownEvent[] {
+  const label = purchase.category ?? 'Purchase';
+  const events: KnownEvent[] = [];
+  if (startMs > horizonEndMs) return events;
+
+  if (purchase.recurrence === 'weekly') {
+    for (let d = startMs; d <= horizonEndMs; d += 7 * DAY_MS) events.push({ date: d, amountPaise: -purchase.amountPaise, label });
+  } else if (purchase.recurrence === 'monthly') {
+    for (let d = startMs; d <= horizonEndMs;) {
+      events.push({ date: d, amountPaise: -purchase.amountPaise, label });
+      const dt = new Date(d);
+      d = Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth() + 1, dt.getUTCDate());
+    }
+  } else {
+    // No recurrence, or `yearly` — see the file-header note above.
+    events.push({ date: startMs, amountPaise: -purchase.amountPaise, label });
+  }
+  return events;
+}
+
+/**
+ * "Takes a category over a budget the person set themselves" (§4 E4's "Tight"
+ * row) — checked only against an explicit **monthly** budget for the
+ * purchase's category. Daily/yearly-cadence budgets aren't handled yet
+ * (`windowForCadence` + `budgetEquivalent`, `lib/budget.ts`, already generalize
+ * this for the Budget screen; wiring the same generalization here is
+ * straightforward follow-up, not done in this slice since nothing in `EN4`'s
+ * own accept criteria exercises it). No budget for the category, or no
+ * category on the purchase at all: no reason.
+ */
+function overBudgetReason(snapshot: FinanceSnapshot, purchase: Purchase): AffordReason | null {
+  if (!purchase.category) return null;
+  const budget = snapshot.budgets.find(b => b.category === purchase.category && b.cadence === 'monthly');
+  if (!budget) return null;
+
+  const { from, to } = windowForCadence('monthly', new Date(snapshot.asOf));
+  const spent = snapshot.history
+    .filter(h => h.kind === 'expense' && h.category === purchase.category && h.date >= from && h.date <= to)
+    .reduce((s, h) => s + h.amountPaise, 0);
+
+  const effect = purchase.recurrence
+    ? recurringMonthlyEquivalent(purchase.amountPaise, purchase.recurrence)
+    : purchase.amountPaise;
+
+  const after = spent + effect;
+  if (after <= budget.amount) return null;
+  return { code: 'over_budget', amountPaise: after - budget.amount, label: `Over your ${purchase.category} budget` };
+}
+
+type Evaluation = {
+  cautiousLowPointAfter: number;
+  overBudget: AffordReason | null;
+  verdict: AffordVerdict;
+};
+
+/**
+ * The verdict table (§4 E4), minus the one row this slice can't judge yet: a
+ * known commitment becoming unfundable within 12 months, and a Want pushing a
+ * dated goal past its target — both need machinery `EN6`/`goalForecast` haven't
+ * been built yet. Documented here rather than silently absent: those two paths
+ * to "Tight"/"Not affordable" simply never fire in this slice.
+ */
+function evaluate(snapshot: FinanceSnapshot, purchase: Purchase, startMs: number, horizonDays: number, floor: number): Evaluation {
+  const horizonEndMs = snapshot.asOf + horizonDays * DAY_MS;
+  const events = purchaseEvents(purchase, startMs, horizonEndMs);
+  const band = projectBand(snapshot, horizonDays, SIMULATION_PATHS, events);
+  const cashShort = band.cautiousLowPoint < 0;
+  const overBudget = overBudgetReason(snapshot, purchase);
+  const belowFloor = !cashShort && band.cautiousLowPoint < floor;
+
+  const verdict: AffordVerdict = cashShort ? 'not-affordable' : (belowFloor || overBudget) ? 'tight' : 'comfortable';
+  return { cautiousLowPointAfter: band.cautiousLowPoint, overBudget, verdict };
+}
+
+/**
+ * `safeToSpend()` = the largest `x` such that `afford(x, now, want)` keeps the
+ * cautious low point ≥ the floor (§4 E4) — by binary search, since `evaluate`
+ * is no longer linear in `x` once a budget line is in play (`overBudgetReason`
+ * can start or stop applying as `x` grows, same direction as the cash test).
+ * Holds the purchase's own category/recurrence/necessity fixed and varies only
+ * the amount — "how much more of this same kind of purchase, comfortably".
+ */
+function largestComfortableAmount(snapshot: FinanceSnapshot, purchase: Purchase, horizonDays: number, floor: number): number {
+  const isOk = (amt: number) => evaluate(snapshot, { ...purchase, amountPaise: Math.max(0, amt) }, snapshot.asOf, horizonDays, floor).verdict === 'comfortable';
+  if (!isOk(0)) return 0;
+
+  let lo = 0;
+  let hi = Math.max(snapshot.cash.available, 100);
+  for (let guard = 0; guard < 60 && isOk(hi); guard++) hi *= 2;
+  for (let i = 0; i < 30 && hi - lo > 1; i++) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (isOk(mid)) lo = mid; else hi = mid;
+  }
+  return lo;
+}
+
+/** Only for `when: 'can-wait'`: the earliest day within the horizon this same purchase would be Comfortable, scanning forward one day at a time. `undefined` if none is. */
+function findEarliestComfortableDate(snapshot: FinanceSnapshot, purchase: Purchase, horizonDays: number, floor: number): number | undefined {
+  const horizonEndMs = snapshot.asOf + horizonDays * DAY_MS;
+  for (let d = snapshot.asOf; d <= horizonEndMs; d += DAY_MS) {
+    if (evaluate(snapshot, purchase, d, horizonDays, floor).verdict === 'comfortable') return d;
+  }
+  return undefined;
+}
+
+function headlineFor(verdict: AffordVerdict, lowPointAfter: number): string {
+  if (verdict === 'not-affordable') return `You'd be about ${formatRupees(Math.abs(lowPointAfter))} short at the low point`;
+  if (verdict === 'tight') return `You'd have about ${formatRupees(lowPointAfter)} left at the low point`;
+  return `You'd still have about ${formatRupees(lowPointAfter)} left at the low point`;
+}
+
+export function afford(snapshot: FinanceSnapshot, purchase: Purchase, horizonDays: number = STS_HORIZON_DAYS): AffordResult {
+  const resolved: Purchase = { ...purchase, necessity: purchase.necessity ?? defaultNecessity(purchase.category) };
+  const floor = essentialFloor(snapshot);
+
+  const beforeBand = projectBand(snapshot, horizonDays);
+  const beforeKnown = projectKnown(snapshot, horizonDays);
+
+  const horizonEndMs = snapshot.asOf + horizonDays * DAY_MS;
+  const afterEvents = purchaseEvents(resolved, snapshot.asOf, horizonEndMs);
+  const afterKnown = projectKnown(snapshot, horizonDays, afterEvents);
+  const evalNow = evaluate(snapshot, resolved, snapshot.asOf, horizonDays, floor);
+
+  const reasons: AffordReason[] = [];
+  if (evalNow.verdict === 'not-affordable') {
+    reasons.push({ code: 'cash_short', amountPaise: Math.abs(evalNow.cautiousLowPointAfter), label: 'Would go below zero' });
+  } else if (evalNow.verdict === 'tight') {
+    if (evalNow.cautiousLowPointAfter < floor) {
+      reasons.push({ code: 'below_floor', amountPaise: floor - evalNow.cautiousLowPointAfter, label: 'Leaves less than a safe week of essentials' });
+    }
+    if (evalNow.overBudget) reasons.push(evalNow.overBudget);
+  }
+  reasons.sort((a, b) => b.amountPaise - a.amountPaise);
+
+  const result: AffordResult = {
+    verdict: evalNow.verdict,
+    headline: headlineFor(evalNow.verdict, afterKnown.lowPoint.amount),
+    lowPointBefore: { amount: beforeKnown.lowPoint.amount, date: beforeKnown.lowPoint.date },
+    lowPointAfter: { amount: afterKnown.lowPoint.amount, date: afterKnown.lowPoint.date },
+    cautiousLowPointBefore: beforeBand.cautiousLowPoint,
+    cautiousLowPointAfter: evalNow.cautiousLowPointAfter,
+    floor,
+    reasons,
+    largestComfortableAmount: largestComfortableAmount(snapshot, resolved, horizonDays, floor),
+  };
+
+  if (resolved.when === 'can-wait' && evalNow.verdict !== 'comfortable') {
+    result.earliestComfortableDate = findEarliestComfortableDate(snapshot, resolved, horizonDays, floor);
+  }
+
+  return result;
 }

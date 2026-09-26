@@ -1,6 +1,6 @@
 # Checkpoint — resume here
 
-`Written 2026-09-26 · Branch: claude/branch-selection-gi7lyy · HEAD: 8fe73ed`
+`Written 2026-09-26 · Branch: claude/branch-selection-gi7lyy · HEAD: 04b9412`
 
 A handoff for picking this work back up in a fresh session (local Claude Code or otherwise). The
 real task lists are `tasks/todo.md` (what's left, per-task accept/verify notes) and `tasks/plan.md`
@@ -29,7 +29,18 @@ P3 (person-screen picker sheet), CP2. Commits `cc92562`, `f3910a2`, `61028da`.
   (`projection.ts`'s `projectBand`), and the essential-spend floor (`behaviour.ts`'s
   `essentialFloor`, on a hardcoded Need/Want category seed since nothing stores that choice
   yet — `EN4` should reuse `NEED_CATEGORY_SEED` rather than inventing a second one).
-- **EN4–EN12** not started. EN4 (Afford v2 on the dev screen) is next.
+- **EN4** done (`04b9412`): `afford()` (`assess.ts`) on top of `EN3`'s band — verdict, ranked reasons, an
+  explicit-monthly-budget check, `largestComfortableAmount` (binary search), and
+  `earliestComfortableDate` for `when: 'can-wait'`. Not the dev screen itself (`EN4`'s scope is
+  `afford()`, tested directly) — wiring a real screen to it is `EN10`/`EN11`.
+  **Two real limits worth knowing before touching this next:** (1) no goal-delay or 12-month
+  "unfundable" Tight/Not-affordable triggers yet (needs `goalForecast`/`EN6`); (2) a one-time
+  purchase's `earliestComfortableDate` can never differ from today's answer with no income modelled
+  yet — only a *recurring* purchase's earliest-date search does anything useful right now (see
+  `assess.ts`'s `findEarliestComfortableDate` doc comment for why). Both are documented in
+  `todo.md`'s EN4 entry, not silently missing.
+- **EN5–EN12** not started. EN5 (Income + receivables) is next — it's the dependency both limits
+  above are waiting on.
 
 **Phase 4 (UPI redesign) and Phase 5 (your decisions)** — not started.
 
@@ -43,12 +54,15 @@ grounded narration) before building anything here — it crosses two of `SPEC-EN
 ## How to pick up
 
 1. `git log --oneline -10` to see you're where this file says you are; `git status` should be clean.
-2. Open `tasks/todo.md`, find the next unchecked box (`EN4` right now) — it has its own accept/verify
+2. Open `tasks/todo.md`, find the next unchecked box (`EN5` right now) — it has its own accept/verify
    criteria already written.
-3. Read `docs/SPEC-ENGINE.md` §4 (module E4, "Assessments") and §5 (Need/Want) before writing code —
-   `assess.ts`'s `SafeToSpendV2` and `projection.ts`'s `projectBand`/`UncertaintyBand` (EN3) are
-   already there to build `afford()` on top of, and `behaviour.ts`'s `NEED_CATEGORY_SEED` is the
-   Need/Want seed EN3 already had to invent for the floor — reuse it, don't add a second one.
+3. Read `docs/SPEC-ENGINE.md` §4 (module E2's Income row, module E3's "Uncertain events" —
+   receivables, module E5 if signals are touched) before writing code. `assess.ts`'s `afford()` (EN4)
+   and `evaluate()` are built around the current income-less `projectKnown`/`projectBand` — adding
+   income means income events can finally RAISE the balance, which breaks an assumption baked into
+   several comments (`projectKnown`'s "the path never rises", `EN3`'s "every path's low point is
+   always the final day", `afford()`'s can-wait note about one-time purchases). Expect to revisit all
+   three, not just add a new event type.
 4. Standing gates (run for every task, per `todo.md`'s own header):
    ```
    cd budgetsplit && npx jest

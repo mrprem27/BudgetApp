@@ -68,6 +68,16 @@ export function isNeedCategory(category: string): boolean {
   return NEED_CATEGORY_SEED.has(category);
 }
 
+/**
+ * The Afford screen's pre-filled Kind chip (§5): "your own last choice for this
+ * category, else the category's seed". Only the seed half is built here —
+ * nothing yet stores a per-category override (that lands with the real Afford
+ * screen, `EN10`/`EN11`), so this is always the seed today.
+ */
+export function defaultNecessity(category?: string): 'need' | 'want' {
+  return category != null && isNeedCategory(category) ? 'need' : 'want';
+}
+
 function median(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
