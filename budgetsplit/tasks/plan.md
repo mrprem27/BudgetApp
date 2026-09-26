@@ -257,6 +257,36 @@ task, sized after you pick. Nothing here is coded before its options task closes
 | The engine's predictions are wrong for real people | The feature loses trust, which is the user's standing worry | Back-test ship gates (EN8); facts-only fallback; nothing switches before your CP3 review of your own ledger |
 | Merge runs through the free-plan query budget | Slow on a big account | Same multi-request push as Upload, now 1.7 s per request with placement |
 
+## Phase 6 — AI context & narration (deferred, not specced yet)
+
+Decided 2026-09-26, in conversation, not yet turned into tracker rows: an optional AI layer on top
+of the finished money engine (after EN12), in three stages that keep the deterministic core
+deterministic:
+
+- **Stage A (optional, user-initiated).** Free text ("it's for my sister's wedding") parsed by
+  Gemini into a small, **guardrailed structured schema** — Need/Want, Now/Can-wait, which goal it
+  touches, a one-line note. Not new inputs the math doesn't already understand (§5) — a second,
+  lower-friction way to fill the same fields the manual chips fill today.
+- **Stage B (unchanged).** `afford()` runs on real numbers plus whatever structured fields it got,
+  from Stage A or the manual chips. No AI touches the money math.
+- **Stage C (optional).** A sentence narrating the deterministic verdict, incorporating Stage A's
+  context. Same rule as E6's own reasons: no number in the sentence that isn't already in the
+  result object.
+
+Provider: Gemini, via a new thin proxy alongside `server/receipt-ocr-proxy/` (same shape: stateless,
+holds the key, one narrow job) — reuses existing infra rather than a new provider/key.
+
+Why deferred: this narrates and contextualises numbers the engine doesn't produce correctly yet
+(Afford's real verdict is EN4; the whole engine is unproven until EN8's back-test gates and your
+CP3 review). It also crosses two of `SPEC-ENGINE.md` §10's "ask first" lines at once (adding ML,
+adding a stored input) and needs its own privacy disclosure (financial context leaving the device
+for the first time) — worth doing once, deliberately, not threaded through the engine build.
+
+Not yet done: an options task (screen layout, how Stage A is invited, what a refused/failed AI call
+falls back to), a spec doc or `SPEC-ENGINE.md` addendum before it gets tracker rows, and the proxy
+build itself.
+
 ## Open questions
 
-None block Phases 1–4. Phase 5 is made of questions by design.
+None block Phases 1–4. Phase 5 is made of questions by design. Phase 6 is a recorded decision,
+not yet broken into tasks — see above.

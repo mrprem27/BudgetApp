@@ -135,3 +135,9 @@ Options tasks come first; each build task is sized once you've picked.
 - [ ] **B-99 · Build the pick**
 
 When each Phase 5 item closes, its tracker row moves to `DONE` and its `FINDINGS.md` entry records the answer.
+
+## Phase 6 · AI context & narration — deferred, not yet broken into tasks
+
+Decided 2026-09-26; see `plan.md`'s Phase 6 for the three-stage design (guardrailed structured
+extraction → unchanged deterministic `afford()` → optional grounded narration) and why it waits
+until after EN12/CP3. No tasks filed yet — needs an options pass and a spec addendum first.
