@@ -1,4 +1,4 @@
-import * as SQLite from 'expo-sqlite';
+import type * as SQLite from 'expo-sqlite';
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
 import { planAutoAllocations, planOverspendRaid, planSurplusSweep } from '../../lib/savingsEngine';

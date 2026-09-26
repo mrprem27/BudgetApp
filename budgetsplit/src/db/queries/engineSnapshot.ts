@@ -1,4 +1,4 @@
-import * as SQLite from 'expo-sqlite';
+import type * as SQLite from 'expo-sqlite';
 import type { FinanceSnapshot } from '../../lib/engine/types';
 import { myShareOf } from '../../lib/splitMath';
 import { getMe } from './persons';
