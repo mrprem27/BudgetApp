@@ -87,7 +87,11 @@ Sync, two phones, two accounts, one group:
 
 Old F1 (cushion patch) dropped: the engine removes the threshold it would have fixed.
 
-- [ ] **EN1 · Snapshot + personas (M)** — `db/queries/engineSnapshot.ts`, 5 personas via real write paths · Accept: parts equal today's `getSafeToSpend` on demo + personas; each field pinned to its source
+- [x] **EN1 · Snapshot + personas (M)** — done 2026-09-26
+  - Files: `src/lib/engine/types.ts` (`FinanceSnapshot`), `src/db/queries/engineSnapshot.ts` (`getFinanceSnapshot`), `src/db/enginePersonas.ts` (5 personas via real write paths: `insertTxn`, `insertGroup`-equivalent personal-group write, `setCategoryBudgets`, `insertGoal`, `setMoneyProfile`), new `src/__tests__/engineSnapshot.test.ts`
+  - Accept: parts equal today's `getSafeToSpend` on demo + all 5 personas (cash, exposure, goal funding, budgets each checked against a direct call to the exact function `engineSnapshot.ts` names as its source); each field pinned to its source in code comments and in the test
+  - Verify: 12 tests; the income-vs-shares read, the recurring-linked marker and the personal-group write are each revert-proven (temporarily broken → the matching test fails → restored); determinism test (same persona twice → byte-identical history)
+  - Gates: `tsc` clean (app + server); full suite 206/206 suites, 2642/2642 tests; `docs/SYSTEM.md`'s query-module count updated 26 → 27
 - [ ] **EN2 · First slice → dev screen (M)** — everyday rate, deterministic projection (30 d), `safeToSpend` v2, `app/dev/engine.tsx` (dev tools only) · Accept: equals today's figure when no bill is dated inside the horizon; every difference names its event
 - [ ] **EN3 · Uncertainty band (M)** — seeded PRNG, 7-day block bootstrap ×500, P10/P50/P90, P20 low point, floor = a week of essentials · Accept: deterministic; empty sample → known path exactly; < 100 ms / year; P20 falls as variance rises
 - [ ] **EN4 · Afford v2 on the dev screen (M)** — verdict rules, ranked reasons, largest comfortable amount, Need/Want + Now/Can wait · Accept: property tests (⟺ StS, monotonic, more income never worse, No only on shortfall); persona goldens; recurring ₹2,000 > one-time ₹2,000
