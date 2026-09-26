@@ -69,7 +69,7 @@ export async function getFinanceSnapshot(db: SQLite.SQLiteDatabase, nowMs: numbe
 
   const profile = await getMoneyProfile(db);
   const [pos, groups, exposure, budgets, cardDueDay] = await Promise.all([
-    getCashPosition(db, profile),
+    getCashPosition(db, profile, nowMs),
     getAllGroups(db),
     getMyExposure(db, me.id),
     getMyGlobalBudgetRows(db, me.id),

@@ -571,6 +571,19 @@ export async function getCashPosition(
    * simply the same question asked five times.
    */
   preloaded?: MoneyProfileWithMeta,
+  /**
+   * The cutoff every query below reads against. Defaults to `Date.now()` — the
+   * only behavior every existing caller sees. A caller asking "what was cash
+   * as of `asOfMs`" (the money engine's back-test, `EN8`) gets a real
+   * historical figure instead — `CASH_TOTALS_SQL`'s own cutoff parameter was
+   * already there, just always bound to `Date.now()` rather than exposed.
+   * `getTotalSaved` stays date-unbound (a known simplification, `SPEC-ENGINE.md`
+   * §12b) — none of the back-test's fixture personas ever record a savings
+   * deposit, so it reads 0 either way for them; a real ledger with savings
+   * activity would need this too before the back-test could trust `available`
+   * for a date with money already saved by then.
+   */
+  asOfMs: number = Date.now(),
 ): Promise<CashPosition> {
   const me = await getMe(db);
   const empty: CashPosition = { available: 0, openingCash: 0, income: 0, paidExpenses: 0, settledOut: 0, settledIn: 0, savings: 0, cardSpend: 0 };
@@ -583,7 +596,7 @@ export async function getCashPosition(
   // any Plan edit re-based the window and erased the card spend it was measuring.
   const profile = preloaded ?? await getMoneyProfile(db);
   const [row, savedTotal] = await Promise.all([
-    db.getFirstAsync<CashTotals>(CASH_TOTALS_SQL, [profile.cardBaselineAt ?? 0, profile.cardBaselineAt ?? 0, me.id, me.id, Date.now()]),
+    db.getFirstAsync<CashTotals>(CASH_TOTALS_SQL, [profile.cardBaselineAt ?? 0, profile.cardBaselineAt ?? 0, me.id, me.id, asOfMs]),
     getTotalSaved(db),
   ]);
   const totals: CashTotals = row ?? { income: 0, paidExpenses: 0, settledOut: 0, settledIn: 0, cardSpend: 0 };
@@ -600,7 +613,7 @@ export async function getCashPosition(
    * assign to a bucket rather than guessing and quietly draining one.
    */
   const flows = await db.getAllAsync<{ bucket: string | null; delta: number }>(
-    BUCKET_FLOWS_SQL, [me.id, me.id, Date.now()],
+    BUCKET_FLOWS_SQL, [me.id, me.id, asOfMs],
   );
   const flowOf = (b: AssetBucket) => flows.find(f => f.bucket === b)?.delta ?? 0;
   pos.byBucket = {
