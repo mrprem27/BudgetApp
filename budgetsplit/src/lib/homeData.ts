@@ -6,7 +6,7 @@ import {
 import { getAllPersons } from '../db/queries/persons';
 import { getAllGroups, sharedGroupsOf } from '../db/queries/groups';
 import { getMyExposure } from '../db/queries/balances';
-import { getSafeToSpend } from '../db/queries/spendPower';
+import { getSafeToSpendV2 } from '../db/queries/spendPower';
 import { getPendingCount } from '../db/queries/pending';
 import { getPendingApprovalCount } from '../db/queries/approval';
 import { getCategories } from '../db/queries/categories';
@@ -258,7 +258,9 @@ export async function loadHomeData(
     // rolling horizon regardless of the Today/Month/Year selector, which is
     // exactly why it renders *outside* the card those pills drive: inside, it
     // read as a headline that ignored its own control (see `StsStrip`).
-    const sts = await getSafeToSpend(db);
+    // `EN10`: reads the money engine (`getSafeToSpendV2`), not the arithmetic
+    // formula — same breakdown shape, so `StsStrip`/`StsSheet` are unchanged.
+    const sts = await getSafeToSpendV2(db);
 
     // ── Health score inputs: the four FinHealth-style pillars, each term from
     // its single existing source (see lib/financialHealth.ts). ──

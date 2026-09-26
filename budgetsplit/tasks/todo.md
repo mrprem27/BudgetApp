@@ -144,8 +144,22 @@ Old F1 (cushion patch) dropped: the engine removes the threshold it would have f
     speculatively. **Need/Want learning** stays parked too — no per-category override storage exists yet
     (already `§12b` L1), and this doesn't change that. Row kept, checked off as "resolved by reshaping,"
     not by building the thing as originally scoped.
-- [ ] **EN10 · Switch Safe-to-Spend (S)** — Home + `StsSheet` tap-through (`DQ-103`), layout from O-103 · Accept: parity notes committed; no screen calls the old formula · **blocked on CP3 DEVICE above**
-- [ ] **EN11 · Switch Afford (S)** — `app/afford.tsx` + the Add screen hint, layout from O-100; delete the six checks · Accept: a guard that no `evaluateAfford` caller remains; EN8 gates still pass · **blocked on CP3 DEVICE above**
+- [x] **EN10 · Switch Safe-to-Spend (S)** — done 2026-09-27 (backend swap only; the tap-through/O-103 redesign is separate, still open)
+  - `getSafeToSpendV2` (`db/queries/spendPower.ts`) — `getFinanceSnapshot` + `safeToSpendV2`, breakdown parts re-derived from the projection's own known events by label instead of queried a second time. `homeData.ts`'s Home loader now calls it instead of `getSafeToSpend`. `getSafeToSpend` itself is untouched on purpose — still `useEngineDevComparison`'s independent "Old" column, and still what `afford.ts`/the Add-screen hint read until `EN11`
+  - Accept: `spendPowerV2.test.ts` — every field (`amount`, `available`, `upcomingBills`, `cardRepayment`, `goalRemaining`, `netIOwe`, `everydaySpend`, `dailyRate`) matches `getSafeToSpend` exactly across all 5 personas + the no-user case; revert-proven (a planted label bug fails 3 of 6 cases)
+  - Gates: `tsc` clean app+server; full suite 215/215, 2700/2700
+- [ ] **EN11 · Switch Afford (S)** — `app/afford.tsx` + the Add screen hint, layout from O-100; delete the six checks · Accept: a guard that no `evaluateAfford` caller remains; EN8 gates still pass
+  - **Attempted 2026-09-27, genuinely blocked on O-100 — not just unstarted.** Unlike `EN10`, this
+    isn't a same-numbers backend swap: the new engine's `AffordResult` deliberately has a smaller
+    reason set than `lib/afford.ts`'s six checks (no goal-delay trigger, no category-norm/income-share/
+    month-forecast-over checks — `EN4`'s own documented scope cuts, `§12b` L2/L4), which is exactly
+    the simplification `DQ-100` asked for. But today's screen (`app/afford.tsx`) has a whole breakdown
+    card and a "WHAT THIS COSTS YOU" card built around the OLD `AffordResult`'s richer fields
+    (`categoryAfter`, `incomeShare`, `projectedAfter`, `goalImpact` — none exist on the new type).
+    Forcing the new engine's data through that old layout would either crash on missing fields or
+    render a visibly broken/half-empty screen — not a safe swap to make without the options pass
+    `DQ-100` itself calls for. Real product decisions needed: what to keep, what to cut, how to phrase
+    the simpler verdict. Left undone rather than rushed.
 - [ ] **EN12 · Signals, one surface per commit (S each)** — forecast card + budget bar · low-point warning · unusual spend · recurring analysis · savings suggestion · Insights · health Spend/Save · Accept: same number or a written, justified difference; nothing below its minimum. **Each commit builds its own E2 sub-model from the old EN9 scope as it's needed** — don't pre-build the list
 - [ ] **CP3b** — gates, commit, push after each switch; device look at Home, Afford and Insights after EN11
 
