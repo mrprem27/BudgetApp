@@ -98,6 +98,9 @@ export type Behaviour = {
   /** Trimmed-mean daily non-recurring expense (paise), or `null` below 30 days
    *  of qualifying history — never a guess (§4 E2). */
   everydayRatePaise: number | null;
+  /** One week of essential (Need-category) spend — the floor E3 protects
+   *  (§4 E3). 0 below its own minimum ("cold start"), never a guess either. */
+  essentialFloorPaise: number;
 };
 
 /** One deterministic, dated claim on cash between now and the horizon (§4 E3). */
@@ -125,4 +128,35 @@ export type Projection = {
   dailyRate: number | null;
   days: ProjectedDay[];
   lowPoint: { amount: number; date: number; events: string[] };
+};
+
+/** One day's simulated balance spread, P10/P50/P90 across all 500 paths (§4 E3). */
+export type PercentileDay = {
+  date: number;
+  p10: number;
+  p50: number;
+  p90: number;
+};
+
+/**
+ * E3, second slice (`EN3`): the uncertainty band around the deterministic
+ * path — 500 bootstrapped futures over the same known events, differing only
+ * in the everyday-spend draw for each day.
+ *
+ * **Thin data** (`sample.length === 0`, matching `Behaviour.everydayRatePaise
+ * === null`): no simulation runs. The band collapses onto the known path
+ * exactly — `paths` is 0 and every day's P10/P50/P90 equal that day's
+ * deterministic balance — and `cautiousLowPoint` equals the known path's own
+ * low point (§4 E3 "Thin data").
+ */
+export type UncertaintyBand = {
+  /** 500 normally, 0 when there wasn't enough history to simulate at all. */
+  paths: number;
+  days: PercentileDay[];
+  /** The 20th percentile of each path's own low point — "four in five
+   *  simulated futures do better than this" (§4 E3). */
+  cautiousLowPoint: number;
+  /** `Behaviour.essentialFloorPaise`, carried alongside the band because every
+   *  caller that reads one reads the other in the same breath (§4 E4). */
+  floor: number;
 };

@@ -1,6 +1,6 @@
 # Checkpoint — resume here
 
-`Written 2026-09-26 · Branch: claude/branch-selection-gi7lyy · HEAD: c67efec`
+`Written 2026-09-26 · Branch: claude/branch-selection-gi7lyy · HEAD: 8fe73ed`
 
 A handoff for picking this work back up in a fresh session (local Claude Code or otherwise). The
 real task lists are `tasks/todo.md` (what's left, per-task accept/verify notes) and `tasks/plan.md`
@@ -25,7 +25,11 @@ P3 (person-screen picker sheet), CP2. Commits `cc92562`, `f3910a2`, `61028da`.
   decision made mid-build: income is deliberately excluded from this slice (deferred whole to EN5),
   because every fixture persona gets paid inside 30 days, which made "equals today's figure when no
   bill is in the horizon" (EN2's own accept criterion) unsatisfiable otherwise.
-- **EN3–EN12** not started. EN3 (uncertainty band: seeded PRNG, bootstrap, P10/P50/P90) is next.
+- **EN3** done (`8fe73ed`): `src/lib/engine/rng.ts` (seeded PRNG), the P10/P50/P90 bootstrap band
+  (`projection.ts`'s `projectBand`), and the essential-spend floor (`behaviour.ts`'s
+  `essentialFloor`, on a hardcoded Need/Want category seed since nothing stores that choice
+  yet — `EN4` should reuse `NEED_CATEGORY_SEED` rather than inventing a second one).
+- **EN4–EN12** not started. EN4 (Afford v2 on the dev screen) is next.
 
 **Phase 4 (UPI redesign) and Phase 5 (your decisions)** — not started.
 
@@ -39,11 +43,12 @@ grounded narration) before building anything here — it crosses two of `SPEC-EN
 ## How to pick up
 
 1. `git log --oneline -10` to see you're where this file says you are; `git status` should be clean.
-2. Open `tasks/todo.md`, find the next unchecked box (`EN3` right now) — it has its own accept/verify
+2. Open `tasks/todo.md`, find the next unchecked box (`EN4` right now) — it has its own accept/verify
    criteria already written.
-3. Read `docs/SPEC-ENGINE.md` §4 (module E3, "Uncertainty band") and §7/§8 (testing strategy, ship
-   gates) before writing code — the personas and back-test machinery this needs already partly exist
-   (`src/db/enginePersonas.ts`).
+3. Read `docs/SPEC-ENGINE.md` §4 (module E4, "Assessments") and §5 (Need/Want) before writing code —
+   `assess.ts`'s `SafeToSpendV2` and `projection.ts`'s `projectBand`/`UncertaintyBand` (EN3) are
+   already there to build `afford()` on top of, and `behaviour.ts`'s `NEED_CATEGORY_SEED` is the
+   Need/Want seed EN3 already had to invent for the floor — reuse it, don't add a second one.
 4. Standing gates (run for every task, per `todo.md`'s own header):
    ```
    cd budgetsplit && npx jest
@@ -67,8 +72,10 @@ grounded narration) before building anything here — it crosses two of `SPEC-EN
   don't end up sharing one in-memory ledger.
 - The full jest suite includes doc-integrity guards (`countClaims.test.ts`, `docCoverage.test.ts`,
   `screenIdMap.test.ts`, `coverage.test.ts` / `scripts/build-system-map.js`) that fail on a new route
-  or a changed module count until the docs are updated to match — expect this the moment EN3 or later
-  adds a new file under `src/db/queries/` or `src/lib/`, or any new route.
+  or a changed **query-module** count until the docs are updated to match. `EN3` added a new file
+  under `src/lib/engine/` (`rng.ts`) with no doc-guard failure — these guards count `src/db/queries/`
+  modules and routes specifically, not `src/lib/` — but stay alert for it the moment a task adds a
+  new query module or route.
 - `docs/SYSTEM.md`, `docs/SCREENS.md`, `docs/TRACKER.md`, `docs/FINDINGS.md`, `docs/SYNC-MODEL.md`,
   `docs/RELEASE_CHECKLIST.md` and `AGENTS.md` are the seven **live** documents (AGENTS.md says so
   explicitly) — anything else under `docs/` (including `docs/history/`) is frozen and must not be
