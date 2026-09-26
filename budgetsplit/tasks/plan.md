@@ -11,9 +11,9 @@ There's no separate spec file. By the user's choice, the spec is the tracker row
 |---|---|---|---|
 | `DQ-94` | Merge into my account at first sign-in | Decided | Phase 1 (build) |
 | `DQ-94` part 2 | "Same person as…" — combine two people by hand | Decided | Phase 2 (build) |
-| `DQ-100`, `DQ-103` | The money engine behind Afford, Safe-to-Spend and every forecast (`SPEC-ENGINE.md`) | Spec written 2026-09-26 | Phase 3 (build) |
+| `DQ-100`, `DQ-103` | The money engine behind Afford and Safe-to-Spend (`SPEC-ENGINE.md`, v1) | Spec rewritten to v1 2026-09-27 | Phase 3 (build) |
 | `DQ-98` | UPI app picker: logo button + Change grid | Decided | Phase 4 (build) |
-| `DQ-99`, `DQ-101`, `DQ-102` + the Afford / Safe-to-Spend screens | Recurring placement, Settings, wordiness, and how the engine's answers look | **Your call** | Phase 5 (options first, build after you pick) |
+| `DQ-99`, `DQ-101`, `DQ-102` + the Afford / Safe-to-Spend screens | Recurring placement, Settings, wordiness, and how the engine's answers look | Answered 2026-09-27 | Phase 5 (builds the recorded proposals) |
 
 **32 tasks across 5 phases** (Merge 4 · Same person 3 · Engine 12 · UPI 5, one deferred · decisions: 5 options + 3 builds; the Afford and Safe-to-Spend screens are built as EN10/EN11). None is bigger than M. Each phase ends at a checkpoint. Checkpoints
 marked DEVICE are yours; the rest are mine (gates green, committed).
@@ -187,23 +187,17 @@ mistake `EN3`'s reverted band was. Each `EN12` commit builds only the E2 sub-mod
 point it needs it. Fixed vs variable additionally needs a `description` field on `FinanceSnapshot`
 that doesn't exist yet — parked until something asks for it.
 
-**EN10 · Switch Safe-to-Spend (S).** Home hero and `StsSheet` read the engine; the sheet's lines
-tap through to their rows (`DQ-103`). Layout follows O-103 (Phase 5).
-*Accept:* parity notes committed; old `computeSafeToSpend` reduced to an adapter, with no screen
-calling it.
+**Engine tail — decided 2026-09-27** (spec rewritten to v1: `docs/SPEC-ENGINE.md` §2 has every call).
 
-**EN11 · Switch Afford (S).** `app/afford.tsx` and the Add screen's inline hint read `afford()`;
-`lib/afford.ts`'s six checks are deleted. Layout follows O-100.
-*Accept:* no caller of `evaluateAfford` remains (a guard); the gates from EN8 still pass.
+| Task | What | Accept |
+|---|---|---|
+| **EN10** ✅ | Home reads `getSafeToSpendV2` | Parity with the old formula on every field, 5 personas |
+| **EN13 · Horizon to payday, salary counted (S)** | `safeToSpendV2` uses `horizonDaysFor` + income. The breakdown is read up to the **low point** (cash − claims − everyday spend to that day + income before it), so the lines always add up to the figure; the strip says "until 5 Oct" instead of "over 30 days". Add-screen toast reads the same | Parts sum to `amount` exactly on every persona; each difference from the old figure named |
+| **EN11 · Afford on the engine, "number first" (M)** | `app/afford.tsx` rebuilt on `afford()`: headline + verdict, ≤ 2 reasons, "most you can spend comfortably", can-wait date, breakdown folded behind "How we got this". Need/Want chip removed. Add-screen hint reads `afford()`. `lib/afford.ts` deleted | Guard: no `evaluateAfford` caller; property: Not affordable ⟺ amount > Safe to spend |
+| **EN12 · Low-point warning (S)** | `lib/engine/signals.ts`: below the floor within 14 days → one line on Home with the date and the biggest event before it | Fires on a persona that dips, silent on one that doesn't, silent below the rate's minimum |
+| **B-103 · StS sheet you can check (M)** | Every line taps through to its rows; "Cash last confirmed <date> · Update"; thin history said plainly | Each line's rows sum to the line |
 
-**EN12 · Signals, one surface per commit (S each).** The forecast card and budget bar → E4 budget
-forecast with a band; the low-point warning; unusual spend; recurring analysis; the savings
-suggestion; Insights; the health score's Spend and Save pillars.
-*Accept:* per surface, the same number as before or a written, justified difference; nothing fires
-below its model's minimum.
-
-**CP3b** — gates, commit, push after each switch; a device look at Home, Afford and Insights after
-EN11.
+**CP3b** — gates, commit after each; device look at Home and Afford (yours).
 
 ## Phase 4 — UPI payment redesign (`DQ-98`)
 
@@ -236,18 +230,17 @@ detected; the generic `upi://` becomes the "Other UPI app" tile.
 **CP4** — **DEVICE, iOS** (Android deferred with U5): pay with the default app; Change → pick another; relaunch →
 the new default stuck; Request QR scanned from a second phone.
 
-## Phase 5 — Your decisions (`DQ-99`–`DQ-103`)
+## Phase 5 — Your decisions (`DQ-99`–`DQ-103`) — answered 2026-09-27
 
-Each item is one **options** task (I draw two or three layouts; you pick) followed by one **build**
-task, sized after you pick. Nothing here is coded before its options task closes.
+Options were skipped by agreement: each item builds the proposal already recorded in `FINDINGS.md`,
+and `DQ-99` (left unscoped by the user) is decided from the existing Recurring rule.
 
-| Order | Options task | Build task (after you pick) | Why this order |
-|---|---|---|---|
-| 1 | O-103 Safe-to-Spend screen: tap-through lines, the band, "cash last confirmed" | built as EN10 | After CP3: the numbers first, then the look |
-| 2 | O-100 Afford screen: headline, ≤ 2 reasons, the Need/Want and Now/Can wait chips | built as EN11 | Same |
-| 3 | O-101 Settings: consolidated rows | B-101 | Rows must settle before copy is trimmed |
-| 4 | O-102 Copy rule (a line into `AGENTS.md`) | B-102 copy pass, screen by screen | Last: touches every screen |
-| 5 | O-99 Recurring / Upcoming placement | B-99 | Independent; slot anywhere |
+| Order | Task | Builds |
+|---|---|---|
+| 1 | `DQ-100`, `DQ-103` | EN11 and B-103 above |
+| 2 | **B-101 · Settings (M)** | One **Account & sync** row, one **Data** row, Currency dropped |
+| 3 | **B-102 · Copy rule + pass (M)** | The rule into `AGENTS.md`, then one pass screen by screen |
+| 4 | **B-99 · Recurring placement (S)** | Decided from the rule "two lists + one rule screen; a list opens the thing" |
 
 ## Risks
 

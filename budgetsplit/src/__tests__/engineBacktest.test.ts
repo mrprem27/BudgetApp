@@ -1,157 +1,139 @@
 /**
- * The money engine's back-test — `SPEC-ENGINE.md` §8, `EN8`, formalized as a
- * command instead of eyeballing the dev comparison screen.
+ * The money engine's back-test — `SPEC-ENGINE.md` §8, `EN8`.
  *
  *   npm run engine:backtest
  *
- * What it does, per persona: stand at several past dates, build the snapshot
- * as it would honestly have looked *then* (`getFinanceSnapshot` already bounds
- * history/cash to `asOfMs` — nothing here peeks at the future), project
- * forward with the same deterministic `projectKnown` the app uses, and
- * compare the projected low point against the REAL low point that actually
- * happened between then and the horizon's end (sampled day by day via
- * `getCashPosition`'s own `asOfMs` cutoff, added in `4ba8352` for exactly
- * this).
+ * Stand at past dates per persona, project forward, compare with what actually
+ * happened. Two gates, both hard-fail:
  *
- * The one ship gate that still applies post-EN3-revert (§8's table, minus the
- * band rows — there is no P10/P90 to check coverage on any more): **false
- * "Not affordable" must be zero.** The model saying you'll go short when you
- * genuinely never would is the one wrong answer worse than saying nothing.
- * A missed shortfall (a real dip the model didn't see coming) is reported
- * too, as information — it isn't the ship gate, but it's the more useful
- * thing to read when deciding whether the deterministic path is trustworthy.
+ * 1. **Everyday-spend calibration.** The rate is the engine's only estimate —
+ *    bills, card, goals and debts are facts read off the ledger. Predicted
+ *    (rate × horizon) vs the real non-recurring my-share spend in the window:
+ *    every run within ±`MAX_RATE_ERROR`.
+ * 2. **No false "Not affordable".** The cash forecast (bills + everyday +
+ *    income) says the balance goes below zero; reality says it never did.
+ *    Must be zero.
  *
- * **This test does not hard-fail on that gate.** 5 synthetic personas over a
- * handful of sampled windows is exactly the kind of thing that can't honestly
- * validate a real number (`SPEC-ENGINE.md` §8, the same reasoning the EN3
- * band was reverted over) — a run currently DOES surface one false
- * "Not affordable" (the `student` persona), consistent, small, and not yet
- * investigated; see `docs/SPEC-ENGINE.md` §12b for the tracked finding. This
- * test reports it plainly every run rather than hiding it OR turning it into
- * a permanently-red CI gate over fixture noise.
+ * What the stand-point snapshot drops, and why (both were contaminating the
+ * first version of this test, and very likely L7's original evidence too):
+ * - `futureOneOffs`. A snapshot taken "as of" a past date still sees every row
+ *   dated after it — the db has no record of *when* a row was entered — so the
+ *   real future spend leaked in as pre-logged bills, on top of the rate.
+ * - The three reservations (card balance, goal contributions, what I owe).
+ *   Safe-to-Spend sets that money aside on purpose; the fixtures never pay
+ *   the card or fund a goal, so reality keeps it. That's policy, not a
+ *   prediction, and there's nothing to calibrate.
  *
- * Printed as a table (jest doesn't silence `console.log` by default), so
- * this is meant to be *read*, not just to go green — re-run it any time the
- * engine changes, or against a fresh export of a real ledger (swap
- * `buildPersona` for a loader on that export; nothing else here assumes a
- * fixture).
+ * Swap `buildPersona` for a loader on a real exported ledger to run it on
+ * real data — nothing else here assumes a fixture.
  */
 import { createTestDb } from './helpers/testDb';
 import { buildPersona, PERSONA_KINDS, PERSONA_NOW, type PersonaKind } from '../db/enginePersonas';
 import { getFinanceSnapshot } from '../db/queries/engineSnapshot';
 import { getCashPosition } from '../db/queries/savings';
-import { projectKnown, horizonDaysFor } from '../lib/engine/projection';
+import { projectKnown } from '../lib/engine/projection';
+import { everydayRate } from '../lib/engine/behaviour';
+import type { FinanceSnapshot } from '../lib/engine/types';
+import { STS_HORIZON_DAYS } from '../lib/safeToSpend';
 import { formatRupees } from '../lib/money';
 
 const DAY_MS = 86_400_000;
-
-/** How far back to stand, per run — skipped if it lands before the persona has any history at all (a cold-start snapshot has nothing to project from and would just be noise). */
-const STAND_BACK_DAYS = [45, 30, 20, 10, 5];
+const STAND_BACK_DAYS = [90, 75, 60, 45, 30];
+const HORIZON = STS_HORIZON_DAYS;
+/** ±25%: today's worst run is 13%; a rate twice or half the truth fails loudly. */
+const MAX_RATE_ERROR = 0.25;
 
 type Run = {
   persona: PersonaKind;
   standAtMs: number;
-  horizonDays: number;
-  predictedLowPaise: number;
-  actualLowPaise: number;
-  errorPaise: number;
+  predictedSpend: number;
+  actualSpend: number;
+  rateError: number;
+  predictedLow: number;
+  actualLow: number;
   falseNotAffordable: boolean;
-  missedShortfall: boolean;
 };
+
+/** The forecast half only: no leaked future rows, no reservations. */
+function forecastOnly(s: FinanceSnapshot): FinanceSnapshot {
+  return {
+    ...s,
+    futureOneOffs: [],
+    cash: { ...s.cash, creditUsed: 0 },
+    goals: { ...s.goals, funding: { ...s.goals.funding, remaining: 0 } },
+    exposure: { ...s.exposure, owe: 0 },
+  };
+}
 
 async function backtestPersona(kind: PersonaKind): Promise<Run[]> {
   const db = createTestDb();
   await buildPersona(db, kind);
   const runs: Run[] = [];
 
-  for (const backDays of STAND_BACK_DAYS) {
-    const standAtMs = PERSONA_NOW - backDays * DAY_MS;
+  for (const back of STAND_BACK_DAYS) {
+    const standAtMs = PERSONA_NOW - back * DAY_MS;
+    const endMs = standAtMs + HORIZON * DAY_MS;
+    if (endMs > PERSONA_NOW) continue;
 
     const snapshot = await getFinanceSnapshot(db, standAtMs);
-    // No qualifying history yet at this stand-point — a cold-start snapshot's
-    // projection is degenerate (rate is `null`, floor is 0), not a real miss.
-    if (snapshot.history.length === 0) continue;
+    const rate = everydayRate(snapshot);
+    if (rate == null) continue; // below the rate's own minimum — nothing claimed, nothing to check
 
-    const horizonDays = horizonDaysFor(snapshot);
-    const horizonEndMs = standAtMs + horizonDays * DAY_MS;
-    if (horizonEndMs > PERSONA_NOW) continue; // the real outcome isn't in the fixture past this point
+    const later = await getFinanceSnapshot(db, endMs);
+    const actualSpend = later.history
+      .filter(h => h.kind === 'expense' && !h.isRecurringLinked && h.date > standAtMs && h.date <= endMs)
+      .reduce((s, h) => s + h.amountPaise, 0);
+    const predictedSpend = rate * HORIZON;
 
-    const predicted = projectKnown(snapshot, horizonDays);
-    const predictedLowPaise = predicted.lowPoint.amount;
-
-    // The real trajectory: sample actual cash every day across the same
-    // window and take the minimum — the thing `predictedLowPaise` is a claim
-    // about.
-    let actualLowPaise = Infinity;
-    for (let d = standAtMs; d <= horizonEndMs; d += DAY_MS) {
-      const real = await getCashPosition(db, undefined, d);
-      if (real.available < actualLowPaise) actualLowPaise = real.available;
+    const predictedLow = projectKnown(forecastOnly(snapshot), HORIZON, [], true).lowPoint.amount;
+    let actualLow = Infinity;
+    for (let d = standAtMs; d <= endMs; d += DAY_MS) {
+      actualLow = Math.min(actualLow, (await getCashPosition(db, undefined, d)).available);
     }
 
     runs.push({
-      persona: kind,
-      standAtMs,
-      horizonDays,
-      predictedLowPaise,
-      actualLowPaise,
-      errorPaise: actualLowPaise - predictedLowPaise,
-      falseNotAffordable: predictedLowPaise < 0 && actualLowPaise >= 0,
-      missedShortfall: predictedLowPaise >= 0 && actualLowPaise < 0,
+      persona: kind, standAtMs, predictedSpend, actualSpend,
+      rateError: actualSpend > 0 ? (predictedSpend - actualSpend) / actualSpend : 0,
+      predictedLow, actualLow,
+      falseNotAffordable: predictedLow < 0 && actualLow >= 0,
     });
   }
   return runs;
 }
 
-function fmtDate(ms: number): string {
-  return new Date(ms).toISOString().slice(0, 10);
-}
+const pct = (x: number) => `${x >= 0 ? '+' : ''}${Math.round(x * 100)}%`;
 
 describe('engine back-test (SPEC-ENGINE.md §8)', () => {
-  it('never falsely claims a shortfall that never happened', async () => {
-    const all: Run[] = [];
-    for (const kind of PERSONA_KINDS) {
-      all.push(...(await backtestPersona(kind)));
-    }
+  let runs: Run[] = [];
 
-    // eslint-disable-next-line no-console
-    console.log('\nMoney engine back-test — SPEC-ENGINE.md §8\n');
-    console.log('persona          stand-at    horizon  predicted low   actual low     error');
-    console.log('-'.repeat(88));
-    for (const r of all) {
-      const flag = r.falseNotAffordable ? '  ⚠ FALSE NOT-AFFORDABLE' : r.missedShortfall ? '  (missed a real dip)' : '';
-      console.log(
-        `${r.persona.padEnd(16)} ${fmtDate(r.standAtMs)}  ${String(r.horizonDays).padStart(3)}d   `
-        + `${formatRupees(r.predictedLowPaise).padStart(14)} ${formatRupees(r.actualLowPaise).padStart(14)} `
-        + `${formatRupees(r.errorPaise).padStart(10)}${flag}`,
-      );
-    }
+  beforeAll(async () => {
+    for (const kind of PERSONA_KINDS) runs.push(...(await backtestPersona(kind)));
 
-    const falseNotAffordable = all.filter(r => r.falseNotAffordable);
-    const missedShortfalls = all.filter(r => r.missedShortfall);
-    const meanAbsErrorPaise = all.length > 0
-      ? Math.round(all.reduce((s, r) => s + Math.abs(r.errorPaise), 0) / all.length)
-      : 0;
+    const rows = runs.map(r =>
+      `${r.persona.padEnd(15)} ${new Date(r.standAtMs).toISOString().slice(0, 10)}  `
+      + `spend ${formatRupees(r.predictedSpend).padStart(11)} vs ${formatRupees(r.actualSpend).padStart(11)} ${pct(r.rateError).padStart(5)}   `
+      + `low ${formatRupees(r.predictedLow).padStart(13)} vs ${formatRupees(r.actualLow).padStart(13)}`
+      + (r.falseNotAffordable ? '  ⚠ FALSE NOT-AFFORDABLE' : ''),
+    );
+    const worst = Math.max(0, ...runs.map(r => Math.abs(r.rateError)));
+    console.log([
+      `\nMoney engine back-test — ${runs.length} runs, ${HORIZON}-day horizon (predicted vs actual)\n`,
+      ...rows,
+      `\nWorst everyday-spend error: ${pct(worst)} (gate ±${MAX_RATE_ERROR * 100}%)`,
+      `False "Not affordable": ${runs.filter(r => r.falseNotAffordable).length} (gate 0)\n`,
+    ].join('\n'));
+  });
 
-    console.log('\nSummary');
-    console.log('-'.repeat(88));
-    console.log(`Runs: ${all.length} (across ${PERSONA_KINDS.length} personas, cold-start / out-of-range stand-points skipped)`);
-    console.log(`Mean absolute error: ${formatRupees(meanAbsErrorPaise)}`);
-    console.log(`False "Not affordable" (ship gate — must be 0): ${falseNotAffordable.length}${falseNotAffordable.length > 0 ? '  ⚠ GATE NOT MET' : '  ✅'}`);
-    console.log(`Missed real shortfalls (informational, not a gate): ${missedShortfalls.length}\n`);
-    if (falseNotAffordable.length > 0) {
-      console.log(
-        'NOT hard-failing this test on that gate: 5 synthetic personas, 6 sampled windows, is not\n'
-        + 'the real pilot data §8 itself says this needs to validate honestly (same reasoning as the\n'
-        + 'EN3 band revert — see docs/SPEC-ENGINE.md §12b). Tracked there as an open item instead of\n'
-        + 'either hidden or treated as a hard CI gate on fixture noise.\n',
-      );
-    }
+  it('ran on enough windows to mean something', () => {
+    expect(runs.length).toBeGreaterThanOrEqual(8);
+  });
 
-    // Sanity only: the test actually exercised something, so a suite-wide
-    // fixture regression (e.g. every persona losing its history) can't pass
-    // silently. The false-not-affordable count above is real, is printed
-    // plainly, and is not swallowed — it's just not (yet) a hard assertion,
-    // for the reason printed above.
-    expect(all.length).toBeGreaterThan(0);
+  it('everyday spend is predicted within ±25% on every window', () => {
+    const off = runs.filter(r => Math.abs(r.rateError) > MAX_RATE_ERROR);
+    expect(off.map(r => `${r.persona} ${pct(r.rateError)}`)).toEqual([]);
+  });
+
+  it('never predicts a shortfall that never happened', () => {
+    expect(runs.filter(r => r.falseNotAffordable).map(r => r.persona)).toEqual([]);
   });
 });

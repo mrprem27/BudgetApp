@@ -148,19 +148,11 @@ Old F1 (cushion patch) dropped: the engine removes the threshold it would have f
   - `getSafeToSpendV2` (`db/queries/spendPower.ts`) — `getFinanceSnapshot` + `safeToSpendV2`, breakdown parts re-derived from the projection's own known events by label instead of queried a second time. `homeData.ts`'s Home loader now calls it instead of `getSafeToSpend`. `getSafeToSpend` itself is untouched on purpose — still `useEngineDevComparison`'s independent "Old" column, and still what `afford.ts`/the Add-screen hint read until `EN11`
   - Accept: `spendPowerV2.test.ts` — every field (`amount`, `available`, `upcomingBills`, `cardRepayment`, `goalRemaining`, `netIOwe`, `everydaySpend`, `dailyRate`) matches `getSafeToSpend` exactly across all 5 personas + the no-user case; revert-proven (a planted label bug fails 3 of 6 cases)
   - Gates: `tsc` clean app+server; full suite 215/215, 2700/2700
-- [ ] **EN11 · Switch Afford (S)** — `app/afford.tsx` + the Add screen hint, layout from O-100; delete the six checks · Accept: a guard that no `evaluateAfford` caller remains; EN8 gates still pass
-  - **Attempted 2026-09-27, genuinely blocked on O-100 — not just unstarted.** Unlike `EN10`, this
-    isn't a same-numbers backend swap: the new engine's `AffordResult` deliberately has a smaller
-    reason set than `lib/afford.ts`'s six checks (no goal-delay trigger, no category-norm/income-share/
-    month-forecast-over checks — `EN4`'s own documented scope cuts, `§12b` L2/L4), which is exactly
-    the simplification `DQ-100` asked for. But today's screen (`app/afford.tsx`) has a whole breakdown
-    card and a "WHAT THIS COSTS YOU" card built around the OLD `AffordResult`'s richer fields
-    (`categoryAfter`, `incomeShare`, `projectedAfter`, `goalImpact` — none exist on the new type).
-    Forcing the new engine's data through that old layout would either crash on missing fields or
-    render a visibly broken/half-empty screen — not a safe swap to make without the options pass
-    `DQ-100` itself calls for. Real product decisions needed: what to keep, what to cut, how to phrase
-    the simpler verdict. Left undone rather than rushed.
-- [ ] **EN12 · Signals, one surface per commit (S each)** — forecast card + budget bar · low-point warning · unusual spend · recurring analysis · savings suggestion · Insights · health Spend/Save · Accept: same number or a written, justified difference; nothing below its minimum. **Each commit builds its own E2 sub-model from the old EN9 scope as it's needed** — don't pre-build the list
+- [ ] **EN13 · Horizon to payday, salary counted (S)** — decided 2026-09-27 (spec §2) · breakdown read up to the low point so the lines add up · strip says "until <date>" · Add toast reads V2 · Accept: parts sum to `amount` on every persona; differences from the old figure named
+- [ ] **EN11 · Afford on the engine, "number first" (M)** — decided 2026-09-27 · headline + verdict, ≤ 2 reasons, most-comfortable amount, can-wait date, breakdown behind "How we got this"; Need/Want chip removed; Add hint on `afford()`; `lib/afford.ts` deleted · Accept: guard no `evaluateAfford` caller; property Not affordable ⟺ amount > Safe to spend
+  - Earlier attempt 2026-09-27 stopped because the old layout was built on fields the engine doesn't have — resolved by the "number first" pick
+- [ ] **EN12 · Low-point warning (S)** — the only signal kept (spec §2 cuts the rest) · `lib/engine/signals.ts` + one Home line · Accept: fires on a dipping persona, silent otherwise and below the rate's minimum
+- [ ] **B-103 · StS sheet you can check (M)** — every line taps through; "Cash last confirmed · Update"; thin history said plainly · Accept: each line's rows sum to the line
 - [ ] **CP3b** — gates, commit, push after each switch; device look at Home, Afford and Insights after EN11
 
 ## Phase 4 · UPI payment redesign (`DQ-98`)
@@ -197,14 +189,10 @@ Independent of Phase 3 (money engine) — zero file overlap (`finance/pay/*`, `S
 
 Options tasks come first; each build task is sized once you've picked.
 
-- [ ] **O-103 · Safe-to-Spend screen options** (after CP3) — tap-through lines, "cash last confirmed" → you pick → built in EN10 (the uncertainty band option is gone — reverted, `EN3` row)
-- [ ] **O-100 · Afford screen options** (after CP3) — headline, ≤ 2 reasons, the two chips → you pick → built in EN11
-- [ ] **O-101 · Settings options** — consolidated rows → you pick
-- [ ] **B-101 · Build the pick**
-- [ ] **O-102 · Copy rule** (after B-101) — one line for `AGENTS.md` → you approve
-- [ ] **B-102 · Copy pass**, screen by screen
-- [ ] **O-99 · Recurring / Upcoming options** → you pick
-- [ ] **B-99 · Build the pick**
+- [x] **O-99 / O-100 / O-101 / O-102 / O-103** — answered 2026-09-27: build the proposals recorded in `FINDINGS.md`; `DQ-99` decided from the Recurring rule
+- [ ] **B-101 · Settings consolidation (M)** — one Account & sync row, one Data row, Currency dropped
+- [ ] **B-102 · Copy rule + pass (M)** — rule into `AGENTS.md`, then screen by screen
+- [ ] **B-99 · Recurring placement (S)**
 
 When each Phase 5 item closes, its tracker row moves to `DONE` and its `FINDINGS.md` entry records the answer.
 
