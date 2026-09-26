@@ -47,7 +47,14 @@ P3 (person-screen picker sheet), CP2. Commits `cc92562`, `f3910a2`, `61028da`.
   `afford()`, also gated on `withIncome`.
 - **Every scoping call/limitation from EN1–EN6, in one place: `docs/SPEC-ENGINE.md` §12b** — a v1
   release gate. Read it before EN7+, and add to it rather than re-explaining a limitation in this file.
-- **EN7–EN12** not started. EN7 (Confidence + explanation) is next.
+- **EN7** done: `explain.ts` (E6) — `afford().verdict` is now `AffordVerdict | null`, `null` when
+  history is too thin for any verdict (not just low-confidence). Confidence also caps on `irregular`
+  income or a wide P10–P90 band.
+- **EN8–EN12** not started. EN8 (Back-test + ship gates) is next.
+- **A second, parallel session is doing Phase 4 (UPI) in this same working tree right now** —
+  `useUpiHandoff.ts`/`upiIntent.ts`/`ScanPaySheet.tsx`/`TransferBody.tsx` mid-refactor, currently
+  failing `tsc` and two doc guards (`deadComponents`, `coverage`). Not engine-related; don't touch
+  those files or "fix" those failures — they'll resolve when that session finishes/commits.
 
 **Phase 4 (UPI redesign) and Phase 5 (your decisions)** — not started.
 
@@ -61,9 +68,13 @@ grounded narration) before building anything here — it crosses two of `SPEC-EN
 ## How to pick up
 
 1. `git log --oneline -10` to see you're where this file says you are; `git status` should be clean.
-2. Open `tasks/todo.md`, find the next unchecked box (`EN7` right now) — it has its own accept/verify
+2. Open `tasks/todo.md`, find the next unchecked box (`EN8` right now) — it has its own accept/verify
    criteria already written.
-3. Read `docs/SPEC-ENGINE.md` §4 (module E6, "Explain") and §12b (the limitations gate) first.
+3. Read `docs/SPEC-ENGINE.md` §8 (evaluation/back-test, the ship gates table) and §12b (limitations)
+   first. `EN8` is the last engine task before `CP3 DEVICE` — a **human, on-phone** checkpoint (§11
+   step 4: "No switch before this"), and `O-100`/`O-103` (screen-layout picks) also gate `EN10`/`EN11`.
+   Those three are not something a coding session can do — flag them to the user rather than
+   attempting to route around them.
 4. Standing gates (run for every task, per `todo.md`'s own header):
    ```
    cd budgetsplit && npx jest

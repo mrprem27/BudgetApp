@@ -22,6 +22,12 @@ const EMPTY: FinanceSnapshot = {
   futureOneOffs: [],
 };
 
+/** 35 days of trivial expense history — clears EN7's thin-data gate (`explain()`), which otherwise suppresses `afford()`'s verdict outright. */
+const EXPENSE_HISTORY = Array.from({ length: 35 }, (_, i) => ({
+  id: `e${i}`, date: PERSONA_NOW - (35 - i) * DAY_MS, kind: 'expense' as const,
+  category: 'Shopping', amountPaise: R(10), isRecurringLinked: false,
+}));
+
 function yearlyFeeRule(dueInMonths: number, amountPaise: number) {
   return {
     id: 'fee', group_id: 'g', kind: 'expense' as const, entry_mode: 'quick' as const,
@@ -90,6 +96,7 @@ describe('monthlyAffordability — a future month with no surplus reads unfundab
         { id: 'i1', date: PERSONA_NOW - 90 * DAY_MS, kind: 'income', category: 'Salary', amountPaise: R(12_000), isRecurringLinked: true },
         { id: 'i2', date: PERSONA_NOW - 60 * DAY_MS, kind: 'income', category: 'Salary', amountPaise: R(12_000), isRecurringLinked: true },
         { id: 'i3', date: PERSONA_NOW - 30 * DAY_MS, kind: 'income', category: 'Salary', amountPaise: R(12_000), isRecurringLinked: true },
+        ...EXPENSE_HISTORY,
       ],
     };
     expect(monthlyAffordability(snap).some(m => m.unfundable)).toBe(true);
@@ -125,6 +132,7 @@ describe('monthlyAffordability — a future month with no surplus reads unfundab
         { id: 'i1', date: PERSONA_NOW - 90 * DAY_MS, kind: 'income', category: 'Salary', amountPaise: R(12_000), isRecurringLinked: true },
         { id: 'i2', date: PERSONA_NOW - 60 * DAY_MS, kind: 'income', category: 'Salary', amountPaise: R(12_000), isRecurringLinked: true },
         { id: 'i3', date: PERSONA_NOW - 30 * DAY_MS, kind: 'income', category: 'Salary', amountPaise: R(12_000), isRecurringLinked: true },
+        ...EXPENSE_HISTORY,
       ],
     };
     const result = afford(snap, { amountPaise: R(10), when: 'now' }, 30, true);

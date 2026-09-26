@@ -97,6 +97,12 @@ describe('afford — persona goldens', () => {
 
 describe('afford — over-budget is a Tight reason on its own', () => {
   it('flags a category over its own explicit monthly budget even with plenty of cash', () => {
+    // 35 days of trivial, unrelated history — enough to clear EN7's thin-data
+    // gate (`explain()`), which otherwise suppresses the verdict outright.
+    const history = Array.from({ length: 35 }, (_, i) => ({
+      id: `h${i}`, date: PERSONA_NOW - (35 - i) * 86_400_000, kind: 'expense' as const,
+      category: 'Shopping', amountPaise: R(10), isRecurringLinked: false,
+    }));
     const snap: FinanceSnapshot = {
       asOf: PERSONA_NOW,
       meId: 'me',
@@ -106,7 +112,7 @@ describe('afford — over-budget is a Tight reason on its own', () => {
       exposure: { owe: 0, owed: 0, owedExpected: 0, net: 0, owePeople: 0, owedPeople: 0, perPerson: [] },
       receivables: [],
       budgets: [{ id: 'b1', group_id: 'g', category: 'Dining', cadence: 'monthly', amount: R(1_000), person_id: null }],
-      history: [],
+      history,
       futureOneOffs: [],
     };
     const result = afford(snap, { amountPaise: R(1_500), category: 'Dining', when: 'now' });

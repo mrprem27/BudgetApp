@@ -8,6 +8,7 @@
 import type { AffordReason, AffordVerdict, FinanceSnapshot, KnownEvent, Projection, Purchase, AffordResult, TippingReceivable } from './types';
 import { projectKnown, projectBand, SIMULATION_PATHS } from './projection';
 import { essentialFloor, defaultNecessity, repaymentModel, monthlyAffordability } from './behaviour';
+import { explain } from './explain';
 import { STS_HORIZON_DAYS } from '../safeToSpend';
 import { recurringMonthlyEquivalent } from '../recurrence';
 import { windowForCadence } from '../budget';
@@ -115,6 +116,8 @@ type Evaluation = {
   overBudget: AffordReason | null;
   unfundable: AffordReason | null;
   verdict: AffordVerdict;
+  bandP10: number;
+  bandP90: number;
 };
 
 /**
@@ -142,7 +145,11 @@ function evaluate(snapshot: FinanceSnapshot, purchase: Purchase, startMs: number
     : null;
 
   const verdict: AffordVerdict = (cashShort || unfundable) ? 'not-affordable' : (belowFloor || overBudget) ? 'tight' : 'comfortable';
-  return { cautiousLowPointAfter: band.cautiousLowPoint, overBudget, unfundable, verdict };
+  const lastDay = band.days[band.days.length - 1];
+  return {
+    cautiousLowPointAfter: band.cautiousLowPoint, overBudget, unfundable, verdict,
+    bandP10: lastDay?.p10 ?? 0, bandP90: lastDay?.p90 ?? 0,
+  };
 }
 
 /**
@@ -250,9 +257,14 @@ export function afford(
   }
   reasons.sort((a, b) => b.amountPaise - a.amountPaise);
 
+  const explanation = explain(snapshot, evalNow.bandP10, evalNow.bandP90, resolved.amountPaise);
+
   const result: AffordResult = {
-    verdict: evalNow.verdict,
-    headline: headlineFor(evalNow.verdict, afterKnown.lowPoint.amount),
+    verdict: explanation.suppressVerdict ? null : evalNow.verdict,
+    explanation,
+    headline: explanation.suppressVerdict
+      ? `Not enough data yet — ${explanation.missing}`
+      : headlineFor(evalNow.verdict, afterKnown.lowPoint.amount),
     lowPointBefore: { amount: beforeKnown.lowPoint.amount, date: beforeKnown.lowPoint.date },
     lowPointAfter: { amount: afterKnown.lowPoint.amount, date: afterKnown.lowPoint.date },
     cautiousLowPointBefore: beforeBand.cautiousLowPoint,

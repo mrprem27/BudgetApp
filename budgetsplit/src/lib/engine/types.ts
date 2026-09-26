@@ -232,6 +232,16 @@ export type AffordReason = {
 
 export type AffordVerdict = 'not-affordable' | 'tight' | 'comfortable';
 
+/** §4 E6, `EN7`. */
+export type Confidence = 'high' | 'medium' | 'low';
+
+/** §4 E6, `EN7`. `suppressVerdict`: data's too thin for a verdict at all, not just a weak one. */
+export type Explanation = {
+  confidence: Confidence;
+  missing?: string;
+  suppressVerdict: boolean;
+};
+
 /** §4 E4: "receivables called out when they tip the answer" (`EN5`). Named as a conditional, not a promise — `probability`/`delayDays` are `RepaymentModel`'s own numbers, never shown as a bare score (§4 E2). */
 export type TippingReceivable = {
   personId: string;
@@ -241,7 +251,9 @@ export type TippingReceivable = {
 };
 
 export type AffordResult = {
-  verdict: AffordVerdict;
+  /** `null` when `explanation.suppressVerdict` — too little history for any verdict at all, not just a weak one (§4 E6, `EN7`). */
+  verdict: AffordVerdict | null;
+  explanation: Explanation;
   headline: string;
   lowPointBefore: { amount: number; date: number };
   lowPointAfter: { amount: number; date: number };

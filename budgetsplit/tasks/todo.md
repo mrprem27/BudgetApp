@@ -124,7 +124,11 @@ Old F1 (cushion patch) dropped: the engine removes the threshold it would have f
   - Accept: a ₹60k yearly fee accrues only 60k/months-until-due, never the lump sum; an unfundable future month makes `afford()` say No today for an unrelated small purchase; the unfundable reason and a cash-short reason never share one rupee figure
   - Verify: 4 new tests; the accrual math and the unfundable→No wiring are each revert-proven
   - Gates: `tsc` clean (app + server); full suite 212/212 suites, 2686/2686 tests
-- [ ] **EN7 · Confidence + explanation (S)** · Accept: every reason renders with only result numbers; thin-data persona → no verdict + "what's missing"
+- [x] **EN7 · Confidence + explanation (S)** — done 2026-09-26
+  - Files: `explain.ts` (new, E6), `assess.ts` (`afford` wires it in — `verdict: AffordVerdict | null`, `null` when thin data), `types.ts` (+`Confidence`, `Explanation`), new `engineExplain.test.ts`
+  - Accept: thin-data persona (`thinData`) gets `verdict: null` + `explanation.missing`; every reason label across 4 personas × several amounts (incl. one swept to the exact Comfortable/Tight boundary, so `below_floor` is actually exercised) has no digit in it
+  - Verify: 3 new tests; the null-out-on-thin-data wiring and the no-raw-numbers invariant are each revert-proven
+  - Gates: `tsc` clean (app + server) for engine files — a **different, in-progress session's** Phase 4 (UPI) work is mid-edit in the same working tree and currently fails `tsc`/`deadComponents`/`coverage`; confirmed unrelated by diffing only engine files. Full suite otherwise 211/211, 2683/2683
 - [ ] **EN8 · Back-test + ship gates (M)** — spec §8 · Accept: gates pass on personas, or the surface is marked facts-only with the reason recorded
 - [ ] **CP3 DEVICE (yours)** — the dev screen on your real ledger: do the new Safe-to-Spend and Afford answers make sense? **No switch before this.**
 - [ ] **EN9 · Behaviour, the rest (M)** — category model, seasonality, exceptional days, fixed/variable, Need/Want learning · Accept: spec E2 acceptance
