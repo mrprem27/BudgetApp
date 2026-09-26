@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useStore } from '../store';
 import { useScreenData } from './useScreenData';
-import { getPersonById, setReceivableState, setTrustState } from '../db/queries/persons';
+import { getPersonById, setReceivableState, setTrustState, combinableWith } from '../db/queries/persons';
 import { getFriendBalances } from '../db/queries/balances';
 import { getSharedActivityWith } from '../db/queries/transactions';
 import { computeTransferScopes } from '../lib/settleScope';
@@ -30,7 +30,7 @@ export function usePersonScreen(personId: string) {
   const { data, loading, error, refreshing, onRefresh, reload } = useScreenData(
     async (db) => {
       if (!me) throw new Error('No current user');
-      const [person, activity, balances, scopes, shared, overrides, invited] = await Promise.all([
+      const [person, activity, balances, scopes, shared, overrides, invited, combinable] = await Promise.all([
         getPersonById(db, personId),
         getSharedActivityWith(db, me.id, personId),
         getFriendBalances(db, me.id),
@@ -38,6 +38,7 @@ export function usePersonScreen(personId: string) {
         getSharedGroupsWith(db, me.id, personId),
         getGroupTrustFor(db, personId),
         invitedGroupsOf(db, personId),
+        combinableWith(db, personId),
       ]);
       /*
        * The one sentence about what hasn't reached THEM: a group they were added
@@ -57,6 +58,7 @@ export function usePersonScreen(personId: string) {
         scopes,
         shared,
         overrides: new Map(overrides.map(o => [o.group_id, o.trust_state])),
+        canCombine: combinable.length > 0,
       };
     },
     [personId, me?.id],
@@ -159,6 +161,8 @@ export function usePersonScreen(personId: string) {
     syncNote: data?.syncNote ?? null,
     groupTrust: data?.overrides ?? new Map<string, string>(),
     setGroupTrustFor,
+    /** At least one other real person this one could be combined with (`P3`). */
+    canCombine: data?.canCombine ?? false,
     loading, error, refreshing, onRefresh, reload,
   };
 }

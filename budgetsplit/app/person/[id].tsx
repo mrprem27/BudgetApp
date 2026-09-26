@@ -7,6 +7,7 @@ import { ListRow } from '../../src/components/ui/ListRow';
 import { Divider } from '../../src/components/ui/Divider';
 import { IconCircle } from '../../src/components/ui/IconCircle';
 import { TrustSheet } from '../../src/components/finance/TrustSheet';
+import { CombineSameSheet } from '../../src/components/finance/CombineSameSheet';
 import { trustStateLabel, groupTrustLabel, trustInert } from '../../src/lib/trustCopy';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { EmptyState } from '../../src/components/ui/EmptyState';
@@ -39,6 +40,7 @@ import type { MyActivityItem } from '../../src/db/queries/transactions';
 export default function PersonScreen() {
   /** Which trust choice is open: the person-level one, or one group's exception. */
   const [trustSheet, setTrustSheet] = useState<{ groupId: string | null } | null>(null);
+  const [combineSheet, setCombineSheet] = useState(false);
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const bottomPad = useContentInset({});
@@ -46,7 +48,7 @@ export default function PersonScreen() {
     me, person, activity, sections, net, scopes, rhythm,
     receivableState, suggestWriteOff, toggleWrittenOff, syncNote,
     trustState, trustIsLive, trustApplies, toggleTrusted,
-    sharedGroups, groupTrust, setGroupTrustFor,
+    sharedGroups, groupTrust, setGroupTrustFor, canCombine,
     loading, error, refreshing, onRefresh, reload,
   } = usePersonScreen(id ?? '');
 
@@ -217,6 +219,23 @@ export default function PersonScreen() {
                 <Text style={styles.trustHint}>{trustInert(name)}</Text>
               )}
 
+              {/*
+                A duplicate placeholder for the same human, folded by hand
+                (`DQ-94` part 2). Shown only when there is somebody eligible to
+                fold in — `usePersonScreen`'s `canCombine` runs the same check
+                `combinePeople` would, so this never offers a pair it would refuse.
+              */}
+              {canCombine && (
+                <Card style={styles.trustCard}>
+                  <ListRow
+                    leading={<IconCircle icon="copy" size={layout.iconCircle} color={colors.accent} />}
+                    title="Same person as…"
+                    onPress={() => setCombineSheet(true)}
+                    accessibilityLabel={`Combine ${name} with another entry for the same person`}
+                  />
+                </Card>
+              )}
+
               {/* Only when they owe YOU and we have a number. `canRemind` owns
                   both halves of that — nudging someone about money you owe them
                   is an apology, not a reminder. */}
@@ -265,6 +284,12 @@ export default function PersonScreen() {
           if (trustSheet?.groupId) setGroupTrustFor(trustSheet.groupId, next);
           else if (next !== null && next !== trustState) toggleTrusted();
         }}
+      />
+      <CombineSameSheet
+        visible={combineSheet}
+        onClose={() => setCombineSheet(false)}
+        personId={id}
+        personName={name}
       />
 
     </View>

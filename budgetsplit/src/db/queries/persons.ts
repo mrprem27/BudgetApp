@@ -247,6 +247,35 @@ export async function getAllPersons(db: SQLite.SQLiteDatabase): Promise<Person[]
   return db.getAllAsync<Person>('SELECT * FROM person ORDER BY is_me DESC, name ASC');
 }
 
+/**
+ * Everyone `personId` could be combined with ("Same person as…", `DQ-94` part 2,
+ * task P3): every other real person, except one already linked to a DIFFERENT
+ * account — `combinePeople` refuses that pair, so the picker never offers it.
+ */
+export async function combinableWith(db: SQLite.SQLiteDatabase, personId: string): Promise<Person[]> {
+  const mine = await getPersonById(db, personId);
+  if (!mine) return [];
+  const all = await getAllPersons(db);
+  return all.filter(p => p.id !== personId && p.is_me === 0
+    && !(mine.remote_uid && p.remote_uid && p.remote_uid !== mine.remote_uid));
+}
+
+/**
+ * How many entries name this person as a payer or a split — the number the
+ * "Same person as…" confirm shows moving onto the person being kept.
+ */
+export async function countCombinableEntries(db: SQLite.SQLiteDatabase, personId: string): Promise<number> {
+  const row = await db.getFirstAsync<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM (
+       SELECT txn_id FROM txn_payment WHERE person_id = ?
+       UNION
+       SELECT txn_id FROM txn_share WHERE person_id = ?
+     )`,
+    [personId, personId],
+  );
+  return row?.n ?? 0;
+}
+
 export async function getPersonById(db: SQLite.SQLiteDatabase, id: string): Promise<Person | null> {
   return db.getFirstAsync<Person>('SELECT * FROM person WHERE id = ?', [id]);
 }

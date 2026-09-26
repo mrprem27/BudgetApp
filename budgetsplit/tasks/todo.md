@@ -77,11 +77,11 @@ Sync, two phones, two accounts, one group:
   - Files: `src/db/queries/personRemap.ts` (`combinePeople`, `foldPerson`, `adoptPulledMerge`), new `src/__tests__/combinePeople.test.ts`
   - Accept: entries, splits, item assignments and trust move; the dropped person is gone on both phones; balances unchanged; refused for "me" and for two different accounts
   - Verify: 9 tests incl. a two-phone test on the real Worker; the money-sum fold, the group/trust dedupe and the pulled-side adoption are each revert-proven (temporarily removed → the expected case fails → restored, suite green)
-- [ ] **P3 · Person screen action (S)**
-  - Files: `app/person/[id].tsx`, a picker sheet under `src/components/finance/`
-  - Accept: only eligible pairs are offered; the confirm names both people and the number of entries that move
-  - Verify: `tsc`; the full suite
-- [ ] **CP2** — gates · deploy · commit · push
+- [x] **P3 · Person screen action (S)** — done 2026-09-26
+  - Files: `app/person/[id].tsx` (a "Same person as…" row, shown only when `canCombine`), `src/components/finance/CombineSameSheet.tsx` (picker → confirm), `src/hooks/usePersonScreen.ts` (`canCombine`), `src/db/queries/persons.ts` (`combinableWith`, `countCombinableEntries`), new `src/__tests__/combinableWith.test.ts`
+  - Accept: only eligible pairs are offered (excludes "me", itself, and anyone linked to a different account — the same check `combinePeople` enforces); the confirm names both people and the number of entries that move
+  - Verify: `tsc` (app + server) clean; full suite 205/205 suites, 2630/2630 tests
+- [x] **CP2** — done 2026-09-26 — gates green (above); no server change in P3, so nothing new to deploy (P1's deploy already covers `into_person`); commit · push done together with P3
 
 ## Phase 3 · The money engine (`docs/SPEC-ENGINE.md`)
 
