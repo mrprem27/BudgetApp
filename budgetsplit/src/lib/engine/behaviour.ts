@@ -3,9 +3,10 @@
  *
  * First slice (`EN2`): the everyday rate only. Pure — no React, no database.
  */
-import type { FinanceSnapshot, Behaviour, IncomeModel, RepaymentModel } from './types';
+import type { FinanceSnapshot, Behaviour, IncomeModel, RepaymentModel, TrueExpense, MonthlyAffordability } from './types';
 import { dailySpendTotals, typicalDailySpend, EVERYDAY_WINDOW_DAYS, EVERYDAY_MIN_DAYS } from '../safeToSpend';
 import { nextUnskippedOccurrence, materializeInstances } from '../recurrence';
+import { myShareOrTotal } from '../splitMath';
 
 const DAY_MS = 86_400_000;
 
@@ -243,4 +244,62 @@ export function repaymentModel(snapshot: FinanceSnapshot, personId: string): Rep
   const gapsDays: number[] = [];
   for (let i = 1; i < sorted.length; i++) gapsDays.push((sorted[i].date - sorted[i - 1].date) / DAY_MS);
   return { probability, delayDays: Math.max(1, Math.round(median(gapsDays))) };
+}
+
+const MONTH_MS = 30 * DAY_MS;
+
+/**
+ * §4 E2 "True expenses": yearly commitments + dated goals due within `months`,
+ * spread as a monthly set-aside (a sinking fund) — so a ₹60k yearly fee claims
+ * only its accrual (60k / months-until-due) each month, never the lump sum,
+ * until it's actually due. Quarterly/custom cadences are cut (no `'quarterly'`
+ * in `RecurFreq` to tell them from a plain custom rule) — yearly + goals only.
+ */
+export function trueExpenses(snapshot: FinanceSnapshot, months = 12): TrueExpense[] {
+  const horizonEnd = snapshot.asOf + months * MONTH_MS;
+  const out: TrueExpense[] = [];
+
+  for (const r of snapshot.recurring.rules) {
+    if (r.kind !== 'expense' || r.recur_freq !== 'yearly' || r.pendingApproval) continue;
+    if (r.recur_state && r.recur_state !== 'active') continue;
+    const due = nextUnskippedOccurrence(r, snapshot.asOf, new Set(snapshot.recurring.skips[r.id] ?? []));
+    if (due == null || due > horizonEnd) continue;
+    const monthsUntil = Math.max(1, Math.ceil((due - snapshot.asOf) / MONTH_MS));
+    out.push({ label: r.note?.trim() || r.category, dueDate: due, monthlyAccrualPaise: Math.round(myShareOrTotal(r, snapshot.meId) / monthsUntil) });
+  }
+
+  for (const g of snapshot.goals.list) {
+    if (!g.target_date || g.target_date > horizonEnd || g.target_date <= snapshot.asOf) continue;
+    const remaining = g.target - (snapshot.goals.savedByGoal[g.id] ?? 0);
+    if (remaining <= 0) continue;
+    const monthsUntil = Math.max(1, Math.ceil((g.target_date - snapshot.asOf) / MONTH_MS));
+    out.push({ label: g.name, dueDate: g.target_date, monthlyAccrualPaise: Math.round(remaining / monthsUntil) });
+  }
+
+  return out;
+}
+
+/**
+ * Coarse monthly view over the 12-month commitment horizon (§4 E3/E4) —
+ * separate from the daily safety-horizon walk (`projectKnown`/`projectBand`),
+ * never summed into it. `surplusPaise` is `null` (nothing judgeable) when
+ * income is `irregular` — no monthly income figure to compare against.
+ */
+export function monthlyAffordability(snapshot: FinanceSnapshot, months = 12): MonthlyAffordability[] {
+  const expenses = trueExpenses(snapshot, months);
+  const income = incomeModel(snapshot);
+  const rate = everydayRate(snapshot) ?? 0;
+  const monthlyIncome = income.consistency === 'irregular' ? null : (income.eventAmountPaise ?? income.medianRecentPaise);
+  const monthlyBills = snapshot.recurring.rules
+    .filter(r => r.kind === 'expense' && r.recur_freq === 'monthly' && !r.pendingApproval && (!r.recur_state || r.recur_state === 'active'))
+    .reduce((s, r) => s + myShareOrTotal(r, snapshot.meId), 0);
+
+  const out: MonthlyAffordability[] = [];
+  for (let m = 0; m < months; m++) {
+    const monthStart = snapshot.asOf + m * MONTH_MS;
+    const requiredPaise = expenses.filter(e => e.dueDate >= monthStart).reduce((s, e) => s + e.monthlyAccrualPaise, 0);
+    const surplusPaise = monthlyIncome != null ? monthlyIncome - monthlyBills - rate * 30 : null;
+    out.push({ monthIndex: m, monthStart, requiredPaise, surplusPaise, unfundable: surplusPaise != null && requiredPaise > surplusPaise });
+  }
+  return out;
 }

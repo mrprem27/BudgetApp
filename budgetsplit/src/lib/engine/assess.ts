@@ -7,7 +7,7 @@
  */
 import type { AffordReason, AffordVerdict, FinanceSnapshot, KnownEvent, Projection, Purchase, AffordResult, TippingReceivable } from './types';
 import { projectKnown, projectBand, SIMULATION_PATHS } from './projection';
-import { essentialFloor, defaultNecessity, repaymentModel } from './behaviour';
+import { essentialFloor, defaultNecessity, repaymentModel, monthlyAffordability } from './behaviour';
 import { STS_HORIZON_DAYS } from '../safeToSpend';
 import { recurringMonthlyEquivalent } from '../recurrence';
 import { windowForCadence } from '../budget';
@@ -113,15 +113,20 @@ function overBudgetReason(snapshot: FinanceSnapshot, purchase: Purchase): Afford
 type Evaluation = {
   cautiousLowPointAfter: number;
   overBudget: AffordReason | null;
+  unfundable: AffordReason | null;
   verdict: AffordVerdict;
 };
 
 /**
- * The verdict table (§4 E4), minus the one row this slice can't judge yet: a
- * known commitment becoming unfundable within 12 months, and a Want pushing a
- * dated goal past its target — both need machinery `EN6`/`goalForecast` haven't
- * been built yet. Documented here rather than silently absent: those two paths
- * to "Tight"/"Not affordable" simply never fire in this slice.
+ * The verdict table (§4 E4), minus one row: a Want pushing a dated goal past
+ * its target needs `goalForecast`, not built yet. The other row — a known
+ * commitment becoming unfundable within 12 months (`EN6`) — is checked here,
+ * gated behind `withIncome` since it needs a monthly income figure to judge
+ * against (`monthlyAffordability`). It's a property of the ledger itself, not
+ * of the purchase being asked about — "already broken" makes today's answer
+ * No regardless of amount, which is `monthlyAffordability`'s own
+ * `unfundable` flag, checked independent of `events`/`band` so its rupee
+ * figure is never the same money `cash_short`/`below_floor` already counted.
  */
 function evaluate(snapshot: FinanceSnapshot, purchase: Purchase, startMs: number, horizonDays: number, floor: number, withIncome: boolean): Evaluation {
   const horizonEndMs = snapshot.asOf + horizonDays * DAY_MS;
@@ -131,8 +136,13 @@ function evaluate(snapshot: FinanceSnapshot, purchase: Purchase, startMs: number
   const overBudget = overBudgetReason(snapshot, purchase);
   const belowFloor = !cashShort && band.cautiousLowPoint < floor;
 
-  const verdict: AffordVerdict = cashShort ? 'not-affordable' : (belowFloor || overBudget) ? 'tight' : 'comfortable';
-  return { cautiousLowPointAfter: band.cautiousLowPoint, overBudget, verdict };
+  const brokenMonth = withIncome ? monthlyAffordability(snapshot).find(m => m.unfundable) : undefined;
+  const unfundable = brokenMonth
+    ? { code: 'unfundable_commitment' as const, amountPaise: brokenMonth.requiredPaise - (brokenMonth.surplusPaise ?? 0), label: 'A commitment within 12 months can\'t be funded at this rate' }
+    : null;
+
+  const verdict: AffordVerdict = (cashShort || unfundable) ? 'not-affordable' : (belowFloor || overBudget) ? 'tight' : 'comfortable';
+  return { cautiousLowPointAfter: band.cautiousLowPoint, overBudget, unfundable, verdict };
 }
 
 /**
@@ -228,7 +238,10 @@ export function afford(
 
   const reasons: AffordReason[] = [];
   if (evalNow.verdict === 'not-affordable') {
-    reasons.push({ code: 'cash_short', amountPaise: Math.abs(evalNow.cautiousLowPointAfter), label: 'Would go below zero' });
+    if (evalNow.cautiousLowPointAfter < 0) {
+      reasons.push({ code: 'cash_short', amountPaise: Math.abs(evalNow.cautiousLowPointAfter), label: 'Would go below zero' });
+    }
+    if (evalNow.unfundable) reasons.push(evalNow.unfundable);
   } else if (evalNow.verdict === 'tight') {
     if (evalNow.cautiousLowPointAfter < floor) {
       reasons.push({ code: 'below_floor', amountPaise: floor - evalNow.cautiousLowPointAfter, label: 'Leaves less than a safe week of essentials' });

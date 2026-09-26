@@ -118,7 +118,12 @@ Old F1 (cushion patch) dropped: the engine removes the threshold it would have f
   - Accept: `horizonDaysFor` extends past 30 to cover a further-out payday, and floors at 60 for `irregular` income (freelancer persona); `repaymentModel` gives exactly the Beta(1,2) prior (1/3) with no settlement history; a receivable that would close the gap to the floor is named in `afford()`'s `tippingReceivables`; `repaymentModel`/`RepaymentModel` are guarded from ever being referenced under `db/queries/`, `lib/sync/` or `server/api` (planted-and-removed canary proves the guard itself isn't vacuous)
   - Verify: 11 + 2 new tests; the Beta-binomial prior formula, the 60-day irregular floor, and the tipping-receivable detection are each revert-proven (temporarily broken → the matching test fails → restored, suite green)
   - Gates: `tsc` clean (app + server); full suite 211/211 suites, 2682/2682 tests; no doc-guard failures (no new query module or route)
-- [ ] **EN6 · True expenses, 12-month horizon (M)** — sinking funds, "unfundable → No" · Accept: ₹60k fee claims only its accrual; March made unfundable → No today; no double subtraction
+- [x] **EN6 · True expenses, 12-month horizon (M)** — done 2026-09-26
+  - Files: `behaviour.ts` (+`trueExpenses`, `monthlyAffordability`), `assess.ts` (`evaluate` +unfundable-commitment check, gated on `withIncome`), `types.ts` (+`TrueExpense`, `MonthlyAffordability`, `AffordReason.code` +`unfundable_commitment`), new `engineTrueExpenses.test.ts`
+  - Scoped to yearly recurring rules + dated goals only (no `'quarterly'` value in `RecurFreq` to tell it from a plain custom rule — cut, not guessed at)
+  - Accept: a ₹60k yearly fee accrues only 60k/months-until-due, never the lump sum; an unfundable future month makes `afford()` say No today for an unrelated small purchase; the unfundable reason and a cash-short reason never share one rupee figure
+  - Verify: 4 new tests; the accrual math and the unfundable→No wiring are each revert-proven
+  - Gates: `tsc` clean (app + server); full suite 212/212 suites, 2686/2686 tests
 - [ ] **EN7 · Confidence + explanation (S)** · Accept: every reason renders with only result numbers; thin-data persona → no verdict + "what's missing"
 - [ ] **EN8 · Back-test + ship gates (M)** — spec §8 · Accept: gates pass on personas, or the surface is marked facts-only with the reason recorded
 - [ ] **CP3 DEVICE (yours)** — the dev screen on your real ledger: do the new Safe-to-Spend and Afford answers make sense? **No switch before this.**
@@ -129,6 +134,9 @@ Old F1 (cushion patch) dropped: the engine removes the threshold it would have f
 - [ ] **CP3b** — gates, commit, push after each switch; device look at Home, Afford and Insights after EN11
 
 ## Phase 4 · UPI payment redesign (`DQ-98`)
+
+Independent of Phase 3 (money engine) — zero file overlap (`finance/pay/*`, `ScanPaySheet` vs
+`lib/engine/*`). Safe to run in a parallel session/branch.
 
 - [ ] **U1 · Logos (S)** — `logo` on `UpiAppSpec`, `assets/upi/*.png` from official artwork, `UpiAppIcon` with a monogram fallback · Accept: a guard fails on any spec without a logo or pointing at a missing file
 - [ ] **U2 · Default app (S)** — `settings.upiLastApp` + pure `pickDefaultApp` · Accept: last-used → popularity order → none; an uninstalled last-used app falls back

@@ -125,6 +125,22 @@ export type RepaymentModel = {
   delayDays: number;
 };
 
+/** One yearly commitment or dated goal, due within the 12-month window, spread as a monthly set-aside (§4 E2 "True expenses", `EN6`). */
+export type TrueExpense = {
+  label: string;
+  dueDate: number;
+  monthlyAccrualPaise: number;
+};
+
+/** One month of the 12-month commitment view (§4 E3/E4, `EN6`). `surplusPaise` is `null` when income is `irregular`. */
+export type MonthlyAffordability = {
+  monthIndex: number;
+  monthStart: number;
+  requiredPaise: number;
+  surplusPaise: number | null;
+  unfundable: boolean;
+};
+
 /** One deterministic, dated claim on cash between now and the horizon (§4 E3). */
 export type KnownEvent = {
   date: number;
@@ -208,7 +224,7 @@ export type Purchase = {
 
 /** One reason the verdict landed where it did, ranked by `amountPaise` (§4 E4: "reasons, ranked by rupee effect, each carrying its number"). */
 export type AffordReason = {
-  code: 'cash_short' | 'below_floor' | 'over_budget';
+  code: 'cash_short' | 'below_floor' | 'over_budget' | 'unfundable_commitment';
   /** The rupee effect this reason is ranked by (always positive). */
   amountPaise: number;
   label: string;

@@ -1,6 +1,6 @@
 # Checkpoint — resume here
 
-`Written 2026-09-26 · Branch: claude/branch-selection-gi7lyy · HEAD: 3be617b`
+`Written 2026-09-26 · Branch: claude/branch-selection-gi7lyy · HEAD: ae2efcd`
 
 A handoff for picking this work back up in a fresh session (local Claude Code or otherwise). The
 real task lists are `tasks/todo.md` (what's left, per-task accept/verify notes) and `tasks/plan.md`
@@ -39,19 +39,15 @@ P3 (person-screen picker sheet), CP2. Commits `cc92562`, `f3910a2`, `61028da`.
   yet — only a *recurring* purchase's earliest-date search does anything useful right now (see
   `assess.ts`'s `findEarliestComfortableDate` doc comment for why). Both are documented in
   `todo.md`'s EN4 entry, not silently missing.
-- **EN5** done (`3be617b`): `incomeModel`/`repaymentModel`/`horizonDaysFor` (`behaviour.ts`/`projection.ts`),
-  income events + receivable Monte Carlo arrivals in `projectBand`, `afford()`'s `tippingReceivables`.
-  **All of it is opt-in behind a `withIncome` parameter, defaulting `false`, on `knownEvents`,
-  `projectKnown`, `projectBand` and `afford()`** — EN2/EN4's existing tests are locked to the
-  income-less numbers (every persona has a payday inside 30 days), so defaulting income "on" would
-  have silently changed what they compute. Nothing calls `withIncome: true` from a real screen yet —
-  that's `EN10`/`EN11`.
-  **Two real, documented limits, not silently assumed:** (1) `repaymentModel`'s Beta-binomial has no
-  representable "failure" case — this app has no forgiven/written-off debt state, so "always settles
-  eventually" and "settles fast" read identically; (2) a variable (no-rule) income's inferred next
-  date comes from the median gap between recent income rows, one reasonable reading of a spec line
-  that doesn't actually name a date for that case. Both are in `todo.md`'s EN5 entry.
-- **EN6–EN12** not started. EN6 (True expenses, 12-month horizon) is next.
+- **EN5** done (`3be617b`, refined `73d265e`): income + receivables (`behaviour.ts`/`projection.ts`),
+  all opt-in behind `withIncome` (default `false` everywhere — EN2/EN4's tests are locked to the
+  income-less numbers). `afford()`'s `tippingReceivables` names a receivable that would close the gap.
+- **EN6** done: `trueExpenses`/`monthlyAffordability` (`behaviour.ts`) — yearly commitments + dated
+  goals as a sinking fund, feeding a new "unfundable within 12 months" → Not-affordable trigger in
+  `afford()`, also gated on `withIncome`.
+- **Every scoping call/limitation from EN1–EN6, in one place: `docs/SPEC-ENGINE.md` §12b** — a v1
+  release gate. Read it before EN7+, and add to it rather than re-explaining a limitation in this file.
+- **EN7–EN12** not started. EN7 (Confidence + explanation) is next.
 
 **Phase 4 (UPI redesign) and Phase 5 (your decisions)** — not started.
 
@@ -65,14 +61,9 @@ grounded narration) before building anything here — it crosses two of `SPEC-EN
 ## How to pick up
 
 1. `git log --oneline -10` to see you're where this file says you are; `git status` should be clean.
-2. Open `tasks/todo.md`, find the next unchecked box (`EN6` right now) — it has its own accept/verify
+2. Open `tasks/todo.md`, find the next unchecked box (`EN7` right now) — it has its own accept/verify
    criteria already written.
-3. Read `docs/SPEC-ENGINE.md` §4 (module E2's "True expenses" row, module E6 if confidence/explain is
-   touched) before writing code. `EN6` builds the sinking-fund schedule for yearly/quarterly
-   commitments and dated goals within 12 months, and is what makes a `yearly`-recurrence `Purchase`
-   in `assess.ts` finally distinguishable from a one-time one (today it isn't — see `purchaseEvents`'s
-   doc comment). It's also what the verdict table's "unfundable within 12 months" Not-affordable
-   trigger needs, which `evaluate()` in `assess.ts` explicitly documents as missing.
+3. Read `docs/SPEC-ENGINE.md` §4 (module E6, "Explain") and §12b (the limitations gate) first.
 4. Standing gates (run for every task, per `todo.md`'s own header):
    ```
    cd budgetsplit && npx jest
