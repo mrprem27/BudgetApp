@@ -197,7 +197,7 @@ Independent of Phase 3 (money engine) — zero file overlap (`finance/pay/*`, `S
   - Verify: `upiPayButtonUsage.test.ts`, revert-proven (temporarily reintroduced an `ActionSheetIOS` import → test failed → restored, suite green)
   - Gates: `tsc` clean; full suite 214/214 suites, 2698/2698 tests
 - [ ] ~~**U5 · Android package targeting (M)**~~ — **DEFERRED 2026-09-26 (user).** Android keeps the OS chooser for now; revisit with the Android port — package names on specs, `expo-intent-launcher` (**new dependency**), `<queries>` in `app.json`, the "Other UPI app" tile · Accept: `tsc`; the suite; the prebuild config holds · **needs a rebuild**
-- [ ] **CP4** — gates · commit · push
+- [x] **CP4** — done 2026-09-29 (committed together with the review-pass fixes to it, `eb08436`) — gates green, committed, pushed to `origin/claude/branch-selection-gi7lyy`
 - [ ] **CP4 DEVICE (yours, iOS)** — pay with the default app · Change → another app · relaunch → new default kept · Request QR scanned from a second phone
 
 ## Phase 5 · Your decisions (`DQ-99`, `DQ-101`, `DQ-102`, and the engine's two screens)
