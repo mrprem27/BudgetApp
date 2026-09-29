@@ -83,6 +83,12 @@ Today: 46 files in `app/`+`src/components/` import `src/db` directly; screens up
 | BS-14 | Low | Categories | Rename collision said "in this group" — categories are global | FIXED |
 | BS-15 | Low | Trust everyone | A failure part-way was an unhandled rejection | FIXED |
 | SV-3 | Medium | Sync screen | Group invitations could only be accepted | FIXED — Decline row (`useSyncInvites.decline`); the server already allowed it |
+| SV-4 | High | server `/invites/claim` | An *ended* link counted as "already linked": after unlinking someone, a fresh invite from them could never reconnect the pair, while the list showed them as not linked | FIXED — only a live link counts (`findLink`); tested through the real Worker (`src/__tests__/server/`, the linking suite) |
+| SV-5 | Medium | server `/invites` list + approve | A claim from an account that was since closed was listed with its scrubbed `deleted+…@account.invalid` address, and could be approved into a link with nobody | FIXED |
+| IM-1 | High | statement import (`parseStatement`) | Quoted fields with a comma (`"1,250.00"`, `"UPI-SWIGGY, BLR"`) tore apart, so those rows — the salary credit, every amount over a thousand — were **silently dropped** and only "skipped N" hinted at it | FIXED — quote-aware split |
+| IM-2 | High | statement import | A deposit row with an empty withdrawal cell was read as a *debit*: the empty cell vanished, the credit slid into the debit slot, and a salary was recorded as an expense | FIXED — debit/credit columns read from the statement's own header |
+| UP-1 | Medium | Scan & Pay | A `upi://pay?…&am=249` code (shop dynamic QR, friend's request) had its amount discarded; the user typed their own, which could differ from what was asked | FIXED — the code's amount is kept, and the sheet already locks a code-fixed figure |
+| UP-2 | Medium | merchant (EMV) QR | The code's own checksum (tag 63) was never verified, so a string with intact length headers but an altered payee parsed as valid | FIXED — CRC-16 checked over UTF-8 bytes when present; a code with none behaves as before |
 | S | — | app/ ↔ db | 32 UI files imported `src/db` | DONE — 0 (only `_layout.tsx`, the boot root); `uiLayering.test.ts` enforces it |
 | R | — | `app/` layout | 20 loose files at the top level | DONE — `(money)` `(people)` `(ledger)` `(system)` route groups; URL set unchanged (46 routes) |
 | U5 | Low | `formatRupees` / `formatRupeesShort` | A negative amount printed `₹-50.00`; the compact form prints `-₹50` | FIXED |
@@ -93,7 +99,7 @@ Today: 46 files in `app/`+`src/components/` import `src/db` directly; screens up
 
 Read line by line: every write path in `src/db/queries` for transactions, recurring, savings, sync queue/apply, approvals, and the group/person delete-leave-remove functions; server auth, sync push/pull/guards/access, transactions entity, erase and delete-account; `money`, `splitMath`; and every screen whose data code moved (32 files).
 
-**Not** read this pass: `upiIntent`, `voice*`, `importParse`/`paytmParse`, `engine/*` internals, `reviewCommit`, `settle`/`balances` SQL, the rest of `server/api/index.ts` (invites, links, friend requests), and most presentational components. UI/UX coverage is what the moved screens showed, not a device walk — no render tests exist, so anything visual needs a phone.
+Read in the follow-up pass: `upiIntent`, `emvQr`, `importParse`, `paytmParse`, `reviewCommit`, `balances`, and all of `server/api/index.ts` (invites, links, friend requests). **Still not read:** `voice*`, `engine/*` internals, `settle`, `importDetect`/`xlsx`/OCR, and most presentational components. UI/UX coverage is what the moved screens showed, not a device walk — no render tests exist, so anything visual needs a phone.
 
 ### Deploy note (SV-1)
 

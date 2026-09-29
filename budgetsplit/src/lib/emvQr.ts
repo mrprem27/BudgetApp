@@ -124,6 +124,44 @@ function findUpiAccount(top: Map<string, string>): { vpa: string; reproducible: 
   return null;
 }
 
+/** A string as UTF-8 bytes — the checksum is over bytes, and a merchant name may not be ASCII. */
+function utf8Bytes(text: string): number[] {
+  const out: number[] = [];
+  for (const ch of text) {
+    const c = ch.codePointAt(0)!;
+    if (c < 0x80) out.push(c);
+    else if (c < 0x800) out.push(0xc0 | (c >> 6), 0x80 | (c & 63));
+    else if (c < 0x10000) out.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
+    else out.push(0xf0 | (c >> 18), 0x80 | ((c >> 12) & 63), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
+  }
+  return out;
+}
+
+/** CRC-16/CCITT-FALSE (poly 0x1021, init 0xFFFF) — the checksum EMV MPM codes end with. */
+export function emvCrc16(text: string): number {
+  let crc = 0xffff;
+  for (const byte of utf8Bytes(text)) {
+    crc ^= byte << 8;
+    for (let b = 0; b < 8; b++) crc = crc & 0x8000 ? ((crc << 1) ^ 0x1021) & 0xffff : (crc << 1) & 0xffff;
+  }
+  return crc;
+}
+
+/**
+ * The code's own checksum, when it carries one. EMV puts it last as `6304` + four hex
+ * digits, over everything before those four digits. It is the spec's guard against a
+ * string that is *almost* the shop's code — a corrupted decode or a hand-edited VPA
+ * with every length header still intact — which `parseTlv` alone reads as a valid
+ * payee. A code with no tag 63 is left to the rest of the parser, as before.
+ */
+function crcHolds(data: string): boolean {
+  const at = data.length - 8;
+  if (at < 0 || data.slice(at, at + 4) !== '6304') return true;
+  const claimed = data.slice(at + 4);
+  if (!/^[0-9A-Fa-f]{4}$/.test(claimed)) return false;
+  return emvCrc16(data.slice(0, at + 4)) === parseInt(claimed, 16);
+}
+
 /**
  * `null` unless this is a UPI merchant code we can pay in rupees.
  *
@@ -132,6 +170,7 @@ function findUpiAccount(top: Map<string, string>): { vpa: string; reproducible: 
  */
 export function parseMerchantQr(raw: string): MerchantQr | null {
   const data = raw.trim();
+  if (!crcHolds(data)) return null;
   // Every EMV MPM payload opens with the payload-format indicator `000201`. Checking
   // it first means a `upi://` URI or random text exits immediately instead of being
   // tortured through the TLV reader.

@@ -134,3 +134,94 @@ describe('U5 · a negative amount reads "-₹50.00", like the compact form', () 
     expect(formatRupeesShort(-20)).toBe('₹0');
   });
 });
+
+describe('IM-1 · bank CSVs quote amounts that contain a thousands comma', () => {
+  it('imports the quoted rows, not just the plain ones', () => {
+    const { parseStatement } = jest.requireActual('../lib/importParse') as typeof import('../lib/importParse');
+    const r = parseStatement([
+      'Date,Narration,Withdrawal,Deposit,Balance',
+      '01/06/2025,"UPI-SWIGGY, BLR","1,250.00",,"48,750.00"',
+      '02/06/2025,"NEFT SALARY",,"50,000.00","98,750.00"',
+      '03/06/2025,Coffee,120.00,,98630.00',
+    ].join('\n'));
+    expect(r.rows.map(x => [x.amount, x.direction])).toEqual([[125000, 'debit'], [5000000, 'credit'], [12000, 'debit']]);
+    expect(r.rows[0].description).toBe('UPI-SWIGGY, BLR');
+    expect(r.skipped).toBe(1); // the header, and only the header
+  });
+});
+
+describe('IM-2 · an empty withdrawal cell must not turn a deposit into an expense', () => {
+  const { parseStatement } = jest.requireActual('../lib/importParse') as typeof import('../lib/importParse');
+  const HEADER = 'Date,Narration,Ref No,Withdrawal Amt.,Deposit Amt.,Closing Balance';
+
+  it('reads the side from the header, so a blank cell keeps its column', () => {
+    const r = parseStatement([
+      HEADER,
+      '02/06/2025,NEFT SALARY,000123,,50000.00,98750.00',
+      '03/06/2025,Coffee,000124,120.00,,98630.00',
+    ].join('\n'));
+    expect(r.rows.map(x => [x.amount, x.direction, x.kind])).toEqual([[5000000, 'credit', 'income'], [12000, 'debit', 'expense']]);
+  });
+
+  it('is not fooled by a reference number in the row', () => {
+    const r = parseStatement([HEADER, '02/06/2025,Refund,402913847,,250.00,9000.00'].join('\n'));
+    expect(r.rows.map(x => [x.amount, x.direction])).toEqual([[25000, 'credit']]);
+  });
+
+  it('leaves a headerless statement to the old heuristic', () => {
+    const r = parseStatement('02/06/2025,Coffee,120.00 Dr');
+    expect(r.rows.map(x => [x.amount, x.direction])).toEqual([[12000, 'debit']]);
+  });
+});
+
+describe('UP-1 · a UPI code that states an amount keeps it', () => {
+  const { parseAnyUpiQr } = jest.requireActual('../lib/upiIntent') as typeof import('../lib/upiIntent');
+  it('reads am from a upi:// code, so the amount cannot be typed differently', () => {
+    expect(parseAnyUpiQr('upi://pay?pa=shop@okhdfcbank&pn=Shop&am=249.50&cu=INR')?.amountPaise).toBe(24950);
+  });
+  it('leaves an open-amount code open', () => {
+    expect(parseAnyUpiQr('upi://pay?pa=rahul@ybl&pn=Rahul')?.amountPaise).toBeUndefined();
+    expect(parseAnyUpiQr('rahul@ybl')?.amountPaise).toBeUndefined();
+  });
+  it('ignores an am that is not a plain positive amount', () => {
+    for (const am of ['0', '-5', '1e3', 'abc', '', '99999999999', '1.234']) {
+      expect(parseAnyUpiQr(`upi://pay?pa=x@ybl&am=${am}`)?.amountPaise).toBeUndefined();
+    }
+  });
+});
+
+describe('UP-2 · a merchant QR whose checksum does not hold is not a payee', () => {
+  const { parseMerchantQr, emvCrc16 } = jest.requireActual('../lib/emvQr') as typeof import('../lib/emvQr');
+  const tlv = (tag: string, v: string) => `${tag}${String(v.length).padStart(2, '0')}${v}`;
+  // Independent of the code under test, and over Node's real UTF-8 bytes.
+  const referenceCrc = (text: string) => {
+    let crc = 0xffff;
+    for (const byte of Buffer.from(text, 'utf8')) {
+      crc ^= byte << 8;
+      for (let i = 0; i < 8; i++) crc = (crc & 0x8000) ? ((crc << 1) ^ 0x1021) & 0xffff : (crc << 1) & 0xffff;
+    }
+    return crc;
+  };
+  const withCrc = (body: string) => {
+    const head = `${body}6304`;
+    return head + referenceCrc(head).toString(16).toUpperCase().padStart(4, '0');
+  };
+  const body = (name: string, vpa = 'shop@okhdfcbank') =>
+    tlv('00', '01') + tlv('01', '11') + tlv('26', tlv('00', 'in.gov.upi') + tlv('01', vpa))
+    + tlv('52', '5411') + tlv('53', '356') + tlv('59', name) + tlv('60', 'Pune');
+
+  it('computes the standard CRC-16/CCITT-FALSE check value', () => {
+    expect(emvCrc16('123456789')).toBe(0x29b1);
+  });
+  it('accepts a code whose checksum holds, non-ASCII names included', () => {
+    expect(parseMerchantQr(withCrc(body('Chai Stop')))?.vpa).toBe('shop@okhdfcbank');
+    expect(parseMerchantQr(withCrc(body('चाय की दुकान')))?.vpa).toBe('shop@okhdfcbank');
+  });
+  it('rejects one whose payee was changed under an intact length and checksum', () => {
+    const good = withCrc(body('Chai Stop'));
+    expect(parseMerchantQr(good.replace('shop@okhdfcbank', 'scam@okhdfcbank'))).toBeNull();
+  });
+  it('still accepts a code that carries no checksum at all', () => {
+    expect(parseMerchantQr(body('Chai Stop'))?.vpa).toBe('shop@okhdfcbank');
+  });
+});

@@ -760,6 +760,16 @@ export type ScanTarget = ScannedUpi & {
   canHandoff: boolean;
 };
 
+/** A UPI `am` value → paise, only when it is a plain positive decimal within the app's cap. */
+function uriAmountPaise(raw: string): number | null {
+  const q = raw.indexOf('?');
+  if (q < 0) return null;
+  const am = (new URLSearchParams(raw.slice(q + 1)).get('am') ?? '').trim();
+  if (!/^\d{1,9}(?:\.\d{1,2})?$/.test(am)) return null;
+  const paise = Math.round(parseFloat(am) * 100);
+  return paise > 0 ? paise : null;
+}
+
 /**
  * Any payable UPI QR — a person's `upi://` code or a shop's EMV/BharatQR.
  *
@@ -775,7 +785,15 @@ export type ScanTarget = ScannedUpi & {
  */
 export function parseAnyUpiQr(raw: string): ScanTarget | null {
   const person = parseUpiQr(raw);
-  if (person) return { ...person, kind: 'person', canHandoff: true };
+  if (person) {
+    // The amount the code itself states. `parseUpiQr` drops `am` (it is one of our own
+    // parameters), so a `upi://pay?…&am=249` code — a shop's dynamic QR, or a friend's
+    // payment request — came back with no amount, the sheet let the user type one, and
+    // they could pay ₹100 against a request for ₹249. The code's figure wins, and the
+    // sheet already refuses to edit a figure the code fixes.
+    const amountPaise = uriAmountPaise(raw);
+    return { ...person, kind: 'person', canHandoff: true, ...(amountPaise ? { amountPaise } : {}) };
+  }
 
   // Required here rather than at the top: emvQr imports isValidVpa from this module.
   // eslint-disable-next-line @typescript-eslint/no-var-requires

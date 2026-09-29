@@ -18,6 +18,7 @@
 export { handleSync, ENTITIES } from './routes';
 export { handleHistory, type HistoryEntry } from './history';
 export { eraseAccount } from './erase';
+export { liveAccount } from './utils/access';
 
 export type { Mutation, EntitySpec, PushContext } from './push';
 export type { PulledScope, PullResult } from './pull';

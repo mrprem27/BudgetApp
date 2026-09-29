@@ -34,12 +34,40 @@ const MONEY_RE = /^[(\-]?\s*(?:₹|rs\.?|inr)?\s*[\d,]+(?:\.\d{1,2})?\s*(?:dr|cr
 
 type MoneyMarker = 'dr' | 'cr' | 'neg' | 'none';
 
+/**
+ * Split one line on `delim`, honouring double-quoted fields.
+ *
+ * Bank exports quote what contains their own delimiter — `"1,250.00"`, or a
+ * narration like `"UPI-SWIGGY, BLR"`. A plain `split(',')` tore those into
+ * `"1` and `250.00"`, neither of which reads as money, so the row was skipped and
+ * only the "skipped N" count said so: the salary credit and every amount over a
+ * thousand vanished from an import. Quotes are dropped from the fields returned.
+ */
+function splitFields(line: string, delim: string): string[] {
+  if (!line.includes('"')) return line.split(delim);
+  const out: string[] = [];
+  let cur = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (line[i + 1] === '"') { cur += '"'; i++; } else inQuotes = false;
+      } else cur += ch;
+    } else if (ch === '"') inQuotes = true;
+    else if (ch === delim) { out.push(cur); cur = ''; }
+    else cur += ch;
+  }
+  out.push(cur);
+  return out;
+}
+
 /** Which delimiter splits the text most consistently across its lines. */
 function detectDelimiter(lines: string[]): string {
   let best = ',';
   let bestScore = -1;
   for (const d of DELIMITERS) {
-    const counts = lines.map(l => l.split(d).length - 1).filter(c => c > 0);
+    const counts = lines.map(l => splitFields(l, d).length - 1).filter(c => c > 0);
     if (counts.length === 0) continue;
     const mode = counts.slice().sort((a, b) => a - b)[Math.floor(counts.length / 2)];
     const consistent = counts.filter(c => c === mode).length;
@@ -85,6 +113,22 @@ function parseDate(field: string): number | null {
   return null;
 }
 
+/**
+ * Which columns are the debit and the credit, read from a header row such as
+ * `Date, Narration, Withdrawal Amt., Deposit Amt., Closing Balance`.
+ *
+ * Needed because position is the only thing that says which side a bare amount is
+ * on, and an EMPTY cell is not a money field — so on a deposit row the empty
+ * withdrawal cell vanished, the credit slid into the debit slot, and a salary was
+ * recorded as an expense. Two distinct columns are required: a lone `Dr/Cr` marker
+ * column is handled by the marker itself.
+ */
+function detectSideColumns(fields: string[]): { debit: number; credit: number } | null {
+  const debit = fields.findIndex(f => /withdraw|debit|paid out|money out|\bdr\b/i.test(f) && !/credit|deposit/i.test(f));
+  const credit = fields.findIndex(f => /deposit|credit|paid in|money in|received|\bcr\b/i.test(f) && !/debit|withdraw/i.test(f));
+  return debit >= 0 && credit >= 0 && debit !== credit ? { debit, credit } : null;
+}
+
 export function parseStatement(text: string): ParseResult {
   const lines = (text ?? '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
   if (lines.length === 0) return { rows: [], skipped: 0 };
@@ -92,16 +136,21 @@ export function parseStatement(text: string): ParseResult {
   const delim = detectDelimiter(lines);
   const rows: ParsedRow[] = [];
   let skipped = 0;
+  let sides: { debit: number; credit: number } | null = null;
 
   for (const line of lines) {
-    const fields = (delim && line.includes(delim) ? line.split(delim) : [line]).map(f => f.trim());
+    const fields = (delim && line.includes(delim) ? splitFields(line, delim) : [line]).map(f => f.trim());
 
     const moneyFields = fields
       .map((f, i) => ({ i, m: parseMoney(f) }))
       .filter((x): x is { i: number; m: { paise: number; marker: MoneyMarker } } => x.m !== null);
 
-    // No money anywhere → header / junk.
-    if (moneyFields.length === 0) { skipped += 1; continue; }
+    // No money anywhere → header / junk. A header still says where the sides are.
+    if (moneyFields.length === 0) {
+      sides = detectSideColumns(fields) ?? sides;
+      skipped += 1;
+      continue;
+    }
 
     const dateIdx = fields.findIndex(f => parseDate(f) !== null);
     const date = dateIdx >= 0 ? parseDate(fields[dateIdx])! : Date.now();
@@ -111,7 +160,13 @@ export function parseStatement(text: string): ParseResult {
     let direction: ParsedDirection = 'unknown';
 
     const marked = moneyFields.find(x => x.m.marker !== 'none');
-    if (marked) {
+    const debitCell = sides ? parseMoney(fields[sides.debit] ?? '') : null;
+    const creditCell = sides ? parseMoney(fields[sides.credit] ?? '') : null;
+    if (sides && (debitCell?.paise ?? 0) > 0) {
+      amount = debitCell!.paise; amtIdx = sides.debit; direction = 'debit';
+    } else if (sides && (creditCell?.paise ?? 0) > 0) {
+      amount = creditCell!.paise; amtIdx = sides.credit; direction = 'credit';
+    } else if (marked) {
       amount = marked.m.paise; amtIdx = marked.i;
       direction = marked.m.marker === 'cr' ? 'credit' : 'debit';
     } else if (moneyFields.length >= 3) {

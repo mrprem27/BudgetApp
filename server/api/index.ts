@@ -57,7 +57,7 @@ import {
 import { mailProvider, sendMail } from './mailer';
 import { callerIp, magicLinkAllowed, recordMagicLink } from './rateLimit';
 import { storage } from './storage';
-import { handleSync, handleHistory, eraseAccount } from './sync';
+import { handleSync, handleHistory, eraseAccount, liveAccount } from './sync';
 
 const USER_COLUMNS = 'id, email, name, phone, avatar_url, created_at, deleted_at';
 
@@ -650,7 +650,7 @@ async function listPendingClaims(request: Request, env: Env): Promise<Response> 
   const rows = await env.DB.prepare(
     `SELECT i.token, i.claimed_at, u.id, u.name, u.email
        FROM invites i JOIN users u ON u.id = i.claimed_by
-      WHERE i.from_user = ? AND i.state = 'pending'
+      WHERE i.from_user = ? AND i.state = 'pending' AND u.deleted_at IS NULL
       ORDER BY i.claimed_at DESC`,
   ).bind(auth.user.id).all<{ token: string; claimed_at: number; id: string; name: string | null; email: string }>();
 
@@ -672,6 +672,10 @@ async function decideClaim(request: Request, env: Env, token: string, approve: b
        FROM invites WHERE token = ? AND from_user = ? AND state = 'pending'`,
   ).bind(token, auth.user.id).first<InviteRow>();
   if (!invite || !invite.claimed_by) return notFound('No such pending invite');
+  // Their account may have been closed since they tapped the link (`deleteAccount`
+  // leaves a claimed invite "for this to find gone-quiet"). There is nobody left
+  // to link to, and approving would connect the sender to a scrubbed account.
+  if (!(await liveAccount(env.DB, invite.claimed_by))) return notFound('No such pending invite');
 
   await env.DB.prepare('UPDATE invites SET state = ? WHERE token = ?')
     .bind(approve ? 'approved' : 'declined', token).run();
@@ -701,10 +705,18 @@ async function linkUsers(env: Env, one: string, two: string): Promise<void> {
   ).bind(newId(), a, b, Date.now()).run();
 }
 
+/**
+ * The LIVE link between two people, if any. An unlinked pair keeps its row as a
+ * tombstone (`ended_at`), and that is not a link: treating it as one answered
+ * "already linked" to a fresh invite from somebody you had unlinked, so the pair
+ * could never be reconnected — while the list showed them as not linked at all.
+ * `linkUsers` is what revives a tombstone, and only an approval reaches it.
+ */
 function findLink(env: Env, x: string, y: string): Promise<LinkRow | null> {
   const [a, b] = orderPair(x, y);
   return env.DB.prepare(
-    'SELECT id, user_a, user_b, created_at, share_phone_a, share_phone_b FROM links WHERE user_a = ? AND user_b = ?',
+    `SELECT id, user_a, user_b, created_at, share_phone_a, share_phone_b FROM links
+      WHERE user_a = ? AND user_b = ? AND ended_at IS NULL`,
   ).bind(a, b).first<LinkRow>();
 }
 
