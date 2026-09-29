@@ -11,16 +11,18 @@ import { EmptyState } from '../../src/components/ui/EmptyState';
 import { ErrorState } from '../../src/components/ui/ErrorState';
 import { SectionHeader } from '../../src/components/ui/SectionHeader';
 import { SkeletonCard } from '../../src/components/ui/Skeleton';
-import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
 import { SecondaryButton } from '../../src/components/ui/SecondaryButton';
 import { AppRefreshControl } from '../../src/components/ui/AppRefreshControl';
 import { AssetSheet, type AssetSheetMode } from '../../src/components/finance/plan/AssetSheet';
+import { MoveMoneySheet } from '../../src/components/finance/plan/MoveMoneySheet';
 import { useAssets } from '../../src/hooks/useAssets';
 import { useContentInset } from '../../src/hooks/useContentInset';
 import { formatRupees, formatCompact } from '../../src/lib/money';
 import { backOr } from '../../src/lib/nav';
 import { ASSET_KIND_ICON, ASSET_KIND_LABEL } from '../../src/constants/assets';
-import type { Asset } from '../../src/db/queries/assets';
+import type { Asset, MoveEndpoint } from '../../src/db/queries/assets';
+
+const BANK: MoveEndpoint = { kind: 'bucket', bucket: 'bank' };
 
 /**
  * The asset register: what you own that isn't cash.
@@ -31,17 +33,20 @@ import type { Asset } from '../../src/db/queries/assets';
  * it was to retype the total, which is why buying an investment was logged as an
  * expense and dropped net worth by the amount invested.
  *
- * Three actions per asset, and they are three different things on purpose:
- * **Add** and **Take out** are transfers (cash moves, net worth does not), while
- * **worth now** is a market move (net worth changes, no cash moves). Collapsing
- * them would mean either inventing cash movement for a price change or losing the
- * record of an actual purchase.
+ * **What is out here is what you do often.** A row is its name and worth, tap to open
+ * it, plus one shortcut — `Move`, which is Add and Take out and switching between
+ * assets in a single form (`MoveMoneySheet`). What you do rarely — restate its worth,
+ * rename it, stop counting it — lives inside the asset's own page. It used to be four
+ * buttons under every row.
  */
 export default function AssetsScreen() {
   const router = useRouter();
   const bottomPad = useContentInset();
   const a = useAssets();
   const [sheet, setSheet] = useState<{ mode: AssetSheetMode; asset?: Asset } | null>(null);
+  const [move, setMove] = useState<{ from: MoveEndpoint; to: MoveEndpoint } | null>(null);
+  // Money in is the common case, so a row's Move opens as bank → this asset (⇅ flips it).
+  const moveInto = (asset: Asset) => setMove({ from: { kind: 'bucket', bucket: 'bank' }, to: { kind: 'asset', id: asset.id } });
 
   function renderAsset(asset: Asset, i: number, list: Asset[]) {
     return (
@@ -67,21 +72,7 @@ export default function AssetsScreen() {
           accessibilityLabel={`${asset.name}, ${formatRupees(asset.balance)}`}
         />
         <View style={styles.actionRow}>
-          <SecondaryButton label="Add" size="sm" onPress={() => setSheet({ mode: 'in', asset })} style={styles.actionBtn} />
-          <SecondaryButton
-            label="Take out"
-            size="sm"
-            onPress={() => setSheet({ mode: 'out', asset })}
-            style={styles.actionBtn}
-            // Nothing to take out of an empty asset, and offering it only produces
-            // a refusal the user has to read.
-            disabled={asset.balance <= 0}
-          />
-          <SecondaryButton label="Worth now" size="sm" onPress={() => setSheet({ mode: 'restate', asset })} style={styles.actionBtn} />
-          {/* Edit moved here when the row's tap became "open this asset". Renaming
-              is rarer than seeing what is in it, so the row's whole surface goes to
-              the common case and the rare one keeps a named button. */}
-          <SecondaryButton label="Edit" size="sm" onPress={() => setSheet({ mode: 'edit', asset })} style={styles.actionBtn} />
+          <SecondaryButton label="Move" icon="repeat" size="sm" onPress={() => moveInto(asset)} style={styles.actionBtn} />
         </View>
       </View>
     );
@@ -126,6 +117,14 @@ export default function AssetsScreen() {
                 </Text>
               </Card>
 
+              {a.assets.length > 0 && (
+                <SecondaryButton
+                  label="Move money"
+                  icon="repeat"
+                  onPress={() => setMove({ from: { kind: 'bucket', bucket: 'bank' }, to: { kind: 'asset', id: a.assets[0].id } })}
+                />
+              )}
+
               {a.assets.length === 0 ? (
                 <EmptyState
                   icon="package"
@@ -159,9 +158,6 @@ export default function AssetsScreen() {
                 </>
               )}
 
-              {a.assets.length > 0 && (
-                <PrimaryButton label="Add an asset" onPress={() => setSheet({ mode: 'create' })} />
-              )}
             </>
           )}
         </ScrollView>
@@ -174,10 +170,18 @@ export default function AssetsScreen() {
         onCreate={async (input) => { if (await a.create(input)) setSheet(null); }}
         onRename={async (id, patch) => { if (await a.rename(id, patch)) setSheet(null); }}
         onRestate={async (id, paise) => { if (await a.restate(id, paise)) setSheet(null); }}
-        onAddMoney={async (id, paise, from) => { if (await a.addMoney(id, paise, from)) setSheet(null); }}
-        onTakeMoney={async (id, paise, to) => { if (await a.takeMoney(id, paise, to)) setSheet(null); }}
         onArchive={async (asset) => { if (await a.archive(asset)) setSheet(null); }}
         onDelete={async (asset) => { if (await a.remove(asset)) setSheet(null); }}
+      />
+
+      <MoveMoneySheet
+        visible={!!move}
+        onClose={() => setMove(null)}
+        assets={a.assets}
+        from={move?.from ?? BANK}
+        to={move?.to ?? BANK}
+        busy={a.busy}
+        onMove={async (from, to, paise) => { if (await a.move(from, to, paise)) setMove(null); }}
       />
     </View>
   );
@@ -192,7 +196,7 @@ const styles = StyleSheet.create({
   heroAmount: { fontFamily: 'SpaceMono_400Regular', fontSize: 32, letterSpacing: -1, color: colors.textPrimary },
   heroHint: { ...type.caption, color: colors.textSecondary, textAlign: 'center' },
   balance: { fontFamily: 'SpaceMono_400Regular', fontSize: 15, color: colors.textPrimary },
-  actionRow: { flexDirection: 'row', gap: space.sm, paddingHorizontal: space.md, paddingBottom: space.md },
-  actionBtn: { flex: 1 },
+  actionRow: { flexDirection: 'row', paddingHorizontal: space.md, paddingBottom: space.md },
+  actionBtn: { alignSelf: 'flex-start' },
   foot: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginTop: -space.sm },
 });

@@ -12,9 +12,9 @@ import {
 } from '../db/queries/savings';
 import { setMoneyProfile } from '../db/queries/moneyProfile';
 import type { MoneyProfileWrite } from '../db/queries/moneyProfile';
-import { moveToInvestments, payCardBill } from '../db/queries/spendPower';
-import { transferToAsset } from '../db/queries/assets';
-import type { PayMethod } from '../constants/enums';
+import { payCardBill } from '../db/queries/spendPower';
+import { Alert } from 'react-native';
+import { moveMoney, AssetError, type MoveEndpoint } from '../db/queries/assets';
 import { loadSavingsTabData } from '../lib/savingsTabData';
 import { getPendingOverspendNotice, setPendingOverspendNotice } from '../lib/overspendNotice';
 import type { MoneyProfile } from '../lib/cash';
@@ -118,11 +118,15 @@ export function useSavingsTab() {
     refresh();
   }
 
-  async function handleMoveToInvestments(amountPaise: number, from: PayMethod, assetId: string | null) {
-    // A named destination goes straight to the register; `moveToInvestments` is
-    // the no-assets-yet path, and it is the one that mints "Investments".
-    if (assetId) await transferToAsset(db, assetId, amountPaise, from);
-    else await moveToInvestments(db, amountPaise, from);
+  /** Money from any place to any other — the one form behind Plan's "Move money". */
+  async function handleMoveMoney(from: MoveEndpoint, to: MoveEndpoint, amountPaise: number) {
+    try {
+      await moveMoney(db, from, to, amountPaise);
+    } catch (e) {
+      haptic.error();
+      Alert.alert('Couldn’t move that', e instanceof AssetError ? e.message : 'Please try again.');
+      return;
+    }
     haptic.success();
     setShowMoveInvest(false);
     await reload();
@@ -219,7 +223,7 @@ export function useSavingsTab() {
     // money editor
     showMoneyEditor, setShowMoneyEditor, handleSaveMoney,
     showPayCardBill, setShowPayCardBill, handlePayCardBill,
-    showMoveInvest, setShowMoveInvest, handleMoveToInvestments,
+    showMoveInvest, setShowMoveInvest, handleMoveMoney,
     // fund a goal
     fundGoalId, setFundGoalId, fundGoalObj, fundAmt, setFundAmt, handleFundGoal,
     // new-goal form

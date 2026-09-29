@@ -113,13 +113,13 @@ export function TotalMoneyCard({ money, byBucket, unattributed, updatedAt, onEdi
       <Row label="Credit headroom" value={formatCompact(money.creditAvailable)} strong />
       <SubRow label={`Limit ${formatCompact(money.creditLimit)} · used ${formatCompact(money.creditUsed)} · borrowing, not money`} value="" />
 
-      {/* Investments have a real way UP now — not just re-typing the figure.
-          Buying an SIP was logged as an expense, which dropped net worth by the
-          amount when it should have stayed flat. */}
+      {/* Money moves between places — bank, cash, wallet, any asset — and none of it is
+          spending. Buying an SIP was once logged as an expense, which dropped net worth by
+          the amount when it should have stayed flat. */}
       {onMoveToInvestments && (
-        <PressableScale style={styles.payBillBtn} onPress={onMoveToInvestments} accessibilityLabel="Move money to investments">
-          <Feather name="trending-up" size={14} color={colors.accent} />
-          <Text style={styles.payBillText}>Bought an investment? Move it across</Text>
+        <PressableScale style={styles.payBillBtn} onPress={onMoveToInvestments} accessibilityLabel="Move money">
+          <Feather name="repeat" size={14} color={colors.accent} />
+          <Text style={styles.payBillText}>Move money — bank, cash or an asset</Text>
         </PressableScale>
       )}
 

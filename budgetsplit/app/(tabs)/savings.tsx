@@ -23,7 +23,7 @@ import { GoalCard } from '../../src/components/finance/plan/GoalCard';
 import { TotalMoneyCard } from '../../src/components/finance/plan/TotalMoneyCard';
 import { MoneyEditorSheet } from '../../src/components/finance/plan/MoneyEditorSheet';
 import { PayCardBillSheet } from '../../src/components/finance/plan/PayCardBillSheet';
-import { MoveToInvestmentsSheet } from '../../src/components/finance/plan/MoveToInvestmentsSheet';
+import { MoveMoneySheet } from '../../src/components/finance/plan/MoveMoneySheet';
 import { ForecastCard } from '../../src/components/finance/plan/ForecastCard';
 import { formatCompact, parseToPaise } from '../../src/lib/money';
 
@@ -91,7 +91,7 @@ export default function SavingsScreen() {
     overspend, applied, handleApproveOverspend, handleUndoOverspend, handleDismissOverspend,
     showMoneyEditor, setShowMoneyEditor, handleSaveMoney,
     showPayCardBill, setShowPayCardBill, handlePayCardBill,
-    showMoveInvest, setShowMoveInvest, handleMoveToInvestments,
+    showMoveInvest, setShowMoveInvest, handleMoveMoney,
     fundGoalId, setFundGoalId, fundGoalObj, fundAmt, setFundAmt, handleFundGoal,
     showNew, setShowNew, name, setName, target, setTarget,
     priority, setPriority, icon, setIcon, color, setColor,
@@ -313,12 +313,15 @@ export default function SavingsScreen() {
         onManageAssets={() => { setShowMoneyEditor(false); router.push('/assets'); }}
       />
 
-      <MoveToInvestmentsSheet
-        assets={assets}
+      {/* Opens as bank → your first asset (the common "I bought an investment" case); ⇅ flips it,
+          and any place can be either end. */}
+      <MoveMoneySheet
         visible={showMoveInvest}
         onClose={() => setShowMoveInvest(false)}
-        cashAvailable={money?.cashAvailable ?? 0}
-        onMove={handleMoveToInvestments}
+        assets={assets}
+        from={{ kind: 'bucket', bucket: 'bank' }}
+        to={assets[0] ? { kind: 'asset', id: assets[0].id } : { kind: 'bucket', bucket: 'cash' }}
+        onMove={handleMoveMoney}
       />
 
       <PayCardBillSheet

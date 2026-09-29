@@ -8,8 +8,8 @@ import { formatRupees } from '../lib/money';
 import { PayMethod } from '../constants/enums';
 import {
   getAssets, getArchivedAssets, insertAsset, updateAsset, archiveAsset, deleteAsset,
-  restateAssetBalance, transferToAsset, transferFromAsset, setAssetOrder,
-  AssetError, type Asset, type AssetKind,
+  restateAssetBalance, moveMoney, setAssetOrder,
+  AssetError, type Asset, type AssetKind, type MoveEndpoint,
 } from '../db/queries/assets';
 
 /**
@@ -71,11 +71,9 @@ export function useAssets() {
     restate: (id: string, balancePaise: number) =>
       run(async () => { await restateAssetBalance(db, id, balancePaise); }),
 
-    addMoney: (id: string, amountPaise: number, from: PayMethod, note?: string) =>
-      run(async () => { await transferToAsset(db, id, amountPaise, from, note); }),
-
-    takeMoney: (id: string, amountPaise: number, to: PayMethod, note?: string) =>
-      run(async () => { await transferFromAsset(db, id, amountPaise, to, note); }),
+    /** Money from any place to any other — bank, cash, wallet or an asset. Net worth is flat. */
+    move: (from: MoveEndpoint, to: MoveEndpoint, amountPaise: number) =>
+      run(async () => { await moveMoney(db, from, to, amountPaise); }),
 
     reorder: (ids: string[]) => run(async () => { await setAssetOrder(db, ids); }),
 

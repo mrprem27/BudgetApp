@@ -6,43 +6,28 @@ import { Input } from '../../ui/Input';
 import { Chip } from '../../ui/Chip';
 import { PrimaryButton } from '../../ui/PrimaryButton';
 import { SecondaryButton } from '../../ui/SecondaryButton';
-import { formatRupees, parseToPaise, paiseToInput } from '../../../lib/money';
-import { PayMethod, PAY_METHOD_LABEL, PAY_METHOD_ICON } from '../../../constants/enums';
+import { parseToPaise, paiseToInput } from '../../../lib/money';
 import { ASSET_KIND, ASSET_KIND_LABEL, ASSET_KIND_ICON } from '../../../constants/assets';
 import type { Asset, AssetKind } from '../../../db/queries/assets';
 
 /**
- * One sheet, five jobs — because they are all "this asset, and a number", and
- * five near-identical sheets is how the chip variants got to seven.
+ * One sheet for describing an asset: create it, edit it, or restate what it is worth.
  *
- * The three money modes are NOT the same operation and the copy says so:
- *
- * - `in` / `out` are **transfers**. Cash moves, the asset moves the other way,
- *   and net worth does not change. They ask which bucket the money came from or
- *   goes to, because that is what makes cash land in the right place.
- * - `restate` is a **market move**. Net worth changes and no cash moves, so it
- *   asks for no bucket and writes no transaction.
- *
- * Merging them would mean either inventing cash movement for a price change, or
- * losing the record of a real purchase. Both are silent.
+ * Moving money in or out is *not* here — that is `MoveMoneySheet`, one form for every
+ * place money can go. What is left are the things you do to the asset itself, and the
+ * distinction that matters still holds: `restate` is a **market move** — net worth
+ * changes and no cash does, so it asks for no bucket and writes no transaction.
  */
-export type AssetSheetMode = 'create' | 'edit' | 'in' | 'out' | 'restate';
-
-/** Where money comes from or goes to. Card is absent on purpose: you cannot buy
- *  an asset "from" a credit card in this model without it also being a debt, and
- *  that is a bigger change than this screen. */
-const BUCKETS = [PayMethod.Bank, PayMethod.Cash, PayMethod.Wallet, PayMethod.Upi];
+export type AssetSheetMode = 'create' | 'edit' | 'restate';
 
 const TITLE: Record<AssetSheetMode, (a?: Asset) => string> = {
   create: () => 'Add an asset',
   edit: (a) => a?.name ?? 'Asset',
-  in: (a) => `Add to ${a?.name ?? 'asset'}`,
-  out: (a) => `Take out of ${a?.name ?? 'asset'}`,
   restate: (a) => `What is ${a?.name ?? 'it'} worth?`,
 };
 
 export function AssetSheet({
-  state, busy, onClose, onCreate, onRename, onRestate, onAddMoney, onTakeMoney, onArchive, onDelete,
+  state, busy, onClose, onCreate, onRename, onRestate, onArchive, onDelete,
 }: {
   state: { mode: AssetSheetMode; asset?: Asset } | null;
   busy: boolean;
@@ -50,8 +35,6 @@ export function AssetSheet({
   onCreate: (input: { name: string; kind: AssetKind; balance: number }) => void;
   onRename: (id: string, patch: { name: string; kind: AssetKind }) => void;
   onRestate: (id: string, balancePaise: number) => void;
-  onAddMoney: (id: string, amountPaise: number, from: PayMethod) => void;
-  onTakeMoney: (id: string, amountPaise: number, to: PayMethod) => void;
   onArchive: (asset: Asset) => void;
   onDelete: (asset: Asset) => void;
 }) {
@@ -74,7 +57,6 @@ export function AssetSheet({
   const [name, setName] = useState('');
   const [kind, setKind] = useState<AssetKind>('investment');
   const [amount, setAmount] = useState('');
-  const [bucket, setBucket] = useState<PayMethod>(PayMethod.Bank);
 
   // Re-seed whenever the sheet opens, so the previous asset's values never leak
   // into the next one — the same reason MoneyEditorSheet re-seeds on `visible`.
@@ -82,16 +64,14 @@ export function AssetSheet({
     if (!state) return;
     setName(asset?.name ?? '');
     setKind(asset?.kind ?? 'investment');
-    setBucket(PayMethod.Bank);
     setAmount(mode === 'restate' && asset ? paiseToInput(asset.balance) : '');
   }, [state, asset, mode]);
 
   const paise = parseToPaise(amount);
-  const overdraw = mode === 'out' && !!asset && paise > asset.balance;
   const canSubmit = !busy && (
     mode === 'create' || mode === 'edit'
       ? name.trim().length > 0
-      : mode === 'restate' ? amount.trim().length > 0 : paise > 0 && !overdraw
+      : amount.trim().length > 0
   );
 
   function submit() {
@@ -99,9 +79,7 @@ export function AssetSheet({
     if (mode === 'create') return onCreate({ name: name.trim(), kind, balance: paise });
     if (!asset) return;
     if (mode === 'edit') return onRename(asset.id, { name: name.trim(), kind });
-    if (mode === 'restate') return onRestate(asset.id, paise);
-    if (mode === 'in') return onAddMoney(asset.id, paise, bucket);
-    return onTakeMoney(asset.id, paise, bucket);
+    return onRestate(asset.id, paise);
   }
 
   const namingMode = mode === 'create' || mode === 'edit';
@@ -144,7 +122,7 @@ export function AssetSheet({
             <Input value={amount} onChangeText={setAmount} keyboardType="decimal-pad" placeholder="₹0" style={styles.gap} />
             <Text style={styles.hint}>
               Its current value. This does NOT take money out of your cash — it records
-              something you already own. Use “Add” afterwards for money you move in from now on.
+              something you already own. Use “Move money” afterwards for money you put in from now on.
             </Text>
           </>
         )}
@@ -160,38 +138,8 @@ export function AssetSheet({
           </>
         )}
 
-        {(mode === 'in' || mode === 'out') && (
-          <>
-            <Text style={styles.label}>Amount</Text>
-            <Input value={amount} onChangeText={setAmount} keyboardType="decimal-pad" placeholder="₹0" style={styles.gap} autoFocus />
-            {overdraw && (
-              <Text style={styles.error}>
-                {asset?.name} only holds {formatRupees(asset?.balance ?? 0)}.
-              </Text>
-            )}
-
-            <Text style={styles.label}>{mode === 'in' ? 'Money comes from' : 'Money goes to'}</Text>
-            <View style={styles.chips}>
-              {BUCKETS.map(b => (
-                <Chip
-                  key={b}
-                  label={PAY_METHOD_LABEL[b]}
-                  icon={PAY_METHOD_ICON[b]}
-                  selected={bucket === b}
-                  onPress={() => setBucket(b)}
-                />
-              ))}
-            </View>
-            <Text style={styles.hint}>
-              {mode === 'in'
-                ? 'Your cash goes down and this asset goes up by the same — a transfer, so your net worth stays where it is. It is not spending, so no budget is touched.'
-                : 'This asset goes down and your cash goes up by the same. Selling something you already own is not income, so it is not counted as earnings.'}
-            </Text>
-          </>
-        )}
-
         <PrimaryButton
-          label={mode === 'create' ? 'Add asset' : mode === 'edit' ? 'Save' : mode === 'restate' ? 'Update value' : mode === 'in' ? 'Move it in' : 'Take it out'}
+          label={mode === 'create' ? 'Add asset' : mode === 'edit' ? 'Save' : 'Update value'}
           onPress={submit}
           disabled={!canSubmit}
           loading={busy}
@@ -213,7 +161,6 @@ const styles = StyleSheet.create({
   label: { ...type.label, color: colors.textSecondary, marginBottom: space.xs, marginTop: space.md },
   gap: { marginBottom: space.xs },
   hint: { ...type.caption, color: colors.textMuted, lineHeight: 18 },
-  error: { ...type.caption, color: colors.expense, marginBottom: space.xs },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginBottom: space.sm },
   submit: { marginTop: space.lg },
   dangerRow: { flexDirection: 'row', gap: space.sm, marginTop: space.sm },

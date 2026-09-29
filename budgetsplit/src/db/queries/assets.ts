@@ -2,7 +2,7 @@ import * as SQLite from 'expo-sqlite';
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
 import { INVESTMENT_CATEGORY } from '../../constants/categories';
-import { PayMethod } from '../../constants/enums';
+import { PayMethod, type AssetBucket } from '../../constants/enums';
 import { getMe } from './persons';
 import { getAllGroups, personalGroupOf } from './groups';
 import { insertTxnRows } from './transactions';
@@ -56,7 +56,7 @@ export type Asset = {
 /** Refusals a caller must handle. Thrown, not returned, because every one of
  *  these means the write did not happen and the UI must say so. */
 export class AssetError extends Error {
-  constructor(readonly reason: 'no-asset' | 'no-me' | 'no-personal-group' | 'bad-amount' | 'insufficient', message: string) {
+  constructor(readonly reason: 'no-asset' | 'no-me' | 'no-personal-group' | 'bad-amount' | 'insufficient' | 'same-place', message: string) {
     super(message);
     this.name = 'AssetError';
   }
@@ -319,6 +319,123 @@ export async function transferFromAsset(
     await queueUpsert(db, 'asset', asset.id);
   });
   return id;
+}
+
+/** One end of a move: a money bucket, or an asset from the register. */
+export type MoveEndpoint =
+  | { kind: 'bucket'; bucket: AssetBucket }
+  | { kind: 'asset'; id: string };
+
+const BUCKET_PAY: Record<AssetBucket, PayMethod> = {
+  bank: PayMethod.Bank, cash: PayMethod.Cash, wallet: PayMethod.Wallet,
+};
+const BUCKET_LABEL: Record<AssetBucket, string> = { bank: 'Bank', cash: 'Cash', wallet: 'Wallet' };
+
+/**
+ * Move money from any place you hold it to any other: bank, cash, wallet or an asset.
+ *
+ * Buying gold, redeeming an FD, switching one asset into another and taking cash out
+ * of the bank are the same act — *money goes from one place to another* — and were
+ * four separate forms. The ledger model needs no new shape for it: a settlement in the
+ * Personal group is "payments only" when money leaves a place and "shares only" when it
+ * arrives, and every surface already reads that shape.
+ *
+ * - bucket → asset, asset → bucket: exactly `transferToAsset` / `transferFromAsset`.
+ * - asset → asset: money leaves A into a bucket and goes straight into B from that same
+ *   bucket — two rows, one on each asset's page, **cash unchanged** (the bucket gets and
+ *   gives the same amount).
+ * - bucket → bucket (the ATM case): a row out of one, a row into the other — bucket
+ *   balances move, total cash does not.
+ *
+ * Net worth is flat in all four, which is the rule this file exists for. Everything is
+ * written in ONE transaction; a move that lands only its first half would drop net worth
+ * by the amount with a correct-looking row behind it. An asset never goes negative — the
+ * same SQL guard as `transferFromAsset`, checked again inside the transaction.
+ *
+ * `via` is the bucket an asset → asset move passes through; the user never chooses it.
+ */
+export async function moveMoney(
+  db: SQLite.SQLiteDatabase,
+  from: MoveEndpoint,
+  to: MoveEndpoint,
+  amountPaise: number,
+  opts: { date?: number; via?: AssetBucket } = {},
+): Promise<string[]> {
+  if (!Number.isFinite(amountPaise) || amountPaise <= 0) {
+    throw new AssetError('bad-amount', 'A move needs a positive amount');
+  }
+  const same = from.kind === to.kind && (from.kind === 'bucket'
+    ? from.bucket === (to as { bucket: AssetBucket }).bucket
+    : from.id === (to as { id: string }).id);
+  if (same) throw new AssetError('same-place', 'Pick two different places');
+
+  const amount = Math.round(amountPaise);
+  const [me, groups] = await Promise.all([getMe(db), getAllGroups(db)]);
+  if (!me) throw new AssetError('no-me', 'No current user');
+  const personal = personalGroupOf(groups);
+  if (!personal) throw new AssetError('no-personal-group', 'No personal group');
+
+  const load = async (e: MoveEndpoint) => {
+    if (e.kind === 'bucket') return null;
+    const a = await getAssetById(db, e.id);
+    if (!a) throw new AssetError('no-asset', 'That asset no longer exists');
+    return a;
+  };
+  const [fromAsset, toAsset] = await Promise.all([load(from), load(to)]);
+  if (fromAsset && amount > fromAsset.balance) {
+    throw new AssetError('insufficient', `${fromAsset.name} only holds ${(fromAsset.balance / 100).toFixed(2)}`);
+  }
+
+  /** A leg is one settlement row: money leaving a place (`out`, payments only) or arriving (`in`, shares only). */
+  type Leg = { dir: 'out' | 'in'; bucket: AssetBucket; assetId: string | null; note: string; category: string };
+  const via = opts.via ?? 'bank';
+  const legs: Leg[] = [];
+  if (from.kind === 'bucket' && toAsset) {
+    legs.push({ dir: 'out', bucket: from.bucket, assetId: toAsset.id, note: `Moved to ${toAsset.name}`, category: INVESTMENT_CATEGORY });
+  } else if (fromAsset && to.kind === 'bucket') {
+    legs.push({ dir: 'in', bucket: to.bucket, assetId: fromAsset.id, note: `Moved from ${fromAsset.name}`, category: INVESTMENT_CATEGORY });
+  } else if (fromAsset && toAsset) {
+    legs.push({ dir: 'in', bucket: via, assetId: fromAsset.id, note: `Moved to ${toAsset.name}`, category: INVESTMENT_CATEGORY });
+    legs.push({ dir: 'out', bucket: via, assetId: toAsset.id, note: `Moved from ${fromAsset.name}`, category: INVESTMENT_CATEGORY });
+  } else if (from.kind === 'bucket' && to.kind === 'bucket') {
+    legs.push({ dir: 'out', bucket: from.bucket, assetId: null, note: `Moved to ${BUCKET_LABEL[to.bucket]}`, category: 'Other' });
+    legs.push({ dir: 'in', bucket: to.bucket, assetId: null, note: `Moved from ${BUCKET_LABEL[from.bucket]}`, category: 'Other' });
+  }
+
+  const now = Date.now();
+  const ids: string[] = [];
+  await db.withTransactionAsync(async () => {
+    for (const leg of legs) {
+      const id = uuid();
+      ids.push(id);
+      await insertTxnRows(db, {
+        groupId: personal.id,
+        kind: 'settlement',
+        entryMode: 'quick',
+        date: opts.date ?? now,
+        category: leg.category,
+        note: leg.note,
+        payMethod: BUCKET_PAY[leg.bucket],
+        assetId: leg.assetId ?? undefined,
+        payments: leg.dir === 'out' ? [{ personId: me.id, amount }] : [],
+        shares: leg.dir === 'in' ? [{ personId: me.id, amount }] : [],
+      }, id, now);
+    }
+    if (fromAsset) {
+      // Guarded in SQL as well as above: two overlapping withdrawals could both pass the read.
+      const res = await db.runAsync(
+        'UPDATE asset SET balance = balance - ?, updated_at = ? WHERE id = ? AND balance >= ?',
+        [amount, now, fromAsset.id, amount],
+      );
+      if (res.changes === 0) throw new AssetError('insufficient', `${fromAsset.name} does not hold that much any more`);
+      await queueUpsert(db, 'asset', fromAsset.id);
+    }
+    if (toAsset) {
+      await db.runAsync('UPDATE asset SET balance = balance + ?, updated_at = ? WHERE id = ?', [amount, now, toAsset.id]);
+      await queueUpsert(db, 'asset', toAsset.id);
+    }
+  });
+  return ids;
 }
 
 /**

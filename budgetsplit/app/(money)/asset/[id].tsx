@@ -1,5 +1,6 @@
-import React, { useCallback } from 'react';
-import { View, Text, StyleSheet, SectionList } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { View, Text, StyleSheet, SectionList, TouchableOpacity } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { colors, type, space, layout } from '../../../src/theme';
 import { ScreenHeader } from '../../../src/components/ui/ScreenHeader';
@@ -8,6 +9,11 @@ import { EmptyState } from '../../../src/components/ui/EmptyState';
 import { ErrorState } from '../../../src/components/ui/ErrorState';
 import { AppRefreshControl } from '../../../src/components/ui/AppRefreshControl';
 import { IconCircle } from '../../../src/components/ui/IconCircle';
+import { PrimaryButton } from '../../../src/components/ui/PrimaryButton';
+import { SecondaryButton } from '../../../src/components/ui/SecondaryButton';
+import { AssetSheet, type AssetSheetMode } from '../../../src/components/finance/plan/AssetSheet';
+import { MoveMoneySheet } from '../../../src/components/finance/plan/MoveMoneySheet';
+import { useAssets } from '../../../src/hooks/useAssets';
 import { TransactionRow } from '../../../src/components/finance/TransactionRow';
 import { TxnCell } from '../../../src/components/finance/TxnCell';
 import { useScreenData } from '../../../src/hooks/useScreenData';
@@ -45,6 +51,9 @@ export default function AssetDetailScreen() {
   const bottomPad = useContentInset();
 
   const { data, loading, error, refreshing, onRefresh, reload } = useScreenData((db) => loadAssetDetail(db, id), [id]);
+  const reg = useAssets();
+  const [sheet, setSheet] = useState<AssetSheetMode | null>(null);
+  const [moving, setMoving] = useState(false);
 
   const asset = data?.asset ?? null;
   const txns = data?.txns ?? [];
@@ -85,7 +94,17 @@ export default function AssetDetailScreen() {
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title={asset?.name ?? 'Asset'} onBack={() => backOr(router, '/assets')} />
+      <ScreenHeader
+        title={asset?.name ?? 'Asset'}
+        onBack={() => backOr(router, '/assets')}
+        right={asset ? (
+          // The rare things — rename, change its kind, stop counting, delete — live in the
+          // edit sheet behind this, not as buttons on the register's rows.
+          <TouchableOpacity onPress={() => setSheet('edit')} hitSlop={10} accessibilityRole="button" accessibilityLabel={`Edit ${asset.name}`}>
+            <Feather name="more-horizontal" size={22} color={colors.textPrimary} />
+          </TouchableOpacity>
+        ) : undefined}
+      />
 
       <SectionList
         sections={sections}
@@ -109,6 +128,10 @@ export default function AssetDetailScreen() {
                 {ASSET_KIND_LABEL[asset.kind]}
                 {txns.length > 0 && ` · ${txns.length} ${txns.length === 1 ? 'movement' : 'movements'}`}
               </Text>
+              <View style={styles.actions}>
+                <PrimaryButton label="Move money" onPress={() => setMoving(true)} style={styles.actionBtn} />
+                <SecondaryButton label="Update worth" onPress={() => setSheet('restate')} style={styles.actionBtn} />
+              </View>
             </View>
           ) : null
         }
@@ -119,16 +142,35 @@ export default function AssetDetailScreen() {
             <EmptyState
               icon="trending-up"
               title="Nothing moved yet"
-              // No CTA: the actions belong to the register, which is one tap back
-              // and owns both halves of a movement. Offering "Add to this" here
-              // would be a second door to a write this screen does not perform.
               body={asset
-                ? `${asset.name} is worth ${formatRupees(asset.balance)}. Add to it or take from it in Plan → Assets, and every movement shows up here.`
+                ? `${asset.name} is worth ${formatRupees(asset.balance)}. Move money in or out and every movement shows up here.`
                 : 'This asset no longer exists.'}
               tint={colors.textSecondary}
             />
           )
         }
+      />
+
+      <MoveMoneySheet
+        visible={moving}
+        onClose={() => setMoving(false)}
+        assets={reg.assets}
+        // Money in is the common case; ⇅ flips it to taking money out.
+        from={{ kind: 'bucket', bucket: 'bank' }}
+        to={{ kind: 'asset', id }}
+        busy={reg.busy}
+        onMove={async (from, to, paise) => { if (await reg.move(from, to, paise)) { setMoving(false); reload(); } }}
+      />
+
+      <AssetSheet
+        state={sheet && asset ? { mode: sheet, asset } : null}
+        busy={reg.busy}
+        onClose={() => setSheet(null)}
+        onCreate={() => {}}
+        onRename={async (aid, patch) => { if (await reg.rename(aid, patch)) { setSheet(null); reload(); } }}
+        onRestate={async (aid, paise) => { if (await reg.restate(aid, paise)) { setSheet(null); reload(); } }}
+        onArchive={async (a) => { if (await reg.archive(a)) { setSheet(null); backOr(router, '/assets'); } }}
+        onDelete={async (a) => { if (await reg.remove(a)) { setSheet(null); backOr(router, '/assets'); } }}
       />
     </View>
   );
@@ -142,4 +184,6 @@ const styles = StyleSheet.create({
   hero: { alignItems: 'center', gap: space.sm, paddingVertical: space.lg },
   balance: { ...type.amountXL, color: colors.textPrimary },
   kind: { ...type.caption, color: colors.textMuted },
+  actions: { flexDirection: 'row', gap: space.sm, alignSelf: 'stretch', marginTop: space.md },
+  actionBtn: { flex: 1 },
 });
