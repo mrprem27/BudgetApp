@@ -77,11 +77,14 @@ describe('the recurring flow has two lists and one rule screen', () => {
     expect(src).not.toMatch(/\/plan\/recurring\?focus=/);
   });
 
-  it('Personal no longer carries a second copy of the global list', () => {
-    // Its Recurring tab listed every rule in every SHARED group, so it was neither
-    // personal nor different from `/plan/recurring`.
+  it('Personal\'s Recurring tab is the Personal group\'s own rules, not a copy of the global list', () => {
+    // An old tab listed every rule in every SHARED group — the global list again. The tab now shows
+    // exactly what a group's Recurring tab shows for that group: its own rules.
     const src = readFileSync(join(APP, '(people)', 'personal.tsx'), 'utf8');
-    expect(src).not.toContain("label: 'Recurring'");
+    expect(src).toContain('<RecurringTab');
+    const loader = readFileSync(join(APP, '..', 'src', 'lib', 'personalData.ts'), 'utf8');
+    expect(loader).toMatch(/getRecurringForGroup\(db, personal\.id\)/);
+    expect(loader).not.toMatch(/getAllRecurringRules/);
   });
 });
 

@@ -847,3 +847,83 @@ describe('H1 · Home says where the month is heading in one line, and shows the 
     expect(fs.readFileSync('src/components/finance/home/StreakBadge.tsx', 'utf8')).toMatch(/icon="zap"/);
   });
 });
+
+describe('XL-1 · a spreadsheet statement keeps its dates and its multi-line narrations', () => {
+  const { zipSync, strToU8 } = jest.requireActual('fflate') as typeof import('fflate');
+  const { readXlsx } = jest.requireActual('../lib/xlsx') as typeof import('../lib/xlsx');
+  const { parseAnyWorkbook } = jest.requireActual('../lib/importDetect') as typeof import('../lib/importDetect');
+  const book = (dateCell: string, styles: string) => zipSync({
+    'xl/worksheets/sheet1.xml': strToU8(`<worksheet><sheetData>
+<row r="1"><c r="A1" t="inlineStr"><is><t>Date</t></is></c><c r="B1" t="inlineStr"><is><t>Narration</t></is></c><c r="C1" t="inlineStr"><is><t>Withdrawal</t></is></c><c r="D1" t="inlineStr"><is><t>Deposit</t></is></c></row>
+<row r="2">${dateCell}<c r="B2" t="inlineStr"><is><t>UPI/Swiggy
+Ref 123</t></is></c><c r="C2"><v>450</v></c></row>
+</sheetData></worksheet>`),
+    'xl/styles.xml': strToU8(styles),
+    'xl/workbook.xml': strToU8('<workbook><sheets><sheet name="S" sheetId="1"/></sheets></workbook>'),
+  });
+
+  it('a built-in date format reads as a date, not an amount', () => {
+    const rows = parseAnyWorkbook(readXlsx(book('<c r="A2" s="1"><v>46264</v></c>', '<styleSheet><cellXfs><xf numFmtId="0"/><xf numFmtId="14"/></cellXfs></styleSheet>'))).result.rows;
+    expect(rows.map(r => [new Date(r.date).getFullYear(), new Date(r.date).getMonth(), new Date(r.date).getDate(), r.amount])).toEqual([[2026, 7, 30, 45000]]);
+  });
+
+  it('a custom dd-mmm-yy format is a date too; a plain number stays a number', () => {
+    const custom = '<styleSheet><numFmts><numFmt numFmtId="170" formatCode="dd\\-mmm\\-yy"/></numFmts><cellXfs><xf numFmtId="0"/><xf numFmtId="170"/></cellXfs></styleSheet>';
+    expect(readXlsx(book('<c r="A2" s="1"><v>46264</v></c>', custom))[0].rows[1][0]).toBe('30/08/2026');
+    expect(readXlsx(book('<c r="A2" s="0"><v>46264</v></c>', custom))[0].rows[1][0]).toBe('46264');
+  });
+
+  it('a line break inside a cell does not make a second, bogus row', () => {
+    const r = parseAnyWorkbook(readXlsx(book('<c r="A2" s="1"><v>46264</v></c>', '<styleSheet><cellXfs><xf numFmtId="0"/><xf numFmtId="14"/></cellXfs></styleSheet>'))).result;
+    expect(r.rows).toHaveLength(1);
+    expect(r.rows[0].description).toBe('UPI/Swiggy Ref 123');
+  });
+});
+
+describe('R2 · a bill paid by hand near its date counts as that occurrence, not a second one', () => {
+  const { createTestDb, addPerson, addGroup, addMember, addTxn } = jest.requireActual('./helpers/testDb') as typeof import('./helpers/testDb');
+  const { materializeDueOccurrences } = jest.requireActual('../db/queries/recurring') as typeof import('../db/queries/recurring');
+  const { matchWindowDays, amountMatches } = jest.requireActual('../lib/recurrence') as typeof import('../lib/recurrence');
+  const DAY = 86_400_000;
+
+  it('window: at most 4 days, under half a cycle, none for daily', () => {
+    expect([matchWindowDays('monthly', 1), matchWindowDays('weekly', 1), matchWindowDays('daily', 1), matchWindowDays('custom', 3), matchWindowDays(null, 1)])
+      .toEqual([4, 3, 0, 1, 0]);
+    expect([amountMatches(2_100_000, 2_200_000), amountMatches(1_900_000, 2_200_000), amountMatches(5, 0)]).toEqual([true, false, false]);
+  });
+
+  function setup() {
+    const db = createTestDb();
+    const me = addPerson(db, 'Me', true);
+    const g = addGroup(db, 'Personal', true); addMember(db, g, me);
+    // Monthly rent rule that started 40 days ago → occurrences at the start and ~10 days ago.
+    const start = Date.now() - 40 * DAY;
+    const rule = addTxn(db, { groupId: g, kind: 'expense', date: start, category: 'Rent', recurFreq: 'monthly', payments: [{ personId: me, amount: 2_200_000 }], shares: [{ personId: me, amount: 2_200_000 }] });
+    db.raw.prepare("UPDATE txn SET recur_interval = 1, recur_state = 'active', recur_mode = 'auto' WHERE id = ?").run(rule);
+    return { db, me, g, rule, start };
+  }
+  const occurrenceOf = (start: number) => { const d = new Date(start); d.setMonth(d.getMonth() + 1); return d.getTime(); };
+  const count = (db: { raw: { prepare: (s: string) => { get: () => unknown } } }) =>
+    (db.raw.prepare("SELECT COUNT(*) AS n FROM txn WHERE category = 'Rent' AND recur_freq IS NULL AND is_deleted = 0").get() as { n: number }).n;
+
+  it('rent paid 2 days early is claimed — no duplicate', async () => {
+    const { db, me, g, rule, start } = setup();
+    const occ = occurrenceOf(start);
+    const manual = addTxn(db, { groupId: g, kind: 'expense', date: occ - 2 * DAY, category: 'Rent', payments: [{ personId: me, amount: 2_200_000 }], shares: [{ personId: me, amount: 2_200_000 }] });
+    await materializeDueOccurrences(db as never);
+    // The start-date occurrence + the hand-paid one, which is now the second occurrence.
+    expect(count(db)).toBe(2);
+    expect(db.raw.prepare('SELECT parent_recur_id FROM txn WHERE id = ?').get(manual)).toEqual({ parent_recur_id: rule });
+  });
+
+  it('a different amount, or too far away, still posts the occurrence', async () => {
+    const a = setup();
+    addTxn(a.db, { groupId: a.g, kind: 'expense', date: occurrenceOf(a.start) - 2 * DAY, category: 'Rent', payments: [{ personId: a.me, amount: 900_000 }], shares: [{ personId: a.me, amount: 900_000 }] });
+    await materializeDueOccurrences(a.db as never);
+    expect(count(a.db)).toBe(3);
+    const b = setup();
+    addTxn(b.db, { groupId: b.g, kind: 'expense', date: occurrenceOf(b.start) - 9 * DAY, category: 'Rent', payments: [{ personId: b.me, amount: 2_200_000 }], shares: [{ personId: b.me, amount: 2_200_000 }] });
+    await materializeDueOccurrences(b.db as never);
+    expect(count(b.db)).toBe(3);
+  });
+});

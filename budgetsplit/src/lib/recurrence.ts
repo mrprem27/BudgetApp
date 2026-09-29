@@ -214,3 +214,20 @@ function occurrenceAt(
     default:        return addMonths(start, n);
   }
 }
+
+/**
+ * How many days either side of a recurring date a hand-logged entry still counts as that occurrence
+ * (rent paid two days early, a bill logged before the app opened). At most 4, and never more than
+ * half the cycle, so an entry can't be claimed by the neighbouring occurrence; a daily rule has none.
+ */
+export function matchWindowDays(freq: string | null | undefined, interval: number | null | undefined): number {
+  const n = interval && interval > 0 ? interval : 1;
+  const cycle = freq === 'daily' ? n : freq === 'weekly' ? 7 * n : freq === 'monthly' ? 30 * n
+    : freq === 'yearly' ? 365 * n : freq === 'custom' ? n : 0;
+  return Math.max(0, Math.min(4, Math.floor((cycle - 1) / 2)));
+}
+
+/** Amounts close enough to be the same bill paid by hand: within 10% of the rule's amount. */
+export function amountMatches(entryPaise: number, rulePaise: number): boolean {
+  return rulePaise > 0 && Math.abs(entryPaise - rulePaise) <= Math.round(rulePaise * 0.1);
+}

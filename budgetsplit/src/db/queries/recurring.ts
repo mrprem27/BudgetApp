@@ -4,7 +4,7 @@ import { NOT_AWAITING_APPROVAL, AWAITING_APPROVAL_COL } from './approvalSql';
 import { RULE_IN_LIVE_GROUP } from './memberSql';
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
-import { nextOccurrenceOnOrAfter, occurrenceDatesUpTo } from '../../lib/recurrence';
+import { nextOccurrenceOnOrAfter, occurrenceDatesUpTo, matchWindowDays, amountMatches } from '../../lib/recurrence';
 import { logAudit } from './audit';
 import type { RecurFreq } from '../../constants/enums';
 import {
@@ -375,12 +375,44 @@ export async function materializeDueOccurrences(db: SQLite.SQLiteDatabase): Prom
         // first-run back-fill; only recent due ones become real editable rows.
         if (occ < horizonStart) continue;
         if (skips?.has(occ) || claimed?.has(occ)) continue;
+        // Already paid by hand near this date? Then that entry IS this occurrence — claim it rather
+        // than post a second copy (rent paid early, a bill logged before the app opened).
+        if (await claimManualMatch(db, t, rw, occ)) continue;
         await insertOccurrence(db, t, rw, occ, now);
         created++;
       }
     }
   });
   return created;
+}
+
+/**
+ * Find the user's own un-linked entry that is this occurrence, and link it: same group, kind and
+ * category, amount within 10%, dated within the rule's match window. Nearest date wins. The link is
+ * the claim `getClaimedOccurrences` reads, and it syncs like any edit.
+ */
+async function claimManualMatch(db: SQLite.SQLiteDatabase, t: Txn, rw: { payments: { amount: number }[] }, occ: number): Promise<boolean> {
+  const days = matchWindowDays(t.recur_freq, t.recur_interval);
+  if (days === 0) return false;
+  const w = days * 24 * 60 * 60 * 1000;
+  const ruleTotal = rw.payments.reduce((s, p) => s + p.amount, 0);
+  const rows = await db.getAllAsync<{ id: string; date: number; total: number }>(
+    `SELECT t.id, t.date, COALESCE(SUM(p.amount), 0) AS total
+       FROM txn t LEFT JOIN txn_payment p ON p.txn_id = t.id
+      WHERE t.group_id = ? AND t.kind = ? AND t.category = ? AND t.is_deleted = 0
+        AND t.recur_freq IS NULL AND t.parent_recur_id IS NULL
+        AND t.date BETWEEN ? AND ?
+        AND ${NOT_AWAITING_APPROVAL}
+      GROUP BY t.id`,
+    [t.group_id, t.kind, t.category, occ - w, occ + w],
+  );
+  const hit = rows.filter(r => amountMatches(r.total, ruleTotal)).sort((a, b) => Math.abs(a.date - occ) - Math.abs(b.date - occ))[0];
+  if (!hit) return false;
+  await db.runAsync('UPDATE txn SET parent_recur_id = ?, recur_override_date = ?, updated_at = ? WHERE id = ?', [t.id, occ, Date.now(), hit.id]);
+  // The claim travels (`recurring_rule_id` / `occurrence_date`), so another phone learns this entry
+  // is the occurrence and does not post its own.
+  await queueEntry(db, hit.id);
+  return true;
 }
 
 /** All skipped occurrence dates (ms) for one series. */

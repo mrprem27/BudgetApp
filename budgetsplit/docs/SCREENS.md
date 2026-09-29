@@ -228,7 +228,7 @@ Absorbed from `AUDIT.md` §2 so the IDs cited elsewhere resolve here. 45 route f
 | S-10b | **Group budget editor** | `app/(people)/group/[id]/budget.tsx` | A group's **default** (admin-only, what every member inherits) and **Mine** (your private per-category override). Switching to Mine asks first (`OwnBudgetSheet`) and only the categories you fill in become yours; blanks keep following the group. A personal group forwards to `/budget`. Both routes render `components/finance/budget/BudgetEditor`. |
 | S-11 | **Members** | `app/(people)/group/[id]/members.tsx` | Add/remove/rename members, avatars, per-member net. Swipe-remove with Undo. |
 | S-13 | **Edit group** | `app/(people)/group/[id]/edit.tsx` | Rename / re-icon / re-colour / default split + membership diff; archive and hard-delete. Shares `GroupForm` with the create sheet. |
-| S-14 | **Personal** | `app/(people)/personal.tsx` | The unified personal screen: Activity / Budget, filterable across personal-vs-group activity, CSV export. The **only** personal screen — S-09's `is_personal` branch was retired. A third *Recurring* tab was removed: it listed every rule in every shared group, so it was neither personal nor different from S-32. |
+| S-14 | **Personal** | `app/(people)/personal.tsx` | The unified personal screen: **Activity / Budget / Recurring**, filterable across personal-vs-group activity, CSV export. The **only** personal screen — S-09's `is_personal` branch was retired. Recurring shows the **Personal group's own rules** (the same `RecurringTab` a group uses); every rule everywhere is Money → Recurring. |
 
 ### 3.5 Detail screens
 

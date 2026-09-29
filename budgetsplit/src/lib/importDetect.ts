@@ -68,8 +68,10 @@ export function parseAnyWorkbook(sheets: Sheet[]): DetectedParse {
   }
   // Widest sheet = the one most likely to hold the transaction table.
   const sheet = sheets.slice().sort((a, b) => b.rows.length - a.rows.length)[0];
+  // A line break inside a cell (bank narrations carry them) would split one row into two lines of
+  // text — the second a bogus row of its own — so it becomes a space before the rows are joined.
   const text = (sheet?.rows ?? [])
-    .map(r => r.map(c => (c.includes(',') ? `"${c.replace(/"/g, '""')}"` : c)).join(','))
+    .map(r => r.map(c => c.replace(/\s*\r?\n\s*/g, ' ')).map(c => (c.includes(',') || c.includes('"') ? `"${c.replace(/"/g, '""')}"` : c)).join(','))
     .join('\n');
   return parseAnyText(text);
 }

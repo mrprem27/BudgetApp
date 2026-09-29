@@ -16,6 +16,31 @@ continuing.
 
 ---
 
+## FINAL TRACKER — 2026-09-30 (the one list; everything else below is history)
+
+### 1 · Bugs — scan what was never read (`docs/SPEC-BUGSCAN.md` coverage)
+- [x] **F1** `settle` (settle-up math) — read, test edge cases, fix
+- [x] **F2** `importDetect` / `xlsx` / OCR import paths — read, fix
+- [x] **F3** `voiceShortcut*` — read, fix
+
+### 2 · Deferred items, now built
+- [x] **R1** Recurring section in **Personal** (groups have one; Personal doesn't)
+- [x] **R2** Recurring **match window**: a manual entry near a recurring date (rent paid 2 days early, salary a day late) counts as that occurrence instead of a duplicate
+
+### 3 · Deferred on purpose (not built — reason)
+- **U5** Android UPI package targeting — the Android port isn't started; needs a new native dependency
+- **Phase 6** AI narration — needs a spec and an options pass first
+- **B-103** "Cash last confirmed · Update" — needs a new stored input; a product decision
+- **S1** Refunds lower spend — needs negative/offsetting expense amounts, which touches every analysis path and the server's positive-amount checks. Proposed design: a `refund_of` link on an income row; analysis subtracts linked refunds from the original's category; Review offers "refund of…" when a credit's text says refund/reversal
+- **R2b** A manual entry logged AFTER its auto occurrence posted: today the Add screen's duplicate warning catches same-amount-within-a-day; a wider window would need replacing an auto row the user may have edited
+- **S2** Merchant name from a UPI handle (`razorpay@hdfcbank` → the shop) — needs a names source; the app already learns categories per merchant
+
+### 4 · Yours
+- [ ] **D4** Device pass (list in the plan below) · Friends "name missing when I owe" → screenshot if it persists
+
+### Suggestions checked against the web (2026)
+Users leave Splitwise over transaction caps, ads and no UPI; value UPI settle, recurring bills, offline, receipt scan, export, no ads — **all already here**. Top pain in Indian trackers: "day-8 abandonment" (daily reminder + streak — here), refunds counted twice (→ S1), unreadable UPI merchant names (→ S2).
+
 ## MASTER LIST — close-out, 2026-09-30 (this is the one to work from)
 
 Everything asked in the last sessions, in one place. Status is honest: `[x]` is built, tested and pushed

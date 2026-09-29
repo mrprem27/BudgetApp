@@ -34,21 +34,21 @@ import { haptic } from '../../src/lib/haptics';
 import { buildGroupExportCsv } from '../../src/lib/groupExport';
 import { shareCsv, csvFileSlug } from '../../src/lib/shareCsv';
 import { keyboardAwareScroll } from '../../src/components/ui/KeyboardForm';
+import { RecurringTab } from '../../src/components/finance/group/RecurringTab';
+import { computeRecurringMonthlyTotal, computeRecurNextLabel } from '../../src/lib/groupDetail';
 
 /*
- * Two tabs, not three.
+ * Three tabs, the same three a group has for its own money: Activity, Budget, Recurring.
  *
- * A third, "Recurring", listed every rule in every SHARED group — so it was
- * neither personal nor different from `/plan/recurring`, which shows the same
- * query and is one tap from the Plan tab. Two lists of the same rules, in two
- * places, with two different groupings and two different subtotals, is the
- * duplication that made the recurring flow unreadable. There is one inventory now,
- * and every rule in it opens `/recurring/[id]`.
+ * Recurring here is the PERSONAL group's own rules — exactly what a group's Recurring tab shows
+ * for that group. (An earlier Recurring tab here listed every SHARED group's rules, which was just
+ * Money → Recurring again; that is why it was removed, and why this one is scoped to Personal.)
  */
-type TabKey = 'activity' | 'budget';
+type TabKey = 'activity' | 'budget' | 'recurring';
 const TABS: { key: TabKey; label: string }[] = [
   { key: 'activity', label: 'Activity' },
   { key: 'budget', label: 'Budget' },
+  { key: 'recurring', label: 'Recurring' },
 ];
 
 const listScroll = keyboardAwareScroll();
@@ -91,12 +91,18 @@ export default function PersonalScreen() {
   // overview to render.
   const budget = data?.budget ?? null;
   const summary = data?.summary ?? { owe: 0, lent: 0 };
+  const recurringRules = data?.recurringRules ?? [];
+  const recurSkips = data?.recurSkips;
+  const recurringMonthlyTotal = useMemo(() => computeRecurringMonthlyTotal(recurringRules), [recurringRules]);
+  const recurNextLabel = useMemo(() => computeRecurNextLabel(recurringRules, recurSkips), [recurringRules, recurSkips]);
 
   // Memoised through to `filterGroups`: the filter bar sits above a SectionList,
   // so without it every keystroke re-filtered the ledger, rebuilt the chip row and
   // re-rendered the whole list. `TransactionsTab` already does it this way.
   const sharedGroups = useMemo(() => groups.filter(g => g.is_personal !== 1), [groups]);
   const personalGroup = useMemo(() => groups.find(g => g.is_personal === 1) ?? null, [groups]);
+  // One way into Add from this screen, for the button and the Recurring tab alike.
+  const addPersonal = () => { if (personalGroup) router.push(`/add/quick?groupId=${personalGroup.id}&kind=expense`); };
 
   // Rows span every group, so the actions read the owning group off each txn.
   const { handleDelete, handleEditTxn } = useGroupTxnActions(reload);
@@ -326,9 +332,24 @@ export default function PersonalScreen() {
             />
           )}
 
+          {tab === 'recurring' && personalGroup && me && (
+            <RecurringTab
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              rules={recurringRules}
+              skips={recurSkips}
+              meId={me.id}
+              defaultSplit={personalGroup.default_split}
+              monthlyTotal={recurringMonthlyTotal}
+              nextLabel={recurNextLabel}
+              onAdd={addPersonal}
+              onOpenRule={(ruleId) => router.push(`/recurring/${ruleId}`)}
+            />
+          )}
+
           {/* Single-tap FAB — pre-fills the personal group. */}
           {personalGroup && (
-            <FAB onPress={() => router.push(`/add/quick?groupId=${personalGroup.id}&kind=expense`)} aboveTabBar={false} />
+            <FAB onPress={addPersonal} aboveTabBar={false} />
           )}
         </>
       )}
