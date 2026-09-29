@@ -136,6 +136,8 @@ instead of relying on somebody noticing.
 
 #### What the demo dataset actually contains
 
+The dev screen offers four **demo personas** (`src/db/demoPersonas.ts`): *Salaried renter · 1 year* (the dataset below), *New user · 2 weeks* (the engine holds its verdict back), *Freelancer* (irregular income, 60-day horizon) and *Student* (owes friends, over budget). Each one's engine state is asserted in `demoPersonas.test.ts`.
+
 `src/db/seedDemo.ts` is built for exactly this — *"a rich, realistic dataset that exercises every
 surface."* Cite it by name in a `State.` line rather than saying "a group with a balance":
 

@@ -10,7 +10,10 @@ import { Banner } from '../../src/components/ui/Banner';
 import { ErrorState } from '../../src/components/ui/ErrorState';
 import { SecondaryButton } from '../../src/components/ui/SecondaryButton';
 import { getAttachmentStorage, clearAllReceipts } from '../../src/lib/attachment';
-import { loadDemoData, resetToEmpty } from '../../src/lib/devData';
+import { loadDemoPersona, resetToEmpty, DEMO_PERSONAS, type DemoPersona } from '../../src/lib/devData';
+import { Card } from '../../src/components/ui/Card';
+import { ListRow } from '../../src/components/ui/ListRow';
+import { Divider } from '../../src/components/ui/Divider';
 import { formatBytes } from '../../src/lib/storage';
 import { DEV_TOOLS_ENABLED } from '../../src/constants/devTools';
 import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
@@ -30,7 +33,7 @@ export default function StorageScreen() {
 
   // Defense in depth: the only entry point (the 7-tap gesture in Settings → About)
   // carries the same gate, but this screen can replace or erase a user's entire
-  // dataset (loadDemoData/resetToEmpty below), so a stray deep link or old muscle
+  // dataset (loadDemoPersona/resetToEmpty below), so a stray deep link or old muscle
   // memory must not reach it once the gate closes either.
   useFocusEffect(useCallback(() => {
     if (!DEV_TOOLS_ENABLED) router.back();
@@ -42,10 +45,10 @@ export default function StorageScreen() {
   const count = data?.count ?? 0;
   const bytes = data?.bytes ?? 0;
 
-  function confirmLoadDemo() {
+  function confirmLoadDemo(persona: DemoPersona, label: string) {
     Alert.alert(
-      'Load demo data?',
-      'This REPLACES all current data with a comprehensive test dataset (people, groups, splits, settlements, budgets, recurring rules, savings goals). Your name & avatar are kept. If you’re signed in, this phone stops syncing — sign out and back in to connect it again.',
+      `Load “${label}”?`,
+      'This REPLACES all current data with this demo persona. Your name & avatar are kept. If you’re signed in, this phone stops syncing — sign out and back in to connect it again.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -53,7 +56,7 @@ export default function StorageScreen() {
           onPress: async () => {
             setBusy(true);
             try {
-              const summary = await loadDemoData(db);
+              const summary = await loadDemoPersona(db, persona);
               // Turn every feature flag ON so all gated surfaces are visible for testing.
               (Object.keys(DEFAULTS) as FeatureKey[]).forEach(k => setFlag(k, true));
               refresh();
@@ -174,9 +177,22 @@ export default function StorageScreen() {
         <View style={styles.devSection}>
           <Text style={styles.devTitle}>TESTING</Text>
           <Text style={styles.note}>
-            Load a full demo dataset to explore every screen, or wipe everything back to an empty app.
+            Load a demo persona — each puts the app in a different state — or wipe everything back to an empty app.
           </Text>
-          <SecondaryButton label={busy ? 'Working…' : 'Load demo data'} onPress={confirmLoadDemo} disabled={busy} icon="database" />
+          <Card clip>
+            {DEMO_PERSONAS.map((p, i) => (
+              <View key={p.key}>
+                {i > 0 && <Divider indent="none" />}
+                <ListRow
+                  title={p.label}
+                  subtitle={p.blurb}
+                  chevron
+                  onPress={busy ? undefined : () => confirmLoadDemo(p.key, p.label)}
+                  accessibilityLabel={`Load demo persona: ${p.label}`}
+                />
+              </View>
+            ))}
+          </Card>
           <TouchableOpacity
             style={[styles.eraseBtn, busy && styles.eraseDisabled]}
             onPress={confirmReset}

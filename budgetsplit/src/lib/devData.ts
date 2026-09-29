@@ -3,4 +3,5 @@
  * `DEV_TOOLS_ENABLED`). Routed through here so no screen reaches into `src/db`
  * (`uiLayering.test.ts`).
  */
-export { loadDemoData, resetToEmpty } from '../db/seedDemo';
+export { resetToEmpty } from '../db/seedDemo';
+export { loadDemoPersona, DEMO_PERSONAS, type DemoPersona } from '../db/demoPersonas';

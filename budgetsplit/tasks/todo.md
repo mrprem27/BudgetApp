@@ -34,13 +34,13 @@ or committed; `[ ]` is not.
 - [x] Over-budget shows as a multiple (`1.01×`), percent up to 100 (UX-1)
 - [x] Friends: payment rows say "You owe Aarav" / "Aarav owes you" (FR-1) · Group picker: most-used first (GR-1)
 - [x] Backend deployed 2026-09-30 (D1 `magic_links.ip` applied first; live schema = repo) · demo data made consistent (one salary/rent a month, a real "you owe")
+- [x] Demo **personas** on the dev screen: Salaried renter · 1 year (high confidence) · New user · 2 weeks (verdict held back) · Freelancer (irregular, 60-day horizon) · Student (owes friends, over budget) — `db/demoPersonas.ts`, states asserted in `demoPersonas.test.ts`
 - [x] Navigation: **Home · Groups · [+] · Money · Insights**; Settings opens from the avatar on every tab
 
 ### Open — in this order
 - [ ] **P3** One filter structure everywhere (Search, Reports, Review, Personal, Group): frequent filters inline, the rest in a modal (this is G2, widened)
 - [ ] **P4** Phase 5c modules 1–6 (`docs/SPEC-FORMS-GROUP.md`): AmountRow + Your money · Members "+ Add" first · clean notes · full text on hold · group header card · forms to the Edit-group shape
 - [ ] **P6** Docs for the navigation change (SCREENS/SYSTEM), decisions kept here + memory
-- [ ] **P8** Demo **personas**: several selectable demo datasets (new user ~2 weeks → verdict held back; settling in ~6 weeks → medium confidence; established 12 months → high), each internally consistent. Test-only `enginePersonas.ts` is the base
 - [ ] **P9** Card due day: the engine reads `money.card_due_day` but no screen asks for it and it doesn't sync. Add the field (card sheet) + a `money_profiles.card_due_day` column (live D1 ALTER before deploy)
 - [ ] **P7** DEVICE (yours): Money, Insights, Settings-from-avatar, Plan zones, forecast, time picker, Help, filters, forms
 

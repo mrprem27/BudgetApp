@@ -87,6 +87,19 @@ export async function resetToEmpty(db: SQLite.SQLiteDatabase): Promise<void> {
   await createMeAndPersonal(db, meId, meName, meColor, meImage);
 }
 
+/**
+ * Wipe, then recreate "me" (keeping name and avatar) and the Personal group. The first step of
+ * every demo persona (`demoPersonas.ts`). Returns the ids a persona builds on.
+ */
+export async function startFresh(db: SQLite.SQLiteDatabase): Promise<{ meId: string; personalId: string }> {
+  const prev = await getMe(db);
+  const meId = prev?.id ?? uuid();
+  await wipeAllData(db);
+  await clearMoneyProfile(db);
+  const personalId = await createMeAndPersonal(db, meId, prev?.name ?? 'You', prev?.avatar_color ?? '#4F46E5', prev?.image_uri ?? null);
+  return { meId, personalId };
+}
+
 async function createMeAndPersonal(
   db: SQLite.SQLiteDatabase, meId: string, meName: string, meColor: string, meImage: string | null,
 ): Promise<string> {
@@ -234,6 +247,21 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
   // A soft-deleted entry → exercises the deleted state + audit log.
   const doomed = await exp('Other', 999, thisMonth(16), { note: 'Mistaken entry' });
   await softDeleteTxn(db, doomed);
+
+  // Months 3–11 back: a year of ordinary history, so reports and trends have depth and the
+  // engine reads a settled income pattern. Amounts drift a little month to month, like real ones.
+  for (let back = 3; back <= 11; back++) {
+    const drift = (base: number, k: number) => Math.round(base * (0.85 + ((back * 7 + k * 3) % 10) / 33));
+    await income('Salary', 85000, monthsBack(back, 1), 'Monthly salary');
+    await exp('Rent', 22000, monthsBack(back, 2), { pay: PayMethod.Bank });
+    await exp('Groceries', drift(6000, 1), monthsBack(back, 6), { pay: PayMethod.Upi });
+    await exp('Eating Out', drift(1800, 2), monthsBack(back, 11));
+    await exp('Fuel', drift(1800, 3), monthsBack(back, 13), { pay: PayMethod.Upi });
+    await exp('Electricity', drift(1900, 4), monthsBack(back, 7));
+    if (back % 3 === 0) await exp('Shopping', drift(3500, 5), monthsBack(back, 20));
+  }
+  // Diwali last year: a real one-off spike in the history, not an everyday rate.
+  await exp('Shopping', 18000, monthsBack(11, 24), { note: 'Diwali shopping & gifts' });
 
   // --- Personal recurring rules (templates) → Recurring tab + Subscriptions
   const rule = (category: string, rupees: number, freq: RecurFreq, note: string, interval = 1) =>
