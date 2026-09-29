@@ -373,3 +373,12 @@ describe('HB-1 · Help paragraphs read as bullets', () => {
     expect(helpBullets('')).toEqual([]);
   });
 });
+
+describe('FC-1 · the forecast chart is drawn only once it has a width', () => {
+  const fs = jest.requireActual('fs') as typeof import('fs');
+  it('holds the space until measured, and re-keys on width', () => {
+    const src = fs.readFileSync('app/(money)/insights.tsx', 'utf8');
+    expect(src).toMatch(/chartW > 0 \? \(/);
+    expect(src).toMatch(/key=\{Math\.round\(chartW\)\}/);
+  });
+});

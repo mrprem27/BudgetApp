@@ -296,47 +296,53 @@ export default function InsightsScreen() {
               >
                 <Divider indent="none" />
                 <View style={styles.chartWrap} onLayout={onChartLayout}>
-                  <LineChart
-                    data={forecastProjected}
-                    data2={forecastActual}
-                    color1={colors.accent}
-                    color2={colors.expense}
-                    thickness1={2}
-                    thickness2={2.5}
-                    strokeDashArray1={[5, 5]}
-                    noOfSections={4}
-                    maxValue={Math.ceil((Math.max(...forecastActual.map(d => d.value), ...forecastProjected.map(d => d.value), 1)) * 1.1)}
-                    // Until the first layout lands there is nothing measured to
-                    // divide, so hold the old constant for one frame rather than
-                    // collapsing every label to the floor.
-                    spacing={plotWidth(chartW, space.md) > 0 ? axisSpacing(plotWidth(chartW, space.md), forecastProjected.length) : 8}
-                    initialSpacing={8}
-                    endSpacing={8}
-                    xAxisThickness={0}
-                    yAxisThickness={0}
-                    yAxisTextStyle={{ color: colors.textMuted, fontSize: 10 }}
-                    formatYLabel={formatAxisShort}
-                    xAxisLabelTextStyle={{ color: colors.textMuted, fontSize: 9 }}
-                    hideRules
-                    isAnimated
-                    disableScroll
-                    pointerConfig={{
-                      pointerStripUptoDataPoint: true,
-                      pointerStripColor: alpha(colors.textMuted, 38),
-                      pointerStripWidth: 1,
-                      pointerColor: colors.accent,
-                      radius: 5,
-                      pointerLabelWidth: 76,
-                      pointerLabelHeight: 32,
-                      activatePointersOnLongPress: false,
-                      autoAdjustPointerLabelPosition: true,
-                      pointerLabelComponent: (items: Array<{ value: number }>) => (
-                        <View style={styles.pointerLabel}>
-                          <Text style={styles.pointerLabelText}>{formatAxisShort(items[0]?.value ?? 0)}</Text>
-                        </View>
-                      ),
-                    }}
-                  />
+                  {/* Drawn only once the width is measured, and re-keyed if it changes: the chart
+                      animates its own drawing, and one that starts at a guessed width and is then
+                      re-laid-out mid-animation stalls half-drawn on the first open. */}
+                  {chartW > 0 ? (
+                    <LineChart
+                      key={Math.round(chartW)}
+                      data={forecastProjected}
+                      data2={forecastActual}
+                      color1={colors.accent}
+                      color2={colors.expense}
+                      thickness1={2}
+                      thickness2={2.5}
+                      strokeDashArray1={[5, 5]}
+                      noOfSections={4}
+                      maxValue={Math.ceil((Math.max(...forecastActual.map(d => d.value), ...forecastProjected.map(d => d.value), 1)) * 1.1)}
+                      // Until the first layout lands there is nothing measured to
+                      // divide, so hold the old constant for one frame rather than
+                      // collapsing every label to the floor.
+                      spacing={plotWidth(chartW, space.md) > 0 ? axisSpacing(plotWidth(chartW, space.md), forecastProjected.length) : 8}
+                      initialSpacing={8}
+                      endSpacing={8}
+                      xAxisThickness={0}
+                      yAxisThickness={0}
+                      yAxisTextStyle={{ color: colors.textMuted, fontSize: 10 }}
+                      formatYLabel={formatAxisShort}
+                      xAxisLabelTextStyle={{ color: colors.textMuted, fontSize: 9 }}
+                      hideRules
+                      isAnimated
+                      disableScroll
+                      pointerConfig={{
+                        pointerStripUptoDataPoint: true,
+                        pointerStripColor: alpha(colors.textMuted, 38),
+                        pointerStripWidth: 1,
+                        pointerColor: colors.accent,
+                        radius: 5,
+                        pointerLabelWidth: 76,
+                        pointerLabelHeight: 32,
+                        activatePointersOnLongPress: false,
+                        autoAdjustPointerLabelPosition: true,
+                        pointerLabelComponent: (items: Array<{ value: number }>) => (
+                          <View style={styles.pointerLabel}>
+                            <Text style={styles.pointerLabelText}>{formatAxisShort(items[0]?.value ?? 0)}</Text>
+                          </View>
+                        ),
+                      }}
+                    />
+                  ) : <View style={styles.chartHold} />}
                   <View style={styles.legend}>
                     <LegendItem color={colors.expense} label="Actual" />
                     <LegendItem color={colors.accent} label="Projected" />
@@ -496,6 +502,7 @@ const styles = StyleSheet.create({
   noteText: { ...type.label, lineHeight: 19 },
   noteCaption: { ...type.caption, color: colors.textMuted, marginTop: 2 },
 
+  chartHold: { height: 220 },
   chartWrap: { paddingHorizontal: space.md, paddingBottom: space.md, paddingTop: space.sm },
   legend: { flexDirection: 'row', gap: space.lg, marginTop: space.sm },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
