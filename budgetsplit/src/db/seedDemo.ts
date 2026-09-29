@@ -170,6 +170,18 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
   await income('Salary', 85000, monthsBack(2, 1), 'Monthly salary');
   await income('Freelance', 15000, monthsBack(1, 12), 'Logo design gig');
   await income('Interest', 1200, thisMonth(5), 'Savings interest');
+  // A recurring RULE, separate from the three logged occurrences above: the
+  // money engine (`incomeModel`/`knownEvents`, `SPEC-ENGINE.md` §4) only ever
+  // counts a payday it can see a rule for — it never infers one from a bare
+  // history pattern, on purpose (a wrong guess would silently relieve a real
+  // low-point warning). Without this, Safe-to-Spend's "Salary before then" and
+  // goal-funding-this-cycle both read as if there were no income at all, which
+  // is what demo data was doing before this rule existed.
+  await insertTxn(db, {
+    groupId: personalId, kind: 'income', entryMode: 'quick', date: monthsBack(3, 1),
+    category: 'Salary', note: 'Monthly salary', recurFreq: 'monthly', recurInterval: 1,
+    payments: [{ personId: meId, amount: R(85000) }], shares: [{ personId: meId, amount: R(85000) }],
+  });
 
   // --- Personal expenses (logged occurrences) ----------------------------
   type Opt = { note?: string; pay?: PayMethod; lat?: number; lng?: number; place?: string; attach?: string };
@@ -348,7 +360,12 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
   await fundGoal(db, trip.id, R(30000), 'manual');                                // reached (100%) + has deadline
   const laptop = await insertGoal(db, { name: 'New Laptop', target: R(80000), priority: 'need', icon: 'monitor', color: '#818CF8', category: 'Electronics' });
   await fundGoal(db, laptop.id, R(15000), 'manual');                              // partial
-  const vacation = await insertGoal(db, { name: 'Europe Vacation', target: R(50000), priority: 'want', icon: 'globe', color: '#34D399', allocation: R(3000), frequency: 'monthly', target_date: Date.now() + 200 * 86400000 });
+  // Rate (₹8,000/mo) deliberately above what gets funded below (₹5,000 this
+  // cycle), so Safe-to-Spend's "Goal contributions still due" has a genuine
+  // ₹3,000 remaining to show — every other goal here is funded AT or OVER its
+  // own rate this month, which reads as ₹0 due everywhere (not a bug, just not
+  // a useful demo of this specific line).
+  const vacation = await insertGoal(db, { name: 'Europe Vacation', target: R(50000), priority: 'want', icon: 'globe', color: '#34D399', allocation: R(8000), frequency: 'monthly', target_date: Date.now() + 200 * 86400000 });
   await fundGoal(db, vacation.id, R(4000), 'manual');
   await fundGoal(db, vacation.id, R(1000), 'auto');                                // auto-funded slice
   await withdrawFromGoal(db, vacation.id, R(2000), 'Changed plans');                    // withdrawal history → net ₹3,000

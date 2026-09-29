@@ -164,7 +164,10 @@ Old F1 (cushion patch) dropped: the engine removes the threshold it would have f
   - `lib/engine/signals.ts` (new): `lowPointWarning` — a dip below the essential floor within 14 days, naming the day and the single biggest event that day (not the cumulative path). `null` below the floor's own cold-start minimum, silent past 14 days. Wired into `getSafeToSpendV2`'s `warning` field (same snapshot, no extra query) and rendered as one `Banner` on Home, above `StsStrip`, opening the sheet on tap
   - Accept: `engineSignals.test.ts` — silent cold-start, silent when comfortably above floor, fires with the right date/label/sign on a real dip, silent past the 14-day window, runs clean on all 5 personas; revert-proven
   - Gates: `tsc` clean app+server; full suite 216/216, 2712/2712
-- [ ] **B-103 · StS sheet you can check (M)** — every line taps through; "Cash last confirmed · Update"; thin history said plainly · Accept: each line's rows sum to the line
+- [x] **B-103 · StS sheet tap-through (M)** — done 2026-09-29 (scope cut, see `tasks/plan.md`'s spec: "Cash last confirmed · Update" needs a new stored input, asked first, deferred)
+  - `StsSheet.tsx`: every row with a positive claim opens the existing screen that shows its rows — Bills→`/upcoming`, Card→`/savings`, Goals→`/savings`, Owed→`/friends`, Salary→`/plan/recurring`. No new screens. A ₹0 row stays flat (no chevron)
+  - Found and fixed a real demo-data bug along the way: `seedDemo.ts` logged salary as one-off transactions only, never a recurring rule — the engine (by design, EN5) never infers a payday without one, so "Salary before then" and goal-contribution-remaining both always read 0/absent on demo data. Added a recurring Salary rule; bumped one goal's rate above its funded-this-cycle amount so "Goal contributions" has real data to show
+  - Gates: `tsc` clean app+server; full suite 216/216, 2685/2685 (including `demoRoundTrip.test.ts`)
 - [ ] **CP3b** — gates, commit, push after each switch; device look at Home, Afford and Insights after EN11
 
 ## Phase 4 · UPI payment redesign (`DQ-98`)

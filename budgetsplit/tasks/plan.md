@@ -237,10 +237,115 @@ and `DQ-99` (left unscoped by the user) is decided from the existing Recurring r
 
 | Order | Task | Builds |
 |---|---|---|
-| 1 | `DQ-100`, `DQ-103` | EN11 and B-103 above |
-| 2 | **B-101 · Settings (M)** | One **Account & sync** row, one **Data** row, Currency dropped |
-| 3 | **B-102 · Copy rule + pass (M)** | The rule into `AGENTS.md`, then one pass screen by screen |
-| 4 | **B-99 · Recurring placement (S)** | Decided from the rule "two lists + one rule screen; a list opens the thing" |
+| 1 | `DQ-100` | EN11 (done) |
+| 2 | `DQ-103` | **B-103** below |
+| 3 | **B-101 · Settings (M)** | One **Account & sync** row, one **Data** row, Currency dropped |
+| 4 | **B-102 · Copy rule + pass (M)** | The rule into `AGENTS.md`, then one pass screen by screen |
+| 5 | **B-99 · Recurring placement (S)** | Decided from the rule "two lists + one rule screen; a list opens the thing" |
+
+### B-103 · Safe-to-Spend sheet you can check — spec, 2026-09-29
+
+Scoped 2026-09-29: **tap-through only.** "Cash last confirmed · Update" is cut from this task — it
+needs a new stored balance-confirmation and a new write path, which `SPEC-ENGINE.md` §10's own
+boundary says to ask about before adding. Asked; deferred to a later, separately-scoped task.
+
+**Objective.** Every `StsSheet` row that names a claim opens the real rows behind it, so "Bills still
+due ₹4,200" is a receipt, not a number to trust blind (`DQ-103`).
+
+**Behaviour.**
+
+| Row | Opens | Existing screen reused |
+|---|---|---|
+| Bills still due | The bills counted, in date order | `/upcoming` |
+| Card to repay | Where a card payment gets made | `/savings` (Plan tab, `TotalMoneyCard`'s existing `PayCardBillSheet`) |
+| Goal contributions | This cycle's goal funding | `/savings` (Plan tab, `GoalCard`s) |
+| You owe people | Per-person breakdown | `/friends` |
+| Salary before then | The income rule | `/recurring` |
+| Cash available, Everyday spending | No tap — not a list of rows, nothing to open | — |
+
+No new screens. Each row becomes pressable (`chevron-right`, matching `ListRow`'s own tappable
+affordance) only when its amount is > 0 — a ₹0 claim has nothing behind it to check.
+
+**Thin history, said plainly.** When `sts.dailyRate == null` (as today), the everyday-spending row's
+existing hint already says so ("Needs a few weeks of history…") — `DQ-103`'s "say plainly when the
+estimate is thin" is already met; no change needed there.
+
+**Accept:** every row with a positive amount navigates on tap; a ₹0 row does not render as tappable;
+existing `StsSheet`/`StsStrip` tests still pass; no new database column, no new write path.
+
+**Boundaries:** always route to an existing screen (never build a new one for this); ask first before
+reviving the cash-confirmation idea, since it needs a stored input `SPEC-ENGINE.md` doesn't have yet.
+
+### B-101 · Settings consolidation — spec, 2026-09-29
+
+**Objective.** Fewer rows for the same reach, per `DQ-101`'s finding: three separate rows (Account,
+Sync, Backup & restore) already collapse to one, because `/settings/account` already surfaces sync
+status (`SyncStatus`) and a link to Backup on its own screen — nothing is lost by not repeating both
+as their own top-level rows.
+
+**Behaviour.**
+- Remove the standalone **Sync** row and **Backup & restore** row from `(tabs)/settings.tsx`'s "Data
+  & Help" section. Both stay one tap away, from Account (`SyncStatus` for sync, its existing link for
+  backup) — nobody loses reach, the list just stops repeating what Account already shows.
+- **Currency** row (`Preferences`): dropped. It has always been untappable (`onPress={undefined}`,
+  INR only) — a row that cannot be tapped reads as broken, not as "there's only one option."
+- Import / Review inbox / Reports & export / Export all data are **left as four rows**, not forced
+  into one — they're four genuinely different actions (upload, confirm-queue, generate a document,
+  raw export), and merging distinct flows behind one tap risks hiding one behind the other rather than
+  consolidating. `DQ-101`'s literal "one Data row" is scoped down to this; flagged here rather than
+  silently reinterpreted.
+
+**Accept:** Settings' row count drops by 3 (Sync, Backup & restore, Currency); Account, sync status
+and backup are each still reachable in ≤ 2 taps from Settings; no screen becomes unreachable
+(`entryPointCount.test.ts` / `screenIdMap.test.ts` still pass).
+
+**Boundaries:** never remove a row whose destination has no other path to it; ask before merging
+Import/Review or Reports/Export-all into one screen — that is a bigger IA change than dropping a
+repeated link.
+
+### B-102 · Copy rule + pass — spec, 2026-09-29
+
+**Objective.** `DQ-102`: stop screens explaining themselves in paragraphs.
+
+**The rule (for `AGENTS.md`).** At most one short line of supporting copy under any control (a
+`caption`-styled hint, not a `body` paragraph). Anything longer — what a feature is for, why it
+exists, multi-sentence context — moves to Help (`/help`) or is cut outright. Applies to new screens
+immediately; existing screens are trimmed by the pass below.
+
+**The pass — the three cases `DQ-102` names, plus the pattern they're an instance of:**
+- `app/settings/sync.tsx`'s explainer block
+- `app/settings/account.tsx`'s footnotes (`.note`, `.footnote`, `.noteWarn` — 5 blocks)
+- The first-sign-in step's two-sentence body
+- Any other screen matching the same shape found while trimming these three (same rule, not a second
+  audit)
+
+**Accept:** each trimmed screen keeps at most one caption-line of copy per control; nothing a user
+needs to complete a flow is deleted — only restated context and "why this exists" prose; `AGENTS.md`
+carries the rule so a new screen doesn't reintroduce it.
+
+**Boundaries:** never cut copy that is the only place a constraint is stated (e.g., a warning before
+a destructive action) — the rule is about explanation, not about removing information the user needs
+to decide.
+
+### B-99 · Recurring placement — spec, 2026-09-29
+
+Decided from the existing rule (`AGENTS.md`, "Recurring flow"): two lists + one rule screen, a list
+never opens another list. `DQ-99` raised two separate things — where Recurring sits, and "something
+felt off at the bottom of Plan" — only the first is scoped; the second stays open (not enough signal
+to act on, per the ticket's own note).
+
+**Behaviour.** No move. Recurring stays on Plan's header rail; the Home bell still opens `/upcoming`.
+Reasoning: the existing rule already gives Recurring a home that isn't a person or group screen — a
+recurring rule can span groups or be personal-only, so anchoring it to one person would put a
+household bill's rule on an arbitrary member. Plan (money-wide) is the correct scope; a per-person
+"recurring with them" view is a filter ON that list, not a new location for the rule, and isn't
+scoped here.
+
+**Accept:** no code change; `docs/FINDINGS.md`'s `DQ-99` row updated to record the decision and why,
+with the "bottom of Plan" half left explicitly open.
+
+**Boundaries:** don't move Recurring off Plan without a concrete per-person use case written down
+first — moving it back later costs more than leaving it.
 
 ## Risks
 
