@@ -225,3 +225,73 @@ describe('UP-2 · a merchant QR whose checksum does not hold is not a payee', ()
     expect(parseMerchantQr(body('Chai Stop'))?.vpa).toBe('shop@okhdfcbank');
   });
 });
+
+describe('VP-1/2 · a dictated phrase is read the way the recognizer formats it', () => {
+  const { parseVoice } = jest.requireActual('../lib/voiceParse') as typeof import('../lib/voiceParse');
+  const opts = { categories: [{ name: 'Groceries' }], people: [{ id: 'p1', name: 'Riya' }], nowMs: new Date(2026, 8, 29, 12).getTime() };
+  const read = (t: string) => parseVoice(t, opts);
+
+  it('VP-1 · group commas do not split an amount', () => {
+    expect(read('1,200 groceries').amountPaise).toBe(120000);
+    expect(read('rent 1,20,000').amountPaise).toBe(12000000);
+    expect(read('groceries 1.5 lakh').amountPaise).toBe(15000000);
+  });
+
+  it('VP-1 · a sentence-final full stop does not hide the amount or the person', () => {
+    expect(read('coffee 150.').amountPaise).toBe(15000);
+    expect(read('Rs.450 chai').amountPaise).toBe(45000);
+    const paid = read('paid Riya 500.');
+    expect([paid.amountPaise, paid.personId]).toEqual([50000, 'p1']);
+  });
+
+  it('VP-2 · the number in "2 days ago" is the date, not the amount', () => {
+    for (const t of ['2 days ago I paid 450 for lunch', 'two days ago I paid four fifty for lunch']) {
+      const d = read(t);
+      expect(d.amountPaise).toBe(45000);
+      expect(d.dateMs).not.toBeNull();
+      expect(d.note).toBe('lunch');
+    }
+  });
+});
+
+describe('EG-1 · the 12-month surplus counts every recurring bill, not only the monthly ones', () => {
+  const { monthlyAffordability } = jest.requireActual('../lib/engine/behaviour') as typeof import('../lib/engine/behaviour');
+  const { PERSONA_NOW } = jest.requireActual('../db/enginePersonas') as typeof import('../db/enginePersonas');
+  const DAY = 86_400_000;
+  const R = (rupees: number) => rupees * 100;
+  type Snap = import('../lib/engine/types').FinanceSnapshot;
+  type Rule = Snap['recurring']['rules'][number];
+  const rule = (o: object) => ({ group_id: 'g', entry_mode: 'quick', is_deleted: 0, pendingApproval: false, payments: [], shares: [], ...o }) as unknown as Rule;
+
+  const snapWith = (bill: Rule): Snap => ({
+    asOf: PERSONA_NOW, meId: 'me',
+    cash: { available: R(1_000_000), creditUsed: 0, creditLimit: 0, cardDueDay: null },
+    recurring: {
+      rules: [
+        rule({ id: 'fee', kind: 'expense', date: PERSONA_NOW + 180 * DAY, category: 'Education', recur_freq: 'yearly', shares: [{ personId: 'me', amount: R(12_000) }] }),
+        rule({ id: 'salary', kind: 'income', date: PERSONA_NOW - 3 * DAY, category: 'Salary', recur_freq: 'monthly', payments: [{ personId: 'me', amount: R(20_000) }] }),
+        bill,
+      ],
+      skips: {},
+    },
+    goals: { list: [], savedByGoal: {}, funding: { commitMonthly: 0, fundedThisMonth: 0, remaining: 0, goalsCount: 0 } },
+    exposure: { owe: 0, owed: 0, owedExpected: 0, net: 0, owePeople: 0, owedPeople: 0, perPerson: [] },
+    receivables: [], budgets: [], futureOneOffs: [],
+    history: [90, 60, 30].map(d => ({ id: `i${d}`, date: PERSONA_NOW - d * DAY, kind: 'income' as const, category: 'Salary', amountPaise: R(20_000), isRecurringLinked: true })),
+  });
+
+  it('a weekly ₹5,000 bill (~₹21,667 a month) eats a ₹20,000 income', () => {
+    const weekly = rule({ id: 'maid', kind: 'expense', date: PERSONA_NOW + 2 * DAY, category: 'Household Help', recur_freq: 'weekly', shares: [{ personId: 'me', amount: R(5_000) }] });
+    expect(monthlyAffordability(snapWith(weekly))[0].surplusPaise).toBeLessThan(0);
+  });
+
+  it('an every-10-days bill counts by its interval', () => {
+    const custom = rule({ id: 'tiffin', kind: 'expense', date: PERSONA_NOW + 2 * DAY, category: 'Food', recur_freq: 'custom', recur_interval: 10, shares: [{ personId: 'me', amount: R(7_000) }] });
+    expect(monthlyAffordability(snapWith(custom))[0].surplusPaise).toBe(R(20_000) - R(21_000));
+  });
+
+  it('a monthly bill still counts once, and the yearly fee is not counted twice', () => {
+    const monthly = rule({ id: 'rent', kind: 'expense', date: PERSONA_NOW + 2 * DAY, category: 'Rent', recur_freq: 'monthly', shares: [{ personId: 'me', amount: R(8_000) }] });
+    expect(monthlyAffordability(snapWith(monthly))[0].surplusPaise).toBe(R(12_000));
+  });
+});

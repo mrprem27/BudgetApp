@@ -150,8 +150,16 @@ export function denoise(tokens: string[]): string[] {
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 
+// A recognizer formats what it hears: "1,200", "450.", "Rs.450". Group commas go (so "1,20,000" is one
+// number, not 1 and 20 and 0), and a full stop survives only inside a number ("1.5"), never at a
+// sentence end ("450." would otherwise not be an amount and "riya." would not be a person).
 function tokenize(s: string): string[] {
-  return s.toLowerCase().replace(/[^a-z0-9.\s]/g, ' ').split(/\s+/).filter(Boolean);
+  return s.toLowerCase()
+    .replace(/(\d),(?=\d)/g, '$1')
+    .replace(/[^a-z0-9.\s]/g, ' ')
+    .replace(/\.(?!\d)/g, ' ')
+    .replace(/(^|\D)\./g, '$1 ')
+    .split(/\s+/).filter(Boolean);
 }
 
 /**
@@ -413,8 +421,10 @@ export function parseVoice(
 ): VoiceDraft {
   const tokens = tokenize(transcript);
 
-  const { paise, consumed: amtIdx } = extractAmount(tokens);
   const { dateMs, consumed: dateIdx } = extractDate(tokens, opts.nowMs);
+  // The date phrase owns its numeral ("2 days ago"), so the amount must not read it. Masked rather
+  // than removed, so the indices the two extractors return still line up.
+  const { paise, consumed: amtIdx } = extractAmount(tokens.map((t, i) => (dateIdx.has(i) ? '' : t)));
 
   // Whatever wasn't an amount or a date is what the transaction is *about* — once the words
   // that were only holding the sentence together are gone.

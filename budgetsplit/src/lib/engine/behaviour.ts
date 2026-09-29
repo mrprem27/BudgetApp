@@ -5,7 +5,7 @@
  */
 import type { FinanceSnapshot, Behaviour, IncomeModel, RepaymentModel, TrueExpense, MonthlyAffordability } from './types';
 import { dailySpendTotals, typicalDailySpend, EVERYDAY_WINDOW_DAYS, EVERYDAY_MIN_DAYS } from '../safeToSpend';
-import { nextUnskippedOccurrence, materializeInstances } from '../recurrence';
+import { nextUnskippedOccurrence, materializeInstances, recurringMonthlyEquivalent } from '../recurrence';
 import { myShareOrTotal } from '../splitMath';
 
 const DAY_MS = 86_400_000;
@@ -296,8 +296,10 @@ export function monthlyAffordability(snapshot: FinanceSnapshot, months = 12): Mo
   const rate = everydayRate(snapshot) ?? 0;
   const monthlyIncome = income.consistency === 'irregular' ? null : (income.eventAmountPaise ?? income.medianRecentPaise);
   const monthlyBills = snapshot.recurring.rules
-    .filter(r => r.kind === 'expense' && r.recur_freq === 'monthly' && !r.pendingApproval && (!r.recur_state || r.recur_state === 'active'))
-    .reduce((s, r) => s + myShareOrTotal(r, snapshot.meId), 0);
+    // Every cadence, at its monthly equivalent — a weekly or every-N-days bill is as real a claim on
+    // income as a monthly one. Yearly is left out: `trueExpenses` already accrues it.
+    .filter(r => r.kind === 'expense' && r.recur_freq && r.recur_freq !== 'yearly' && !r.pendingApproval && (!r.recur_state || r.recur_state === 'active'))
+    .reduce((s, r) => s + recurringMonthlyEquivalent(myShareOrTotal(r, snapshot.meId), r.recur_freq, r.recur_interval), 0);
 
   const out: MonthlyAffordability[] = [];
   for (let m = 0; m < months; m++) {
