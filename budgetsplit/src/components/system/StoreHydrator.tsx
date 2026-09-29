@@ -1,8 +1,6 @@
 import { useCallback, useEffect } from 'react';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useStore } from '../../store';
-import { getMe } from '../../db/queries/persons';
-import { getAllGroups } from '../../db/queries/groups';
+import { hydrateStore } from '../../store/hydrate';
 import { useRefreshOnDataChange } from './DataRefreshProvider';
 
 /**
@@ -13,26 +11,11 @@ import { useRefreshOnDataChange } from './DataRefreshProvider';
  */
 export function StoreHydrator() {
   const db = useSQLiteContext();
-  const setMe = useStore((s) => s.setMe);
-  const setGroups = useStore((s) => s.setGroups);
+  // Non-fatal on failure: screens still load their own data via useScreenData.
+  const hydrate = useCallback(() => { hydrateStore(db).catch(() => {}); }, [db]);
 
-  const hydrate = useCallback(async () => {
-    try {
-      const [me, groups] = await Promise.all([getMe(db), getAllGroups(db)]);
-      // Most cross-screen writes (a new expense, a budget edit, a savings deposit)
-      // touch neither the current user nor the groups list. Diff before writing so
-      // those refreshes don't churn the store and re-render every consumer.
-      const state = useStore.getState();
-      const nextMe = me ?? null;
-      if (JSON.stringify(state.me) !== JSON.stringify(nextMe)) setMe(nextMe);
-      if (JSON.stringify(state.groups) !== JSON.stringify(groups)) setGroups(groups);
-    } catch {
-      // Non-fatal: screens still load their own data via useScreenData.
-    }
-  }, [db, setMe, setGroups]);
-
-  useEffect(() => { void hydrate(); }, [hydrate]);
-  useRefreshOnDataChange(() => { void hydrate(); });
+  useEffect(() => { hydrate(); }, [hydrate]);
+  useRefreshOnDataChange(hydrate);
 
   return null;
 }

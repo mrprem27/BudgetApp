@@ -5,12 +5,10 @@ import {
   ActionSheetIOS, ActivityIndicator,
 } from 'react-native';
 import { KeyboardForm, keyboardAwareScroll } from '../../src/components/ui/KeyboardForm';
-import { useSQLiteContext } from 'expo-sqlite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius, layout, shadow, alpha } from '../../src/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { insertCategory } from '../../src/db/queries/categories';
 import { formatRupees, parseToPaise } from '../../src/lib/money';
 import { computeItemSubtotal, splitItemBase, type Adjustment } from '../../src/lib/itemized';
 import { SplitEditor } from '../../src/components/finance/add/SplitEditor';
@@ -37,7 +35,6 @@ const assignScroll = keyboardAwareScroll();
 
 export default function ItemizedScreen() {
   const { groupId: paramGroupId, editId } = useLocalSearchParams<{ groupId?: string; editId?: string }>();
-  const db = useSQLiteContext();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -425,11 +422,7 @@ export default function ItemizedScreen() {
             categories={f.categories}
             value={f.selectedCategory}
             onChange={f.setSelectedCategory}
-            onCreate={async (name) => {
-              const created = await insertCategory(db, name, 'tag', colors.accent);
-              f.setCategories(prev => [...prev, created]);
-              return created;
-            }}
+            onCreate={(name) => f.createCategory(name)}
           />
 
           <Text style={[styles.fieldLabel, { marginTop: space.sm }]}>Note</Text>

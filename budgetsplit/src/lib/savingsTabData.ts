@@ -3,10 +3,9 @@ import { getDate, getDaysInMonth, startOfMonth, endOfMonth, subMonths, differenc
 import { getGoals, getGoalSavedMap, getCashPosition } from '../db/queries/savings';
 import { getMoneyProfile } from '../db/queries/moneyProfile';
 import { computeTotalMoney } from './cash';
-import { getAllGroups } from '../db/queries/groups';
 import { getMe } from '../db/queries/persons';
 import { getTransactionsInRange } from '../db/queries/transactions';
-import { getRecurringForGroup, getSkipsMap } from '../db/queries/recurring';
+import { getAllRecurringRules, getSkipsMap } from '../db/queries/recurring';
 import { getMyGlobalBudgetSummary } from './budget';
 import { forecastMonthEnd as computeForecastMonthEnd } from './forecast';
 import { buildUpcoming, type UpcomingItem } from './upcoming';
@@ -33,8 +32,8 @@ export async function loadSavingsTabData(
   // longer a cheap KV lookup — `investments` is derived from the asset register —
   // and this loader used to issue four of them.
   const profile = await getMoneyProfile(db);
-  const [goals, saved, grps, me, cashPos, assets] = await Promise.all([
-    getGoals(db), getGoalSavedMap(db), getAllGroups(db), getMe(db),
+  const [goals, saved, me, cashPos, assets] = await Promise.all([
+    getGoals(db), getGoalSavedMap(db), getMe(db),
     // Same underlying figures as `getTotalMoney`, but carrying the per-bucket
     // detail. Only this screen needs it, which is why it is not on `TotalMoney`.
     getCashPosition(db, profile),
@@ -69,8 +68,7 @@ export async function loadSavingsTabData(
 
   let upcoming: UpcomingItem[] = [];
   if (me) {
-    const recurringByGroup = await Promise.all(grps.map(g => getRecurringForGroup(db, g.id)));
-    const rules = recurringByGroup.flat();
+    const rules = await getAllRecurringRules(db);
     const skips = await getSkipsMap(db, rules.map(r => r.id));
     /*
      * A REAL window, because the heading claims one.

@@ -8,7 +8,7 @@ import { getMe } from '../db/queries/persons';
 import { buildSavingsInsights } from '../db/queries/savings';
 import { myShareOf } from './splitMath';
 import { expandUpcoming } from './upcoming';
-import { getRecurringForGroup, getSkipsMap } from '../db/queries/recurring';
+import { getAllRecurringRules, getSkipsMap } from '../db/queries/recurring';
 import { getMyGlobalBudgetSummary } from './budget';
 import { forecastMonthEnd, projectedAtDay, FORECAST_MIN_DAYS } from './forecast';
 
@@ -90,7 +90,7 @@ export async function loadInsightsData(
     // Known recurring bills still due this month floor the forecast (same
     // wiring as Home and Afford — one model, one floor).
     const monthEndMs = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999).getTime();
-    const recurRules = (await Promise.all(grps.map(g => getRecurringForGroup(db, g.id)))).flat();
+    const recurRules = await getAllRecurringRules(db);
     const recurSkips = await getSkipsMap(db, recurRules.map(r => r.id));
     const committedRemaining = expandUpcoming(recurRules, meId, now.getTime(), monthEndMs, recurSkips)
       .reduce((s, o) => s + o.amount, 0);

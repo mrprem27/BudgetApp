@@ -3,6 +3,7 @@ import { saveFailureMessage } from '../lib/dbErrors';
 import { Alert } from 'react-native';
 import { File } from 'expo-file-system';
 import { useSQLiteContext } from 'expo-sqlite';
+import { useCategoryCreate } from './useCategoryCreate';
 import { useRouter } from 'expo-router';
 import { settings } from '../lib/settings';
 import { getCurrentPlace, type CapturedPlace } from '../lib/location';
@@ -79,6 +80,7 @@ export function useItemizedForm(paramGroupId?: string, editId?: string) {
   const [selectedGroupId, setSelectedGroupId] = useState(paramGroupId ?? '');
   const [members, setMembers] = useState<Person[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const createCategory = useCategoryCreate(setCategories);
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [note, setNote] = useState('');
   /**
@@ -430,7 +432,7 @@ export function useItemizedForm(paramGroupId?: string, editId?: string) {
     // wizard
     step, setStep, stepTitle: STEP_TITLE[step], isEditing,
     // group / meta
-    selectedGroupId, members, categories, setCategories,
+    selectedGroupId, members, categories, setCategories, createCategory,
     selectedCategory, setSelectedCategory,
     note, setNote,
     payMethod, setPayMethod,

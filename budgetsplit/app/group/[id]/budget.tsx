@@ -2,8 +2,7 @@ import React, { useEffect } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { getGroupById } from '../../../src/db/queries/groups';
-import { isGlobalBudgetGroup } from '../../../src/lib/budget';
+import { groupUsesGlobalBudget } from '../../../src/lib/budget';
 import { BudgetEditor } from '../../../src/components/finance/budget/BudgetEditor';
 import { ScreenHeader } from '../../../src/components/ui/ScreenHeader';
 import { SkeletonCard } from '../../../src/components/ui/Skeleton';
@@ -27,9 +26,8 @@ export default function GroupBudgetScreen() {
     if (!id) return;
     let alive = true;
     (async () => {
-      const g = await getGroupById(db, id);
+      const personal = await groupUsesGlobalBudget(db, id);
       if (!alive) return;
-      const personal = !!g && isGlobalBudgetGroup(g);
       setIsPersonal(personal);
       if (personal) router.replace(category ? `/budget?category=${encodeURIComponent(category)}` : '/budget');
     })();

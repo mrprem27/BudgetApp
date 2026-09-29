@@ -3,17 +3,17 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useScreenData } from '../src/hooks/useScreenData';
 import { Feather } from '@expo/vector-icons';
-import { isSameDay, isYesterday, startOfDay, startOfMonth, subDays } from 'date-fns';
-import { shortDate, fullDate, timeOfDay } from '../src/lib/dateFormat';
+import { isSameDay } from 'date-fns';
+import { shortDate, timeOfDay } from '../src/lib/dateFormat';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, type, space, radius, layout, shadow } from '../src/theme';
 import { EmptyState } from '../src/components/ui/EmptyState';
 import { ErrorState } from '../src/components/ui/ErrorState';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { AppRefreshControl } from '../src/components/ui/AppRefreshControl';
-import { getAuditLog } from '../src/db/queries/audit';
 import { formatCompact } from '../src/lib/money';
-import type { AuditLog, AuditAction, AuditEntityType } from '../src/db/queries/audit';
+import type { AuditAction } from '../src/constants/enums';
+import { loadHistory, historySections, auditEntryView, type HistorySection } from '../src/lib/historyData';
 
 const PAGE_SIZE = 30;
 
@@ -28,86 +28,28 @@ const DOT_COLOR: Record<AuditAction, string> = {
   ended:   colors.textMuted,
 };
 
-// The label is built from BOTH columns: the entity supplies the noun, the action
-// the verb. Hardcoding "Expense …" made a group archive read "Expense deleted".
-const ENTITY_NOUN: Record<AuditEntityType, string> = {
-  txn:        'Expense',
-  group:      'Group',
-  member:     'Member',
-  budget:     'Budget',
-  recurring:  'Recurring',
-  settlement: 'Settlement',
-};
-
-const ACTION_VERB: Record<AuditAction, string> = {
-  created:  'added',
-  updated:  'edited',
-  deleted:  'deleted',
-  archived: 'archived',
-  settled:  'recorded',
-  paused:   'paused',
-  resumed:  'resumed',
-  ended:    'ended',
-};
-
 const BADGE_LABEL: Record<string, string> = {
   updated:  'EDIT',
   deleted:  'DEL',
   archived: 'ARCH',
 };
 
-function dateLabel(d: Date): string {
-  const now = new Date();
-  if (isSameDay(d, now)) return 'TODAY';
-  if (isYesterday(d)) return 'YESTERDAY';
-  return fullDate(d).toUpperCase();
-}
-
-function rangeStart(range: string): number | undefined {
-  const now = new Date();
-  switch (range) {
-    case 'today': return startOfDay(now).getTime();
-    case 'week':  return subDays(startOfDay(now), 7).getTime();
-    case 'month': return startOfMonth(now).getTime();
-    default: return undefined;
-  }
-}
-
-type Section = { title: string; data: AuditLog[] };
-
 /** One date-grouped card. Memoized so off-screen sections don't re-render (and the
  *  per-entry date formatting only runs when the section is actually rendered). */
-const SectionCard = React.memo(function SectionCard({ section }: { section: Section }) {
+const SectionCard = React.memo(function SectionCard({ section }: { section: HistorySection }) {
   return (
     <View>
       <Text style={styles.sectionLabel}>{section.title}</Text>
       <View style={styles.card}>
         {section.data.map((item, i) => {
           const dotColor = DOT_COLOR[item.action] ?? colors.accent;
-          const noun = ENTITY_NOUN[item.entity_type] ?? 'Item';
-          const verb = ACTION_VERB[item.action] ?? 'changed';
-          /*
-           * A settlement's own summary says which of the four things it was —
-           * `insertTxn` writes "Invested ₹10,000" or "Settled ₹500" — and it is
-           * rendered directly below. The label above it said "Settlement recorded"
-           * regardless, so an SIP was captioned with a word that is wrong for it,
-           * sitting over a line that had it right.
-           *
-           * The summary's first word is the verb, so the label borrows it and the
-           * two agree. Not the whole summary: that renders below, and printing it
-           * twice would be worse than printing it wrong.
-           */
-          const label = item.entity_type === 'settlement' && item.summary
-            ? `${item.summary.split(' ')[0]} money`
-            : `${noun} ${verb}`;
+          const { label, sign, tone } = auditEntryView(item);
           const badge = BADGE_LABEL[item.action];
           const itemDate = new Date(item.created_at);
           const dateStr = isFinite(itemDate.getTime())
-            // Was `'MMM d'` here — "Jun 14" — against `'d MMM'` everywhere else.
-            // Exactly the drift `dateFormat.ts`'s header was written about.
             ? (isSameDay(itemDate, new Date()) ? `Today ${timeOfDay(itemDate)}` : `${shortDate(itemDate)} · ${timeOfDay(itemDate)}`)
             : '';
-          const amtColor = item.action === 'settled' ? colors.income : item.action === 'deleted' || item.action === 'created' ? colors.expense : undefined;
+          const amtColor = tone === 'in' ? colors.income : tone === 'out' ? colors.expense : colors.textSecondary;
 
           return (
             <View
@@ -118,15 +60,15 @@ const SectionCard = React.memo(function SectionCard({ section }: { section: Sect
               <View style={styles.entryBody}>
                 <Text style={styles.entryLabel}>{label}</Text>
                 <Text style={styles.entrySummary} numberOfLines={2}>{item.summary}</Text>
-                {dateStr ? <Text style={styles.entryTime}>· you · {dateStr}</Text> : null}
+                {dateStr ? <Text style={styles.entryTime}>· {item.actorName ?? 'you'} · {dateStr}</Text> : null}
               </View>
               {badge ? (
                 <View style={[styles.actionBadge, { backgroundColor: badge === 'DEL' ? colors.expenseTint : colors.amberTint }]}>
                   <Text style={[styles.actionBadgeText, { color: badge === 'DEL' ? colors.expense : colors.healthAmber }]}>{badge}</Text>
                 </View>
               ) : item.amount != null ? (
-                <Text style={[styles.entryAmt, { color: amtColor ?? colors.textSecondary }]}>
-                  {item.action === 'settled' ? '+' : item.action === 'created' ? '−' : ''}{formatCompact(item.amount)}
+                <Text style={[styles.entryAmt, { color: amtColor }]}>
+                  {sign}{formatCompact(item.amount)}
                 </Text>
               ) : null}
             </View>
@@ -143,28 +85,16 @@ export default function HistoryScreen() {
   const insets = useSafeAreaInsets();
   const [pageLimit, setPageLimit] = useState(PAGE_SIZE);
   const { data, loading, error: loadError, refreshing, onRefresh, reload } = useScreenData(
-    (db) => getAuditLog(db, { groupId: groupId || undefined }),
+    (db) => loadHistory(db, groupId || undefined),
     [groupId],
   );
   const entries = data ?? [];
-
-  const sections: Section[] = useMemo(() => {
-    const visible = entries.slice(0, pageLimit);
-    const map = new Map<string, AuditLog[]>();
-    for (const e of visible) {
-      const d = new Date(e.created_at);
-      if (!isFinite(d.getTime())) continue;
-      const key = dateLabel(d);
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(e);
-    }
-    return Array.from(map.entries()).map(([title, data]) => ({ title, data }));
-  }, [entries, pageLimit]);
+  const sections = useMemo(() => historySections(entries, pageLimit), [entries, pageLimit]);
 
   const hasMore = entries.length > pageLimit;
 
   const renderSection = useCallback(
-    ({ item }: { item: Section }) => <SectionCard section={item} />,
+    ({ item }: { item: HistorySection }) => <SectionCard section={item} />,
     [],
   );
 

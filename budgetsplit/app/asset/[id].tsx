@@ -12,9 +12,7 @@ import { TransactionRow } from '../../src/components/finance/TransactionRow';
 import { TxnCell } from '../../src/components/finance/TxnCell';
 import { useScreenData } from '../../src/hooks/useScreenData';
 import { useContentInset } from '../../src/hooks/useContentInset';
-import { getAssetById } from '../../src/db/queries/assets';
-import { getTransactionsForAsset } from '../../src/db/queries/transactions';
-import { getMe } from '../../src/db/queries/persons';
+import { loadAssetDetail } from '../../src/lib/assetData';
 import { groupByDate } from '../../src/lib/txnGrouping';
 import { formatRupees } from '../../src/lib/money';
 import { ASSET_KIND_LABEL, ASSET_KIND_ICON } from '../../src/constants/assets';
@@ -46,14 +44,7 @@ export default function AssetDetailScreen() {
   const router = useRouter();
   const bottomPad = useContentInset();
 
-  const { data, loading, error, refreshing, onRefresh, reload } = useScreenData(async (db) => {
-    const [asset, txns, me] = await Promise.all([
-      getAssetById(db, id),
-      getTransactionsForAsset(db, id),
-      getMe(db),
-    ]);
-    return { asset, txns, myId: me?.id ?? '' };
-  }, [id]);
+  const { data, loading, error, refreshing, onRefresh, reload } = useScreenData((db) => loadAssetDetail(db, id), [id]);
 
   const asset = data?.asset ?? null;
   const txns = data?.txns ?? [];

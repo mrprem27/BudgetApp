@@ -3,7 +3,7 @@ import {
   startOfDay, endOfDay, startOfMonth, endOfMonth,
   startOfYear, endOfYear, getDaysInMonth, getDaysInYear,
 } from 'date-fns';
-import { getAllGroups, sharedGroupsOf, type BudgetGroup } from '../db/queries/groups';
+import { getAllGroups, getGroupById, sharedGroupsOf, type BudgetGroup } from '../db/queries/groups';
 import { getTransactionsInRange } from '../db/queries/transactions';
 import { getCategoryBudgets, getMyGlobalBudgetRows } from '../db/queries/categoryBudgets';
 import { OTHERS_LABEL } from './categoryFold';
@@ -40,6 +40,12 @@ export type BudgetHealth = 'green' | 'amber' | 'red' | 'none';
 
 /** Whether this group's default lines are My Budget rather than a group budget. */
 export const isGlobalBudgetGroup = (g: Pick<BudgetGroup, 'is_personal'>) => g.is_personal === 1;
+
+/** Whether this group's budget is My Budget (so its screen forwards to `/budget`). */
+export async function groupUsesGlobalBudget(db: SQLite.SQLiteDatabase, groupId: string): Promise<boolean> {
+  const g = await getGroupById(db, groupId);
+  return !!g && isGlobalBudgetGroup(g);
+}
 
 /**
  * Collapse two-level budget rows into the one line that applies to `meId`.

@@ -36,6 +36,25 @@ export async function getRecurringForGroup(
   return loadSplitsMany(db, rows);
 }
 
+/**
+ * Every rule, in every group that still has me — archived groups included — as a
+ * ledger view (a peer's rule I have not accepted comes back marked).
+ *
+ * The one source for "all my rules". Seven surfaces built it as
+ * `getAllGroups()` → `getRecurringForGroup` each, and `getAllGroups` drops
+ * archived groups — while materialization and reminders read every group. So a
+ * rule in an archived group went on posting every month, counted by nothing that
+ * forecasts and listed on no screen where it could be paused or stopped.
+ */
+export async function getAllRecurringRules(db: SQLite.SQLiteDatabase): Promise<TxnWithSplits[]> {
+  const rows = await db.getAllAsync<Txn>(
+    `SELECT t.*, ${AWAITING_APPROVAL_COL} FROM txn t
+     WHERE t.is_deleted = 0 AND t.recur_freq IS NOT NULL AND ${RULE_IN_LIVE_GROUP}
+     ORDER BY t.recur_state ASC, t.date DESC`,
+  );
+  return loadSplitsMany(db, rows);
+}
+
 export async function pauseRecurring(db: SQLite.SQLiteDatabase, txnId: string): Promise<void> {
   const now = Date.now();
   await db.withTransactionAsync(async () => {

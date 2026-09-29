@@ -1,7 +1,6 @@
-import React, { useCallback, useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, Alert, ActivityIndicator } from 'react-native';
-import { useSQLiteContext } from 'expo-sqlite';
-import { useRouter, useFocusEffect } from 'expo-router';
+import React from 'react';
+import { View, Text, ScrollView, StyleSheet, ActivityIndicator } from 'react-native';
+import { useRouter } from 'expo-router';
 import { colors, type, space, layout } from '../../src/theme';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { Card } from '../../src/components/ui/Card';
@@ -9,12 +8,9 @@ import { ListRow } from '../../src/components/ui/ListRow';
 import { Divider } from '../../src/components/ui/Divider';
 import { Banner } from '../../src/components/ui/Banner';
 import { serverConfigured } from '../../src/lib/serverApi';
-import { haptic } from '../../src/lib/haptics';
 import { useServerSession } from '../../src/hooks/useServerSession';
-import { pendingInvites, answerInvite, type PendingInvite } from '../../src/db/queries/syncApply';
-import { scheduleSync } from '../../src/lib/sync/run';
+import { useSyncInvites } from '../../src/hooks/useSyncInvites';
 import { SyncStatus } from '../../src/components/system/SyncStatus';
-import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
 
 /**
  * What syncing actually means for you — said plainly, in one place.
@@ -30,52 +26,11 @@ import { useDataRefresh } from '../../src/components/system/DataRefreshProvider'
  * would be one more thing that looks like a promise and isn't.
  */
 export default function SyncScreen() {
-  const db = useSQLiteContext();
   const router = useRouter();
   const { session } = useServerSession();
-  const { refresh } = useDataRefresh();
   const configured = serverConfigured();
 
-  const [invites, setInvites] = useState<PendingInvite[]>([]);
-  const [joining, setJoining] = useState<string | null>(null);
-
-  const load = useCallback(() => {
-    let alive = true;
-    pendingInvites(db).then(p => { if (alive) setInvites(p); }).catch(() => {});
-    return () => { alive = false; };
-  }, [db]);
-
-  useFocusEffect(load);
-
-  /**
-   * Accept an invitation.
-   *
-   * Queued like any other change (`answerInvite`), so it holds offline and can't
-   * half-fail here. The group and its entries arrive with the sync this kicks off —
-   * a cursor of zero already means "everything", so there is no special first pull.
-   */
-  async function accept(g: PendingInvite) {
-    setJoining(g.memberId);
-    try {
-      await answerInvite(db, g, true);
-    } catch {
-      setJoining(null);
-      haptic.error();
-      Alert.alert('Could not accept', 'Please try again.');
-      return;
-    }
-    setJoining(null);
-    haptic.success();
-    setInvites(prev => prev.filter(x => x.memberId !== g.memberId));
-    // The group then shows up everywhere, not only here.
-    scheduleSync(db, () => { refresh(); load(); }, 0);
-    Alert.alert(
-      'Joined',
-      'The group appears as soon as the app syncs — in a few seconds if you’re online. Entries other people add show up in '
-      + 'the group straight away, but move none of your own numbers until you accept them — '
-      + 'unless you have marked that person trusted.',
-    );
-  }
+  const { invites, joining, accept } = useSyncInvites();
 
   return (
     <View style={styles.container}>

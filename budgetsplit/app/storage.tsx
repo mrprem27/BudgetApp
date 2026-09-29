@@ -9,9 +9,9 @@ import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { Banner } from '../src/components/ui/Banner';
 import { ErrorState } from '../src/components/ui/ErrorState';
 import { SecondaryButton } from '../src/components/ui/SecondaryButton';
-import { getAttachmentStorage, clearAllAttachmentFiles } from '../src/lib/attachment';
-import { clearAllAttachmentRefs } from '../src/db/queries/transactions';
-import { loadDemoData, resetToEmpty } from '../src/db/seedDemo';
+import { getAttachmentStorage, clearAllReceipts } from '../src/lib/attachment';
+import { loadDemoData, resetToEmpty } from '../src/lib/devData';
+import { formatBytes } from '../src/lib/storage';
 import { DEV_TOOLS_ENABLED } from '../src/constants/devTools';
 import { useDataRefresh } from '../src/components/system/DataRefreshProvider';
 import { useFeatureFlags } from '../src/components/system/FeatureFlagsProvider';
@@ -20,12 +20,6 @@ import { applyPersona, asIntent } from '../src/lib/personaDefaults';
 import { settings } from '../src/lib/settings';
 import { haptic } from '../src/lib/haptics';
 import { IconCircle } from '../src/components/ui/IconCircle';
-
-function formatBytes(b: number): string {
-  if (b <= 0) return '0 KB';
-  if (b < 1024 * 1024) return `${Math.max(1, Math.round(b / 1024))} KB`;
-  return `${(b / (1024 * 1024)).toFixed(1)} MB`;
-}
 
 export default function StorageScreen() {
   const db = useSQLiteContext();
@@ -123,8 +117,7 @@ export default function StorageScreen() {
           text: 'Delete all', style: 'destructive',
           onPress: async () => {
             try {
-              clearAllAttachmentFiles();
-              await clearAllAttachmentRefs(db);
+              await clearAllReceipts(db);
               haptic.warning();
               reload();
             } catch { haptic.error(); Alert.alert('Something went wrong', 'Please try again.'); }

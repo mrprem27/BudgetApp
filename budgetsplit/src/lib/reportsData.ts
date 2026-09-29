@@ -3,7 +3,9 @@ import { startOfMonth, endOfMonth, startOfYear, endOfYear, subMonths, format } f
 import { getAllGroups, getArchivedGroups, type BudgetGroup } from '../db/queries/groups';
 import { getCategories } from '../db/queries/categories';
 import { getTransactionsInRange, type TxnWithSplits } from '../db/queries/transactions';
-import { foldUncategorized } from './categoryFold';
+import { foldUncategorized, matchesCategory } from './categoryFold';
+import { isInvestment } from './settlementView';
+import { txnTotal } from './splitMath';
 import { getMyGlobalBudgetSummary, isGlobalBudgetGroup } from './budget';
 import { getBudgetAnalytics, type BudgetAnalytics } from './analytics';
 import { categoryVisual } from '../constants/categories';
@@ -219,4 +221,62 @@ export async function loadReportsData(db: SQLite.SQLiteDatabase, month: Date) {
         pieTotal,
         monthly,
       };
+}
+
+export type ReportSort = 'date' | 'amount';
+
+/**
+ * One month's ledger for the drill-down from a Reports segment. Group names cover
+ * archived groups too: their entries are in the month, and an unnamed row reads
+ * as Personal.
+ */
+export async function loadReportTransactions(db: SQLite.SQLiteDatabase, month: Date) {
+  const [live, archived, me, txns, knownCats] = await Promise.all([
+    getAllGroups(db),
+    getArchivedGroups(db),
+    getMe(db),
+    getTransactionsInRange(db, null, startOfMonth(month).getTime(), endOfMonth(month).getTime()),
+    // Only needed to resolve the folded "Others" filter — the category *list* is gone,
+    // because the pie chart you arrived from is the category picker.
+    getCategories(db, 'expense'),
+  ]);
+  const grps = [...live, ...archived];
+  return {
+    myId: me?.id ?? '',
+    personalId: grps.find(g => g.is_personal === 1)?.id ?? null,
+    groupNames: Object.fromEntries(grps.map(g => [g.id, g.name])) as Record<string, string>,
+    known: new Set(knownCats.map(c => c.name)),
+    txns,
+  };
+}
+
+/**
+ * The drill-down's rows, filtered and sorted, with a total PER KIND. A single total
+ * across income + expense + transfers answers no question anyone has, and a
+ * settlement is neither — so investments are counted apart from person-to-person
+ * settlements too (`IV-17`), and "Moved" means what it says.
+ */
+export function reportTransactionRows(
+  txns: TxnWithSplits[],
+  { cat, typeFilter, group, sort, known }: { cat: string; typeFilter: string; group: string; sort: ReportSort; known: Set<string> },
+): { rows: TxnWithSplits[]; byKind: Record<string, number> } {
+  const rows = txns.filter(t => {
+    if (typeFilter === 'invest') {
+      if (!isInvestment(t)) return false;
+    } else if (typeFilter === 'settlement') {
+      // "Transfers" means between PEOPLE. An asset movement has its own tab, so
+      // leaving it here would double-count it across two tabs.
+      if (t.kind !== 'settlement' || isInvestment(t)) return false;
+    } else if (typeFilter !== 'all' && t.kind !== typeFilter) return false;
+    if (group !== 'all' && t.group_id !== group) return false;
+    // A folded-name filter ("Others") matches any category not in the catalog.
+    return cat === 'all' || matchesCategory(t.category, cat, known);
+  });
+  rows.sort((a, b) => (sort === 'amount' ? txnTotal(b) - txnTotal(a) : b.date - a.date));
+  const byKind: Record<string, number> = { expense: 0, income: 0, settlement: 0, invest: 0 };
+  for (const t of rows) {
+    const bucket = isInvestment(t) ? 'invest' : t.kind;
+    byKind[bucket] = (byKind[bucket] ?? 0) + txnTotal(t);
+  }
+  return { rows, byKind };
 }

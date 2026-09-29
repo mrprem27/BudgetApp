@@ -93,8 +93,9 @@ describe('no surface sums across kinds', () => {
    * problem, not this rule.
    */
   const SUMMING = [
-    join(ROOT, 'app', 'search.tsx'),
-    join(ROOT, 'app', 'report-transactions.tsx'),
+    // Both screens' totals now live in lib (`searchData`, `reportsData`).
+    join(ROOT, 'src', 'lib', 'searchData.ts'),
+    join(ROOT, 'src', 'lib', 'reportsData.ts'),
   ];
 
   it('keeps a per-kind bucket, or shows no figure at all', () => {

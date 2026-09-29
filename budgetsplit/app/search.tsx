@@ -2,8 +2,6 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet, SectionList, TouchableOpacity, ScrollView, TextInput } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { startOfMonth } from 'date-fns';
-import { monthLabel } from '../src/lib/dateFormat';
 import { colors, type, space, radius, layout } from '../src/theme';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { EmptyState } from '../src/components/ui/EmptyState';
@@ -11,17 +9,12 @@ import { ErrorState } from '../src/components/ui/ErrorState';
 import { TransactionRow } from '../src/components/finance/TransactionRow';
 import { TxnCell } from '../src/components/finance/TxnCell';
 import { SectionHeader } from '../src/components/ui/SectionHeader';
-import { getTransactionsInRange } from '../src/db/queries/transactions';
-import { getMe } from '../src/db/queries/persons';
-import { getAllGroups } from '../src/db/queries/groups';
 import { formatCompact } from '../src/lib/money';
-import { txnTotal } from '../src/lib/splitMath';
 import { FilterBar } from '../src/components/ui/FilterBar';
-import { applyFilters, resolveRange, KIND_ANY, type KindFilter, type RangePreset } from '../src/lib/txnFilter';
-import { getAllPersons } from '../src/db/queries/persons';
+import { resolveRange, KIND_ANY, type KindFilter, type RangePreset } from '../src/lib/txnFilter';
+import { loadSearchData, searchResults, isMore, type SearchRow as Row } from '../src/lib/searchData';
 import { useScreenData } from '../src/hooks/useScreenData';
 import { SEARCH_SOURCE, SEARCH_SOURCE_LABEL, type SearchSource } from '../src/constants/enums';
-import type { TxnWithSplits } from '../src/db/queries/transactions';
 import { keyboardAwareScroll } from '../src/components/ui/KeyboardForm';
 
 // `KindFilter` was declared here, one of three private copies of the same idea.
@@ -33,13 +26,6 @@ const SOURCE_GROUP = [{
   options: SEARCH_SOURCE.map(v => ({ label: SEARCH_SOURCE_LABEL[v], value: v })),
 }];
 
-const THREE_YEARS_MS = 3 * 365 * 24 * 60 * 60 * 1000;
-const SECTION_CAP = 6;
-
-type MoreRow = { _more: true; section: string; count: number; monthName: string };
-type Row = TxnWithSplits | MoreRow;
-type MonthSection = { title: string; data: Row[] };
-const isMore = (r: Row): r is MoreRow => (r as MoreRow)._more === true;
 
 const searchScroll = keyboardAwareScroll();
 
@@ -62,91 +48,17 @@ export default function SearchScreen() {
   const [personId, setPersonId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
-  const { data, loading, error, reload } = useScreenData(async (db) => {
-    const now = Date.now();
-    const [txns, me, grps, persons] = await Promise.all([
-      getTransactionsInRange(db, null, now - THREE_YEARS_MS, now),
-      getMe(db),
-      getAllGroups(db),
-      getAllPersons(db),
-    ]);
-    return {
-      all: txns,
-      myId: me?.id ?? '',
-      personalGroupId: grps.find(g => g.is_personal === 1)?.id ?? '',
-      groupNames: Object.fromEntries(grps.map(g => [g.id, g.name])) as Record<string, string>,
-      // Everyone, so the person chip can narrow to any of them. `me` included —
-      // "only the ones I'm on" is a real question on a screen spanning every group.
-      people: persons.map(x => ({ id: x.id, name: x.name })),
-    };
-  }, []);
+  const { data, loading, error, reload } = useScreenData(loadSearchData, []);
 
   const all = data?.all ?? [];
   const myId = data?.myId ?? '';
   const personalGroupId = data?.personalGroupId ?? '';
   const groupNames = data?.groupNames ?? {};
 
-  const { sections, totalCount, totalAmount } = useMemo(() => {
-    /*
-     * Kind, text, date range and person come from `lib/txnFilter.ts` — the same
-     * predicate the Personal ledger and the group ledger now run, so a word that
-     * finds a row here finds it there too. This screen's haystack was the widest of
-     * the three and became the shared one: tags and both spellings of the amount
-     * are folded in, because someone hunting a row types whatever they remember
-     * about it rather than reaching for the right control first.
-     *
-     * `source` stays local: it is not a property of a transaction, it is which
-     * ledger you are looking at.
-     */
-    const filtered = applyFilters(all, { query: debouncedQuery, kind, from, to, personId })
-      .filter(t => {
-        if (source === 'personal' && personalGroupId && t.group_id !== personalGroupId) return false;
-        if (source === 'groups' && personalGroupId && t.group_id === personalGroupId) return false;
-        return true;
-      });
-
-    /*
-     * Grouped by `date` — WHEN IT HAPPENED — like every other ledger surface.
-     *
-     * This grouped by `created_at`, the moment the row was written, while the
-     * query that produced these rows both filters and orders by `date`. Three
-     * things went wrong at once: a bill dated in March but entered today sat
-     * under SEPTEMBER here and under March everywhere else, so searching for it
-     * found it in the wrong place; rows inside a section arrived in `date` order
-     * under a header derived from a different column, so a section could read out
-     * of order against itself; and an imported statement, whose rows are all
-     * created within the same minute, collapsed three years of history into one
-     * month.
-     */
-    const map = new Map<string, TxnWithSplits[]>();
-    for (const t of filtered) {
-      const d = new Date(t.date);
-      const key = isFinite(d.getTime()) ? monthLabel(startOfMonth(d)).toUpperCase() : 'OLDER';
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(t);
-    }
-
-    // Cap each month at SECTION_CAP rows unless expanded; overflow collapses into a
-    // "+ N more in {month}" row.
-    const secs: MonthSection[] = Array.from(map.entries()).map(([title, rows]) => {
-      if (rows.length > SECTION_CAP && !expanded.has(title)) {
-        const monthName = title.split(' ')[0];
-        return {
-          title,
-          data: [...rows.slice(0, SECTION_CAP), { _more: true as const, section: title, count: rows.length - SECTION_CAP, monthName }] as Row[],
-        };
-      }
-      return { title, data: rows };
-    });
-    // Summed for the SELECTED kind only. It used to sum expenses whatever was listed, so
-    // "24 results · ₹12,400 total" was measuring something other than the 24 rows above it
-    // — and on "All" a single figure across money-in, money-out and settlements answers no
-    // question at all, so there is none.
-    const totalAmt = kind === 'all'
-      ? 0
-      : filtered.reduce((s, t) => s + txnTotal(t), 0);
-    return { sections: secs, totalCount: filtered.length, totalAmount: totalAmt };
-  }, [all, debouncedQuery, kind, from, to, personId, source, personalGroupId, expanded]);
+  const { sections, totalCount, totalAmount } = useMemo(
+    () => searchResults(all, { query: debouncedQuery, kind, from, to, personId, source, personalGroupId, expanded }),
+    [all, debouncedQuery, kind, from, to, personId, source, personalGroupId, expanded],
+  );
 
   const hasQuery = query.trim().length > 0;
   // Results reflect the debounced query — key the empty-state copy off it too.

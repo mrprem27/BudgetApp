@@ -2,10 +2,9 @@ import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { startOfMonth, endOfMonth, addMonths, subMonths, format } from 'date-fns';
+import { addMonths, subMonths, format } from 'date-fns';
 import { monthLabel } from '../src/lib/dateFormat';
 import { colors, type, space, layout } from '../src/theme';
-import { isInvestment } from '../src/lib/settlementView';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { EmptyState } from '../src/components/ui/EmptyState';
 import { ErrorState } from '../src/components/ui/ErrorState';
@@ -17,16 +16,9 @@ import { TransactionRow } from '../src/components/finance/TransactionRow';
 import { TxnCell } from '../src/components/finance/TxnCell';
 import { useScreenData } from '../src/hooks/useScreenData';
 import { useContentInset } from '../src/hooks/useContentInset';
-import { getAllGroups } from '../src/db/queries/groups';
-import { getCategories } from '../src/db/queries/categories';
-import { getMe } from '../src/db/queries/persons';
-import { getTransactionsInRange, type TxnWithSplits } from '../src/db/queries/transactions';
-import { matchesCategory } from '../src/lib/categoryFold';
-import { txnTotal } from '../src/lib/splitMath';
+import { loadReportTransactions, reportTransactionRows, type ReportSort as SortKey } from '../src/lib/reportsData';
 import { haptic } from '../src/lib/haptics';
 import { AppRefreshControl } from '../src/components/ui/AppRefreshControl';
-
-type SortKey = 'date' | 'amount';
 
 /**
  * All three kinds, because this is a **ledger** — a record of what happened — not an
@@ -55,9 +47,6 @@ const TYPE_TABS = [
   { key: 'invest', label: 'Invested' },
 ];
 
-// Full transaction magnitude via the canonical txnTotal, used for the
-// "Largest" sort and the header totals — matches Reports and Search.
-const txnAmount = txnTotal;
 
 function parseMonth(m?: string): Date {
   const parts = (m ?? '').split('-');
@@ -101,28 +90,7 @@ export default function ReportTransactionsScreen() {
   const [sort, setSort] = useState<SortKey>('date');
   const listPad = useContentInset();
 
-  const { data, loading, error: loadError, refreshing, onRefresh, reload } = useScreenData(async (db) => {
-    const grps = await getAllGroups(db);
-    const me = await getMe(db);
-    const from = startOfMonth(month).getTime();
-    const to = endOfMonth(month).getTime();
-    const [txns, knownCats] = await Promise.all([
-      getTransactionsInRange(db, null, from, to),
-      getCategories(db, 'expense'),
-    ]);
-    // Only needed to resolve the folded "Others" filter — the category *list* is gone,
-    // because the pie chart you arrived from is the category picker. Offering every
-    // alternative here was what made the screen's first action "undo your last tap".
-    const known = new Set(knownCats.map(c => c.name));
-
-    return {
-      myId: me?.id ?? '',
-      personalId: grps.find(g => g.is_personal === 1)?.id ?? null,
-      groupNames: Object.fromEntries(grps.map(g => [g.id, g.name])) as Record<string, string>,
-      known,
-      txns,
-    };
-  }, [monthKey]);
+  const { data, loading, error: loadError, refreshing, onRefresh, reload } = useScreenData((db) => loadReportTransactions(db, month), [monthKey]);
 
   const myId = data?.myId ?? '';
   const personalId = data?.personalId ?? null;
@@ -130,39 +98,10 @@ export default function ReportTransactionsScreen() {
   const known = data?.known ?? new Set<string>();
   const txns = data?.txns ?? [];
 
-  // A folded-name filter ("Others") matches any category not in the catalog.
-  const matchesCat = (t: TxnWithSplits, c: string): boolean =>
-    c === 'all' || matchesCategory(t.category, c, known);
-
-  const { rows, byKind } = useMemo(() => {
-    const filtered = txns.filter(t => {
-      if (typeFilter === 'invest') {
-        if (!isInvestment(t)) return false;
-      } else if (typeFilter === 'settlement') {
-        // "Transfers" now means between PEOPLE. An asset movement has its own tab,
-        // so leaving it here would double-count it across two tabs.
-        if (t.kind !== 'settlement' || isInvestment(t)) return false;
-      } else if (typeFilter !== 'all' && t.kind !== typeFilter) return false;
-      if (group !== 'all' && t.group_id !== group) return false;
-      if (!matchesCat(t, cat)) return false;
-      return true;
-    });
-    filtered.sort((a, b) => sort === 'amount' ? txnAmount(b) - txnAmount(a) : b.date - a.date);
-    // Summed PER KIND. A single total across income + expense + transfers answers no
-    // question anyone has: money in and money out don't belong in one figure, and a
-    // settlement is neither. This is the crux of "should the three kinds be treated
-    // differently" — in a total, yes, always.
-    const by = { expense: 0, income: 0, settlement: 0, invest: 0 } as Record<string, number>;
-    for (const t of filtered) {
-      // Investments are counted apart from person-to-person settlements, so the
-      // "Moved" figure means what it says. `IV-17` — one total across kinds
-      // answers no question, and that includes lumping an SIP with a repayment.
-      const bucket = isInvestment(t) ? 'invest' : t.kind;
-      by[bucket] = (by[bucket] ?? 0) + txnAmount(t);
-    }
-    return { rows: filtered, byKind: by };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [txns, cat, typeFilter, group, sort, known]);
+  const { rows, byKind } = useMemo(
+    () => reportTransactionRows(txns, { cat, typeFilter, group, sort, known }),
+    [txns, cat, typeFilter, group, sort, known],
+  );
 
   const groupName = group === 'all' ? null : (group === personalId ? 'Personal' : groupNames[group]);
   const hasActiveChips = cat !== 'all' || group !== 'all';

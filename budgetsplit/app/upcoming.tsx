@@ -11,44 +11,16 @@ import { MemberAvatar } from '../src/components/finance/MemberAvatar';
 import { AppRefreshControl } from '../src/components/ui/AppRefreshControl';
 import { ComingUpList } from '../src/components/finance/home/ComingUpList';
 import { useScreenData } from '../src/hooks/useScreenData';
-import { getAllGroups } from '../src/db/queries/groups';
-import { getRecurringForGroup, getSkipsMap } from '../src/db/queries/recurring';
-import { getGlobalNet } from '../src/db/queries/balances';
-import { getMe, getAllPersons, type Person } from '../src/db/queries/persons';
-import { simplify } from '../src/lib/settle';
-import { buildUpcoming, type UpcomingItem } from '../src/lib/upcoming';
+import { loadUpcomingScreen } from '../src/lib/upcomingData';
 import { formatCompact } from '../src/lib/money';
 import { oweView } from '../src/lib/owe';
 import { IconCircle } from '../src/components/ui/IconCircle';
 
-type SettleReminder = { from: string; to: string; amount: number; counterpart: Person; iOwe: boolean };
 
 export default function UpcomingScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { data, loading, error, refreshing, onRefresh, reload } = useScreenData(async (db) => {
-    const me = await getMe(db);
-    if (!me) return { bills: [] as UpcomingItem[], settles: [] as SettleReminder[] };
-    const grps = await getAllGroups(db);
-
-    // Bills coming up in the next ~2 weeks (from recurring expense rules).
-    const recurringByGroup = await Promise.all(grps.map(g => getRecurringForGroup(db, g.id)));
-    const billRules = recurringByGroup.flat();
-    const billSkips = await getSkipsMap(db, billRules.map(r => r.id));
-    const bills = buildUpcoming(billRules, me.id, Date.now(), 8, 14, billSkips);
-
-    // Pending settle-ups that involve me.
-    const persons = await getAllPersons(db);
-    const pmap = new Map(persons.map(p => [p.id, p]));
-    const mine = simplify(await getGlobalNet(db)).filter(s => s.from === me.id || s.to === me.id);
-    const settles = mine.map(s => {
-      const iOwe = s.from === me.id;
-      const other = pmap.get(iOwe ? s.to : s.from);
-      return { from: s.from, to: s.to, amount: s.amount, counterpart: other as Person, iOwe };
-    }).filter(s => s.counterpart) as SettleReminder[];
-
-    return { bills, settles };
-  }, []);
+  const { data, loading, error, refreshing, onRefresh, reload } = useScreenData(loadUpcomingScreen, []);
 
   const bills = data?.bills ?? [];
   const settles = data?.settles ?? [];

@@ -21,14 +21,11 @@ import { SheetModal } from '../src/components/ui/SheetModal';
 import { FAB } from '../src/components/ui/FAB';
 import { SettingsRow, settingsRowDivider } from '../src/components/ui/SettingsRow';
 import { useGroupTxnActions } from '../src/hooks/useGroupTxnActions';
-import { getMyActivity, type MyActivityItem } from '../src/db/queries/transactions';
-import { getAllGroups } from '../src/db/queries/groups';
-import { getAllPersons } from '../src/db/queries/persons';
-import { getMyExposure } from '../src/db/queries/balances';
+import type { MyActivityItem } from '../src/db/queries/transactions';
+import { loadPersonal, scopeActivity } from '../src/lib/personalData';
 import { useScreenData } from '../src/hooks/useScreenData';
 import { useContentInset } from '../src/hooks/useContentInset';
 import { useStore } from '../src/store';
-import { getMyGlobalBudgetSummary } from '../src/lib/budget';
 import { groupByDate } from '../src/lib/txnGrouping';
 import { formatCompact } from '../src/lib/money';
 import { oweView } from '../src/lib/owe';
@@ -76,21 +73,7 @@ export default function PersonalScreen() {
 
   const { data, loading, error: loadError, refreshing, onRefresh, reload } = useScreenData(async (db) => {
     if (!me) throw new Error('No current user');
-    const [acts, allPersons, grps, exp, bud] = await Promise.all([
-      getMyActivity(db, me.id),
-      getAllPersons(db),
-      getAllGroups(db),
-      getMyExposure(db, me.id),
-      getMyGlobalBudgetSummary(db, me.id),
-    ]);
-    return {
-      persons: allPersons,
-      activity: acts,
-      groups: grps,
-      budget: bud,
-      // Owe / Lent summary — single source of truth (netted per person).
-      summary: { owe: exp.owe, lent: exp.owed },
-    };
+    return loadPersonal(db, me.id);
   }, [me?.id]);
 
   const persons = data?.persons ?? [];
@@ -124,12 +107,7 @@ export default function PersonalScreen() {
    * collapsed the predicate into `lib/txnFilter.ts`, so a word that finds a row on
    * one of the three now finds it on all of them.
    */
-  const scoped = useMemo(() => activity.filter(a =>
-    filter === 'all' ? true
-    : filter === 'personal' ? a.isPersonal
-    : filter === 'groups' ? !a.isPersonal
-    : a.group_id === filter,
-  ), [activity, filter]);
+  const scoped = useMemo(() => scopeActivity(activity, filter), [activity, filter]);
   const filtered = useMemo(
     () => applyFilters(scoped, { query, kind, from, to, personId }),
     [scoped, query, kind, from, to, personId],

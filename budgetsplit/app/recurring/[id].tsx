@@ -18,9 +18,7 @@ import { useScreenData } from '../../src/hooks/useScreenData';
 import { useContentInset } from '../../src/hooks/useContentInset';
 import { useRecurringActions } from '../../src/hooks/useRecurringActions';
 import { useStore } from '../../src/store';
-import { getTxnById } from '../../src/db/queries/transactions';
-import { getSkipsMap } from '../../src/db/queries/recurring';
-import { getGroupById } from '../../src/db/queries/groups';
+import { loadRecurringRule } from '../../src/lib/recurringData';
 import { categoryVisual } from '../../src/constants/categories';
 import { asFeather } from '../../src/constants/palette';
 import { freqLabel, nextUnskippedOccurrence } from '../../src/lib/recurrence';
@@ -61,19 +59,7 @@ export default function RecurringRuleScreen() {
   const meId = useStore(s => s.me?.id) ?? '';
   const bottomPad = useContentInset();
 
-  const { data, loading, error, refreshing, onRefresh, reload } = useScreenData(async (db) => {
-    const rule = await getTxnById(db, id);
-    if (!rule) return { rule: null, skips: undefined, groupName: null };
-    const [skipMap, group] = await Promise.all([
-      getSkipsMap(db, [rule.id]),
-      getGroupById(db, rule.group_id),
-    ]);
-    return {
-      rule,
-      skips: skipMap.get(rule.id),
-      groupName: group && group.is_personal !== 1 ? group.name : null,
-    };
-  }, [id]);
+  const { data, loading, error, refreshing, onRefresh, reload } = useScreenData((db) => loadRecurringRule(db, id), [id]);
 
   const { skipNext, undoSkip, pause, resume, edit, end } = useRecurringActions(reload);
 

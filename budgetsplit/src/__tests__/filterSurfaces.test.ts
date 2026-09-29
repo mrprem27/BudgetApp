@@ -99,7 +99,10 @@ describe('a transaction ledger filters through one predicate', () => {
   ];
 
   it('has all three on `applyFilters`', () => {
-    for (const f of LEDGERS) {
+    // Search's filtering moved out of the screen into `lib/searchData.ts`; the
+    // predicate is read wherever the screen's logic now lives.
+    const LOGIC = [join(ROOT, 'src', 'lib', 'searchData.ts'), ...LEDGERS.slice(1)];
+    for (const f of LOGIC) {
       expect({ file: label(f), shared: readFileSync(f, 'utf8').includes('applyFilters') })
         .toEqual({ file: label(f), shared: true });
     }

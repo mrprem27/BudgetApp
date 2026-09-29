@@ -18,7 +18,7 @@ import { getCashPosition, getGoals, getGoalSavedMap } from './savings';
 import { getMoneyProfile } from './moneyProfile';
 import { computeTotalMoney } from '../../lib/cash';
 import { getAllGroups, personalGroupOf } from './groups';
-import { getRecurringForGroup, getSkipsMap } from './recurring';
+import { getAllRecurringRules, getSkipsMap } from './recurring';
 import { getTransactionsInRange, insertTxn } from './transactions';
 import { getMyExposure } from './balances';
 import { getMe } from './persons';
@@ -100,8 +100,7 @@ export async function getSafeToSpend(db: SQLite.SQLiteDatabase, nowMs: number = 
   // from the two above rather than re-read, which is what `getTotalMoney` does.
   const money = computeTotalMoney(pos, profile);
 
-  const [groups, funding, exposure, futureTxns, dailyRows] = await Promise.all([
-    getAllGroups(db),
+  const [funding, exposure, futureTxns, dailyRows] = await Promise.all([
     getGoalFundingStatus(db, nowMs),
     getMyExposure(db, me.id),
     // Already-logged future-dated one-offs (recurring occurrences are never
@@ -112,7 +111,7 @@ export async function getSafeToSpend(db: SQLite.SQLiteDatabase, nowMs: number = 
     db.getAllAsync<DailySpendRow>(DAILY_SPEND_SQL, [windowStartMs, me.id, windowStartMs, nowMs]),
   ]);
 
-  const recurRules = (await Promise.all(groups.map(g => getRecurringForGroup(db, g.id)))).flat();
+  const recurRules = await getAllRecurringRules(db);
   const skips = await getSkipsMap(db, recurRules.map(r => r.id));
 
   let upcomingBills = expandUpcoming(recurRules, me.id, nowMs, horizonMs, skips)

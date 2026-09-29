@@ -2,7 +2,9 @@ import { Paths, File, Directory } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
+import type * as SQLite from 'expo-sqlite';
 import { dirUsage, type DirUsage } from './deviceStorage';
+import { clearAllAttachmentRefs } from '../db/queries/transactions';
 
 const ATTACHMENT_DIR = new Directory(Paths.document, 'attachments');
 
@@ -66,6 +68,16 @@ export async function deleteAttachment(uri: string): Promise<void> {
  */
 export function getAttachmentStorage(): DirUsage {
   return dirUsage(ATTACHMENT_DIR);
+}
+
+/**
+ * Every receipt, gone: the references first, then the files — so a failure in
+ * between leaves spare files on disk rather than rows pointing at nothing.
+ * Transactions themselves are untouched.
+ */
+export async function clearAllReceipts(db: SQLite.SQLiteDatabase): Promise<void> {
+  await clearAllAttachmentRefs(db);
+  clearAllAttachmentFiles();
 }
 
 /** Delete every attachment file from disk (the DB columns are cleared separately). */

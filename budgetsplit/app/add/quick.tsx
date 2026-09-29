@@ -1,16 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, Keyboard, Platform } from 'react-native';
-import { useSQLiteContext } from 'expo-sqlite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { colors, type, space, layout } from '../../src/theme';
 import { formatRupees } from '../../src/lib/money';
 import { kindAccent } from '../../src/lib/kindTheme';
 import { ADD_KIND_TABS, ADD_KIND_LABEL, AddKind } from '../../src/constants/enums';
-import { insertCategory } from '../../src/db/queries/categories';
 import { INVESTMENT_EXPENSE_CATEGORY } from '../../src/constants/categories';
 import { Banner } from '../../src/components/ui/Banner';
-import { getTagsByFrequency } from '../../src/db/queries/transactions';
 import { useAddTxnForm } from '../../src/hooks/useAddTxnForm';
 import { useContentInset } from '../../src/hooks/useContentInset';
 import { useVoiceDeepLink } from '../../src/hooks/useVoiceDeepLink';
@@ -35,7 +32,6 @@ import { backOr } from '../../src/lib/nav';
 const KIND_TABS = ADD_KIND_TABS.map(k => ({ key: k, label: ADD_KIND_LABEL[k] }));
 
 export default function QuickAddScreen() {
-  const db = useSQLiteContext();
   const router = useRouter();
   const params = useLocalSearchParams<{ groupId?: string; kind?: string; editId?: string; recurEditId?: string; from?: string; to?: string; amount?: string; note?: string; date?: string; category?: string; q?: string }>();
   const f = useAddTxnForm(params);
@@ -44,10 +40,6 @@ export default function QuickAddScreen() {
   const [sheet, setSheet] = useState<QuickAddSheet>(null);
   const [transferSlot, setTransferSlot] = useState<'from' | 'to' | null>(null);
   const [showCatPicker, setShowCatPicker] = useState(false);
-  // The tag vocabulary is derived from existing transactions, so it's read once per mount
-  // rather than kept in the form hook — nothing here writes to it mid-edit.
-  const [tagSuggestions, setTagSuggestions] = useState<string[]>([]);
-  useEffect(() => { getTagsByFrequency(db).then(setTagSuggestions).catch(() => {}); }, [db]);
 
   /*
    * No args: a fullScreenModal with no tab bar, no FAB and no sticky footer — the
@@ -183,11 +175,7 @@ export default function QuickAddScreen() {
               setShowCatPicker(false);
               f.recordCategoryChoice(c.name);
             }}
-            onCreate={async (name) => {
-              const created = await insertCategory(db, name, 'tag', colors.accent, kind === 'income' ? 'income' : kind === 'transfer' ? 'transfer' : 'expense');
-              f.setCategories(prev => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
-              return created;
-            }}
+            onCreate={(name) => f.createCategory(name, kind === 'income' ? 'income' : kind === 'transfer' ? 'transfer' : 'expense')}
           />
 
           {kind === 'transfer' && (
@@ -361,7 +349,7 @@ export default function QuickAddScreen() {
         transferSlot={transferSlot}
         onCloseTransferSlot={() => setTransferSlot(null)}
         accent={accent}
-        tagSuggestions={tagSuggestions}
+        tagSuggestions={f.tagSuggestions}
       />
     </Screen>
   );

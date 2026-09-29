@@ -18,17 +18,12 @@ import { SectionHeader } from '../../src/components/ui/SectionHeader';
 import { useScreenData } from '../../src/hooks/useScreenData';
 import { useContentInset } from '../../src/hooks/useContentInset';
 import { useRecurringActions } from '../../src/hooks/useRecurringActions';
-import { getAllGroups } from '../../src/db/queries/groups';
-import { getRecurringForGroup, getSkipsMap } from '../../src/db/queries/recurring';
-import { nextUnskippedOccurrence, recurringMonthlyEquivalent, freqLabel } from '../../src/lib/recurrence';
+import { recurringMonthlyEquivalent, freqLabel } from '../../src/lib/recurrence';
+import { loadRecurringInventory, type RecurringSub as Sub } from '../../src/lib/recurringData';
 import { shortDate } from '../../src/lib/dateFormat';
-import { myShareOrTotal, myIncomeOf, txnTotal } from '../../src/lib/splitMath';
-import { getMe } from '../../src/db/queries/persons';
-import type { RecurFreq, TxnKind } from '../../src/constants/enums';
 import { formatCompact } from '../../src/lib/money';
 import { backOr } from '../../src/lib/nav';
 
-type Sub = { id: string; groupId: string; name: string; category: string; kind: TxnKind; amount: number; freq: RecurFreq; interval: number | null; nextMs: number | null; paused: boolean };
 
 // Normalise a recurring charge to a per-month figure for the running totals.
 const toMonthly = recurringMonthlyEquivalent;
@@ -47,64 +42,7 @@ export default function RecurringScreen() {
   const router = useRouter();
   const bottomPad = useContentInset();
 
-  const { data, loading, error, refreshing, onRefresh, reload } = useScreenData(async (db) => {
-    const now = Date.now();
-    const grps = await getAllGroups(db);
-    const byGroup = await Promise.all(grps.map(g => getRecurringForGroup(db, g.id)));
-    // Every kind: recurring income (salary) belongs on this screen too — it was
-    // invisible everywhere until it first materialized, which made onboarding's
-    // income answer look like it did nothing.
-    /*
-     * Paused rules are IN this list, and that is the whole point of the screen.
-     *
-     * They were filtered out while the row offered a Pause button and no Resume
-     * anywhere in the app — so Pause removed the rule from the only screen that
-     * lists it, permanently, with no undo. This screen's own docblock above says
-     * a paused rule "belongs here and nowhere else"; the filter contradicted it.
-     */
-    const rules = byGroup.flat().filter(t =>
-      t.recur_freq
-      && t.recur_state !== 'ended'
-      /*
-       * NOT a rule somebody else proposed and I have not accepted.
-       *
-       * `getRecurringForGroup` deliberately includes pending peer rules, and every
-       * other consumer filters them (`lib/upcoming.ts:125`, `expandUpcoming:46`).
-       * This one did not — so a flatmate's proposed "Gym ₹12,000/mo" added ₹4,000
-       * to my committed total the moment they typed it, before I had agreed to
-       * anything, and appeared in no upcoming list to explain where it came from.
-       * The place to decide about a peer's rule is the approvals queue.
-       */
-      && !t.pendingApproval);
-    // Skips have to be loaded, not inferred: "next" must be the next date that actually
-    // happens, not the next one the schedule would produce.
-    const skips = await getSkipsMap(db, rules.map(r => r.id));
-    const meRow = await getMe(db);
-    const list: Sub[] = rules.map(t => ({
-      id: t.id,
-      groupId: t.group_id,
-      name: (t.note && t.note.trim()) || t.category,
-      category: t.category,
-      kind: t.kind,
-      // My share — the only basis that sums honestly with budgets and afford.
-      // Income is attributed by payments, so it reads the other side.
-      amount: meRow
-        ? (t.kind === 'income' ? myIncomeOf(t, meRow.id) : myShareOrTotal(t, meRow.id))
-        : txnTotal(t),
-      freq: t.recur_freq!,
-      interval: t.recur_interval,
-      // A paused rule has no next charge — `materializeDueOccurrences` filters on
-      // `recur_state = 'active'` — so showing the schedule's next date would
-      // advertise a charge that will not happen.
-      nextMs: t.recur_state === 'paused' ? null : nextUnskippedOccurrence(t, now, skips.get(t.id)),
-      paused: t.recur_state === 'paused',
-    }));
-    // Paused rules sink below the live ones: they are here to be found and
-    // resumed, not to lead a list of what is about to be charged.
-    list.sort((a, b) =>
-      Number(a.paused) - Number(b.paused) || (a.nextMs ?? Infinity) - (b.nextMs ?? Infinity));
-    return list;
-  }, []);
+  const { data, loading, error, refreshing, onRefresh, reload } = useScreenData(loadRecurringInventory, []);
 
   const subs = data ?? [];
   // Edit and Stop are not here: they are destructive or navigational, and live on

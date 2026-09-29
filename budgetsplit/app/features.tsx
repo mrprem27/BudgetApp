@@ -5,9 +5,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import * as Location from 'expo-location';
 import { Feather } from '@expo/vector-icons';
 import { settings } from '../src/lib/settings';
-import { getAllGroups } from '../src/db/queries/groups';
-import { getMe } from '../src/db/queries/persons';
-import { getMyExposure } from '../src/db/queries/balances';
+import { splittingFootprint } from '../src/lib/groupsData';
 import { formatRupees } from '../src/lib/money';
 import { colors, type, space, radius, layout, shadow, alpha } from '../src/theme';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
@@ -151,12 +149,7 @@ export default function FeaturesScreen() {
     let shared = 0;
     let outstanding = 0;
     try {
-      const [grps, me] = await Promise.all([getAllGroups(db), getMe(db)]);
-      shared = grps.filter(g => g.is_personal !== 1).length;
-      if (me) {
-        const exp = await getMyExposure(db, me.id);
-        outstanding = exp.owe + exp.owed;
-      }
+      ({ shared, outstanding } = await splittingFootprint(db));
     } catch { /* fall through to the plain confirm */ }
 
     if (shared === 0 && outstanding === 0) { setFlag('splitting', false); return; }

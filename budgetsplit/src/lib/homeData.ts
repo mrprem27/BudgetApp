@@ -14,7 +14,7 @@ import { getCategories } from '../db/queries/categories';
 import { getTransactionsInRange, getLedgerStats, getActiveRecurringRules } from '../db/queries/transactions';
 import { getGoalFundingStatus } from '../db/queries/spendPower';
 import { getTotalMoney } from '../db/queries/savings';
-import { getRecurringForGroup, getSkipsMap } from '../db/queries/recurring';
+import { getAllRecurringRules, getSkipsMap } from '../db/queries/recurring';
 import { foldUncategorized } from './categoryFold';
 import { settings } from './settings';
 import { myShareOf, myIncomeOf } from './splitMath';
@@ -247,11 +247,11 @@ export async function loadHomeData(
     const catTotal = sorted.reduce((acc, [, v]) => acc + v, 0);
 
     // Coming up: next recurring bills across all groups.
-    const recurringByGroup = await Promise.all(groups.map(g => getRecurringForGroup(db, g.id)));
+
     // "Coming up" = only what's due in the next 4 days (imminent), not the whole month.
     // Drives the bell badge only (the list moved to the Reminders screen). Count
     // all bills due within the next 14 days — same window the Reminders screen uses.
-    const upcomingRules = recurringByGroup.flat();
+    const upcomingRules = await getAllRecurringRules(db);
     const upcomingSkips = await getSkipsMap(db, upcomingRules.map(r => r.id));
     const upcoming = buildUpcoming(upcomingRules, me.id, Date.now(), 99, 14, upcomingSkips);
 

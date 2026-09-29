@@ -5,8 +5,7 @@ import { getMe } from './persons';
 import { getMoneyProfile } from './moneyProfile';
 import { getCashPosition, getGoals, getGoalSavedMap } from './savings';
 import { computeTotalMoney } from '../../lib/cash';
-import { getAllGroups } from './groups';
-import { getRecurringForGroup, getSkipsMap } from './recurring';
+import { getAllRecurringRules, getSkipsMap } from './recurring';
 import { getTransactionsInRange, getSharedActivityWith } from './transactions';
 import { getMyExposure } from './balances';
 import { getMyGlobalBudgetRows } from './categoryBudgets';
@@ -68,9 +67,8 @@ export async function getFinanceSnapshot(db: SQLite.SQLiteDatabase, nowMs: numbe
   if (!me) return { ...EMPTY, asOf: nowMs };
 
   const profile = await getMoneyProfile(db);
-  const [pos, groups, exposure, budgets, cardDueDay] = await Promise.all([
+  const [pos, exposure, budgets, cardDueDay] = await Promise.all([
     getCashPosition(db, profile, nowMs),
-    getAllGroups(db),
     getMyExposure(db, me.id),
     getMyGlobalBudgetRows(db, me.id),
     getCardDueDay(db),
@@ -78,7 +76,7 @@ export async function getFinanceSnapshot(db: SQLite.SQLiteDatabase, nowMs: numbe
   const money = computeTotalMoney(pos, profile);
 
   const [recurRulesByGroup, goals, savedByGoal, funding, history, future] = await Promise.all([
-    Promise.all(groups.map(g => getRecurringForGroup(db, g.id))),
+    getAllRecurringRules(db),
     getGoals(db),
     getGoalSavedMap(db),
     getGoalFundingStatus(db, nowMs),
@@ -87,7 +85,7 @@ export async function getFinanceSnapshot(db: SQLite.SQLiteDatabase, nowMs: numbe
     // occurrences, which are expanded, never materialized ahead of now.
     getTransactionsInRange(db, null, nowMs, nowMs + FUTURE_DAYS * DAY_MS),
   ]);
-  const rules = recurRulesByGroup.flat();
+  const rules = recurRulesByGroup;
   const skipsBySeries = await getSkipsMap(db, rules.map(r => r.id));
   // `getSkipsMap` returns `Map<string, Set<number>>` — flattened to a plain,
   // JSON-serializable object, since `FinanceSnapshot` is meant to be exactly that

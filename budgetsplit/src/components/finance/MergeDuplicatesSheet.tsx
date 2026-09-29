@@ -1,6 +1,5 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
-import { useSQLiteContext } from 'expo-sqlite';
 import { colors, type, space, radius } from '../tokens';
 import { SheetModal } from '../ui/SheetModal';
 import { Card } from '../ui/Card';
@@ -8,8 +7,7 @@ import { Divider } from '../ui/Divider';
 import { PrimaryButton } from '../ui/PrimaryButton';
 import { SecondaryButton } from '../ui/SecondaryButton';
 import { formatRupees } from '../../lib/money';
-import { softDeleteTxn } from '../../db/queries/transactions';
-import { useDataRefresh } from '../system/DataRefreshProvider';
+import { useMergeDuplicates } from '../../hooks/useMergeDuplicates';
 import type { MergeDuplicate } from '../../lib/sync';
 
 /**
@@ -27,34 +25,7 @@ export function MergeDuplicatesSheet({
   duplicates: MergeDuplicate[];
   onClose: () => void;
 }) {
-  const db = useSQLiteContext();
-  const { refresh } = useDataRefresh();
-  const [removed, setRemoved] = useState<Set<string>>(new Set());
-  const [busy, setBusy] = useState(false);
-
-  const pending = duplicates.filter(d => !removed.has(d.mine));
-
-  async function removeMine(txnId: string) {
-    setBusy(true);
-    try {
-      await softDeleteTxn(db, txnId);
-      setRemoved(prev => new Set(prev).add(txnId));
-      refresh();
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function removeAll() {
-    setBusy(true);
-    try {
-      for (const d of pending) await softDeleteTxn(db, d.mine);
-      setRemoved(new Set(duplicates.map(d => d.mine)));
-      refresh();
-    } finally {
-      setBusy(false);
-    }
-  }
+  const { pending, busy, removed, removeMine, removeAll } = useMergeDuplicates(duplicates);
 
   return (
     <SheetModal visible={visible} onClose={onClose} title="Possible duplicates">

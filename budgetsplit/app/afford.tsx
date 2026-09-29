@@ -10,8 +10,8 @@ import { SecondaryButton } from '../src/components/ui/SecondaryButton';
 import { ErrorState } from '../src/components/ui/ErrorState';
 import { CategoryChip } from '../src/components/finance/CategoryChip';
 import { Chip } from '../src/components/ui/Chip';
-import { getCategories, type Category } from '../src/db/queries/categories';
-import { getFinanceSnapshot } from '../src/db/queries/engineSnapshot';
+import type { Category } from '../src/db/queries/categories';
+import { loadAffordData } from '../src/lib/affordData';
 import { afford } from '../src/lib/engine/assess';
 import type { AffordResult, AffordVerdict, FinanceSnapshot } from '../src/lib/engine/types';
 import { parseToPaise, formatRupees, formatCompact } from '../src/lib/money';
@@ -57,13 +57,7 @@ export default function AffordScreen() {
   // Errors must NOT be swallowed: a null snapshot renders as "no result yet",
   // never as a confident wrong answer — `error` short-circuits to a retry
   // screen below instead of falling through to a zeroed FinanceSnapshot.
-  const { data: snapshot, error: loadError, reload } = useScreenData(
-    async (db): Promise<{ snapshot: FinanceSnapshot; categories: Category[] }> => {
-      const [snap, categories] = await Promise.all([getFinanceSnapshot(db), getCategories(db)]);
-      return { snapshot: snap, categories };
-    },
-    [],
-  );
+  const { data: snapshot, error: loadError, reload } = useScreenData(loadAffordData, []);
 
   const amount = parseToPaise(amountText);
 

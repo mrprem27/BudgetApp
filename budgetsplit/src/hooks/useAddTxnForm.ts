@@ -14,7 +14,8 @@ import { getGroupMembers, getMe, getAllPersons } from '../db/queries/persons';
 import { getFriendBalances } from '../db/queries/balances';
 import { computeTransferScopes, planAllGroupsSettlement, type TransferScopes } from '../lib/settleScope';
 import { getCategoriesByFrequency, type CategoryKind } from '../db/queries/categories';
-import { insertTxn, updateTxn, getTxnById, findRecentDuplicate, recordSettlement, attachmentInUse } from '../db/queries/transactions';
+import { insertTxn, updateTxn, getTxnById, findRecentDuplicate, recordSettlement, attachmentInUse, getTagsByFrequency } from '../db/queries/transactions';
+import { useCategoryCreate } from './useCategoryCreate';
 import { splitRecurringSeries } from '../db/queries/recurring';
 import { parseTags } from '../lib/tags';
 import { deleteAttachment } from '../lib/attachment';
@@ -122,6 +123,11 @@ export function useAddTxnForm(params: AddTxnParams) {
   const [note, setNote] = useState(typeof paramNote === 'string' ? paramNote : '');
   const [title, setTitle] = useState('');
   const [categories, setCategories] = useState<Category[]>([]);
+  const createCategory = useCategoryCreate(setCategories);
+  // The tag vocabulary is derived from existing transactions, so it's read once per
+  // mount — nothing here writes to it mid-edit.
+  const [tagSuggestions, setTagSuggestions] = useState<string[]>([]);
+  useEffect(() => { getTagsByFrequency(db).then(setTagSuggestions).catch(() => {}); }, [db]);
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [catManual, setCatManual] = useState(false);
   const [learned, setLearned] = useState<LearnedMap>({});
@@ -780,7 +786,10 @@ export function useAddTxnForm(params: AddTxnParams) {
           return;
         }
         haptic.success();
-        router.back();
+        refresh();
+        // The edit lives on in a NEW rule; the one it came from has ended. Show the
+        // rule the user just edited, not the old one wearing an "Ended" badge.
+        router.dismissTo(`/recurring/${splitId}`);
         return;
       }
 
@@ -874,7 +883,7 @@ export function useAddTxnForm(params: AddTxnParams) {
      */
     pickerGroups: listableGroups(pickerGroups.length ? pickerGroups : groups),
     selectedGroup: groups.find(g => g.id === selectedGroupId) ?? null,
-    categories, setCategories, selectedCategory, setSelectedCategory, setCatManual, onTitleChange, recordCategoryChoice,
+    categories, setCategories, createCategory, tagSuggestions, selectedCategory, setSelectedCategory, setCatManual, onTitleChange, recordCategoryChoice,
     /** Merchant→category corrections the user has made. Exposed so voice entry inherits
      *  them too — `parseVoice` has always accepted them, but nothing passed them in, so
      *  that branch was dead in the app while two docblocks claimed otherwise. */

@@ -13,8 +13,7 @@ import { IconCircle } from '../../src/components/ui/IconCircle';
 import { ErrorState } from '../../src/components/ui/ErrorState';
 import { useScreenData } from '../../src/hooks/useScreenData';
 import { haptic } from '../../src/lib/haptics';
-import { getAttachmentStorage, clearAllAttachmentFiles } from '../../src/lib/attachment';
-import { clearAllAttachmentRefs } from '../../src/db/queries/transactions';
+import { getAttachmentStorage, clearAllReceipts } from '../../src/lib/attachment';
 import {
   freeBytes, totalBytes, getCacheStorage, getAvatarStorage, clearExportCache,
 } from '../../src/lib/deviceStorage';
@@ -71,8 +70,7 @@ export default function StorageSettingsScreen() {
           onPress: async () => {
             setBusy(true);
             try {
-              clearAllAttachmentFiles();
-              await clearAllAttachmentRefs(db);
+              await clearAllReceipts(db);
               haptic.warning();
               reload();
             } catch {
