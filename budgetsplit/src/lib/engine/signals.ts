@@ -7,7 +7,7 @@
  * change a number the person already sees, and building signals nobody asked
  * for yet is the mistake `EN3`'s band already was. See spec §2's cut list.
  */
-import type { FinanceSnapshot } from './types';
+import type { FinanceSnapshot, Projection } from './types';
 import { projectKnown } from './projection';
 import { essentialFloor } from './behaviour';
 
@@ -20,6 +20,7 @@ export type LowPointWarning = {
 
 /** Days ahead worth warning about — a dip past the horizon's own end isn't "coming up". */
 const WARNING_WINDOW_DAYS = 14;
+const DAY_MS = 86_400_000;
 
 /**
  * One warning when the projected balance drops below the essential floor
@@ -27,13 +28,21 @@ const WARNING_WINDOW_DAYS = 14;
  * affordable", a verdict, not a heads-up) and never for a cold-start ledger
  * (the floor is 0 below 30 days of history, so there's nothing to warn about
  * that isn't also true today).
+ *
+ * `existingProjection`, when given, must cover at least `WARNING_WINDOW_DAYS`
+ * with the same `withIncome: true`/no-extra-events basis this function itself
+ * would otherwise walk with — `getSafeToSpendV2` already builds one that does
+ * (its own horizon is never shorter than 30 days), so it passes it through
+ * instead of this function re-deriving `knownEvents`/`everydayRate` from
+ * scratch a second time on every Home load and StsSheet open.
  */
-export function lowPointWarning(snapshot: FinanceSnapshot): LowPointWarning | null {
+export function lowPointWarning(snapshot: FinanceSnapshot, existingProjection?: Projection): LowPointWarning | null {
   const floor = essentialFloor(snapshot);
   if (floor <= 0) return null;
 
-  const projection = projectKnown(snapshot, WARNING_WINDOW_DAYS, [], true);
-  const dip = projection.days.find(d => d.balance < floor);
+  const projection = existingProjection ?? projectKnown(snapshot, WARNING_WINDOW_DAYS, [], true);
+  const windowEndMs = snapshot.asOf + WARNING_WINDOW_DAYS * DAY_MS;
+  const dip = projection.days.find(d => d.date <= windowEndMs && d.balance < floor);
   if (!dip) return null;
 
   // The biggest single claim ON THAT DAY, not the cumulative path — "what

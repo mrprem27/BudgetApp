@@ -5,7 +5,7 @@
  * payday (`horizonDaysFor`, at least 30 days) and the salary is counted. Same
  * defaults on both, so Safe-to-Spend and Afford can't disagree.
  */
-import type { AffordReason, AffordVerdict, FinanceSnapshot, KnownEvent, Projection, Purchase, AffordResult, TippingReceivable } from './types';
+import type { AffordReason, AffordVerdict, FinanceSnapshot, KnownEvent, Projection, Purchase, AffordResult, TippingReceivable, MonthlyAffordability } from './types';
 import { projectKnown, horizonDaysFor } from './projection';
 import { essentialFloor, defaultNecessity, repaymentModel, monthlyAffordability } from './behaviour';
 import { explain } from './explain';
@@ -108,40 +108,74 @@ function overBudgetReason(snapshot: FinanceSnapshot, purchase: Purchase): Afford
   return { code: 'over_budget', amountPaise: after - budget.amount, label: `Over your ${purchase.category} budget` };
 }
 
+/**
+ * What every `evaluate()` call in one `afford()` invocation shares: the
+ * snapshot, the horizon and the one already-computed "is a future month
+ * unfundable" fact. `monthlyAffordability(snapshot)` depends on nothing the
+ * purchase amount or date can change, but `evaluate()` is called up to ~90
+ * times by `largestComfortableAmount`'s binary search and up to `horizonDays`
+ * times by `findEarliestComfortableDate` — computing it once here and passing
+ * it through, instead of inside `evaluate()`, is the difference between one
+ * pass over income/expense history and ~90 identical ones.
+ */
+type EvalContext = {
+  snapshot: FinanceSnapshot;
+  horizonDays: number;
+  horizonEndMs: number;
+  floor: number;
+  withIncome: boolean;
+  brokenMonth: MonthlyAffordability | undefined;
+};
+
+function evalContext(snapshot: FinanceSnapshot, horizonDays: number, floor: number, withIncome: boolean): EvalContext {
+  return {
+    snapshot,
+    horizonDays,
+    horizonEndMs: snapshot.asOf + horizonDays * DAY_MS,
+    floor,
+    withIncome,
+    brokenMonth: withIncome ? monthlyAffordability(snapshot).find(m => m.unfundable) : undefined,
+  };
+}
+
 type Evaluation = {
   lowPointAfter: number;
+  lowPointAfterDate: number;
   overBudget: AffordReason | null;
   unfundable: AffordReason | null;
+  cashShort: boolean;
+  belowFloor: boolean;
   verdict: AffordVerdict;
 };
 
 /**
  * The verdict table (§4 E4), minus one row: a Want pushing a dated goal past
  * its target needs `goalForecast`, not built yet. The other row — a known
- * commitment becoming unfundable within 12 months (`EN6`) — is checked here,
- * gated behind `withIncome` since it needs a monthly income figure to judge
- * against (`monthlyAffordability`). It's a property of the ledger itself, not
- * of the purchase being asked about — "already broken" makes today's answer
- * No regardless of amount, which is `monthlyAffordability`'s own
- * `unfundable` flag, checked independent of `events`/`band` so its rupee
- * figure is never the same money `cash_short`/`below_floor` already counted.
+ * commitment becoming unfundable within 12 months (`EN6`) — is checked here
+ * from `ctx.brokenMonth`, computed once per `afford()` call (see `EvalContext`).
+ * It's a property of the ledger itself, not of the purchase being asked
+ * about — "already broken" makes today's answer No regardless of amount, and
+ * its rupee figure is never the same money `cash_short`/`below_floor` already
+ * counted.
+ *
+ * Returns `cashShort`/`belowFloor` rather than making the caller re-derive
+ * them from `lowPointAfter` a second time — the verdict and the reasons it's
+ * built from must read the exact same threshold check, not two copies of it.
  */
-function evaluate(snapshot: FinanceSnapshot, purchase: Purchase, startMs: number, horizonDays: number, floor: number, withIncome: boolean): Evaluation {
-  const horizonEndMs = snapshot.asOf + horizonDays * DAY_MS;
-  const events = purchaseEvents(purchase, startMs, horizonEndMs);
-  const projection = projectKnown(snapshot, horizonDays, events, withIncome);
+function evaluate(purchase: Purchase, startMs: number, ctx: EvalContext): Evaluation {
+  const events = purchaseEvents(purchase, startMs, ctx.horizonEndMs);
+  const projection = projectKnown(ctx.snapshot, ctx.horizonDays, events, ctx.withIncome);
   const lowPointAfter = projection.lowPoint.amount;
   const cashShort = lowPointAfter < 0;
-  const overBudget = overBudgetReason(snapshot, purchase);
-  const belowFloor = !cashShort && lowPointAfter < floor;
+  const overBudget = overBudgetReason(ctx.snapshot, purchase);
+  const belowFloor = !cashShort && lowPointAfter < ctx.floor;
 
-  const brokenMonth = withIncome ? monthlyAffordability(snapshot).find(m => m.unfundable) : undefined;
-  const unfundable = brokenMonth
-    ? { code: 'unfundable_commitment' as const, amountPaise: brokenMonth.requiredPaise - (brokenMonth.surplusPaise ?? 0), label: 'A commitment within 12 months can\'t be funded at this rate' }
+  const unfundable = ctx.brokenMonth
+    ? { code: 'unfundable_commitment' as const, amountPaise: ctx.brokenMonth.requiredPaise - (ctx.brokenMonth.surplusPaise ?? 0), label: 'A commitment within 12 months can\'t be funded at this rate' }
     : null;
 
   const verdict: AffordVerdict = (cashShort || unfundable) ? 'not-affordable' : (belowFloor || overBudget) ? 'tight' : 'comfortable';
-  return { lowPointAfter, overBudget, unfundable, verdict };
+  return { lowPointAfter, lowPointAfterDate: projection.lowPoint.date, overBudget, unfundable, cashShort, belowFloor, verdict };
 }
 
 /**
@@ -152,12 +186,12 @@ function evaluate(snapshot: FinanceSnapshot, purchase: Purchase, startMs: number
  * Holds the purchase's own category/recurrence/necessity fixed and varies only
  * the amount — "how much more of this same kind of purchase, comfortably".
  */
-function largestComfortableAmount(snapshot: FinanceSnapshot, purchase: Purchase, horizonDays: number, floor: number, withIncome: boolean): number {
-  const isOk = (amt: number) => evaluate(snapshot, { ...purchase, amountPaise: Math.max(0, amt) }, snapshot.asOf, horizonDays, floor, withIncome).verdict === 'comfortable';
+function largestComfortableAmount(purchase: Purchase, ctx: EvalContext): number {
+  const isOk = (amt: number) => evaluate({ ...purchase, amountPaise: Math.max(0, amt) }, ctx.snapshot.asOf, ctx).verdict === 'comfortable';
   if (!isOk(0)) return 0;
 
   let lo = 0;
-  let hi = Math.max(snapshot.cash.available, 100);
+  let hi = Math.max(ctx.snapshot.cash.available, 100);
   for (let guard = 0; guard < 60 && isOk(hi); guard++) hi *= 2;
   for (let i = 0; i < 30 && hi - lo > 1; i++) {
     const mid = Math.floor((lo + hi) / 2);
@@ -167,10 +201,9 @@ function largestComfortableAmount(snapshot: FinanceSnapshot, purchase: Purchase,
 }
 
 /** Only for `when: 'can-wait'`: the earliest day within the horizon this same purchase would be Comfortable, scanning forward one day at a time. `undefined` if none is. */
-function findEarliestComfortableDate(snapshot: FinanceSnapshot, purchase: Purchase, horizonDays: number, floor: number, withIncome: boolean): number | undefined {
-  const horizonEndMs = snapshot.asOf + horizonDays * DAY_MS;
-  for (let d = snapshot.asOf; d <= horizonEndMs; d += DAY_MS) {
-    if (evaluate(snapshot, purchase, d, horizonDays, floor, withIncome).verdict === 'comfortable') return d;
+function findEarliestComfortableDate(purchase: Purchase, ctx: EvalContext): number | undefined {
+  for (let d = ctx.snapshot.asOf; d <= ctx.horizonEndMs; d += DAY_MS) {
+    if (evaluate(purchase, d, ctx).verdict === 'comfortable') return d;
   }
   return undefined;
 }
@@ -185,24 +218,19 @@ function findEarliestComfortableDate(snapshot: FinanceSnapshot, purchase: Purcha
  * checked — when `withIncome` is set; without it, receivables aren't in the
  * projection at all (see the file header).
  */
-function tippingReceivables(
-  snapshot: FinanceSnapshot, purchase: Purchase, horizonDays: number, floor: number, withIncome: boolean,
-): TippingReceivable[] {
-  if (!withIncome) return [];
-  const owedToMe = snapshot.exposure.perPerson.filter(p => p.net > 0);
+function tippingReceivables(purchase: Purchase, ctx: EvalContext, baselineLowPoint: number): TippingReceivable[] {
+  if (!ctx.withIncome) return [];
+  const owedToMe = ctx.snapshot.exposure.perPerson.filter(p => p.net > 0);
   if (owedToMe.length === 0) return [];
+  if (baselineLowPoint >= ctx.floor) return []; // already fine without assuming any of them
 
-  const horizonEndMs = snapshot.asOf + horizonDays * DAY_MS;
-  const purchaseEv = purchaseEvents(purchase, snapshot.asOf, horizonEndMs);
-  const baseline = projectKnown(snapshot, horizonDays, purchaseEv, withIncome);
-  if (baseline.lowPoint.amount >= floor) return []; // already fine without assuming any of them
-
+  const purchaseEv = purchaseEvents(purchase, ctx.snapshot.asOf, ctx.horizonEndMs);
   const tipping: TippingReceivable[] = [];
   for (const p of owedToMe) {
-    const model = repaymentModel(snapshot, p.personId);
-    const arrival: KnownEvent = { date: snapshot.asOf + model.delayDays * DAY_MS, amountPaise: p.net, label: 'Receivable', kind: 'receivable', ref: p.personId };
-    const withThis = projectKnown(snapshot, horizonDays, [...purchaseEv, arrival], withIncome);
-    if (withThis.lowPoint.amount >= floor) {
+    const model = repaymentModel(ctx.snapshot, p.personId);
+    const arrival: KnownEvent = { date: ctx.snapshot.asOf + model.delayDays * DAY_MS, amountPaise: p.net, label: 'Receivable', kind: 'receivable', ref: p.personId };
+    const withThis = projectKnown(ctx.snapshot, ctx.horizonDays, [...purchaseEv, arrival], ctx.withIncome);
+    if (withThis.lowPoint.amount >= ctx.floor) {
       tipping.push({ personId: p.personId, amountPaise: p.net, probability: model.probability, delayDays: model.delayDays });
     }
   }
@@ -225,22 +253,19 @@ export function afford(
 ): AffordResult {
   const resolved: Purchase = { ...purchase, necessity: purchase.necessity ?? defaultNecessity(purchase.category) };
   const floor = essentialFloor(snapshot);
+  const ctx = evalContext(snapshot, horizonDays, floor, withIncome);
 
   const beforeKnown = projectKnown(snapshot, horizonDays, [], withIncome);
-
-  const horizonEndMs = snapshot.asOf + horizonDays * DAY_MS;
-  const afterEvents = purchaseEvents(resolved, snapshot.asOf, horizonEndMs);
-  const afterKnown = projectKnown(snapshot, horizonDays, afterEvents, withIncome);
-  const evalNow = evaluate(snapshot, resolved, snapshot.asOf, horizonDays, floor, withIncome);
+  const evalNow = evaluate(resolved, snapshot.asOf, ctx);
 
   const reasons: AffordReason[] = [];
   if (evalNow.verdict === 'not-affordable') {
-    if (evalNow.lowPointAfter < 0) {
+    if (evalNow.cashShort) {
       reasons.push({ code: 'cash_short', amountPaise: Math.abs(evalNow.lowPointAfter), label: 'Would go below zero' });
     }
     if (evalNow.unfundable) reasons.push(evalNow.unfundable);
   } else if (evalNow.verdict === 'tight') {
-    if (evalNow.lowPointAfter < floor) {
+    if (evalNow.belowFloor) {
       reasons.push({ code: 'below_floor', amountPaise: floor - evalNow.lowPointAfter, label: 'Leaves less than a safe week of essentials' });
     }
     if (evalNow.overBudget) reasons.push(evalNow.overBudget);
@@ -254,17 +279,17 @@ export function afford(
     explanation,
     headline: explanation.suppressVerdict
       ? `Not enough data yet — ${explanation.missing}`
-      : headlineFor(evalNow.verdict, afterKnown.lowPoint.amount),
+      : headlineFor(evalNow.verdict, evalNow.lowPointAfter),
     lowPointBefore: { amount: beforeKnown.lowPoint.amount, date: beforeKnown.lowPoint.date },
-    lowPointAfter: { amount: afterKnown.lowPoint.amount, date: afterKnown.lowPoint.date },
+    lowPointAfter: { amount: evalNow.lowPointAfter, date: evalNow.lowPointAfterDate },
     floor,
     reasons,
-    largestComfortableAmount: largestComfortableAmount(snapshot, resolved, horizonDays, floor, withIncome),
-    tippingReceivables: tippingReceivables(snapshot, resolved, horizonDays, floor, withIncome),
+    largestComfortableAmount: largestComfortableAmount(resolved, ctx),
+    tippingReceivables: tippingReceivables(resolved, ctx, evalNow.lowPointAfter),
   };
 
   if (resolved.when === 'can-wait' && evalNow.verdict !== 'comfortable') {
-    result.earliestComfortableDate = findEarliestComfortableDate(snapshot, resolved, horizonDays, floor, withIncome);
+    result.earliestComfortableDate = findEarliestComfortableDate(resolved, ctx);
   }
 
   return result;

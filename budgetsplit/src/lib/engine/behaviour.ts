@@ -141,6 +141,11 @@ function myIncomeAmount(row: { payments: ReadonlyArray<{ personId: string; amoun
  * actual date). Below both minimums (no rule, fewer than
  * `INCOME_HISTORY_MIN_MONTHS` months of rows): `irregular` with nothing
  * knowable, matching every other E2 model's "return null, never guess" rule.
+ *
+ * Already the densest function in this file (four-way consistency read, a
+ * rule-present branch, two early returns, an inferred-date fallback) — flagged
+ * in review, not as a defect, but as the natural place a fifth branch would
+ * hide. Resist adding one here; extract a table first.
  */
 export function incomeModel(snapshot: FinanceSnapshot): IncomeModel {
   const rule = snapshot.recurring.rules.find(

@@ -1,6 +1,7 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { PressableScale } from '../../ui/PressableScale';
 import { useRouter } from 'expo-router';
 import { colors, type, space } from '../../tokens';
 import { SheetModal } from '../../ui/SheetModal';
@@ -87,9 +88,9 @@ export function StsSheet({ visible, onClose, sts }: Props) {
             <React.Fragment key={r.label}>
               {i > 0 && <Divider indent="none" />}
               {tappable ? (
-                <TouchableOpacity onPress={r.onPress} accessibilityRole="button" accessibilityLabel={`${r.label}, ${formatRupees(r.amount)}`}>
+                <PressableScale onPress={r.onPress} accessibilityLabel={`${r.label}, ${formatRupees(r.amount)}`}>
                   {content}
-                </TouchableOpacity>
+                </PressableScale>
               ) : content}
             </React.Fragment>
           );

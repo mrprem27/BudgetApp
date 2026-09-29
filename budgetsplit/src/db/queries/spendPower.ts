@@ -174,7 +174,7 @@ export async function getSafeToSpendV2(db: SQLite.SQLiteDatabase, nowMs: number 
     dailyRate: v2.dailyRate,
     untilMs,
     events: v2.projection.days.flatMap(d => d.events),
-    warning: lowPointWarning(snapshot),
+    warning: lowPointWarning(snapshot, v2.projection),
   };
 }
 

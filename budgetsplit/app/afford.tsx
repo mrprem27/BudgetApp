@@ -43,6 +43,8 @@ const VERDICT_STYLE: Record<AffordVerdict, { color: string; icon: FeatherName; t
   'tight': { color: colors.healthAmber, icon: 'alert-triangle', title: 'Possible, but tight' },
   'not-affordable': { color: colors.expense, icon: 'x-circle', title: 'Not right now' },
 };
+/** `verdict === null` (thin history, `explanation.suppressVerdict`) — a real, renderable state. */
+const NEUTRAL_STYLE = { color: colors.textMuted, icon: 'help-circle' as FeatherName, title: 'Not enough data yet' };
 
 export default function AffordScreen() {
   const router = useRouter();
@@ -76,7 +78,11 @@ export default function AffordScreen() {
   }, [snapshot, amount, categoryName, canWait, frequency]);
 
   const showResult = amount > 0 && !!result;
-  const V = result?.verdict != null ? VERDICT_STYLE[result.verdict] : null;
+  // A neutral fallback, not `null`: `verdict` is deliberately `null` when
+  // history is too thin for any verdict at all (`explanation.suppressVerdict`)
+  // — that's a real state to render ("Not enough data yet"), not the absence
+  // of one. Gating the card on `V` being non-null used to skip it entirely.
+  const V = result?.verdict != null ? VERDICT_STYLE[result.verdict] : NEUTRAL_STYLE;
 
   const headline = !result ? '' : result.explanation.suppressVerdict
     ? `Not enough data yet — ${result.explanation.missing}`
@@ -144,30 +150,36 @@ export default function AffordScreen() {
             <Text style={styles.waitLabel}>Can wait</Text>
           </TouchableOpacity>
 
-          {showResult && result && V && (
+          {showResult && result && (
             <View style={[styles.resultCard, { borderColor: alpha(V.color, 33) }]}>
               <Feather name={V.icon} size={30} color={V.color} style={styles.resultIcon} />
-              <Text style={[styles.resultTitle, { color: V.color }]}>{result.explanation.suppressVerdict ? 'Not enough data yet' : V.title}</Text>
+              <Text style={[styles.resultTitle, { color: V.color }]}>{V.title}</Text>
               <Text style={styles.headline}>{headline}</Text>
 
-              {result.reasons.slice(0, 2).map((r, i) => (
-                <View key={i} style={styles.reasonRow}>
-                  <View style={[styles.reasonDot, { backgroundColor: V.color }]} />
-                  <Text style={styles.reasonText}>{r.label} ({formatCompact(r.amountPaise)})</Text>
-                </View>
-              ))}
-
-              {!result.explanation.suppressVerdict && result.verdict !== 'not-affordable' && (
-                <Text style={styles.mostText}>Most you can spend comfortably: {formatRupees(result.largestComfortableAmount)}</Text>
-              )}
-              {canWait && result.earliestComfortableDate != null && (
-                <Text style={styles.mostText}>Comfortable from {shortDate(result.earliestComfortableDate)}</Text>
-              )}
-              {!result.explanation.suppressVerdict && result.explanation.confidence !== 'high' && (
-                <Text style={styles.confidenceText}>
-                  {result.explanation.confidence === 'low' ? 'Low confidence' : 'Medium confidence'}
-                  {result.explanation.missing ? ` — ${result.explanation.missing}` : ''}
-                </Text>
+              {/* Thin history suppresses the verdict outright, not just the
+                  confidence — showing specific reasons/amounts/dates under
+                  "not enough data yet" would contradict the headline itself. */}
+              {!result.explanation.suppressVerdict && (
+                <>
+                  {result.reasons.slice(0, 2).map((r, i) => (
+                    <View key={i} style={styles.reasonRow}>
+                      <View style={[styles.reasonDot, { backgroundColor: V.color }]} />
+                      <Text style={styles.reasonText}>{r.label} ({formatCompact(r.amountPaise)})</Text>
+                    </View>
+                  ))}
+                  {result.verdict !== 'not-affordable' && (
+                    <Text style={styles.mostText}>Most you can spend comfortably: {formatRupees(result.largestComfortableAmount)}</Text>
+                  )}
+                  {canWait && result.earliestComfortableDate != null && (
+                    <Text style={styles.mostText}>Comfortable from {shortDate(result.earliestComfortableDate)}</Text>
+                  )}
+                  {result.explanation.confidence !== 'high' && (
+                    <Text style={styles.confidenceText}>
+                      {result.explanation.confidence === 'low' ? 'Low confidence' : 'Medium confidence'}
+                      {result.explanation.missing ? ` — ${result.explanation.missing}` : ''}
+                    </Text>
+                  )}
+                </>
               )}
             </View>
           )}
