@@ -347,6 +347,22 @@ with the "bottom of Plan" half left explicitly open.
 **Boundaries:** don't move Recurring off Plan without a concrete per-person use case written down
 first — moving it back later costs more than leaving it.
 
+## Phase 5c — Forms, group screen, truncation (`SPEC-FORMS-GROUP.md`) — planned 2026-09-30
+
+Tasks and checkboxes: `todo.md` Phase 5c. Order A → B → C → D, a checkpoint (commit, push, device look) after each.
+
+```
+AmountRow ─► MoneyEditorSheet ─► AssetSheet / PayCardBill ─► goal sheets, GroupForm (N2)
+useFullTextOnHold ─► ListRow / Chip ─► GroupHeaderCard (G1)
+FilterBar layout (G2) ─► Tags filter
+oneLine (N1), members add-first (N3): independent
+```
+
+- Each task is a vertical slice: primitive + its first real consumer, never a primitive alone.
+- Every rule of the "use X, not Y" kind gets a source guard; every piece of logic a pure tested helper — no render tests exist.
+- Biggest risk: task 7 (`FilterBar`) changes three screens at once. Props stay identical so callers don't move.
+- Edit group's inputs are `finance/GroupForm.tsx`; fixing that fixes Edit group.
+
 ## Risks
 
 | Risk | Impact | Mitigation |

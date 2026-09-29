@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, Platform,
+  View, Text, ScrollView, Pressable, StyleSheet, Platform,
   type NativeSyntheticEvent, type NativeScrollEvent,
 } from 'react-native';
 import { colors, type, radius } from '../tokens';
@@ -52,14 +52,35 @@ export function WheelPicker({ options, index, onChange, label, width = 72 }: Pro
     ref.current?.scrollTo({ y: index * WHEEL_ITEM_H, animated: false });
   }, [index]);
 
-  const settle = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const raw = Math.round(e.nativeEvent.contentOffset.y / WHEEL_ITEM_H);
-    const next = Math.max(0, Math.min(options.length - 1, raw));
+  // `contentOffset` parks the column on iOS only; Android ignores it and would open on the
+  // first row while the parent holds the real value.
+  useEffect(() => { ref.current?.scrollTo({ y: index * WHEEL_ITEM_H, animated: false }); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const commit = useCallback((next: number) => {
     if (next === settled.current) return;
     settled.current = next;
     haptic.selection();
     onChange(next);
-  }, [onChange, options.length]);
+  }, [onChange]);
+
+  // A tap: commit, then glide there. A drag needs no glide — it has already snapped, and
+  // scrolling again from its end handler would fire that handler again on Android.
+  const pick = useCallback((next: number) => {
+    commit(next);
+    ref.current?.scrollTo({ y: next * WHEEL_ITEM_H, animated: true });
+  }, [commit]);
+
+  const settle = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const raw = Math.round(e.nativeEvent.contentOffset.y / WHEEL_ITEM_H);
+    commit(Math.max(0, Math.min(options.length - 1, raw)));
+  }, [commit, options.length]);
+
+  // A release that carries speed is followed by momentum, whose end is the real answer;
+  // reading the offset now would report a row the wheel is only passing through.
+  const onDragEnd = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    if (Math.abs(e.nativeEvent.velocity?.y ?? 0) > 0.05) return;
+    settle(e);
+  }, [settle]);
 
   return (
     <View style={[styles.col, { width }]}>
@@ -73,15 +94,16 @@ export function WheelPicker({ options, index, onChange, label, width = 72 }: Pro
         // handling only one leaves the column visibly settled on a value the
         // parent was never told about.
         onMomentumScrollEnd={settle}
-        onScrollEndDrag={settle}
+        onScrollEndDrag={onDragEnd}
         contentOffset={{ x: 0, y: index * WHEEL_ITEM_H }}
         contentContainerStyle={styles.content}
         accessibilityLabel={label}
       >
         {options.map((opt, i) => (
-          <View key={opt} style={styles.item}>
-            <Text style={[styles.text, i === index && styles.textOn]}>{opt}</Text>
-          </View>
+          // A tap on any row goes there — dragging is not the only way in.
+          <Pressable key={opt} style={styles.item} onPress={() => pick(i)} accessibilityRole="button" accessibilityLabel={`${label} ${opt}`}>
+            <Text style={[styles.text, i === index && styles.textOn, { opacity: FADE[Math.min(Math.abs(i - index), FADE.length - 1)] }]}>{opt}</Text>
+          </Pressable>
         ))}
       </ScrollView>
     </View>
@@ -92,6 +114,9 @@ export function WheelPicker({ options, index, onChange, label, width = 72 }: Pro
 export function WheelBand() {
   return <View pointerEvents="none" style={styles.band} />;
 }
+
+/** Rows fade with distance from the selected one, so the column reads as a wheel. */
+const FADE = [1, 0.6, 0.3] as const;
 
 const PAD = (WHEEL_H - WHEEL_ITEM_H) / 2;
 

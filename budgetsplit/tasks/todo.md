@@ -278,59 +278,44 @@ can't be moved between at all. All are the same act — *money goes from one pla
 - Gate: data tests for all four cases (cash net zero, net worth flat, overdraw refused, sync queued).
 - **M done** in `e798ada`: `moveMoney` + `src/__tests__/moveMoney.test.ts` (7 tests), `MoveMoneySheet`, Assets rows show one `Move`, asset page has Move money / Update worth / ⋯ edit, `MoveToInvestmentsSheet` deleted. `spendPower.moveToInvestments` is now unused by the app (still tested) — delete it or keep for the no-assets path.
 
-### F · Forms
-- [ ] **F1 · `ui/AmountRow`** — the AGENTS §4 form row for money: icon disc, label, right-aligned
-  amount input with ₹, no inner border, 52pt, inside a `Card` with dividers.
-- [ ] **F2 · "Your money" form** (`MoneyEditorSheet`): Bank / Cash / Wallet as three AmountRows with a
-  live total, Credit limit + Used as a second card with the available-credit line; hints shrink to
-  one line behind an ⓘ (`InfoLabel`). It was three cramped side-by-side inputs.
-- [ ] **F3 · Same rows** in the asset create/restate sheets and the card-bill sheet.
+Spec: `docs/SPEC-FORMS-GROUP.md` · Plan: `plan.md` Phase 5c. Gates every task: `npx tsc --noEmit`,
+`npx jest --silent`; every regression test revert-checked; doc-count guards updated in the same commit.
 
-### G · Group screen
-- [ ] **G1 · One header card** replacing `GroupHero` + `GroupBalanceCard`: group icon + name
-  (truncates, long-press shows it in full) + members stack on the left; **top right the balance**
-  — "You're owed ₹1,200" / "You owe ₹300" / "Settled up" — coloured by direction, with `Settle up`
-  beneath only when there is someone to settle with. A minimal gradient from the group's colour
-  (≈18% → transparent). No second card.
-- [ ] **G2 · Filter bar rebuilt** (`ui/FilterBar`, same props, so Personal/Search/Group all get it):
-  a full-width search field (always visible — no icon-at-the-edge, no clipped chips) + a `Filters`
-  button with an active-count badge; active filters show below as removable chips only when set.
-  The sheet holds Type, When (presets + the range calendar), Who, **Tags** (new), and any
-  screen-specific scope chips. `lib/txnFilter` gains `tags` (any-of), derived from the rows.
-- Gate: `filtersActive`/tag tests; revert-check tag matching.
+### Phase A · Amount row
+- [ ] **1 · (M) `ui/AmountRow` + "Your money" sheet** — `AmountRow` (IconCircle 32, label, right-aligned
+  ₹ input, no inner border, 52pt) + pure `bucketTotal`. `MoneyEditorSheet`: card 1 Bank/Cash/Wallet +
+  total row; card 2 credit limit/used + available line; hints behind `InfoLabel`.
+  *Accept:* `bucketTotal` tests (empty, `0`, decimals).
+- [ ] **2 · (S) Same row in `AssetSheet` + `PayCardBillSheet`**; delete `spendPower.moveToInvestments` + its test.
+  *Accept:* guard — no amount `Input`/`TextInput` in the three sheets (revert-checked).
+- [ ] **CP-A** — commit + push; DEVICE: Plan → Your money.
 
-### T · Truncation, everywhere
-- [ ] **T1 · `useFullTextOnHold`** — long-press on any truncated name shows it in full (native
-  alert: no nested modal, works inside sheets). Wired into `ListRow` (title/subtitle), `Chip`,
-  the group header, member/asset/friend names. Rule: **one line + ellipsis in lists, full text on hold.**
+### Phase B · Small wins
+- [ ] **3 · (XS) N3** — `+ Add member` first in `MembersTab` and `group/[id]/members.tsx` (admins only
+  there); bottom buttons removed. *Accept:* source-order guard.
+- [ ] **4 · (S) N1** — `lib/noteText.oneLine`; pure `rowText(txn)` out of `TransactionRow`, so a
+  transfer's note is its second line. *Accept:* `oneLine` + `rowText` tests, revert-checked.
+- [ ] **CP-B** — commit + push.
 
-### N · New points (2026-09-29, not started)
-- [ ] **N1 · Notes in transaction rows.** Wherever a row has no title/category worth showing
-  (transfers especially), show the note — **trimmed** (`.trim()`, collapse inner whitespace/newlines)
-  and truncated to one line. Never show leading/trailing spaces or an empty line. Start in
-  `components/finance/TransactionRow.tsx` (+ `lib/settlementView.ts` for what a transfer's title is);
-  also trim on save in `useAddTxnForm` (`note`, `transferNote`) so stored notes are clean.
-- [ ] **N2 · Forms learn from Edit group.** `app/(people)/group/[id]/edit.tsx` is the reference the
-  user likes (except its inputs). Bring the other forms to that shape: Card-grouped `ListRow`s,
-  section headers, one hint line max (AGENTS §4, §14). Worst offenders: `MoneyEditorSheet` (F2),
-  `AssetSheet`, `PayCardBillSheet`, goal sheets in `app/(tabs)/savings.tsx`, `settings/*`.
-  Also fix Edit group's own inputs (they are the part the user called bad) — use `Input`/`AmountRow`.
-- [ ] **N3 · "+ New" first in group members.** In `MembersTab.tsx` the "Invite someone" button sits
-  at the bottom (line ~153); put a `+ Add member` row at the **top** of the members list. Same in
-  `app/(people)/group/[id]/members.tsx` if it lists members before its add control.
+### Phase C · Group screen
+- [ ] **5 · (S) T1** — `hooks/useFullTextOnHold` (native `Alert`), wired into `ListRow` and `Chip`.
+  *Accept:* hook test with mocked `Alert`; guard that both use it.
+- [ ] **6 · (M) G1** — `GroupHeaderCard` in `group/[id].tsx`; `GroupHero` + `GroupBalanceCard` deleted.
+  Balance top right, `Settle up` only when someone to settle with, group-colour gradient
+  (`expo-linear-gradient`, already a dependency), name on hold. *Accept:* pure `headerBalance(net)` tested.
+- [ ] **7 · (M) G2 layout** — `FilterBar`, same props: search always visible, `Filters` button + count
+  badge, sheet (Type / When / Who), removable active chips. Callers: Search, Personal, group
+  Transactions tab. *Accept:* `activeFilterCount` tested; callers unchanged.
+- [ ] **8 · (S) G2 tags** — `TxnFilters.tags` (any-of via `tagKey`), Tags section from row tags, passed by
+  all three callers. *Accept:* tag-match tests, revert-checked; `filtersActive` counts tags.
+- [ ] **CP-C** — commit + push; DEVICE: group screen, Search and Personal filters.
 
-### Where to pick up (handoff)
-Branch `claude/branch-selection-gi7lyy`, all pushed. Order suggested: **F1–F2** (was mid-start:
-planned `ui/AmountRow` = icon disc + label + right-aligned ₹ `TextInput`, no inner border, 52pt,
-used inside `Card` with `Divider indent="text"`; then rebuild `MoneyEditorSheet` on it with a live
-Bank+Cash+Wallet total and credit in a second card, hints behind `ui/InfoLabel`) → **N3** (small) →
-**N1** → **G1/G2** → **T1** → **N2** (broadest). Gates every time: `npx tsc --noEmit -p .` and
-`npx jest` (2750 passing at `e798ada`). Doc guards (`countClaims`, `deadRouteRef`,
-`screenIdMap`, `coverage`) fail when routes/`src/lib` module counts change — update
-`docs/SYSTEM.md`/`SCREENS.md` counts when they do. Reusable pieces built this session:
-`ui/InfoLabel` (ⓘ reveal), `ui/DateRangeSheet` + `lib/dateRange`, `hooks/useReminder`,
-`finance/review/CategoryFilterSheet` (searchable multi-select — reuse for G2's tag picker),
-`lib/owe.settleDirection`, `groups.getOrCreatePeopleSetGroup`.
+### Phase D · Forms (N2, named sheets only)
+- [ ] **9 · (S) Goal amounts** — Add funds / Withdraw (`app/(money)/savings/[id].tsx`) and the
+  `(tabs)/savings.tsx` input on `AmountRow` in a `Card`.
+- [ ] **10 · (S) `finance/GroupForm`** — card-grouped `ListRow`/`Input`, one hint line max (fixes Edit group).
+  *Accept (9–10):* task 2's guard extended — no bare `TextInput`, no `type.body` paragraph under a control.
+- [ ] **CP-D** — commit + push; DEVICE: the forms.
 
 ### Decisions (overrule if wrong)
 - Bucket↔bucket moves are included (Bank→Cash is the ATM case) — that is what "even money is one of

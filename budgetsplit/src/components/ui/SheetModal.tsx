@@ -11,6 +11,8 @@ type Props = {
   children: React.ReactNode;
   /** Wrap children in a ScrollView (for long content). Default true. */
   scroll?: boolean;
+  /** See `DraggableSheet.dragBody`. False for a body with its own vertical drag (a wheel). */
+  dragBody?: boolean;
   /** Optional control rendered at the right of the title row. */
   headerRight?: React.ReactNode;
   /**
@@ -60,7 +62,7 @@ type Props = {
  * one unmounts immediately, animation forfeited. Nobody watches a sheet leave while
  * another arrives; a stuck screen is not a trade-off.
  */
-export function SheetModal({ visible, onClose, title, children, scroll = true, headerRight, onOpened }: Props) {
+export function SheetModal({ visible, onClose, title, children, scroll = true, dragBody, headerRight, onOpened }: Props) {
   // Lags `visible` on the way down only; leads it on the way up.
   const [rendered, setRendered] = useState(visible);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -111,6 +113,7 @@ export function SheetModal({ visible, onClose, title, children, scroll = true, h
             exiting={!visible}
             title={title}
             scroll={scroll}
+            dragBody={dragBody}
             headerRight={headerRight}
           >
             {children}

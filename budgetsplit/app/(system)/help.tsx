@@ -6,9 +6,26 @@ import { colors, type, space, radius, layout, shadow, alpha } from '../../src/th
 import { decor } from '../../src/constants/palette';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { IconCircle } from '../../src/components/ui/IconCircle';
+import { helpBullets } from '../../src/lib/helpBullets';
 
 type Item = { icon: keyof typeof Feather.glyphMap; color: string; title: string; body: string };
 type Section = { title: string; illustration: { icons: Array<{ name: keyof typeof Feather.glyphMap; bg: string; color: string }> }; items: Item[] };
+
+/** One bullet per sentence; a single sentence stays a plain line. */
+function HelpBody({ body }: { body: string }) {
+  const bullets = helpBullets(body);
+  if (bullets.length < 2) return <Text style={styles.body}>{body}</Text>;
+  return (
+    <View style={styles.bullets}>
+      {bullets.map((b, i) => (
+        <View key={i} style={styles.bulletRow}>
+          <Text style={styles.bulletDot}>{'\u2022'}</Text>
+          <Text style={styles.bulletText}>{b}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
 
 const SECTIONS: Section[] = [
   {
@@ -272,7 +289,7 @@ export default function HelpScreen() {
                           <Text style={styles.rowTitle}>{item.title}</Text>
                           <Feather name={isItemOpen ? 'minus' : 'plus'} size={16} color={colors.textMuted} />
                         </TouchableOpacity>
-                        {isItemOpen && <Text style={styles.body}>{item.body}</Text>}
+                        {isItemOpen && <HelpBody body={item.body} />}
                       </View>
                     );
                   })}
@@ -298,4 +315,8 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.smd },
   rowTitle: { ...type.body, color: colors.textPrimary, flex: 1 },
   body: { ...type.body, color: colors.textSecondary, lineHeight: 22, paddingBottom: space.md, paddingLeft: 30 + space.sm },
+  bullets: { paddingBottom: space.md, paddingLeft: 30 + space.sm, gap: space.xs },
+  bulletRow: { flexDirection: 'row', gap: space.sm },
+  bulletDot: { ...type.body, color: colors.textMuted, lineHeight: 22 },
+  bulletText: { ...type.body, color: colors.textSecondary, lineHeight: 22, flex: 1 },
 });

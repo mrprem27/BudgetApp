@@ -343,3 +343,33 @@ describe('IM-3 · a reference number in a headerless row is not the amount', () 
     expect(parseStatement('02/06/2025,Coffee,120').rows.map(x => x.amount)).toEqual([12000]);
   });
 });
+
+describe('TP-1 · the time picker saves the time it shows, and its wheels are not the sheet\'s drag', () => {
+  const { snapTime } = jest.requireActual('../lib/timeSnap') as typeof import('../lib/timeSnap');
+  const fs = jest.requireActual('fs') as typeof import('fs');
+
+  it('holds a time to the wheel step, across the hour and midnight', () => {
+    expect(snapTime({ hour: 7, minute: 7 }, 5)).toEqual({ hour: 7, minute: 5 });
+    expect(snapTime({ hour: 7, minute: 58 }, 5)).toEqual({ hour: 8, minute: 0 });
+    expect(snapTime({ hour: 23, minute: 58 }, 5)).toEqual({ hour: 0, minute: 0 });
+    expect(snapTime({ hour: 9, minute: 30 }, 5)).toEqual({ hour: 9, minute: 30 });
+  });
+
+  it('the sheet holding the wheels is dragged by its header only', () => {
+    const src = fs.readFileSync('src/components/ui/TimePickerSheet.tsx', 'utf8');
+    expect(src).toMatch(/dragBody=\{false\}/);
+  });
+});
+
+describe('HB-1 · Help paragraphs read as bullets', () => {
+  const { helpBullets } = jest.requireActual('../lib/helpBullets') as typeof import('../lib/helpBullets');
+  it('one bullet per sentence', () => {
+    expect(helpBullets('Tap + → Income. Enter the amount, pick a source, and save. Income counts as savings.'))
+      .toEqual(['Tap + → Income.', 'Enter the amount, pick a source, and save.', 'Income counts as savings.']);
+  });
+  it('keeps e.g., decimals and a lone sentence whole', () => {
+    expect(helpBullets('Add context (e.g. "Rajesh\'s dinner"). It is searchable.')).toEqual(['Add context (e.g. "Rajesh\'s dinner").', 'It is searchable.']);
+    expect(helpBullets('Costs ₹4.50 a month')).toEqual(['Costs ₹4.50 a month']);
+    expect(helpBullets('')).toEqual([]);
+  });
+});

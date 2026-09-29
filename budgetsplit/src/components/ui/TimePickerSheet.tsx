@@ -5,7 +5,8 @@ import { SheetModal } from './SheetModal';
 import { PrimaryButton } from './PrimaryButton';
 import { WheelPicker, WheelBand } from './WheelPicker';
 
-export type TimeValue = { hour: number; minute: number };
+import { snapTime, type TimeValue } from '../../lib/timeSnap';
+export type { TimeValue };
 
 type Props = {
   visible: boolean;
@@ -25,11 +26,16 @@ const HOURS_12 = Array.from({ length: 12 }, (_, i) => i + 1); // 1..12
  * (default 5), which is plenty for a reminder.
  */
 export function TimePickerSheet({ visible, value, title = 'Pick a time', minuteStep = 5, onClose, onSave }: Props) {
-  const [hour, setHour] = useState(value.hour);
-  const [minute, setMinute] = useState(value.minute);
+  const start = snapTime(value, minuteStep);
+  const [hour, setHour] = useState(start.hour);
+  const [minute, setMinute] = useState(start.minute);
 
   // Re-sync when reopened against a (possibly changed) external value.
-  useEffect(() => { if (visible) { setHour(value.hour); setMinute(value.minute); } }, [visible, value.hour, value.minute]);
+  useEffect(() => {
+    if (!visible) return;
+    const t = snapTime({ hour: value.hour, minute: value.minute }, minuteStep);
+    setHour(t.hour); setMinute(t.minute);
+  }, [visible, value.hour, value.minute, minuteStep]);
 
   const minutes = Array.from({ length: Math.ceil(60 / minuteStep) }, (_, i) => i * minuteStep);
   const isPM = hour >= 12;
@@ -45,7 +51,7 @@ export function TimePickerSheet({ visible, value, title = 'Pick a time', minuteS
   const minuteIndex = Math.max(0, minutes.indexOf(minute));
 
   return (
-    <SheetModal visible={visible} onClose={onClose} title={title} scroll={false}>
+    <SheetModal visible={visible} onClose={onClose} title={title} scroll={false} dragBody={false}>
       {/*
         A wheel, not three strips of chips.
         

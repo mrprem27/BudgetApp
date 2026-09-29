@@ -36,6 +36,12 @@ type Props = {
   children: React.ReactNode;
   /** Wrap children in a ScrollView (for long content). Default true. */
   scroll?: boolean;
+  /**
+   * Drag the sheet from anywhere (default), or only by its header. A body that scrolls or
+   * spins on its own — a wheel picker — must set this false: the sheet's drag would otherwise
+   * take every downward stroke of it and pull the sheet away.
+   */
+  dragBody?: boolean;
   /** Optional control rendered at the right of the title row (e.g. a segmented toggle). */
   headerRight?: React.ReactNode;
   /**
@@ -67,7 +73,7 @@ type Props = {
  * skip the animation entirely — the sheet was simply unmounted — which is what made a Done
  * button feel like a glitch rather than a dismissal.
  */
-export function DraggableSheet({ onClose, title, children, scroll = true, headerRight, exiting = false }: Props) {
+export function DraggableSheet({ onClose, title, children, scroll = true, dragBody = true, headerRight, exiting = false }: Props) {
   const insets = useSafeAreaInsets();
   const translateY = useSharedValue(SCREEN_H);
   // Scroll offset as a shared value so the pan worklet can read it on the UI thread
@@ -198,6 +204,43 @@ export function DraggableSheet({ onClose, title, children, scroll = true, header
     scrollY.value = e.nativeEvent.contentOffset.y;
   };
 
+  const header = (
+    <View style={styles.grabber}>
+      <View style={styles.handle} />
+      {(title || headerRight) ? (
+        <View style={styles.titleRow}>
+          {title ? <Text style={styles.title}>{title}</Text> : <View />}
+          {headerRight}
+        </View>
+      ) : null}
+    </View>
+  );
+  const sheet = (
+    <Animated.View style={[styles.sheet, { paddingBottom: bottomPad }, sheetStyle]}>
+      {dragBody ? header : <GestureDetector gesture={pan}>{header}</GestureDetector>}
+        {scroll ? (
+          <GestureDetector gesture={nativeGesture}>
+            <ScrollView
+              ref={scrollRef}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              bounces={false}
+              scrollEventThrottle={16}
+              onScroll={onBodyScroll}
+              style={styles.bodyWrap}
+              contentContainerStyle={styles.content}
+            >
+              {children}
+            </ScrollView>
+          </GestureDetector>
+        ) : (
+          // A tap on the body (not a control) closes the keyboard, as it does
+          // in the scrolling variant — a number pad has no return key.
+          <Pressable style={styles.content} onPress={Keyboard.dismiss} accessible={false}>{children}</Pressable>
+        )}
+    </Animated.View>
+  );
+
   return (
     <View style={StyleSheet.absoluteFill}>
       <Animated.View style={[styles.backdrop, backdropStyle]}>
@@ -215,39 +258,7 @@ export function DraggableSheet({ onClose, title, children, scroll = true, header
         style={styles.wrap}
         pointerEvents="box-none"
       >
-        <GestureDetector gesture={pan}>
-          <Animated.View style={[styles.sheet, { paddingBottom: bottomPad }, sheetStyle]}>
-            <View style={styles.grabber}>
-              <View style={styles.handle} />
-              {(title || headerRight) ? (
-                <View style={styles.titleRow}>
-                  {title ? <Text style={styles.title}>{title}</Text> : <View />}
-                  {headerRight}
-                </View>
-              ) : null}
-            </View>
-            {scroll ? (
-              <GestureDetector gesture={nativeGesture}>
-                <ScrollView
-                  ref={scrollRef}
-                  keyboardShouldPersistTaps="handled"
-                  showsVerticalScrollIndicator={false}
-                  bounces={false}
-                  scrollEventThrottle={16}
-                  onScroll={onBodyScroll}
-                  style={styles.bodyWrap}
-                  contentContainerStyle={styles.content}
-                >
-                  {children}
-                </ScrollView>
-              </GestureDetector>
-            ) : (
-              // A tap on the body (not a control) closes the keyboard, as it does
-              // in the scrolling variant — a number pad has no return key.
-              <Pressable style={styles.content} onPress={Keyboard.dismiss} accessible={false}>{children}</Pressable>
-            )}
-          </Animated.View>
-        </GestureDetector>
+        {dragBody ? <GestureDetector gesture={pan}>{sheet}</GestureDetector> : sheet}
       </KeyboardAvoidingView>
     </View>
   );

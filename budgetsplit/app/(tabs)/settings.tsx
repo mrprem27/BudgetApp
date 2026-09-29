@@ -56,7 +56,6 @@ const TINT = {
   payMethod: colors.settle,
   cadence: decor.orange,
   features: colors.accent,
-  voice: decor.pink,
   notifications: colors.healthAmber,
   trust: colors.income,
   lock: decor.blue,
@@ -394,10 +393,6 @@ export default function SettingsScreen() {
         {flags.reminders && (<>
           <View style={settingsRowDivider} />
           <SettingsRow icon="bell" label="Notifications & Reminders" tint={TINT.notifications} value="Bills · daily log" onPress={() => { router.push('/settings/notifications'); }} />
-        </>)}
-        {flags.voiceEntry && (<>
-          <View style={settingsRowDivider} />
-          <SettingsRow icon="mic" label="Voice entry" tint={TINT.voice} value="Hands-free with Siri" onPress={() => { router.push('/settings/voice'); }} />
         </>)}
       </View>
 
