@@ -11,6 +11,7 @@ import { Feather } from '@expo/vector-icons';
 import { settings } from '../../src/lib/settings';
 import { colors, type, space, radius, layout, shadow } from '../../src/theme';
 import { haptic } from '../../src/lib/haptics';
+import { getPendingCount } from '../../src/db/queries/pending';
 import { getMe, getAllPersons, updatePersonName, setPersonImage, setPersonUpiVpa } from '../../src/db/queries/persons';
 import { isValidVpa } from '../../src/lib/upiIntent';
 import { RequestQrSheet } from '../../src/components/finance/RequestQrSheet';
@@ -71,12 +72,14 @@ export default function SettingsScreen() {
       contactCount: allPersons.filter(p => !p.is_me).length,
       budgetMonthly: rollUpBudgets(myBudget, 'monthly', new Date()).amount,
       categoryCount: count,
+      pendingCount: await getPendingCount(database),
     };
   }, []);
   const me = data?.me ?? null;
   const contactCount = data?.contactCount ?? 0;
   const categoryCount = data?.categoryCount ?? 0;
   const budgetMonthly = data?.budgetMonthly ?? 0;
+  const pendingCount = data?.pendingCount ?? 0;
 
   const [biometric, setBiometric] = useState(false);
   const [privacyScreen, setPrivacyScreen] = useState(true);
@@ -408,15 +411,18 @@ export default function SettingsScreen() {
       <Text style={styles.sectionTitle}>Data & Help</Text>
       <View style={styles.card}>
         {/* Each row carries its own trailing divider so a hidden row leaves no seam. */}
+        {/* `B-101` follow-up: Import and Review inbox were two rows for one pipeline.
+            One row, routed by state — unconfirmed rows waiting means the useful thing
+            is to confirm them; otherwise it's to bring more in. `/review`'s empty state
+            offers Import, so neither destination becomes unreachable. */}
         {flags.importReview && (<>
-          <SettingsRow icon="upload" label="Import transactions" value="CSV / text" onPress={() => { router.push('/import'); }} />
-          <View style={settingsRowDivider} />
-          {/* The other half of the same feature, and the only way IN when the queue is
-              empty. `/review`'s two existing entries both require rows — Import replaces
-              to it only after a successful parse, and Home's inbox badge is gated on a
-              non-zero count — so its "Nothing to review" state was unreachable: you could
-              never open the screen and be told there was nothing there. */}
-          <SettingsRow icon="inbox" label="Review inbox" value="Imported · unconfirmed" onPress={() => { router.push('/review'); }} />
+          <SettingsRow
+            icon={pendingCount > 0 ? 'inbox' : 'upload'}
+            label="Import & review"
+            value={pendingCount > 0 ? `${pendingCount} to review` : 'CSV / text'}
+            tint={pendingCount > 0 ? colors.healthAmber : undefined}
+            onPress={() => { router.push(pendingCount > 0 ? '/review' : '/import'); }}
+          />
           <View style={settingsRowDivider} />
         </>)}
         {flags.reports && (<>
