@@ -259,23 +259,24 @@ Today: `Add`, `Take out`, `Worth now`, `Edit` are four buttons under every asset
 separate "Moved to investments" sheet; Add has its own Invest kind; buckets (Bank/Cash/Wallet)
 can't be moved between at all. All are the same act — *money goes from one place to another*.
 
-- [ ] **M1 · `moveMoney(db, from, to, amount)`** in `db/queries/assets.ts`. An endpoint is a bucket
+- [x] **M1 · `moveMoney(db, from, to, amount)`** in `db/queries/assets.ts`. An endpoint is a bucket
   (`bank|cash|wallet`) or an asset. Four cases, **no schema change**, one DB transaction each:
   bucket→asset = `transferToAsset`; asset→bucket = `transferFromAsset`;
   asset→asset = redeem A into a bucket + invest B from the same bucket (cash net zero, both asset
   pages show it); bucket→bucket = a payments-only row out of one, a shares-only row into the other
   (net cash zero, bucket flows move). Assets never overdraw (same SQL guard). Net worth is flat in all four.
-- [ ] **M2 · `MoveMoneySheet`** — From / To chip rows (Bank, Cash, Wallet + every asset, dynamic,
+- [x] **M2 · `MoveMoneySheet`** — From / To chip rows (Bank, Cash, Wallet + every asset, dynamic,
   truncating), a swap ⇅ button, amount, one hint line. `to === from` disabled. Replaces
   `MoveToInvestmentsSheet` and the Add/Take-out modes of `AssetSheet`.
-- [ ] **M3 · Assets screen: frequent out, rare in.** A row = icon, name, balance; tap opens the
+- [x] **M3 · Assets screen: frequent out, rare in.** A row = icon, name, balance; tap opens the
   asset. **One** inline action per row: `Move`. Header keeps `Add` (new asset); the duplicate
   bottom "Add an asset" goes. **Rare actions move inside the asset page**: `Update worth`, and a
   `⋯` menu (Edit, Stop counting, Delete). Asset page gets `Move money` (primary) + `Update worth`.
-- [ ] **M4 · Plan's "moved to investments" entry** opens `MoveMoneySheet` pre-set to Bank → asset.
+- [x] **M4 · Plan's "moved to investments" entry** opens `MoveMoneySheet` pre-set to Bank → asset.
 - Left alone on purpose: Add's Invest kind (a full entry with date/note, not a quick move) and
   `PayCardBillSheet` (a card repayment is a debt, not a holding). Both keep working unchanged.
 - Gate: data tests for all four cases (cash net zero, net worth flat, overdraw refused, sync queued).
+- **M done** in `e798ada`: `moveMoney` + `src/__tests__/moveMoney.test.ts` (7 tests), `MoveMoneySheet`, Assets rows show one `Move`, asset page has Move money / Update worth / ⋯ edit, `MoveToInvestmentsSheet` deleted. `spendPower.moveToInvestments` is now unused by the app (still tested) — delete it or keep for the no-assets path.
 
 ### F · Forms
 - [ ] **F1 · `ui/AmountRow`** — the AGENTS §4 form row for money: icon disc, label, right-aligned
@@ -302,6 +303,34 @@ can't be moved between at all. All are the same act — *money goes from one pla
 - [ ] **T1 · `useFullTextOnHold`** — long-press on any truncated name shows it in full (native
   alert: no nested modal, works inside sheets). Wired into `ListRow` (title/subtitle), `Chip`,
   the group header, member/asset/friend names. Rule: **one line + ellipsis in lists, full text on hold.**
+
+### N · New points (2026-09-29, not started)
+- [ ] **N1 · Notes in transaction rows.** Wherever a row has no title/category worth showing
+  (transfers especially), show the note — **trimmed** (`.trim()`, collapse inner whitespace/newlines)
+  and truncated to one line. Never show leading/trailing spaces or an empty line. Start in
+  `components/finance/TransactionRow.tsx` (+ `lib/settlementView.ts` for what a transfer's title is);
+  also trim on save in `useAddTxnForm` (`note`, `transferNote`) so stored notes are clean.
+- [ ] **N2 · Forms learn from Edit group.** `app/(people)/group/[id]/edit.tsx` is the reference the
+  user likes (except its inputs). Bring the other forms to that shape: Card-grouped `ListRow`s,
+  section headers, one hint line max (AGENTS §4, §14). Worst offenders: `MoneyEditorSheet` (F2),
+  `AssetSheet`, `PayCardBillSheet`, goal sheets in `app/(tabs)/savings.tsx`, `settings/*`.
+  Also fix Edit group's own inputs (they are the part the user called bad) — use `Input`/`AmountRow`.
+- [ ] **N3 · "+ New" first in group members.** In `MembersTab.tsx` the "Invite someone" button sits
+  at the bottom (line ~153); put a `+ Add member` row at the **top** of the members list. Same in
+  `app/(people)/group/[id]/members.tsx` if it lists members before its add control.
+
+### Where to pick up (handoff)
+Branch `claude/branch-selection-gi7lyy`, all pushed. Order suggested: **F1–F2** (was mid-start:
+planned `ui/AmountRow` = icon disc + label + right-aligned ₹ `TextInput`, no inner border, 52pt,
+used inside `Card` with `Divider indent="text"`; then rebuild `MoneyEditorSheet` on it with a live
+Bank+Cash+Wallet total and credit in a second card, hints behind `ui/InfoLabel`) → **N3** (small) →
+**N1** → **G1/G2** → **T1** → **N2** (broadest). Gates every time: `npx tsc --noEmit -p .` and
+`npx jest` (2750 passing at `e798ada`). Doc guards (`countClaims`, `deadRouteRef`,
+`screenIdMap`, `coverage`) fail when routes/`src/lib` module counts change — update
+`docs/SYSTEM.md`/`SCREENS.md` counts when they do. Reusable pieces built this session:
+`ui/InfoLabel` (ⓘ reveal), `ui/DateRangeSheet` + `lib/dateRange`, `hooks/useReminder`,
+`finance/review/CategoryFilterSheet` (searchable multi-select — reuse for G2's tag picker),
+`lib/owe.settleDirection`, `groups.getOrCreatePeopleSetGroup`.
 
 ### Decisions (overrule if wrong)
 - Bucket↔bucket moves are included (Bank→Cash is the ATM case) — that is what "even money is one of
