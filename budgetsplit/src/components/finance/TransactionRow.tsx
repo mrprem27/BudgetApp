@@ -115,13 +115,9 @@ export const TransactionRow = React.memo(function TransactionRow({
     ? { icon: settle.icon, color: settle.tint }
     : categoryVisual(txn.category);
 
-  // "Invested · Gold" rather than a bare category. The asset was reachable only as
+  // "Moved to Gold" rather than a bare category. The asset was reachable only as
   // the default note, so a user-written note erased it everywhere.
-  const settleLine = settle && settle.destination
-    ? `${settle.verb} · ${settle.destination}`
-    : settle && settle.kind !== 'transfer'
-    ? settle.verb
-    : null;
+  const settleLine = settle && settle.kind !== 'transfer' ? settle.line : null;
 
   // Attribution — shown on the RIGHT side below the amount.
   let attribution: { text: string; color: string } | null = null;
@@ -143,7 +139,7 @@ export const TransactionRow = React.memo(function TransactionRow({
   // Settlements always show the directional sentence as primary.
   // If no note, category is primary (nothing below).
   //
-  // An asset movement uses `settleLine` as its secondary — "Invested · Gold" —
+  // An asset movement uses `settleLine` as its secondary — "Moved to Gold" —
   // rather than the bare category "Investment", which said neither what happened
   // nor where the money went. With no note it becomes the primary, so the row
   // still names itself.

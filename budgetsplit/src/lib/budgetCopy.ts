@@ -100,7 +100,7 @@ export const budgetCaption = (opts: {
  * this lives here rather than inline — one file owns the budget's sentences.
  */
 export const budgetInvestedCaption = (amount: string): string =>
-  `plus ${amount} invested this month · kept, not spent`;
+  `plus ${amount} moved to assets this month · kept, not spent`;
 
 /** The editor's hint line, per scope and level. */
 export const budgetEditorHint = (opts: {

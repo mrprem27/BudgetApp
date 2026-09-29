@@ -438,7 +438,7 @@ export default function TxnDetailScreen() {
           {/* Names what it is. Deleting an invest reverses the asset side too
               (`reverseAssetSide`), so calling it "settlement" understated it. */}
           <Text style={styles.deleteText}>
-            Delete {settle ? settle.label.toLowerCase().replace(/s$/, '') : 'transaction'}
+            Delete {isAssetMove ? 'move' : settle ? settle.label.toLowerCase().replace(/s$/, '') : 'transaction'}
           </Text>
         </TouchableOpacity>
         )}

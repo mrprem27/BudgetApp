@@ -44,7 +44,7 @@ const TYPE_TABS = [
   { key: 'expense', label: 'Expenses' },
   { key: 'income', label: 'Income' },
   { key: 'settlement', label: 'Transfers' },
-  { key: 'invest', label: 'Invested' },
+  { key: 'invest', label: 'Asset moves' },
 ];
 
 
@@ -179,7 +179,7 @@ export default function ReportTransactionsScreen() {
                   )}
                   {byKind.invest > 0 && (
                     <View>
-                      <Text style={styles.sideLabel}>Invested</Text>
+                      <Text style={styles.sideLabel}>Asset moves</Text>
                       <AmountText paise={byKind.invest} size="lg" forceColor={colors.settle} />
                     </View>
                   )}

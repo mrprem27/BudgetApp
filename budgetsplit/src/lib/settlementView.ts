@@ -46,10 +46,12 @@ export type SettlementKind = 'invest' | 'redeem' | 'card' | 'transfer';
 
 export type SettlementView = {
   kind: SettlementKind;
-  /** Noun for a filter chip or a tab — "Invested", "Transfers". */
+  /** Noun for a filter chip or a tab — "Moved to assets", "Transfers". */
   label: string;
-  /** Past-tense verb for a feed line — "Invested", "Repaid". */
+  /** Past-tense verb for a sentence — "Moved ₹500", "Repaid ₹500". */
   verb: string;
+  /** The whole feed line — "Moved to Gold", "Repaid". One place for the wording. */
+  line: string;
   icon: FeatherName;
   tint: string;
   /**
@@ -84,8 +86,9 @@ export function settlementView(row: SettlementRow, assetName?: string | null): S
     return outbound
       ? {
           kind: 'invest',
-          label: 'Invested',
-          verb: 'Invested',
+          label: 'Moved to assets',
+          verb: 'Moved',
+          line: assetName ? `Moved to ${assetName}` : 'Moved to assets',
           icon: 'trending-up',
           tint: colors.settle,
           outbound: true,
@@ -93,8 +96,9 @@ export function settlementView(row: SettlementRow, assetName?: string | null): S
         }
       : {
           kind: 'redeem',
-          label: 'Redeemed',
-          verb: 'Took out',
+          label: 'Moved from assets',
+          verb: 'Moved back',
+          line: assetName ? `Moved from ${assetName}` : 'Moved from assets',
           icon: 'trending-down',
           tint: colors.settle,
           // Money came back to me — but this is NOT income and must never be
@@ -112,6 +116,7 @@ export function settlementView(row: SettlementRow, assetName?: string | null): S
       kind: 'card',
       label: 'Card payment',
       verb: 'Repaid',
+      line: 'Repaid',
       icon: 'credit-card',
       tint: colors.settle,
       outbound: true,
@@ -123,6 +128,7 @@ export function settlementView(row: SettlementRow, assetName?: string | null): S
     kind: 'transfer',
     label: 'Transfers',
     verb: 'Settled',
+    line: 'Settled',
     icon: 'check-circle',
     tint: colors.settle,
     outbound,
