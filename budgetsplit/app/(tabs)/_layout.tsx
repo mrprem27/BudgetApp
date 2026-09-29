@@ -71,15 +71,16 @@ function announceVanished(r: SyncOutcome | null) {
 const TAB_ICON: Record<string, React.ComponentProps<typeof Feather>['name']> = {
   index: 'home',
   groups: 'users',
-  savings: 'bar-chart-2',
-  settings: 'settings',
+  savings: 'dollar-sign',
+  insights: 'pie-chart',
 };
 const TAB_LABEL: Record<string, string> = {
-  index: 'Home', groups: 'Groups', savings: 'Plan', settings: 'Settings',
+  index: 'Home', groups: 'Groups', savings: 'Money', insights: 'Insights',
 };
-// Order around the centered FAB: Home · Groups · [FAB] · Plan · Settings.
+// Order around the centered FAB: Home · Groups · [FAB] · Money · Insights. Settings is not a tab: it opens
+// from the avatar (`ProfileButton`) at the top of each.
 // The second slot is Groups or Personal depending on `flags.splitting` — see AppTabBar.
-const RIGHT = ['savings', 'settings'];
+const RIGHT = ['savings', 'insights'];
 
 /**
  * Custom bottom nav: five equal slots — two tabs, the add FAB (centered, half
@@ -290,7 +291,7 @@ export default function TabsLayout() {
       <Tabs.Screen name="index" />
       <Tabs.Screen name="groups" />
       <Tabs.Screen name="savings" />
-      <Tabs.Screen name="settings" />
+      <Tabs.Screen name="insights" />
     </Tabs>
   );
 }

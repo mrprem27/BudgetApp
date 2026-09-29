@@ -180,10 +180,7 @@ export default function DashboardScreen() {
               color={meInfo?.color ?? colors.accent}
               imageUri={meInfo?.image}
               size={36}
-              // `navigate`, not `push`: both are tabs, and pushing one stacks a
-              // second copy of the tab navigator on top of this one — Back then
-              // returned here instead of switching away. Same below for /groups.
-              onPress={() => router.navigate('/settings')}
+              onPress={() => router.push('/settings')}
             />
           </View>
         </View>

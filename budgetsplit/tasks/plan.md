@@ -284,7 +284,7 @@ status (`SyncStatus`) and a link to Backup on its own screen — nothing is lost
 as their own top-level rows.
 
 **Behaviour.**
-- Remove the standalone **Sync** row and **Backup & restore** row from `(tabs)/settings.tsx`'s "Data
+- Remove the standalone **Sync** row and **Backup & restore** row from `(system)/settings/index.tsx`'s "Data
   & Help" section. Both stay one tap away, from Account (`SyncStatus` for sync, its existing link for
   backup) — nobody loses reach, the list just stops repeating what Account already shows.
 - **Currency** row (`Preferences`): dropped. It has always been untappable (`onPress={undefined}`,

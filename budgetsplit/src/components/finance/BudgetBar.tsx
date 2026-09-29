@@ -3,6 +3,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import { colors, type, space } from '../tokens';
 import { AnimatedBar } from '../ui/anim/AnimatedBar';
 import { formatCompact } from '../../lib/money';
+import { usageText } from '../../lib/budgetCopy';
 
 type Health = 'green' | 'amber' | 'red' | 'none';
 
@@ -71,7 +72,7 @@ export function BudgetBar(props: Props) {
             {formatCompact(spent!)} <Text style={styles.labelMuted}>/ {formatCompact(limit!)}</Text>
           </Text>
           <Text style={[styles.pctText, { color: healthColor[health] }]}>
-            {Math.round(pct ?? 0)}%
+            {usageText(pct ?? 0)}
           </Text>
         </View>
       )}

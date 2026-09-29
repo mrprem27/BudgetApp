@@ -136,12 +136,15 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
   const rohan = await insertPerson(db, 'Rohan', '#8B7CF8');
   const sneha = await insertPerson(db, 'Sneha', '#FB7185');
   const vikram = await insertPerson(db, 'Vikram', '#22D3EE');
+  // Only in Family, where she pays and I owe her — so "You owe" is a real balance in the demo.
+  // (Someone who also owes me elsewhere would net it away: balances cancel across groups.)
+  const meera = await insertPerson(db, 'Meera', '#F59E0B');
 
   // --- Shared groups (insertGroup seeds their categories) ----------------
   const roommates = await insertGroup(db, 'Roommates', 'home', '#7C6AF7', [meId, aarav.id, priya.id], 'equal', meId);
   const goa = await insertGroup(db, 'Goa Trip', 'map', '#F472B6', [meId, rohan.id, sneha.id, vikram.id], 'equal', meId);
   const office = await insertGroup(db, 'Office Lunch', 'coffee', '#FB923C', [meId, priya.id, vikram.id], 'equal', meId);
-  const family = await insertGroup(db, 'Family', 'users', '#FB7185', [meId, priya.id, aarav.id], 'equal', meId);
+  const family = await insertGroup(db, 'Family', 'users', '#FB7185', [meId, meera.id, aarav.id], 'equal', meId);
   const manali = await insertGroup(db, 'Manali Trip', 'map', '#22D3EE', [meId, rohan.id, vikram.id], 'equal', meId);
   // Intentionally empty (members, zero transactions) → exercises the empty Expenses/Budget tab states.
   await insertGroup(db, 'Weekend Plans', 'calendar', '#A78BFA', [meId, sneha.id], 'equal', meId);
@@ -162,6 +165,11 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
     const d = new Date(); d.setHours(hour, 0, 0, 0); d.setDate(1); d.setMonth(d.getMonth() - back); d.setDate(Math.min(day, 28)); return d.getTime();
   };
 
+  // A date `ahead` months from now, on `day` (clamped to 28).
+  const monthsAhead = (ahead: number, day: number, hour = 10) => {
+    const d = new Date(); d.setHours(hour, 0, 0, 0); d.setDate(1); d.setMonth(d.getMonth() + ahead); d.setDate(Math.min(day, 28)); return d.getTime();
+  };
+
   // --- Personal income (logged occurrences) ------------------------------
   const income = (category: string, rupees: number, date: number, note?: string) =>
     insertTxn(db, { groupId: personalId, kind: 'income', entryMode: 'quick', date, category, note, payments: [{ personId: meId, amount: R(rupees) }], shares: [{ personId: meId, amount: R(rupees) }] });
@@ -177,8 +185,10 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
   // low-point warning). Without this, Safe-to-Spend's "Salary before then" and
   // goal-funding-this-cycle both read as if there were no income at all, which
   // is what demo data was doing before this rule existed.
+  // Anchored at NEXT month's 1st: the last three salaries are logged above, and a rule dated in the
+  // past would materialise a second copy of each the next time the app opens.
   await insertTxn(db, {
-    groupId: personalId, kind: 'income', entryMode: 'quick', date: monthsBack(3, 1),
+    groupId: personalId, kind: 'income', entryMode: 'quick', date: monthsAhead(1, 1),
     category: 'Salary', note: 'Monthly salary', recurFreq: 'monthly', recurInterval: 1,
     payments: [{ personId: meId, amount: R(85000) }], shares: [{ personId: meId, amount: R(85000) }],
   });
@@ -200,8 +210,8 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
   await exp('Electricity', 2200, thisMonth(7), { note: 'BESCOM bill', attach: 'demo://receipt-bescom.pdf' });
   await exp('Shopping', 4500, thisMonth(8), { note: 'Winter clothes', place: 'Phoenix Mall' });
   await exp('Health & Pharmacy', 800, thisMonth(10), { pay: PayMethod.Cash });
-  await exp('Chai & Snacks', 5, thisMonth(12));                                          // tiny-amount edge case
-  await exp('Chai & Snacks', 5, thisMonth(14));
+  await exp('Chai & Snacks', 20, thisMonth(12));                                         // tiny-amount edge case
+  await exp('Chai & Snacks', 30, thisMonth(14));
   await exp('Cab & Auto', 350, thisMonth(13), { place: 'Uber', pay: PayMethod.Upi });
 
   // Last month — gives shifts vs this month + reports/trend depth + a big one-off.
@@ -230,9 +240,7 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
     insertTxn(db, { groupId: personalId, kind: 'expense', entryMode: 'quick', date: monthsBack(3, 1), category, note, recurFreq: freq, recurInterval: interval, payments: [{ personId: meId, amount: R(rupees) }], shares: [{ personId: meId, amount: R(rupees) }] });
   await rule('Entertainment', 649, 'monthly', 'Netflix');
   await rule('Entertainment', 119, 'monthly', 'Spotify');
-  await rule('Bills', 22000, 'monthly', 'Rent auto-pay');
   await rule('Insurance', 12000, 'yearly', 'Term insurance');
-  await rule('Household Help', 800, 'weekly', 'House cleaning');                          // weekly frequency
   await rule('Maintenance', 2500, 'custom', 'Society dues (every 90 days)', 90);          // custom interval (days)
   const gymRule = await rule('Gym & Fitness', 1500, 'monthly', 'Gym membership');
   await pauseRecurring(db, gymRule);                                                     // paused state
@@ -242,6 +250,9 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
   // Near-due recurring rules → populate Home "Coming up" + Plan "Upcoming this month".
   // Anchored a few days ahead so their NEXT occurrence is imminent (no past occurrences materialize).
   const DAY = 86400000;
+  // Rent is logged for the last three months above; its rule starts at next month's 2nd so it
+  // continues the pattern instead of duplicating it. (Its category is Rent, matching the logged rows.)
+  await insertTxn(db, { groupId: personalId, kind: 'expense', entryMode: 'quick', date: monthsAhead(1, 2), category: 'Rent', note: 'Flat rent (auto-pay)', payMethod: PayMethod.Bank, recurFreq: 'monthly', recurInterval: 1, payments: [{ personId: meId, amount: R(22000) }], shares: [{ personId: meId, amount: R(22000) }] });
   const dueRule = (category: string, rupees: number, freq: 'weekly' | 'monthly' | 'yearly', note: string, inDays: number) =>
     insertTxn(db, { groupId: personalId, kind: 'expense', entryMode: 'quick', date: Date.now() + inDays * DAY, category, note, recurFreq: freq, recurInterval: 1, payments: [{ personId: meId, amount: R(rupees) }], shares: [{ personId: meId, amount: R(rupees) }] });
   await dueRule('Bills', 400, 'weekly', 'Newspaper', 1);            // due tomorrow
@@ -257,18 +268,18 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
   await exp('Metro & Bus', 60, thisMonth(2));
   await exp('Parking & Toll', 120, thisMonth(13));
 
-  // PRIMED FLOW: an obvious row to long-press/delete so you can see the Undo toast.
-  await exp('Other', 250, thisMonth(11), { note: 'Delete me — tests the Undo toast' });
+  // PRIMED FLOW: any row can be swiped away to see the Undo toast; this is a small, ordinary one.
+  await exp('Cab & Auto', 250, thisMonth(11), { note: 'Auto to the station' });
 
-  // --- Roommates: equal splits → live balances, then partial settlements --
-  await insertTxn(db, { groupId: roommates.id, kind: 'expense', entryMode: 'quick', date: monthsBack(1, 1), category: 'Rent', note: 'Flat rent', payments: [{ personId: meId, amount: R(30000) }], shares: [{ personId: meId, amount: R(10000) }, { personId: aarav.id, amount: R(10000) }, { personId: priya.id, amount: R(10000) }] });
+  // --- Roommates (shared flat): groceries, internet, power — rent is each person's own, above ------
   await insertTxn(db, { groupId: roommates.id, kind: 'expense', entryMode: 'quick', date: thisMonth(4), category: 'Groceries', note: 'Weekly groceries', payments: [{ personId: aarav.id, amount: R(4500) }], shares: [{ personId: meId, amount: R(1500) }, { personId: aarav.id, amount: R(1500) }, { personId: priya.id, amount: R(1500) }] });
   await insertTxn(db, { groupId: roommates.id, kind: 'expense', entryMode: 'quick', date: thisMonth(6), category: 'WiFi & Broadband', note: 'Internet', payments: [{ personId: priya.id, amount: R(1200) }], shares: [{ personId: meId, amount: R(400) }, { personId: aarav.id, amount: R(400) }, { personId: priya.id, amount: R(400) }] });
   await insertTxn(db, { groupId: roommates.id, kind: 'expense', entryMode: 'quick', date: thisMonth(9), category: 'Electricity', note: 'Power bill', payments: [{ personId: meId, amount: R(1800) }], shares: [{ personId: meId, amount: R(600) }, { personId: aarav.id, amount: R(600) }, { personId: priya.id, amount: R(600) }] });
-  await recordSettlement(db, { groupId: roommates.id, fromId: aarav.id, toId: meId, amount: R(5000), date: thisMonth(12), payMethod: PayMethod.Upi, category: 'Rent', note: 'Part of rent' });
-  await recordSettlement(db, { groupId: roommates.id, fromId: priya.id, toId: meId, amount: R(3000), date: thisMonth(14), payMethod: PayMethod.Cash, category: 'Repayment' });
+  await recordSettlement(db, { groupId: roommates.id, fromId: aarav.id, toId: meId, amount: R(1500), date: thisMonth(12), payMethod: PayMethod.Upi, category: 'Shared Bill', note: 'For the electricity' });
+  await recordSettlement(db, { groupId: roommates.id, fromId: priya.id, toId: meId, amount: R(600), date: thisMonth(14), payMethod: PayMethod.Cash, category: 'Repayment' });
   // Shared-group recurring rule → Personal → Recurring shows a second group section (Roommates).
-  await insertTxn(db, { groupId: roommates.id, kind: 'expense', entryMode: 'quick', date: monthsBack(3, 1), category: 'Household Help', note: 'Maid (shared)', recurFreq: 'monthly', recurInterval: 1, payments: [{ personId: meId, amount: R(3000) }], shares: [{ personId: meId, amount: R(1000) }, { personId: aarav.id, amount: R(1000) }, { personId: priya.id, amount: R(1000) }] });
+  // Starts next month: dated in the past it would materialise months of maid payments I fronted and nobody repaid.
+  await insertTxn(db, { groupId: roommates.id, kind: 'expense', entryMode: 'quick', date: monthsAhead(1, 5), category: 'Household Help', note: 'Maid (shared)', recurFreq: 'monthly', recurInterval: 1, payments: [{ personId: meId, amount: R(3000) }], shares: [{ personId: meId, amount: R(1000) }, { personId: aarav.id, amount: R(1000) }, { personId: priya.id, amount: R(1000) }] });
 
   // --- Goa Trip: exact + shares splits + an itemized bill -----------------
   // Hotel — EXACT split (everyone a different amount).
@@ -305,8 +316,8 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
   await recordSettlement(db, { groupId: office.id, fromId: vikram.id, toId: meId, amount: R(500), date: thisMonth(6), payMethod: PayMethod.Cash, category: 'Shared Bill' });
 
   // --- Family: I owe THEM (they paid) → a "you owe" balance direction --------
-  await insertTxn(db, { groupId: family.id, kind: 'expense', entryMode: 'quick', date: thisMonth(3), category: 'Groceries', note: 'Monthly groceries', payments: [{ personId: priya.id, amount: R(6000) }], shares: [{ personId: meId, amount: R(2000) }, { personId: priya.id, amount: R(2000) }, { personId: aarav.id, amount: R(2000) }] });
-  await insertTxn(db, { groupId: family.id, kind: 'expense', entryMode: 'quick', date: thisMonth(8), category: 'Health & Pharmacy', note: 'Medicines', payments: [{ personId: aarav.id, amount: R(2400) }], shares: [{ personId: meId, amount: R(800) }, { personId: priya.id, amount: R(800) }, { personId: aarav.id, amount: R(800) }] });
+  await insertTxn(db, { groupId: family.id, kind: 'expense', entryMode: 'quick', date: thisMonth(3), category: 'Groceries', note: 'Monthly groceries', payments: [{ personId: meera.id, amount: R(6000) }], shares: [{ personId: meId, amount: R(2000) }, { personId: meera.id, amount: R(2000) }, { personId: aarav.id, amount: R(2000) }] });
+  await insertTxn(db, { groupId: family.id, kind: 'expense', entryMode: 'quick', date: thisMonth(8), category: 'Health & Pharmacy', note: 'Medicines', payments: [{ personId: aarav.id, amount: R(2400) }], shares: [{ personId: meId, amount: R(800) }, { personId: meera.id, amount: R(800) }, { personId: aarav.id, amount: R(800) }] });
 
   // --- Manali Trip: single expense + a full settle-back ----------------------
   await insertTxn(db, { groupId: manali.id, kind: 'expense', entryMode: 'quick', date: monthsBack(2, 20), category: 'Travel', note: 'Cabs & stay', payments: [{ personId: meId, amount: R(15000) }], shares: [{ personId: meId, amount: R(5000) }, { personId: rohan.id, amount: R(5000) }, { personId: vikram.id, amount: R(5000) }] });
@@ -356,7 +367,7 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
   // values are chosen to demonstrate all three list sections, not just flavor text.
   const emergency = await insertGoal(db, { name: 'Emergency Fund', target: R(100000), priority: 'emergency', icon: 'shield', color: '#0EA5E9', allocation: R(5000), frequency: 'monthly', locked: true });
   await fundGoal(db, emergency.id, R(40000), 'manual');                           // 40% funded, locked AND emergency-tagged
-  const trip = await insertGoal(db, { name: 'Goa Trip Fund', target: R(30000), priority: 'want', icon: 'map', color: '#F472B6', category: 'Travel', allocation: R(5000), frequency: 'monthly', target_date: Date.now() + 60 * 86400000 });
+  const trip = await insertGoal(db, { name: 'Next Trip Fund', target: R(30000), priority: 'want', icon: 'map', color: '#F472B6', category: 'Travel', allocation: R(5000), frequency: 'monthly', target_date: Date.now() + 60 * 86400000 });
   await fundGoal(db, trip.id, R(30000), 'manual');                                // reached (100%) + has deadline
   const laptop = await insertGoal(db, { name: 'New Laptop', target: R(80000), priority: 'need', icon: 'monitor', color: '#818CF8', category: 'Electronics' });
   await fundGoal(db, laptop.id, R(15000), 'manual');                              // partial
@@ -518,12 +529,12 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
     { date: thisMonth(20), amount: R(485), description: 'Select Infrastructure', kind: 'expense', category: 'Bills', direction: 'debit', source: 'gpay', pay_method: PayMethod.Upi, raw: null },
     { date: thisMonth(19), amount: R(70), description: 'PVR LIMITED', kind: 'expense', category: 'Entertainment', direction: 'debit', source: 'gpay', pay_method: null, raw: null },
     { date: thisMonth(19), amount: R(420), description: 'Amazon Pay', kind: 'expense', category: 'Shopping', direction: 'debit', source: 'gpay', pay_method: PayMethod.Wallet, raw: null },
-    { date: thisMonth(18), amount: R(1000), description: 'PREM PURUSHOTTAM BHATI', kind: 'income', category: null, direction: 'credit', source: 'gpay', pay_method: null, raw: null },
+    { date: thisMonth(18), amount: R(1000), description: 'RAHUL VERMA', kind: 'income', category: null, direction: 'credit', source: 'gpay', pay_method: null, raw: null },
     { date: thisMonth(18), amount: R(2000), description: 'Om Prakash Basnet', kind: 'expense', category: null, direction: 'debit', source: 'gpay', pay_method: PayMethod.Upi, raw: null },
     // Bank / UPI email alerts — a separate section in Review.
     { date: thisMonth(17), amount: R(264), description: 'GOKUL MEDICAL STORE', kind: 'expense', category: 'Health & Pharmacy', direction: 'debit', source: 'email', pay_method: PayMethod.Card, raw: 'Rs 264.00 spent on Credit Card ending 4321 at GOKUL MEDICAL STORE' },
     { date: thisMonth(17), amount: R(73), description: 'Rapido', kind: 'expense', category: 'Cab & Auto', direction: 'debit', source: 'email', pay_method: PayMethod.Upi, raw: 'You paid ₹73 to Rapido via UPI' },
-    { date: thisMonth(16), amount: R(6000), description: 'Flat rent share', kind: 'expense', category: 'Rent', direction: 'debit', source: 'email', pay_method: PayMethod.Autopay, raw: 'E-mandate debit of Rs 6000 towards Flat rent share' },
+    { date: thisMonth(16), amount: R(2500), description: 'Society maintenance', kind: 'expense', category: 'Maintenance', direction: 'debit', source: 'email', pay_method: PayMethod.Autopay, raw: 'E-mandate debit of Rs 2500 towards Society maintenance' },
   ]);
 
   // Verify the writes actually landed — turns a silent "empty app" into a clear signal.

@@ -8,34 +8,35 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import { settings } from '../../src/lib/settings';
-import { colors, type, space, radius, layout, shadow } from '../../src/theme';
-import { haptic } from '../../src/lib/haptics';
-import { loadSettingsTab, exportAllGroups, saveMyName, saveMyVpa } from '../../src/lib/settingsData';
-import { replacePersonPhoto } from '../../src/lib/personWrites';
-import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
-import { isValidVpa } from '../../src/lib/upiIntent';
-import { RequestQrSheet } from '../../src/components/finance/RequestQrSheet';
-import { formatCompact } from '../../src/lib/money';
-import { shareCsv } from '../../src/lib/shareCsv';
-import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
-import { SheetModal } from '../../src/components/ui/SheetModal';
-import { PayMethodSelector } from '../../src/components/finance/PayMethodSelector';
-import { Input } from '../../src/components/ui/Input';
-import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
-import { SettingsRow, settingsRowDivider } from '../../src/components/ui/SettingsRow';
-import { IconCircle } from '../../src/components/ui/IconCircle';
-import { decor } from '../../src/constants/palette';
-import { freeBytes } from '../../src/lib/deviceStorage';
-import { StorageVerdict, storageVerdict, formatBytes } from '../../src/lib/storage';
-import { DEV_TOOLS_ENABLED } from '../../src/constants/devTools';
-import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
-import type { Person } from '../../src/db/queries/persons';
-import type { BudgetCadence } from '../../src/db/queries/categoryBudgets';
-import { asBudgetCadence, asPayMethod, PayMethod, PAY_METHOD_ICON, PAY_METHOD_LABEL } from '../../src/constants/enums';
-import { useScreenData } from '../../src/hooks/useScreenData';
-import { useServerSession } from '../../src/hooks/useServerSession';
-import { ErrorState } from '../../src/components/ui/ErrorState';
+import { settings } from '../../../src/lib/settings';
+import { colors, type, space, radius, layout, shadow } from '../../../src/theme';
+import { haptic } from '../../../src/lib/haptics';
+import { loadSettingsTab, exportAllGroups, saveMyName, saveMyVpa } from '../../../src/lib/settingsData';
+import { replacePersonPhoto } from '../../../src/lib/personWrites';
+import { useDataRefresh } from '../../../src/components/system/DataRefreshProvider';
+import { isValidVpa } from '../../../src/lib/upiIntent';
+import { RequestQrSheet } from '../../../src/components/finance/RequestQrSheet';
+import { formatCompact } from '../../../src/lib/money';
+import { shareCsv } from '../../../src/lib/shareCsv';
+import { MemberAvatar } from '../../../src/components/finance/MemberAvatar';
+import { SheetModal } from '../../../src/components/ui/SheetModal';
+import { PayMethodSelector } from '../../../src/components/finance/PayMethodSelector';
+import { Input } from '../../../src/components/ui/Input';
+import { PrimaryButton } from '../../../src/components/ui/PrimaryButton';
+import { ScreenHeader } from '../../../src/components/ui/ScreenHeader';
+import { SettingsRow, settingsRowDivider } from '../../../src/components/ui/SettingsRow';
+import { IconCircle } from '../../../src/components/ui/IconCircle';
+import { decor } from '../../../src/constants/palette';
+import { freeBytes } from '../../../src/lib/deviceStorage';
+import { StorageVerdict, storageVerdict, formatBytes } from '../../../src/lib/storage';
+import { DEV_TOOLS_ENABLED } from '../../../src/constants/devTools';
+import { useFeatureFlags } from '../../../src/components/system/FeatureFlagsProvider';
+import type { Person } from '../../../src/db/queries/persons';
+import type { BudgetCadence } from '../../../src/db/queries/categoryBudgets';
+import { asBudgetCadence, asPayMethod, PayMethod, PAY_METHOD_ICON, PAY_METHOD_LABEL } from '../../../src/constants/enums';
+import { useScreenData } from '../../../src/hooks/useScreenData';
+import { useServerSession } from '../../../src/hooks/useServerSession';
+import { ErrorState } from '../../../src/components/ui/ErrorState';
 
 const CADENCE_LABELS: Record<BudgetCadence, string> = { daily: 'Daily', monthly: 'Monthly', yearly: 'Yearly' };
 const CADENCE_KEYS: BudgetCadence[] = ['daily', 'monthly', 'yearly'];
@@ -255,14 +256,8 @@ export default function SettingsScreen() {
     // No keyboard container: every field here is in a sheet, and `DraggableSheet`
     // handles its own keyboard (AGENTS.md §6b).
     <View style={styles.root}>
-    {/* Persistent status-bar cover — outside the ScrollView so scrolled content
-        never paints under the clock/notch once the large title scrolls away. */}
-    <View style={[styles.statusBarCover, { height: insets.top, backgroundColor: colors.bg }]} pointerEvents="none" />
-    <ScrollView style={styles.container} contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + layout.tabBarHeight + space.lg }]} keyboardShouldPersistTaps="handled">
-      <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
-        <Text style={styles.title}>Settings</Text>
-      </View>
-
+    <ScreenHeader title="Settings" onBack={() => router.back()} />
+    <ScrollView style={styles.container} contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + space.lg }]} keyboardShouldPersistTaps="handled">
       {loadError && (
         <ErrorState
           title="Couldn't load your profile"
@@ -419,8 +414,8 @@ export default function SettingsScreen() {
         {/* Each row carries its own trailing divider so a hidden row leaves no seam. */}
         {/* `B-101` follow-up: Import and Review inbox were two rows for one pipeline.
             One row, routed by state — unconfirmed rows waiting means the useful thing
-            is to confirm them; otherwise it's to bring more in. `/review`'s empty state
-            offers Import, so neither destination becomes unreachable. */}
+            is to confirm them; otherwise it's to bring more in. Review's header carries an
+            Import button, so neither destination becomes unreachable. */}
         {flags.importReview && (<>
           <SettingsRow
             icon={pendingCount > 0 ? 'inbox' : 'upload'}

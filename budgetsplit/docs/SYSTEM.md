@@ -141,15 +141,15 @@ surface."* Cite it by name in a `State.` line rather than saying "a group with a
 
 | | |
 |---|---|
-| **People** | Aarav · Priya · Rohan · Sneha · Vikram |
-| **Groups** | Personal · **Roommates** (equal splits, part-settled) · **Goa Trip** (exact + shares + an itemized bill, **simplify OFF**) · **Office Lunch** (fully settled) · **Family** (you owe *them*) · **Manali Trip** (settled back) · **Weekend Plans** (deliberately empty) · **Old Flat** (archived) |
+| **People** | Aarav · Priya · Rohan · Sneha · Vikram · Meera (Family only — you owe her) |
+| **Groups** | Personal · **Roommates** (equal splits, part-settled) · **Goa Trip** (exact + shares + an itemized bill, **simplify OFF**) · **Office Lunch** (fully settled) · **Family** (Meera and Aarav paid — you owe *them*) · **Manali Trip** (settled back) · **Weekend Plans** (deliberately empty) · **Old Flat** (archived) |
 | **Budgets** | Groceries ₹9,000 spent vs ₹8,000 → **over** · Eating Out ₹2,700 vs ₹3,000 → **near** · Fuel ₹1,500 vs ₹4,000 → **under** · plus daily and yearly cadences |
-| **Recurring** | Netflix, Spotify, rent auto-pay, weekly cleaning, a 90-day custom interval · Gym is **paused** · an old prepaid plan is **ended** · three due within 3 days · Prime Video repeats un-ruled, to be detected |
-| **Goals** | Emergency Fund 40%, **locked** · Goa Trip Fund **100%** · New Laptop 19% · Europe Vacation, with a **withdrawal** · Anniversary Gift **120% overfunded** · Tax Payment, deadline **already past** · Weekend Getaway at **97.5% — add ₹500 to fire the celebration** · New Phone at **0%** |
+| **Recurring** | Netflix, Spotify, rent auto-pay (continues the logged rent from next month), a 90-day custom interval, the shared maid in Roommates · Gym is **paused** · an old prepaid plan is **ended** · three due within 3 days · Prime Video repeats un-ruled, to be detected |
+| **Goals** | Emergency Fund 40%, **locked** · Next Trip Fund **100%** · New Laptop 19% · Europe Vacation, with a **withdrawal** · Anniversary Gift **120% overfunded** · Tax Payment, deadline **already past** · Weekend Getaway at **97.5% — add ₹500 to fire the celebration** · New Phone at **0%** |
 | **Money** | ₹2,10,000 bank · ₹45,000 cash · ₹45,000 wallet · ₹10,000 of ₹60,000 credit used · assets: index funds, gold, an FD |
 | **Peers** | **Aarav is trusted**, so his expense applied on arrival · **Priya is on review**, so hers waits and counts nowhere · a transfer from Aarav **still waits, though he is trusted** · **Rohan disputes** an entry you wrote |
 | **Inbox** | 9 rows waiting in Review — 6 from Google Pay, 3 from email alerts, some pre-categorised, some not |
-| **Edges** | a ₹5 expense · a ₹65,000 one · a soft-deleted row · a row labelled *"Delete me — tests the Undo toast"* · `Poker Night`, a category **Aarav used that you do not have** |
+| **Edges** | a ₹20 chai · a ₹65,000 laptop · a soft-deleted row · `Poker Night`, a category **Aarav used that you do not have** |
 
 The peer rows are the part worth knowing about: **approvals, disputes and trust are walkable on one
 phone.** Only real sync — pushing, pulling, sharing a group, accepting an invite, signing in —

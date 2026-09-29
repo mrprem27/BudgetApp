@@ -206,7 +206,7 @@ Absorbed from `AUDIT.md` §2 so the IDs cited elsewhere resolve here. 45 route f
 | S-03 | **Home / Dashboard** | `app/(tabs)/index.tsx` | Period-scoped spend hero + category ranks + owe/owed + forecast + streak. Dedicated first-run empty state. | `/review` `/search` `/upcoming` `/settings` `/history` `/add/quick` `/group/{personal}/budget` `/groups` `/friends` `/category/{name}` `/insights` |
 | S-04 | **Groups** | `app/(tabs)/groups.tsx` | Groups list (Personal pinned first) with budget health + my net; swipe-left archive/restore; People balance chips. | `/group/{id}` (or `/personal`) · `/add/quick?kind=transfer&to=` |
 | S-05 | **Plan** | `app/(tabs)/savings.tsx` | Available-Money card (+ net worth, credit headroom), overspend **consent** prompt, drag-rankable goals, upcoming bills, forecast. | `/insights` `/plan/recurring` `/afford` · `/savings/{id}` |
-| S-06 | **Settings** | `app/(tabs)/settings.tsx` | Profile + **Account** (only with a server configured) / **Getting paid** (Your UPI ID · Show my UPI QR, behind `upiSettle`) / Manage / Preferences / Security / Notifications / Data & Help / About. Version ×7 unlocks S-27. | `/settings/account` `/friends` `/categories` `/group/{personal}/budget` `/groups` `/features` `/settings/notifications` `/settings/backup` `/import` `/reports` `/help` `/history` `/storage` |
+| S-06 | **Settings** | `app/(system)/settings/index.tsx` | Profile + **Account** (only with a server configured) / **Getting paid** (Your UPI ID · Show my UPI QR, behind `upiSettle`) / Manage / Preferences / Security / Notifications / Data & Help / About. Version ×7 unlocks S-27. | `/settings/account` `/friends` `/categories` `/group/{personal}/budget` `/groups` `/features` `/settings/notifications` `/settings/backup` `/import` `/reports` `/help` `/history` `/storage` |
 
 ### 3.3 Add / edit flows (full-screen modals)
 
@@ -248,7 +248,7 @@ Absorbed from `AUDIT.md` §2 so the IDs cited elsewhere resolve here. 45 route f
 |---|---|---|---|
 | S-20 | **Reports** | `app/(money)/reports.tsx` | Factual monthly history: donut, trend bars, per-group budget summaries, year stats, CSV + PDF export. Month selector cannot advance past the current month. |
 | S-21 | **Report transactions** | `app/(money)/report-transactions.tsx` | Month-scoped transaction list with category / type / group / sort filters — the drill-down from a Reports category. |
-| S-22 | **Insights** | `app/(money)/insights.tsx` | The single narrative-insight home: an always-present headline (spend vs budget, pace, month-end verdict) over collapsible sections — Needs attention · Month-end forecast · Changed vs last month · What if I cut back? · Ways to save. |
+| S-22 | **Insights** | `app/(tabs)/insights.tsx` | The single narrative-insight home: an always-present headline (spend vs budget, pace, month-end verdict) over collapsible sections — Needs attention · Month-end forecast · Changed vs last month · What if I cut back? · Ways to save. |
 | S-23 | **Search** | `app/(ledger)/search.tsx` | Free-text search over 3 years, month-sectioned, 6 rows/section with a "more" expander. 150 ms debounce. Deliberately **no** pull-to-refresh. |
 
 ### 3.8 Settings sub-screens & utilities
@@ -1309,7 +1309,7 @@ The month-scoped drill-down from Reports. Accepts `?month=yyyy-MM` and `?categor
 which sets the window and pre-applies the filter. Filters by category / type / group + sort;
 rows → `/txn/{id}`.
 
-### Insights — `app/(money)/insights.tsx` (narrative only)
+### Insights — `app/(tabs)/insights.tsx` (narrative only)
 **States:** error + retry · `EmptyState` "No insights yet" · pull-to-refresh.
 
 All figures are **my share**, on the same basis as Home (`getMyGlobalBudgetStatus` for the budget it
@@ -1342,7 +1342,7 @@ home.
 
 ## 13. Settings & sub-screens
 
-### 13.1 Settings — `app/(tabs)/settings.tsx`
+### 13.1 Settings — `app/(system)/settings/index.tsx`
 **States:** error + retry; `ActivityIndicator` on the export row while a CSV builds. No loading
 state and no pull-to-refresh — it's a static config list. A persistent status-bar cover view
 keeps content from painting under the clock/notch.
@@ -1620,7 +1620,7 @@ Absorbed from `AUDIT.md` §3. Each step names the code that does it.
 ### FLOW-02 — Feature selection / toggle
 | # | Step | Code |
 |---|---|---|
-| 1 | Settings → "Feature management" | `app/(tabs)/settings.tsx` |
+| 1 | Settings → "Feature management" | `app/(system)/settings/index.tsx` |
 | 2 | S-24 renders the non-toggleable "Core" pillars + the module switches in sections | `app/(system)/features.tsx` |
 | 3 | Flipping a switch calls `setFlag(key, value)` from context | `components/system/FeatureFlagsProvider.tsx:25-28` |
 | 4 | Local state updates optimistically; `AsyncStorage.setItem('feature_' + key, …)` is best-effort | `src/lib/featureFlags.ts:67-69` |
@@ -1899,7 +1899,7 @@ The default OCR provider is `gemini`, so out of the box a scanned receipt photo 
 party. **Feature management → Smart capture → Cloud Receipt Scanning** turns that off and keeps
 everything on the phone (§7.4). Because of that, and now because signing in is possible at all,
 any absolute in-app claim ("zero network calls", "nothing ever leaves your device") would be
-false as written. The strings in `app/(system)/help.tsx`, `app/(tabs)/settings.tsx`, `app/(system)/storage.tsx` and
+false as written. The strings in `app/(system)/help.tsx`, `app/(system)/settings/index.tsx`, `app/(system)/storage.tsx` and
 `VOICE_SHORTCUT_PRIVACY` are scoped instead: local-first, no tracking, no analytics, nothing
 uploaded **unless you ask** — with receipt scanning and signing in named as the two
 exceptions, and the way out named for each (the OCR toggle; not signing in). Help → *The server
@@ -2046,7 +2046,7 @@ Every sheet routes through `ui/SheetModal` (an RN `<Modal transparent>` wrapping
 |---|---|
 | "New Group" (`GroupForm`) | `app/(tabs)/groups.tsx` |
 | "Add to {goal}" · "New goal" | `app/(tabs)/savings.tsx` |
-| "Your name" · "Default budget cadence" | `app/(tabs)/settings.tsx` |
+| "Your name" · "Default budget cadence" | `app/(system)/settings/index.tsx` |
 | "Add Tax" / "Add Tip" / "Add Service Charge" / "Add Discount" | `app/add/itemized.tsx` |
 | "{group.name}" options (Audit log · Export as CSV · Edit group · Archive group) | `app/(people)/group/[id].tsx` |
 | "How often?" (per-category cadence) | `app/(people)/group/[id]/budget.tsx` |

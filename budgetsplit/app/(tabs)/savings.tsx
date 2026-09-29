@@ -25,6 +25,8 @@ import { MoneyEditorSheet } from '../../src/components/finance/plan/MoneyEditorS
 import { PayCardBillSheet } from '../../src/components/finance/plan/PayCardBillSheet';
 import { MoveMoneySheet } from '../../src/components/finance/plan/MoveMoneySheet';
 import { ForecastCard } from '../../src/components/finance/plan/ForecastCard';
+import { ProfileButton } from '../../src/components/finance/ProfileButton';
+import { SectionHeader } from '../../src/components/ui/SectionHeader';
 import { formatCompact, parseToPaise } from '../../src/lib/money';
 
 import { addMonths } from 'date-fns';
@@ -102,7 +104,7 @@ export default function SavingsScreen() {
   return (
     <View style={styles.container}>
       <ScreenHeader
-        title="Plan"
+        title="Money"
         large
         right={
           /*
@@ -126,10 +128,6 @@ export default function SavingsScreen() {
            */
           <View style={styles.headerRight}>
             {[
-              { key: 'insights', icon: 'bar-chart-2' as const, label: 'Insights', a11y: 'Insights', show: flags.insights, to: '/insights' as Href },
-              // V2-08: Reports was reachable only from Settings › Data & Help, which is
-              // where you look for an export, not for last month's numbers.
-              { key: 'reports', icon: 'pie-chart' as const, label: 'Reports', a11y: 'Reports', show: flags.reports, to: '/reports' as Href },
               { key: 'subs', icon: 'refresh-cw' as const, label: 'Recurring', a11y: 'Recurring', show: flags.recurring, to: '/plan/recurring' as Href },
               // Reminders is notification config — lives in Settings › Notifications & Reminders, not here.
               { key: 'afford', icon: 'help-circle' as const, label: 'Afford', a11y: 'Can I afford?', show: flags.affordCheck, to: '/afford' as Href },
@@ -139,6 +137,7 @@ export default function SavingsScreen() {
                 <Text style={styles.headerIconLabel} numberOfLines={1}>{m.label}</Text>
               </TouchableOpacity>
             ))}
+            <ProfileButton />
           </View>
         }
       />
@@ -146,6 +145,8 @@ export default function SavingsScreen() {
         <ErrorState onRetry={() => reload()} />
       ) : (
       <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: contentInset }]} refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
+        <SectionHeader title="Now" first />
+
         {/* Total Money — cash + assets + available credit, with breakdown */}
         {money && (
           <TotalMoneyCard
@@ -159,6 +160,13 @@ export default function SavingsScreen() {
             onMoveToInvestments={() => setShowMoveInvest(true)}
             onManageAssets={() => router.push('/assets')}
           />
+        )}
+
+        {(forecastMonthEnd !== null || (overspend?.total ?? 0) > 0 || upcoming.length > 0) && <SectionHeader title="This month" />}
+
+        {/* Month-end spend forecast */}
+        {forecastMonthEnd !== null && (
+          <ForecastCard forecastMonthEnd={forecastMonthEnd} forecastBudget={forecastBudget} />
         )}
 
         {/* Overspend — ASKS before pulling from goals (`V2-10`). It used to move the
@@ -206,6 +214,19 @@ export default function SavingsScreen() {
               </TouchableOpacity>
             </View>
           </View>
+        )}
+
+        {/* Recurring CHARGES due soon — one row per occurrence. Deliberately not the
+            same list as /plan/recurring, which shows one row per rule: a yearly rule
+            due in 11 months, or a paused/fully-skipped one, is a rule with no upcoming
+            charge. "Due this month" used to carry that distinction in the title itself;
+            `SPEC-2026-09-FEEDBACK.md` §6 collapsed it to one word everywhere ("Upcoming" is charges,
+            "Recurring" is the inventory) — the reader now tells them apart by which
+            block they're looking at, not by a bespoke title per screen. */}
+        {upcoming.length > 0 && (
+          // No "Manage" link: this screen's header already has a Recurring shortcut, so a
+          // second entry point was pure clutter on a block whose job is to be glanced at.
+          <ComingUpList items={upcoming} showIcon />
         )}
 
         {/* Savings insights moved to the global Insights screen (header link above). */}
@@ -278,24 +299,6 @@ export default function SavingsScreen() {
             onAction={() => { resetNew(); setShowNew(true); }}
           />
         ))}
-
-        {/* Recurring CHARGES due soon — one row per occurrence. Deliberately not the
-            same list as /plan/recurring, which shows one row per rule: a yearly rule
-            due in 11 months, or a paused/fully-skipped one, is a rule with no upcoming
-            charge. "Due this month" used to carry that distinction in the title itself;
-            `SPEC-2026-09-FEEDBACK.md` §6 collapsed it to one word everywhere ("Upcoming" is charges,
-            "Recurring" is the inventory) — the reader now tells them apart by which
-            block they're looking at, not by a bespoke title per screen. */}
-        {upcoming.length > 0 && (
-          // No "Manage" link: this screen's header already has a Recurring shortcut, so a
-          // second entry point was pure clutter on a block whose job is to be glanced at.
-          <ComingUpList items={upcoming} showIcon />
-        )}
-
-        {/* Month-end spend forecast */}
-        {forecastMonthEnd !== null && (
-          <ForecastCard forecastMonthEnd={forecastMonthEnd} forecastBudget={forecastBudget} />
-        )}
 
         <View style={{ height: space.lg }} />
       </ScrollView>

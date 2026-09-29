@@ -4,6 +4,7 @@ import { AmountText } from '../ui/AmountText';
 import { MemberAvatar } from './MemberAvatar';
 import { colors, type, space, radius } from '../tokens';
 import type { Person } from '../../db/queries/persons';
+import { paymentSentence } from '../../lib/owe';
 
 type Props = {
   from: Person;
@@ -22,11 +23,14 @@ export function BalanceRow({ from, to, amount, onPaid }: Props) {
         </View>
       </View>
       <View style={styles.names}>
-        <Text style={styles.sentence} numberOfLines={1}>
-          <Text style={styles.bold}>{from.name}</Text>
-          {' owes '}
-          <Text style={styles.bold}>{to.name}</Text>
-        </Text>
+        {(() => {
+          const { lead, name, tail } = paymentSentence(from, to);
+          return (
+            <Text style={styles.sentence} numberOfLines={2}>
+              {lead}<Text style={styles.bold}>{name}</Text>{tail}
+            </Text>
+          );
+        })()}
       </View>
       <View style={styles.right}>
         <AmountText paise={amount} size="md" style={styles.amount} forceColor={colors.accent} />

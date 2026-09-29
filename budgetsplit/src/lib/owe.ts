@@ -72,3 +72,17 @@ export function oweView(net: number): OweView {
     thirdPerson: 'Settled',
   };
 }
+
+/**
+ * A payment between two people as a sentence, worded from the viewer's side: "You owe Aarav",
+ * "Aarav owes you", "Aarav owes Riya". The counterparty comes FIRST when it is the long part, so a
+ * long name is never the piece an ellipsis cuts off — which is what hid who you owed.
+ */
+export function paymentSentence(
+  from: { name: string; is_me?: number | boolean },
+  to: { name: string; is_me?: number | boolean },
+): { lead: string; name: string; tail: string } {
+  if (from.is_me) return { lead: 'You owe ', name: to.name, tail: '' };
+  if (to.is_me) return { lead: '', name: from.name, tail: ' owes you' };
+  return { lead: '', name: from.name, tail: ` owes ${to.name}` };
+}

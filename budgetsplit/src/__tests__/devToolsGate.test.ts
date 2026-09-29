@@ -57,7 +57,7 @@ describe('the developer-tools gate cannot quietly become permanent', () => {
    * doors and leaves a fourth open.
    */
   it('is the only gate on the developer screen and its entry point', () => {
-    const files = ['../../app/(system)/storage.tsx', '../../app/(tabs)/settings.tsx'];
+    const files = ['../../app/(system)/storage.tsx', '../../app/(system)/settings/index.tsx'];
     for (const rel of files) {
       const src = fs.readFileSync(path.resolve(__dirname, rel), 'utf8');
       // Strip comments before looking: `__DEV__` is legitimate PROSE in the

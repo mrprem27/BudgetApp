@@ -245,7 +245,7 @@ file.
 
 Needs the rebuild: npx expo prebuild --clean && npx expo run:ios
 
-- [ ] **S-06 Settings** — `app/(tabs)/settings.tsx`  
+- [ ] **S-06 Settings** — `app/(system)/settings/index.tsx`  
       Open: Settings tab  
       *Changed:* Account section added; section spacing now computed, not hardcoded
       - [ ] Account section appears, directly under the profile card
@@ -396,7 +396,7 @@ Needs the rebuild: npx expo prebuild --clean && npx expo run:ios
       - [ ] The filter says what it filters, and “All” really includes transfers
       - [ ] No single “total” spanning income, expense and transfer
 
-- [ ] **S-22 Insights** — `app/(money)/insights.tsx`  
+- [ ] **S-22 Insights** — `app/(tabs)/insights.tsx`  
       Open: Home → Insights
       - [ ] X-axis day labels are whole numbers, not “1…” “2…”
       - [ ] Forecast headline and chart tell the same story

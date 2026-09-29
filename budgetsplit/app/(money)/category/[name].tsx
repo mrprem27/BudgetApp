@@ -21,6 +21,7 @@ import { categoryVisual } from '../../../src/constants/categories';
 import { matchesCategory } from '../../../src/lib/categoryFold';
 import { recurringMonthlyEquivalent } from '../../../src/lib/recurrence';
 import { formatRupees, formatCompact } from '../../../src/lib/money';
+import { usageText } from '../../../src/lib/budgetCopy';
 import { myShareOf, myShareOrTotal } from '../../../src/lib/splitMath';
 import { AppRefreshControl } from '../../../src/components/ui/AppRefreshControl';
 import { ScreenHeader } from '../../../src/components/ui/ScreenHeader';
@@ -206,7 +207,7 @@ export default function CategoryDetailScreen() {
                 <View style={styles.budgetTop}>
                   <Text style={styles.cardLabel}>Your budget</Text>
                   <Text style={[styles.budgetPct, { color: view.spent > view.budget ? colors.expense : colors.healthAmber }]}>
-                    {Math.round((view.spent / view.budget) * 100)}% used
+                    {usageText((view.spent / view.budget) * 100)} used
                   </Text>
                 </View>
                 <BudgetBar allocated={view.budget} spent={view.spent} />

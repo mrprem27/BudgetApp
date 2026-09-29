@@ -16,6 +16,42 @@ continuing.
 
 ---
 
+## MASTER LIST — close-out, 2026-09-30 (this is the one to work from)
+
+Everything asked in the last sessions, in one place. Status is honest: `[x]` is built, tested and pushed
+or committed; `[ ]` is not.
+
+### Done
+- [x] Bug scan passes: server, import, UPI, voice, engine (`docs/SPEC-BUGSCAN.md`, ids SV/IM/UP/VP/EG/TP/TR/HB/FC/IR/UX)
+- [x] Card due day held to month length, due-today, reference numbers not amounts (EG-2, IM-3)
+- [x] "Safe to spend until <next year>": nearest payday, 60-day cap, year shown when not this year (EG-3)
+- [x] Time picker: wheels no longer pull the sheet, minute snapped, tap-to-select (TP-1)
+- [x] Help as bullets (HB-1) · Voice entry off Settings · Import button on Review (IR-1)
+- [x] Forecast chart draws once measured (FC-1) · month-end forecast on the engine for Home/Plan/Insights
+- [x] Plan in **Now / This month** zones
+- [x] Asset moves read "Moved to / from …" everywhere; Reports says "Asset moves"
+- [x] Afford's "How we got this" states the engine's real rules (TR-1)
+- [x] Over-budget shows as a multiple (`1.01×`), percent up to 100 (UX-1)
+- [x] Friends: payment rows say "You owe Aarav" / "Aarav owes you" (FR-1) · Group picker: most-used first (GR-1)
+- [x] Backend deployed 2026-09-30 (D1 `magic_links.ip` applied first; live schema = repo) · demo data made consistent (one salary/rent a month, a real "you owe")
+- [x] Navigation: **Home · Groups · [+] · Money · Insights**; Settings opens from the avatar on every tab
+
+### Open — in this order
+- [ ] **P3** One filter structure everywhere (Search, Reports, Review, Personal, Group): frequent filters inline, the rest in a modal (this is G2, widened)
+- [ ] **P4** Phase 5c modules 1–6 (`docs/SPEC-FORMS-GROUP.md`): AmountRow + Your money · Members "+ Add" first · clean notes · full text on hold · group header card · forms to the Edit-group shape
+- [ ] **P6** Docs for the navigation change (SCREENS/SYSTEM), decisions kept here + memory
+- [ ] **P8** Demo **personas**: several selectable demo datasets (new user ~2 weeks → verdict held back; settling in ~6 weeks → medium confidence; established 12 months → high), each internally consistent. Test-only `enginePersonas.ts` is the base
+- [ ] **P9** Card due day: the engine reads `money.card_due_day` but no screen asks for it and it doesn't sync. Add the field (card sheet) + a `money_profiles.card_due_day` column (live D1 ALTER before deploy)
+- [ ] **P7** DEVICE (yours): Money, Insights, Settings-from-avatar, Plan zones, forecast, time picker, Help, filters, forms
+
+### Decisions taken (so they are not re-litigated)
+- Asset ↔ liquid moves are internal movements, never expense or income; word is "Moved". Budget keeps a "moved to assets" line.
+- Month-end spend = spent + engine everyday rate × days left + bills still due. Group analytics keeps its own model (a group has no personal rate).
+- Plan: two labelled zones. Navigation: Money + Insights tabs, Settings under the avatar.
+- Deferred on purpose: Android package targeting (U5), Phase 6 AI narration, cash-last-confirmed input (B-103).
+
+---
+
 ## §0 · Device checks carried over from server sync — yours
 
 From the onboarding / feedback pass:

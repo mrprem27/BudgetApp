@@ -132,3 +132,15 @@ export const overrideConfirmBody = (groupName: string): string[] => [
 
 export const overrideConfirmCta = 'Set my own';
 export const overrideConfirmCancel = 'Keep following the group';
+
+/**
+ * "How much of the budget is used", for display: a percentage up to 100, a multiple beyond it.
+ * `101%` reads as a rounding wobble; `1.01×` says you are over. The screen-reader text stays in
+ * percent — a spoken "1.01 times" is harder to follow than "101 percent".
+ */
+export function usageText(pct: number): string {
+  const p = Number.isFinite(pct) ? Math.max(0, Math.round(pct)) : 0;
+  if (p <= 100) return `${p}%`;
+  const x = p / 100;
+  return `${parseFloat(x >= 10 ? x.toFixed(0) : x >= 2 ? x.toFixed(1) : x.toFixed(2))}×`;
+}

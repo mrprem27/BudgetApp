@@ -25,6 +25,7 @@ import { oweView } from '../../src/lib/owe';
 import { utilLabel } from '../../src/lib/budget';
 import { BudgetBar } from '../../src/components/finance/BudgetBar';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
+import { ProfileButton } from '../../src/components/finance/ProfileButton';
 import { AvatarStack } from '../../src/components/finance/AvatarStack';
 import { BalanceChip } from '../../src/components/ui/BalanceChip';
 import { AmountText } from '../../src/components/ui/AmountText';
@@ -319,6 +320,7 @@ export default function GroupsScreen() {
                 <Feather name="plus" size={20} color={colors.textSecondary} />
               </TouchableOpacity>
             )}
+            <ProfileButton />
           </>
         }
       />

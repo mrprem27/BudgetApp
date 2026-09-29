@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, type LayoutChangeEvent } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, type LayoutChangeEvent } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useScreenData } from '../../src/hooks/useScreenData';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,6 +10,8 @@ import { monthLabel } from '../../src/lib/dateFormat';
 import { colors, type, space, layout, alpha } from '../../src/theme';
 import { categoryVisual } from '../../src/constants/categories';
 import { asFeather } from '../../src/constants/palette';
+import { ProfileButton } from '../../src/components/finance/ProfileButton';
+import { useContentInset } from '../../src/hooks/useContentInset';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { Badge } from '../../src/components/ui/Badge';
 import { Card } from '../../src/components/ui/Card';
@@ -93,6 +96,7 @@ export default function InsightsScreen() {
    * container. The library renders each label in a View exactly `spacing` wide at
    * numberOfLines={1}: one digit fits, two do not, hence "1…", "2…", "3…".
    */
+  const contentInset = useContentInset({ tabBar: true });
   const [chartW, setChartW] = useState(0);
   const onChartLayout = (e: LayoutChangeEvent) => {
     const w = e.nativeEvent.layout.width;
@@ -122,12 +126,22 @@ export default function InsightsScreen() {
           in", velocity, what-if — so a past month would render a page of claims about
           a month that already finished. Month history is Reports' job, and it has a
           selector capped at the current month. */}
-      <ScreenHeader title="Insights" onBack={() => router.back()} />
+      <ScreenHeader
+        title="Insights"
+        right={(
+          <>
+            <TouchableOpacity hitSlop={8} onPress={() => router.push('/reports')} accessibilityRole="button" accessibilityLabel="Reports">
+              <Feather name="pie-chart" size={20} color={colors.accent} />
+            </TouchableOpacity>
+            <ProfileButton />
+          </>
+        )}
+      />
       {loadError ? (
         <ErrorState onRetry={reload} />
       ) : (
       <ScrollView
-        contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + space.lg }]}
+        contentContainerStyle={[styles.scroll, { paddingBottom: contentInset }]}
         refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
         {nothingYet ? (
@@ -274,14 +288,14 @@ export default function InsightsScreen() {
             {!hasForecast && !nothingYet && (
               <SectionCard
                 title="Month-end forecast"
-                subtitle="Needs a couple of days of spending first"
+                subtitle="Needs about a month of spending first"
                 icon="trending-up"
                 expanded={open.has('forecast')}
                 onToggle={() => toggle('forecast')}
               >
                 <Text style={styles.pace}>
-                  A projection this early would swing on a single purchase. Log a
-                  day or two more and this becomes a line you can plan against.
+                  A projection this early would swing on a single purchase. It appears
+                  once there is about a month of spending to base it on.
                 </Text>
               </SectionCard>
             )}

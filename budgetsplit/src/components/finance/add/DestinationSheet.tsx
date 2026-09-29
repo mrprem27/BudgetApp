@@ -14,10 +14,13 @@ import { StyleSheet } from 'react-native';
 import { colors, layout, space } from '../../tokens';
 import type { BudgetGroup } from '../../../db/queries/groups';
 
+/** Personal plus your three most-used groups sit in the first block. */
+const USUAL_COUNT = 4;
+
 type Props = {
   visible: boolean;
   onClose: () => void;
-  /** Already ordered — Personal first, then recency (`getGroupsByRecentUse`). */
+  /** Already ordered — Personal first, then most-used lately (`getGroupsByRecentUse`). */
   groups: BudgetGroup[];
   selectedId: string;
   onSelect: (id: string) => void;
@@ -41,8 +44,8 @@ type Props = {
 /**
  * The destination picker behind the Add screen's `ContextPill`.
  *
- * Every group is listed, not the first three with a "More" escape hatch: a sheet
- * scrolls, so there's no reason to truncate. Rows are full `layout.rowMinHeight`
+ * Every group is listed — a sheet scrolls, so nothing is hidden — but the ones you use most come
+ * first, and the top few sit in their own block so the usual answer is one glance away. Rows are full `layout.rowMinHeight`
  * so they can actually be hit — the pills this replaces were ~32pt with no
  * hitSlop, well under AGENTS.md §6.
  */
@@ -59,33 +62,43 @@ export function DestinationSheet({
   const unchanged = picked.length === selectedPersonIds.length && picked.every(id => selectedPersonIds.includes(id));
   const names = people.filter(p => picked.includes(p.id)).map(p => p.name.split(' ')[0]);
 
+  const renderGroups = (list: BudgetGroup[]) => (
+    <Card clip>
+      {list.map((g, i) => {
+        const active = g.id === selectedId;
+        return (
+          <View key={g.id}>
+            {i > 0 && <Divider indent="text" />}
+            <ListRow
+              leading={<IconCircle icon={asFeather(g.icon, 'layers')} size={layout.iconCircle} color={g.color} />}
+              title={g.name}
+              // Counted, not stored: `is_shared` is never updated, so it read
+              // "Shared" only on groups you RECEIVED and never on ones you
+              // shared yourself. See `MEMBER_COUNT` in queries/groups.
+              subtitle={g.is_personal === 1
+                ? 'Only you'
+                : (g.member_count ?? 0) > 1 ? `Shared with ${(g.member_count ?? 1) - 1}` : undefined}
+              value={active ? <Feather name="check" size={18} color={accent} /> : undefined}
+              chevron={false}
+              selected={active}
+              onPress={() => { onClose(); if (!active) onSelect(g.id); }}
+              accessibilityLabel={g.name}
+            />
+          </View>
+        );
+      })}
+    </Card>
+  );
+
   return (
     <SheetModal visible={visible} onClose={onClose} title="Where does this go?">
-      <Card clip>
-        {groups.map((g, i) => {
-          const active = g.id === selectedId;
-          return (
-            <View key={g.id}>
-              {i > 0 && <Divider indent="text" />}
-              <ListRow
-                leading={<IconCircle icon={asFeather(g.icon, 'layers')} size={layout.iconCircle} color={g.color} />}
-                title={g.name}
-                // Counted, not stored: `is_shared` is never updated, so it read
-                // "Shared" only on groups you RECEIVED and never on ones you
-                // shared yourself. See `MEMBER_COUNT` in queries/groups.
-                subtitle={g.is_personal === 1
-                  ? 'Only you'
-                  : (g.member_count ?? 0) > 1 ? `Shared with ${(g.member_count ?? 1) - 1}` : undefined}
-                value={active ? <Feather name="check" size={18} color={accent} /> : undefined}
-                chevron={false}
-                selected={active}
-                onPress={() => { onClose(); if (!active) onSelect(g.id); }}
-                accessibilityLabel={g.name}
-              />
-            </View>
-          );
-        })}
-      </Card>
+      {renderGroups(groups.slice(0, USUAL_COUNT))}
+      {groups.length > USUAL_COUNT && (
+        <>
+          <SectionHeader title="More groups" />
+          {renderGroups(groups.slice(USUAL_COUNT))}
+        </>
+      )}
 
       {/*
         People, under the groups and labelled, because "just the two of us" is a

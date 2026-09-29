@@ -5,6 +5,7 @@ import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius, shadow, alpha } from '../../tokens';
 import { AmountText } from '../../ui/AmountText';
 import { formatCompact } from '../../../lib/money';
+import { usageText } from '../../../lib/budgetCopy';
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
@@ -264,7 +265,7 @@ export function HeroCard({
               color={paceColor}
               /* Privacy mode hides amounts, not proportions — a percentage is not
                  a figure, so the row stays informative instead of going blank. */
-              label={obfuscate ? `${util}% used` : formatCompact(budgetSpent)}
+              label={obfuscate ? `${usageText(util)} used` : formatCompact(budgetSpent)}
               a11y={obfuscate
                 ? `${util}% of budget used, see the breakdown`
                 : `${formatCompact(budgetSpent)} of ${formatCompact(budgetAllocated)} budgeted, see the breakdown`}

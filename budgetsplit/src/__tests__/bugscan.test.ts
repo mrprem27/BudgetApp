@@ -377,7 +377,7 @@ describe('HB-1 · Help paragraphs read as bullets', () => {
 describe('FC-1 · the forecast chart is drawn only once it has a width', () => {
   const fs = jest.requireActual('fs') as typeof import('fs');
   it('holds the space until measured, and re-keys on width', () => {
-    const src = fs.readFileSync('app/(money)/insights.tsx', 'utf8');
+    const src = fs.readFileSync('app/(tabs)/insights.tsx', 'utf8');
     expect(src).toMatch(/chartW > 0 \? \(/);
     expect(src).toMatch(/key=\{Math\.round\(chartW\)\}/);
   });
@@ -413,5 +413,105 @@ describe('TR-1 · the Afford working states the engine\'s real rules with real n
 
   it('says what cash includes', () => {
     expect(lines().find(l => l.label === 'Cash you can spend now')?.detail).toMatch(/wallet.*goals/);
+  });
+});
+
+describe('EG-3 · the horizon runs to the NEAREST payday, and every income counts', () => {
+  const { horizonDaysFor, knownEvents } = jest.requireActual('../lib/engine/projection') as typeof import('../lib/engine/projection');
+  const { PERSONA_NOW } = jest.requireActual('../db/enginePersonas') as typeof import('../db/enginePersonas');
+  const DAY = 86_400_000;
+  const R = (n: number) => n * 100;
+  type Snap = import('../lib/engine/types').FinanceSnapshot;
+  type Rule = Snap['recurring']['rules'][number];
+  const income = (id: string, freq: string, inDays: number, amount: number) => ({
+    id, group_id: 'g', kind: 'income', entry_mode: 'quick', date: PERSONA_NOW + inDays * DAY, category: 'Salary',
+    recur_freq: freq, is_deleted: 0, pendingApproval: false, payments: [{ personId: 'me', amount }], shares: [],
+  }) as unknown as Rule;
+  const snapOf = (rules: Rule[]): Snap => ({
+    asOf: PERSONA_NOW, meId: 'me',
+    cash: { available: R(50_000), creditUsed: 0, creditLimit: 0, cardDueDay: null },
+    recurring: { rules, skips: {} },
+    goals: { list: [], savedByGoal: {}, funding: { commitMonthly: 0, fundedThisMonth: 0, remaining: 0, goalsCount: 0 } },
+    exposure: { owe: 0, owed: 0, owedExpected: 0, net: 0, owePeople: 0, owedPeople: 0, perPerson: [] },
+    receivables: [], budgets: [], futureOneOffs: [],
+    history: [90, 60, 30].map(d => ({ id: `i${d}`, date: PERSONA_NOW - d * DAY, kind: 'income' as const, category: 'Salary', amountPaise: R(40_000), isRecurringLinked: true })),
+  });
+
+  it('a yearly bonus listed first does not stretch the horizon to next year', () => {
+    const days = horizonDaysFor(snapOf([income('bonus', 'yearly', 340, R(100_000)), income('salary', 'monthly', 12, R(40_000))]));
+    expect(days).toBe(30);
+  });
+
+  it('a lone far-off income cannot push the horizon past two months', () => {
+    expect(horizonDaysFor(snapOf([income('bonus', 'yearly', 340, R(100_000))]))).toBeLessThanOrEqual(60);
+  });
+
+  it('a second income (rent, a side job) is counted too', () => {
+    const rules = [income('salary', 'monthly', 12, R(40_000)), income('rent', 'monthly', 20, R(15_000))];
+    const paid = knownEvents(snapOf(rules), PERSONA_NOW + 30 * DAY, true).filter(e => e.kind === 'income').map(e => e.ref).sort();
+    expect(paid).toEqual(['rent', 'salary']);
+  });
+});
+
+describe('IR-1 · Import is reachable from Review even while items are waiting', () => {
+  const fs = jest.requireActual('fs') as typeof import('fs');
+  it("Review's header always carries an Import button", () => {
+    const src = fs.readFileSync('app/(ledger)/review.tsx', 'utf8');
+    expect(src).toMatch(/router\.push\('\/import'\)[\s\S]{0,120}Import more data/);
+  });
+});
+
+describe('UX-1 · budget used reads as a multiple once it is over', () => {
+  const { usageText } = jest.requireActual('../lib/budgetCopy') as typeof import('../lib/budgetCopy');
+  it('percent up to 100, then ×', () => {
+    expect(usageText(0)).toBe('0%');
+    expect(usageText(87.4)).toBe('87%');
+    expect(usageText(100)).toBe('100%');
+    expect(usageText(101)).toBe('1.01×');
+    expect(usageText(150)).toBe('1.5×');
+    expect(usageText(240)).toBe('2.4×');
+    expect(usageText(1234)).toBe('12×');
+  });
+  it('never prints NaN or a negative', () => {
+    expect(usageText(NaN)).toBe('0%');
+    expect(usageText(-5)).toBe('0%');
+  });
+});
+
+describe('FR-1 · a payment names the other person when you owe', () => {
+  const { paymentSentence } = jest.requireActual('../lib/owe') as typeof import('../lib/owe');
+  it('words it from your side', () => {
+    expect(paymentSentence({ name: 'Prem Bhati', is_me: 1 }, { name: 'Aarav Sharma' })).toEqual({ lead: 'You owe ', name: 'Aarav Sharma', tail: '' });
+    expect(paymentSentence({ name: 'Aarav Sharma' }, { name: 'Prem Bhati', is_me: 1 })).toEqual({ lead: '', name: 'Aarav Sharma', tail: ' owes you' });
+    expect(paymentSentence({ name: 'Aarav' }, { name: 'Riya' })).toEqual({ lead: '', name: 'Aarav', tail: ' owes Riya' });
+  });
+});
+
+describe('GR-1 · the group picker puts the groups you use most first', () => {
+  const { createTestDb, addPerson, addGroup, addMember, addSimpleExpense } = jest.requireActual('./helpers/testDb') as typeof import('./helpers/testDb');
+  const { getGroupsByRecentUse } = jest.requireActual('../db/queries/groups') as typeof import('../db/queries/groups');
+  const DAY = 86_400_000;
+  it('orders by recent entry count, not by which was touched last', async () => {
+    const now = Date.now();
+    const db = createTestDb();
+    const me = addPerson(db, 'Me', true);
+    const personal = addGroup(db, 'Personal', true); addMember(db, personal, me);
+    const often = addGroup(db, 'Flat'); addMember(db, often, me);
+    const once = addGroup(db, 'Trip'); addMember(db, once, me);
+    for (let i = 0; i < 6; i++) addSimpleExpense(db, { groupId: often, personId: me, amount: 10_000, date: now - (10 + i) * DAY });
+    addSimpleExpense(db, { groupId: once, personId: me, amount: 9_000_000, date: now - DAY });
+    const names = (await getGroupsByRecentUse(db as never, now)).map(g => g.name);
+    expect(names).toEqual(['Personal', 'Flat', 'Trip']);
+  });
+  it('entries older than 60 days do not count as recent', async () => {
+    const now = Date.now();
+    const db = createTestDb();
+    const me = addPerson(db, 'Me', true);
+    const personal = addGroup(db, 'Personal', true); addMember(db, personal, me);
+    const old = addGroup(db, 'Old'); addMember(db, old, me);
+    const fresh = addGroup(db, 'Fresh'); addMember(db, fresh, me);
+    for (let i = 0; i < 8; i++) addSimpleExpense(db, { groupId: old, personId: me, amount: 100, date: now - (100 + i) * DAY });
+    addSimpleExpense(db, { groupId: fresh, personId: me, amount: 100, date: now - 5 * DAY });
+    expect((await getGroupsByRecentUse(db as never, now)).map(g => g.name)).toEqual(['Personal', 'Fresh', 'Old']);
   });
 });

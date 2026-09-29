@@ -99,17 +99,21 @@ export async function getAllGroups(db: SQLite.SQLiteDatabase): Promise<BudgetGro
  * destination, and a picker whose first row moves around is harder to aim at than
  * one that saves a scroll.
  */
-export async function getGroupsByRecentUse(db: SQLite.SQLiteDatabase): Promise<BudgetGroup[]> {
+export async function getGroupsByRecentUse(db: SQLite.SQLiteDatabase, nowMs: number = Date.now()): Promise<BudgetGroup[]> {
+  // "Where would I put this?" is answered by where you have been putting things: Personal first,
+  // then the groups with the MOST entries in the last 60 days, ties broken by the latest one.
+  // Count, not amount — one big rent payment should not outrank the group you use every day.
   return db.getAllAsync<BudgetGroup>(
     `SELECT g.* FROM budget_group g
      LEFT JOIN (
-       SELECT group_id, MAX(date) AS last_used
+       SELECT group_id, MAX(date) AS last_used, SUM(CASE WHEN date >= ? THEN 1 ELSE 0 END) AS recent_count
          FROM txn
         WHERE is_deleted = 0 AND recur_freq IS NULL
         GROUP BY group_id
      ) t ON t.group_id = g.id
      WHERE g.is_archived = 0
-     ORDER BY g.is_personal DESC, COALESCE(t.last_used, 0) DESC, g.created_at ASC`,
+     ORDER BY g.is_personal DESC, COALESCE(t.recent_count, 0) DESC, COALESCE(t.last_used, 0) DESC, g.created_at ASC`,
+    [nowMs - 60 * 86_400_000],
   );
 }
 

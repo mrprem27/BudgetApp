@@ -321,17 +321,27 @@ export default function ReviewScreen() {
     ? (data?.transferCats ?? [])
     : (data?.expenseCats ?? []);
 
-  const headerRight = pending.length > 0 ? (
-    selectMode ? (
-      <TouchableOpacity onPress={exitSelect} hitSlop={8} accessibilityRole="button" accessibilityLabel="Cancel selection">
-        <Text style={styles.headerAction}>Cancel</Text>
-      </TouchableOpacity>
-    ) : (
-      <TouchableOpacity onPress={() => setMenuOpen(true)} hitSlop={8} accessibilityRole="button" accessibilityLabel="More options">
-        <Feather name="more-horizontal" size={22} color={colors.textPrimary} />
-      </TouchableOpacity>
-    )
-  ) : undefined;
+  // Import is always one tap away. The Settings row goes to Review while anything is waiting, so
+  // without this there was no way to bring in more data until the inbox was empty.
+  const importButton = (
+    <TouchableOpacity onPress={() => router.push('/import')} hitSlop={8} accessibilityRole="button" accessibilityLabel="Import more data">
+      <Feather name="upload" size={20} color={colors.textPrimary} />
+    </TouchableOpacity>
+  );
+  const headerRight = selectMode ? (
+    <TouchableOpacity onPress={exitSelect} hitSlop={8} accessibilityRole="button" accessibilityLabel="Cancel selection">
+      <Text style={styles.headerAction}>Cancel</Text>
+    </TouchableOpacity>
+  ) : (
+    <>
+      {importButton}
+      {pending.length > 0 && (
+        <TouchableOpacity onPress={() => setMenuOpen(true)} hitSlop={8} accessibilityRole="button" accessibilityLabel="More options">
+          <Feather name="more-horizontal" size={22} color={colors.textPrimary} />
+        </TouchableOpacity>
+      )}
+    </>
+  );
 
   const activePayerName = activeView?.paidBy ? (data?.groupMembers[activeView.groupId ?? '']?.find(m => m.id === activeView.paidBy)?.name ?? null) : null;
 
