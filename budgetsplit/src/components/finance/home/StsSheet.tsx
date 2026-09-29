@@ -7,6 +7,7 @@ import { colors, type, space } from '../../tokens';
 import { SheetModal } from '../../ui/SheetModal';
 import { Card } from '../../ui/Card';
 import { Divider } from '../../ui/Divider';
+import { InfoLabel } from '../../ui/InfoLabel';
 import { formatRupees } from '../../../lib/money';
 import type { SafeToSpendBreakdown } from '../../../lib/safeToSpend';
 import { shortDate } from '../../../lib/dateFormat';
@@ -71,8 +72,7 @@ export function StsSheet({ visible, onClose, sts }: Props) {
           const content = (
             <View style={styles.row}>
               <View style={styles.left}>
-                <Text style={styles.label}>{r.label}</Text>
-                <Text style={styles.hint}>{r.hint}</Text>
+                <InfoLabel label={r.label} info={r.hint} />
               </View>
               <Text style={[
                 styles.amount,
@@ -98,8 +98,7 @@ export function StsSheet({ visible, onClose, sts }: Props) {
         <Divider indent="none" />
         <View style={styles.row}>
           <View style={styles.left}>
-            <Text style={styles.totalLabel}>Yours to spend</Text>
-            <Text style={styles.hint}>Until {until}, on top of everything above</Text>
+            <InfoLabel label="Yours to spend" labelStyle={styles.totalLabel} info={`Until ${until}, on top of everything above`} />
           </View>
           <Text style={[styles.total, { color: sts.amount < 0 ? colors.healthRed : colors.income }]}>
             {formatRupees(sts.amount)}
@@ -107,9 +106,13 @@ export function StsSheet({ visible, onClose, sts }: Props) {
         </View>
       </Card>
       {sts.noDip && (
-        <Text style={styles.noDipNote}>
-          Your balance doesn't drop below today's cash before {until}, so nothing is held back yet.
-        </Text>
+        <View style={styles.noDipRow}>
+          <InfoLabel
+            label="Nothing held back yet"
+            labelStyle={styles.noDipNote}
+            info={`Your balance doesn't drop below today's cash before ${until}.`}
+          />
+        </View>
       )}
       {sts.amount < 0 && (
         <Text style={styles.overNote}>
@@ -126,11 +129,11 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: space.smd, gap: space.md },
   left: { flex: 1 },
   label: { ...type.body, color: colors.textPrimary },
-  hint: { ...type.caption, color: colors.textMuted, marginTop: 2 },
   amount: { ...type.bodySemi, fontFamily: 'SpaceMono_400Regular', color: colors.textPrimary },
   chevron: { marginLeft: -space.xs },
   totalLabel: { ...type.bodySemi, color: colors.textPrimary },
   total: { ...type.subheading, fontFamily: 'SpaceMono_400Regular' },
-  noDipNote: { ...type.caption, color: colors.textMuted, marginTop: space.sm, marginHorizontal: space.xs },
+  noDipRow: { marginTop: space.sm, marginHorizontal: space.xs },
+  noDipNote: { ...type.caption, color: colors.textMuted },
   overNote: { ...type.caption, color: colors.healthRed, marginTop: space.sm, marginHorizontal: space.xs },
 });

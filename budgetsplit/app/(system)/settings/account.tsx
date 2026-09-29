@@ -10,6 +10,7 @@ import { Input } from '../../../src/components/ui/Input';
 import { PrimaryButton } from '../../../src/components/ui/PrimaryButton';
 import { SecondaryButton } from '../../../src/components/ui/SecondaryButton';
 import { IconCircle } from '../../../src/components/ui/IconCircle';
+import { InfoLabel } from '../../../src/components/ui/InfoLabel';
 import { SettingsRow, settingsRowDivider } from '../../../src/components/ui/SettingsRow';
 import { MemberAvatar } from '../../../src/components/finance/MemberAvatar';
 import { SheetModal } from '../../../src/components/ui/SheetModal';
@@ -195,10 +196,11 @@ export default function AccountScreen() {
       <KeyboardForm contentContainerStyle={styles.content}>
         {!configured ? (
           <Card padded>
-            <Text style={styles.note}>
-              No server configured — everything works offline. Keep an encrypted copy under Backup
-              & restore.
-            </Text>
+            <InfoLabel
+              label="Works offline"
+              labelStyle={styles.heroTitle}
+              info="No server configured — everything works offline. Keep an encrypted copy under Backup & restore."
+            />
           </Card>
         ) : !ready ? (
           <ActivityIndicator color={colors.accent} style={styles.loading} />
@@ -270,19 +272,27 @@ export default function AccountScreen() {
                 real constraint (phone privacy) and one restating what
                 sign-out does, which the sign-out flow itself already warns
                 about, contextually, at the moment it matters (`DQ-97`). */}
-            <Text style={styles.footnote}>
-              Your number is never used to find you — shown only to people you've linked with.
-            </Text>
+            <View style={styles.footnoteRow}>
+              <InfoLabel
+                center
+                label="Your phone number"
+                labelStyle={styles.footnote}
+                info="Never used to find you — shown only to people you've linked with."
+              />
+            </View>
           </>
         ) : sentTo ? (
           <>
             <Card padded style={styles.heroCard}>
               <IconCircle icon="mail" size={56} iconSize={20} color={colors.accent} bg={colors.accentMuted} />
               <Text style={styles.heroTitle}>Check your inbox</Text>
-              <Text style={styles.note}>
-                We sent a sign-in link to {sentTo}. Open it on this phone and you’re in. The link
-                works once and expires in 15 minutes.
-              </Text>
+              <Text style={styles.note}>Link sent to {sentTo}</Text>
+              <InfoLabel
+                center
+                label="How the link works"
+                labelStyle={styles.footnote}
+                info="Open it on this phone and you’re in. The link works once and expires in 15 minutes."
+              />
             </Card>
 
             <Card padded>
@@ -319,13 +329,22 @@ export default function AccountScreen() {
           <>
             <Card padded style={styles.heroCard}>
               <IconCircle icon="cloud" size={56} iconSize={20} color={colors.accent} bg={colors.accentMuted} />
-              <Text style={styles.heroTitle}>Sign in to keep your place</Text>
+              <InfoLabel
+                center
+                label="Sign in to keep your place"
+                labelStyle={styles.heroTitle}
+                accessibilityLabel="About signing in"
+                info={
+                  <>
+                    <Text style={[styles.note, styles.infoLine]}>Optional — stores only your email and who you're linked with, never your transactions.</Text>
+                    <Text style={[styles.noteWarn, styles.infoLine]}>Doesn't back anything up on its own — use Backup &amp; restore for that.</Text>
+                  </>
+                }
+              />
               {/* `B-102`/`DQ-102`: collapsed from two stacked paragraphs into
                   one line each — both facts are real constraints (what's
                   stored, that sign-in alone doesn't back anything up), so
                   neither is cut, just no longer restated at paragraph length. */}
-              <Text style={styles.note}>Optional — stores only your email and who you're linked with, never your transactions.</Text>
-              <Text style={styles.noteWarn}>Doesn't back anything up on its own — use Backup &amp; restore for that.</Text>
             </Card>
 
             <Card padded>
@@ -399,5 +418,7 @@ const styles = StyleSheet.create({
   secondaryCta: { marginTop: space.sm },
   error: { ...type.body, color: colors.expense, textAlign: 'center' },
   sheetHint: { ...type.caption, color: colors.textMuted, lineHeight: 18, marginTop: space.sm, marginBottom: space.md },
+  footnoteRow: { alignItems: 'center' },
+  infoLine: { marginTop: space.xs },
   footnote: { ...type.caption, color: colors.textMuted, lineHeight: 18, textAlign: 'center' },
 });

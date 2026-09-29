@@ -7,6 +7,7 @@ import { SheetModal } from '../ui/SheetModal';
 import { Card } from '../ui/Card';
 import { Divider } from '../ui/Divider';
 import { SectionHeader } from '../ui/SectionHeader';
+import { InfoLabel } from '../ui/InfoLabel';
 import { AnimatedBar } from '../ui/anim/AnimatedBar';
 import { SampleNote } from './SampleNote';
 import { suggestImprovement, type HealthResult, type HealthInputs } from '../../lib/financialHealth';
@@ -47,11 +48,11 @@ export function HealthSheet({ visible, onClose, result, inputs, txnCount = 0, pe
     return (
       <SheetModal visible={visible} onClose={onClose} title="Money Health">
         <View style={styles.gateHead}>
-          <Text style={styles.gateTitle}>Building your score</Text>
-          <Text style={styles.gateBody}>
-            Your score is computed from your real ledger — it unlocks once there&apos;s enough
-            data to be honest about it.
-          </Text>
+          <InfoLabel
+            label="Building your score"
+            labelStyle={styles.gateTitle}
+            info="Computed from your real ledger — it unlocks once there's enough data to be honest about it."
+          />
         </View>
         <Card clip>
           {result.gate.needs.map((n, i) => (
@@ -133,8 +134,7 @@ export function HealthSheet({ visible, onClose, result, inputs, txnCount = 0, pe
                   <View style={styles.factorRow}>
                     <View style={[styles.dot, { backgroundColor: fc }]} />
                     <View style={styles.factorMid}>
-                      <Text style={styles.factorLabel}>{f.label}</Text>
-                      <Text style={styles.factorDetail}>{f.detail}</Text>
+                      <InfoLabel label={f.label} labelStyle={styles.factorLabel} info={f.detail} />
                     </View>
                     <Text style={[styles.factorPts, { color: fc }]}>{f.points}/{f.max}</Text>
                   </View>
@@ -152,8 +152,7 @@ export function HealthSheet({ visible, onClose, result, inputs, txnCount = 0, pe
               <View style={styles.improveRow}>
                 <View style={[styles.dot, { backgroundColor: colors.income }]} />
                 <View style={styles.factorMid}>
-                  <Text style={styles.improveTitle}>{improvement.title}</Text>
-                  <Text style={styles.factorDetail}>{improvement.detail}</Text>
+                  <InfoLabel label={improvement.title} labelStyle={styles.improveTitle} info={improvement.detail} />
                   {improvement.toScore > improvement.fromScore && (
                     <View style={styles.improveScoreRow}>
                       <Text style={styles.improveFrom}>{improvement.fromScore}</Text>
@@ -176,7 +175,6 @@ const DOT = 8;
 const styles = StyleSheet.create({
   gateHead: { marginBottom: space.md },
   gateTitle: { ...type.subheading, color: colors.textPrimary, marginBottom: space.xs },
-  gateBody: { ...type.body, color: colors.textSecondary },
   gateRow: { flexDirection: 'row', alignItems: 'center', gap: space.smd, paddingVertical: space.smd, paddingHorizontal: space.md, minHeight: layout.rowMinHeight },
   gateLabel: { ...type.body, color: colors.textPrimary, flex: 1 },
   gateDone: { color: colors.textSecondary },
