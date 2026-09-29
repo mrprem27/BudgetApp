@@ -39,6 +39,16 @@ export type QueueRow = {
   sent_ids: string | null;
 };
 
+/**
+ * Told whenever a change is queued, so the drain can be scheduled from the write
+ * itself. It used to hang off `refresh()`, and a write whose screen only called
+ * its own `reload()` — every swipe-delete, an edit, funding a goal — sat queued
+ * until the app next came to the foreground. Fires inside the writer's
+ * transaction, so the listener must only schedule, never read.
+ */
+let onQueued: (() => void) | null = null;
+export function setQueueListener(fn: (() => void) | null): void { onQueued = fn; }
+
 /** The id of the one money-profile row, which lives as `money.*` keys in `settings`. */
 export const MONEY_PROFILE_ID = 'money';
 
@@ -49,6 +59,7 @@ export async function queueUpsert(db: SQLite.SQLiteDatabase, table: QueueTable, 
      VALUES (?, ?, 'upsert', NULL, ?, NULL)`,
     [table, id, Date.now()],
   );
+  onQueued?.();
 }
 
 /**
@@ -67,6 +78,7 @@ export async function queueDelete(
      VALUES (?, ?, 'delete', ?, ?, NULL)`,
     [table, id, JSON.stringify(snapshot), Date.now()],
   );
+  onQueued?.();
 }
 
 /**
@@ -85,6 +97,7 @@ export async function queueAnswer(
      VALUES (?, ?, 'upsert', ?, ?, NULL)`,
     [table, id, JSON.stringify(answer), Date.now()],
   );
+  onQueued?.();
 }
 
 /**
@@ -103,6 +116,7 @@ export async function queueUpsertWhere(
      SELECT ?, id, 'upsert', NULL, ?, NULL FROM (${sql})`,
     [table, Date.now(), ...params] as SQLite.SQLiteBindValue[],
   );
+  onQueued?.();
 }
 
 /**

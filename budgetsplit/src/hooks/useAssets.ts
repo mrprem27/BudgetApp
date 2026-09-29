@@ -4,6 +4,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useScreenData } from './useScreenData';
 import { useDataRefresh } from '../components/system/DataRefreshProvider';
 import { haptic } from '../lib/haptics';
+import { formatRupees } from '../lib/money';
 import { PayMethod } from '../constants/enums';
 import {
   getAssets, getArchivedAssets, insertAsset, updateAsset, archiveAsset, deleteAsset,
@@ -88,7 +89,7 @@ export function useAssets() {
       Alert.alert(
         `Stop counting ${asset.name}?`,
         asset.balance > 0
-          ? `Your net worth drops by ${(asset.balance / 100).toFixed(2)}. Every transfer you made into it stays in your history.\n\n`
+          ? `Your net worth drops by ${formatRupees(asset.balance)}. Every transfer you made into it stays in your history.\n\n`
             + 'If you sold it, take the money out first so it lands back in your cash.'
           : 'It moves out of your list. Every transfer you made into it stays in your history.',
         [

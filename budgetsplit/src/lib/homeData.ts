@@ -11,7 +11,7 @@ import { billsWithin } from './safeToSpend';
 import { getPendingCount } from '../db/queries/pending';
 import { getPendingApprovalCount } from '../db/queries/approval';
 import { getCategories } from '../db/queries/categories';
-import { getTransactionsInRange, getLedgerStats } from '../db/queries/transactions';
+import { getTransactionsInRange, getLedgerStats, getActiveRecurringRules } from '../db/queries/transactions';
 import { getGoalFundingStatus } from '../db/queries/spendPower';
 import { getTotalMoney } from '../db/queries/savings';
 import { getRecurringForGroup, getSkipsMap } from '../db/queries/recurring';
@@ -111,7 +111,7 @@ export async function loadHomeData(
         health: null as HealthResult | null, healthInputs: null as HealthInputs | null, healthTxnCount: 0,
         upcoming: [] as UpcomingItem[],
         forecast: null as Forecast | null, topShift: null as ForecastShift | null,
-        streak: 0, streakLoggedDays: new Set<string>(),
+        streak: 0, streakLoggedDays: new Set<string>(), everLogged: false,
       };
     }
     const meInfo = { name: me.name, color: me.avatar_color, image: me.image_uri };
@@ -364,5 +364,27 @@ export async function loadHomeData(
       healthTxnCount: txns.filter(t => !t.is_deleted).length,
       upcoming, forecast, topShift, sts,
       streak: s, streakLoggedDays: loggedDays,
+      /** Anything ever logged — what separates a first run from a quiet period. */
+      everLogged: ledger.txnCount > 0,
     };
+}
+
+/** How long the app must have been closed before the catch-up notice shows. */
+const CATCH_UP_GAP_DAYS = 30;
+
+/**
+ * "Recurring catch-up complete" — after the app was closed a month or more, how
+ * many rules posted entries in the meantime. Only the rules that actually post
+ * from this phone (`materializeDueOccurrences`): active, auto, mine, in a live
+ * group. Counting ended, remind-only or someone else's rules claimed entries that
+ * were never written. Stamps this open, so the next one compares against it.
+ */
+export async function loadCatchUp(db: SQLite.SQLiteDatabase, now = Date.now()): Promise<{ days: number; ruleCount: number } | null> {
+  const lastOpen = (await settings.appLastOpen()) ?? now;
+  await settings.setAppLastOpen(now);
+  const days = Math.floor((now - lastOpen) / 86400000);
+  if (days < CATCH_UP_GAP_DAYS) return null;
+  const ruleCount = (await getActiveRecurringRules(db))
+    .filter(r => r.recur_mode === 'auto' && r.author_person_id == null).length;
+  return ruleCount > 0 ? { days, ruleCount } : null;
 }

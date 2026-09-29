@@ -3,6 +3,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useRouter } from 'expo-router';
 import { softDeleteTxn, restoreTxn } from '../db/queries/transactions';
 import { useToast } from '../components/system/Toast';
+import { useDataRefresh } from '../components/system/DataRefreshProvider';
 import { isRecurInstance } from '../lib/groupDetail';
 import { haptic } from '../lib/haptics';
 import type { TxnWithSplits } from '../db/queries/transactions';
@@ -21,6 +22,7 @@ export function useGroupTxnActions(reload: () => Promise<void> | void) {
   const db = useSQLiteContext();
   const router = useRouter();
   const { showUndo } = useToast();
+  const { refresh } = useDataRefresh();
 
   async function deleteTxn(targetId: string, cascade: boolean, message: string) {
     try {
@@ -37,10 +39,11 @@ export function useGroupTxnActions(reload: () => Promise<void> | void) {
       return;
     }
     haptic.warning();
+    refresh();
     await reload();
     showUndo({
       message,
-      onUndo: async () => { try { await restoreTxn(db, targetId, cascade); haptic.success(); await reload(); } catch { /* ignore */ } },
+      onUndo: async () => { try { await restoreTxn(db, targetId, cascade); haptic.success(); refresh(); await reload(); } catch { /* ignore */ } },
     });
   }
 

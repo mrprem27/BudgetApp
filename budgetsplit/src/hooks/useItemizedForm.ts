@@ -10,7 +10,7 @@ import { getAllGroups } from '../db/queries/groups';
 import { getGroupMembers, getMe, type Person } from '../db/queries/persons';
 import { getCategoriesByFrequency, type Category } from '../db/queries/categories';
 import {
-  insertItemizedTxn, updateItemizedTxn, getTxnById, getLineItems,
+  insertItemizedTxn, updateItemizedTxn, getTxnById, getLineItems, attachmentInUse,
   type ItemizedAdjustmentType,
 } from '../db/queries/transactions';
 import { parseToPaise, paiseToInput } from '../lib/money';
@@ -394,19 +394,22 @@ export function useItemizedForm(paramGroupId?: string, editId?: string) {
         lng: place?.lng,
         placeLabel: place?.label ?? undefined,
       };
+      let savedId: string | null = null;
       if (isEditing) {
-        await updateItemizedTxn(db, editId!, payload);
+        savedId = await updateItemizedTxn(db, editId!, payload);
         // Replacing/removing the receipt while editing must unlink the old
         // file — otherwise it orphans on disk forever, since nothing else
         // ever revisits a bill's *previous* attachment.
         const original = originalAttachmentUriRef.current;
-        if (original && original !== attachmentUri) await deleteAttachment(original);
+        if (original && original !== attachmentUri && !(await attachmentInUse(db, original))) await deleteAttachment(original);
       } else {
         await insertItemizedTxn(db, payload);
       }
       haptic.success();
       refresh();
-      router.back();
+      // A move to another group gives the bill a new id; the detail screen follows it.
+      if (savedId && savedId !== editId) router.dismissTo(`/txn/${savedId}`);
+      else router.back();
     } catch (e) {
       // Every other save routes through `saveFailureMessage`; this one was missed.
       // Its docblock exists because on a full disk "could not save, try again" is

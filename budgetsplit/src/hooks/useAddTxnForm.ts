@@ -14,7 +14,7 @@ import { getGroupMembers, getMe, getAllPersons } from '../db/queries/persons';
 import { getFriendBalances } from '../db/queries/balances';
 import { computeTransferScopes, planAllGroupsSettlement, type TransferScopes } from '../lib/settleScope';
 import { getCategoriesByFrequency, type CategoryKind } from '../db/queries/categories';
-import { insertTxn, updateTxn, getTxnById, findRecentDuplicate, recordSettlement } from '../db/queries/transactions';
+import { insertTxn, updateTxn, getTxnById, findRecentDuplicate, recordSettlement, attachmentInUse } from '../db/queries/transactions';
 import { splitRecurringSeries } from '../db/queries/recurring';
 import { parseTags } from '../lib/tags';
 import { deleteAttachment } from '../lib/attachment';
@@ -565,6 +565,16 @@ export function useAddTxnForm(params: AddTxnParams) {
     return [{ groupId: firstGroup.groupId, from: transferFromId, to: transferToId, amount: total }];
   }
 
+  /**
+   * Back to the detail screen. A save that moved the entry to another group gave
+   * it a new id (`updateTxn`), so the detail underneath follows it rather than
+   * showing the row it replaced.
+   */
+  function closeEditor(savedId: string) {
+    if (savedId !== editId) router.dismissTo(`/txn/${savedId}`);
+    else router.back();
+  }
+
   async function handleSaveTransfer() {
     if (!transferFromId || !transferToId || transferFromId === transferToId || total <= 0) return;
     // Saving by hand settles the same hand-off, so drop the remembered one first.
@@ -577,7 +587,7 @@ export function useAddTxnForm(params: AddTxnParams) {
     setSaving(true);
     try {
       if (isEditing) {
-        await updateTxn(db, {
+        const savedId = await updateTxn(db, {
           id: editId!, groupId: transferScope === TRANSFER_SCOPE_ALL ? selectedGroupId : transferScope,
           kind: 'settlement', date: txnDate, category: transferCategory,
           note: transferFullNote, payMethod, tags,
@@ -585,7 +595,8 @@ export function useAddTxnForm(params: AddTxnParams) {
           shares: [{ personId: transferToId, amount: total }],
         });
         haptic.success();
-        router.back();
+        refresh();
+        closeEditor(savedId);
         return;
       }
 
@@ -725,7 +736,7 @@ export function useAddTxnForm(params: AddTxnParams) {
       const recurNorm = normalizeRecurrence(recurFreq, parseInt(recurInterval, 10) || 1);
 
       if (isEditing) {
-        await updateTxn(db, {
+        const savedId = await updateTxn(db, {
           id: editId!, groupId: selectedGroupId, kind, date: txnDate,
           category: selectedCategory!.name, note: composedNote, payMethod, tags,
           attachmentUri, payments: finalPayments, shares: finalShares,
@@ -734,9 +745,10 @@ export function useAddTxnForm(params: AddTxnParams) {
         // orphans on disk forever — nothing else ever revisits a transaction's
         // *previous* attachment.
         const original = originalAttachmentUriRef.current;
-        if (original && original !== attachmentUri) await deleteAttachment(original);
+        if (original && original !== attachmentUri && !(await attachmentInUse(db, original))) await deleteAttachment(original);
         haptic.success();
-        router.back();
+        refresh();
+        closeEditor(savedId);
         return;
       }
 

@@ -44,3 +44,15 @@ export const MEMBER_ACTIVE = 'deleted_at IS NULL';
  */
 export const INVITED_ON_ADD =
   'SELECT CASE WHEN remote_uid IS NOT NULL AND is_me = 0 THEN 1 ELSE 0 END FROM person WHERE id = ?';
+
+/**
+ * A recurring rule (aliased `t`) whose group still has me in it: not deleted, and
+ * not one I have left. A rule in a dead group kept posting my share every period
+ * into a group no list shows — spending nobody could see, which the server then
+ * refused — and counted against Safe-to-Spend as a bill still due.
+ */
+export const RULE_IN_LIVE_GROUP = `NOT EXISTS (
+    SELECT 1 FROM budget_group rg WHERE rg.id = t.group_id AND rg.deleted_at IS NOT NULL)
+  AND NOT EXISTS (
+    SELECT 1 FROM group_member rm JOIN person rp ON rp.id = rm.person_id
+     WHERE rm.group_id = t.group_id AND rp.is_me = 1 AND rm.deleted_at IS NOT NULL)`;

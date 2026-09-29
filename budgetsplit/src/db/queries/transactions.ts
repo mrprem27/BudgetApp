@@ -5,6 +5,7 @@ import { v4 as uuid } from 'uuid';
 
 import { logAudit } from './audit';
 import { NOT_AWAITING_APPROVAL, AWAITING_APPROVAL_COL } from './approvalSql';
+import { RULE_IN_LIVE_GROUP } from './memberSql';
 import { settlementView } from '../../lib/settlementView';
 import { formatRupees } from '../../lib/money';
 import { rankTagsByFrequency, serializeTags } from '../../lib/tags';
@@ -548,21 +549,56 @@ export async function insertItemizedTxn(
   return id;
 }
 
+/**
+ * Move an entry to another group: a copy under a new id there, and the old row
+ * deleted. Returns the id the entry now has — `id` itself when it didn't move.
+ *
+ * The server never moves a transaction between groups ("delete it and add it
+ * again", `sync/entities/transactions.ts`), so an in-place `group_id` change was
+ * refused there while the phone kept it: the group I moved it out of went on
+ * charging my share on every other phone, for good. Caller holds the transaction.
+ */
+async function moveIfRegrouped(db: SQLite.SQLiteDatabase, id: string, groupId: string, now: number): Promise<string> {
+  const row = await db.getFirstAsync<Record<string, SQLite.SQLiteBindValue>>('SELECT * FROM txn WHERE id = ?', [id]);
+  if (!row || row.group_id === groupId) return id;
+  const newId = uuid();
+  const cols = Object.keys(row);
+  await db.runAsync(
+    `INSERT INTO txn (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`,
+    cols.map(c => (c === 'id' ? newId : c === 'group_id' ? groupId : c === 'updated_at' ? now : row[c])),
+  );
+  await db.runAsync('UPDATE line_item SET txn_id = ? WHERE txn_id = ?', [newId, id]);
+  // The receipt now belongs to the copy; left on the old row, the reaper would
+  // unlink it once that row aged out.
+  await db.runAsync('UPDATE txn SET is_deleted = 1, attachment_uri = NULL, updated_at = ? WHERE id = ?', [now, id]);
+  // A row the server never received needs no delete — sending one earns a refusal.
+  const known = await db.getFirstAsync<{ n: number }>(
+    `SELECT 1 AS n FROM sync_version WHERE entity = 'transactions' AND entity_id = ?
+     UNION SELECT 1 FROM sync_queue WHERE local_table = 'txn' AND local_id = ? AND sent_ids IS NOT NULL`,
+    [id, id],
+  );
+  if (known) await queueEntry(db, id);
+  else await db.runAsync("DELETE FROM sync_queue WHERE local_table = 'txn' AND local_id = ?", [id]);
+  return newId;
+}
+
 /** Edit an itemized bill in place: rewrite the txn row + its line items, payments
- *  and shares atomically (delete-then-reinsert, so no orphaned line_item rows). */
+ *  and shares atomically (delete-then-reinsert, so no orphaned line_item rows).
+ *  Returns the entry's id, which is new when the edit moved it to another group. */
 export async function updateItemizedTxn(
   db: SQLite.SQLiteDatabase,
-  id: string,
+  editId: string,
   input: InsertItemizedTxnInput,
-): Promise<void> {
+): Promise<string> {
+  const author = await db.getFirstAsync<{ author_person_id: string | null }>(
+    'SELECT author_person_id FROM txn WHERE id = ?', [editId],
+  );
+  if (author?.author_person_id) throw new PeerEntryError('edit an entry somebody else wrote');
   const now = Date.now();
+  let id = editId;
   await db.withTransactionAsync(async () => {
+    id = await moveIfRegrouped(db, editId, input.groupId, now);
     await db.runAsync(
-      // `group_id` is here for the same reason `updateTxn` has it: the Add
-      // screen's destination pill is live in edit mode. Without it, moving an
-      // itemized bill to another group changed the audit line and nothing else —
-      // the row stayed put, and the queue below re-read the OLD group, so it kept
-      // syncing to the group the user had just moved it out of.
       `UPDATE txn SET group_id=?, category=?, note=?, attachment_uri=?, tags=?, adjustments=?,
                       date=?, pay_method=?, currency=?, updated_at=? WHERE id=?`,
       [
@@ -572,8 +608,6 @@ export async function updateItemizedTxn(
         input.date, input.payMethod ?? null, input.currency ?? null, now, id,
       ],
     );
-    // Against the NEW group, so a bill moved into Personal stops queueing and one
-    // moved the other way starts. `queueEntry`'s SQL enforces both.
     await queueEntry(db, id);
     await db.runAsync('DELETE FROM line_item WHERE txn_id=?', [id]);
     await db.runAsync('DELETE FROM txn_payment WHERE txn_id=?', [id]);
@@ -597,6 +631,7 @@ export async function updateItemizedTxn(
       summary: `Edited itemized bill ${formatRupees(totalPaid)} · ${input.category}`,
     });
   });
+  return id;
 }
 
 /** Restore a soft-deleted transaction (the Undo of softDeleteTxn). Pass
@@ -647,13 +682,18 @@ export async function restoreTxn(
 ): Promise<void> {
   const now = Date.now();
   await db.withTransactionAsync(async () => {
-    const row = await db.getFirstAsync<Txn>('SELECT group_id, asset_id FROM txn WHERE id=?', [txnId]);
+    const row = await db.getFirstAsync<Txn>('SELECT group_id, asset_id, updated_at FROM txn WHERE id=?', [txnId]);
     await db.runAsync('UPDATE txn SET is_deleted=0, updated_at=? WHERE id=?', [now, txnId]);
     // The mirror of the reversal in `softDeleteTxn` — Undo has to put the asset
     // side back, or the row returns to the ledger with only its cash half.
     if (row?.asset_id) await reverseAssetSide(db, txnId, row.asset_id, 'restore');
-    if (cascadeOccurrences) {
-      await db.runAsync('UPDATE txn SET is_deleted=0, updated_at=? WHERE parent_recur_id=?', [now, txnId]);
+    if (cascadeOccurrences && row) {
+      // Only the occurrences that delete took with it — they share the rule's
+      // stamp. One deleted by hand earlier stays deleted.
+      await db.runAsync(
+        'UPDATE txn SET is_deleted=0, updated_at=? WHERE parent_recur_id=? AND is_deleted=1 AND updated_at=?',
+        [now, txnId, row.updated_at],
+      );
     }
     // `queueSeries`, not `queueEntry`: a cascade changes N rows in one statement,
     // and queueing only the template leaves every occurrence undelivered — which
@@ -693,9 +733,11 @@ export async function softDeleteTxn(
   }
   await db.withTransactionAsync(async () => {
     const row = await db.getFirstAsync<Txn>('SELECT * FROM txn WHERE id=?', [txnId]);
-    await db.runAsync('UPDATE txn SET is_deleted=1, updated_at=? WHERE id=?', [Date.now(), txnId]);
+    // One stamp for the rule and what it cascades to: `restoreTxn` matches on it.
+    const now = Date.now();
+    await db.runAsync('UPDATE txn SET is_deleted=1, updated_at=? WHERE id=?', [now, txnId]);
     if (cascadeOccurrences && row?.recur_freq) {
-      await db.runAsync('UPDATE txn SET is_deleted=1, updated_at=? WHERE parent_recur_id=?', [Date.now(), txnId]);
+      await db.runAsync('UPDATE txn SET is_deleted=1, updated_at=? WHERE parent_recur_id=? AND is_deleted=0', [now, txnId]);
     }
     /*
      * BOTH halves of an asset transfer move together, on the way out too.
@@ -755,7 +797,22 @@ export async function reapDeletedAttachments(
     `UPDATE txn SET attachment_uri = NULL WHERE id IN (${ids.map(() => '?').join(',')})`,
     ids,
   );
-  return rows.map(r => r.attachment_uri);
+  // A file can be shared — a rule's receipt is copied onto every occurrence — so
+  // only one no row points at any more is actually orphaned.
+  const orphaned: string[] = [];
+  for (const uri of new Set(rows.map(r => r.attachment_uri))) {
+    if (!(await attachmentInUse(db, uri))) orphaned.push(uri);
+  }
+  return orphaned;
+}
+
+/**
+ * Whether any transaction still points at this receipt file — deleted rows
+ * included, since Undo can bring one back. Check before unlinking: a rule's
+ * receipt is copied onto every occurrence it posts, so one file has many owners.
+ */
+export async function attachmentInUse(db: SQLite.SQLiteDatabase, uri: string): Promise<boolean> {
+  return (await db.getFirstAsync('SELECT 1 AS n FROM txn WHERE attachment_uri = ? LIMIT 1', [uri])) !== null;
 }
 
 /* ---- Recurring lifecycle (the parent txn row IS the recurring rule) ---- */
@@ -872,7 +929,8 @@ export async function getActiveRecurringRules(db: SQLite.SQLiteDatabase): Promis
   const rows = await db.getAllAsync<Txn>(
     `SELECT t.* FROM txn t
       WHERE t.recur_freq IS NOT NULL AND t.is_deleted = 0 AND t.recur_state = 'active'
-        AND ${NOT_AWAITING_APPROVAL}`,
+        AND ${NOT_AWAITING_APPROVAL}
+        AND ${RULE_IN_LIVE_GROUP}`,
   );
   return loadSplitsMany(db, rows);
 }
@@ -926,10 +984,11 @@ export class AssetTransferError extends Error {
   }
 }
 
+/** Returns the entry's id — a new one when the edit moved it to another group. */
 export async function updateTxn(
   db: SQLite.SQLiteDatabase,
   input: UpdateTxnInput,
-): Promise<void> {
+): Promise<string> {
   /*
    * I can refuse an entry somebody else wrote. I cannot rewrite it.
    *
@@ -970,43 +1029,40 @@ export async function updateTxn(
   }
 
   const now = Date.now();
+  let id = input.id;
   await db.withTransactionAsync(async () => {
-    // `group_id` is here because the Add screen's destination pill is live in edit
-    // mode; without it, changing a transaction's group reached the audit line and
-    // nothing else. Columns absent from this SET are preserved, not lost — none of
-    // them are editable on that screen.
+    id = await moveIfRegrouped(db, input.id, input.groupId, now);
+    // Columns absent from this SET are preserved — none are editable on that screen.
     await db.runAsync(
       `UPDATE txn SET group_id=?, kind=?, date=?, category=?, note=?, pay_method=?, tags=?, updated_at=? WHERE id=?`,
-      [input.groupId, input.kind, input.date, input.category, input.note ?? null, input.payMethod ?? null, serializeTags(input.tags ?? []), now, input.id],
+      [input.groupId, input.kind, input.date, input.category, input.note ?? null, input.payMethod ?? null, serializeTags(input.tags ?? []), now, id],
     );
     if (input.attachmentUri !== undefined) {
-      await db.runAsync('UPDATE txn SET attachment_uri=? WHERE id=?', [input.attachmentUri, input.id]);
+      await db.runAsync('UPDATE txn SET attachment_uri=? WHERE id=?', [input.attachmentUri, id]);
     }
-    // Queued against the NEW group. `group_id` is editable here — the destination
-    // pill is live in edit mode — so an entry moved from a shared group to
-    // Personal correctly stops queueing, and one moved the other way starts.
-    await queueEntry(db, input.id);
-    await db.runAsync('DELETE FROM txn_payment WHERE txn_id=?', [input.id]);
-    await db.runAsync('DELETE FROM txn_share WHERE txn_id=?', [input.id]);
+    await queueEntry(db, id);
+    await db.runAsync('DELETE FROM txn_payment WHERE txn_id=?', [id]);
+    await db.runAsync('DELETE FROM txn_share WHERE txn_id=?', [id]);
     for (const p of input.payments) {
       await db.runAsync(
         'INSERT INTO txn_payment (txn_id, person_id, amount) VALUES (?, ?, ?)',
-        [input.id, p.personId, p.amount],
+        [id, p.personId, p.amount],
       );
     }
     for (const s of input.shares) {
       await db.runAsync(
         'INSERT INTO txn_share (txn_id, person_id, amount) VALUES (?, ?, ?)',
-        [input.id, s.personId, s.amount],
+        [id, s.personId, s.amount],
       );
     }
     const total = input.payments.reduce((a, p) => a + p.amount, 0);
     await logAudit(db, {
-      entityType: 'txn', entityId: input.id, groupId: input.groupId,
+      entityType: 'txn', entityId: id, groupId: input.groupId,
       action: 'updated', amount: total,
       summary: `Edited ${input.kind} ${formatRupees(total)} · ${input.category}`,
     });
   });
+  return id;
 }
 
 export type LedgerStats = {

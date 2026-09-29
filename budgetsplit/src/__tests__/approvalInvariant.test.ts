@@ -29,6 +29,11 @@ const QUERY_DIR = path.resolve(__dirname, '../db/queries');
  */
 const ALLOWLIST: { file: string; contains: string; why: string }[] = [
   {
+    file: 'transactions.ts',
+    contains: 'SELECT 1 AS n FROM txn WHERE attachment_uri = ?',
+    why: 'attachmentInUse: whether any row — rule, occurrence, pending or deleted — still points at a receipt file before it is unlinked. Every kind of row owns the file, so none may be filtered out.',
+  },
+  {
     file: 'identity.ts',
     contains: 'SELECT (EXISTS (SELECT 1 FROM txn WHERE is_deleted = 0)',
     why: 'phoneHasData: an entry waiting on my approval is still data on this phone that a restore would discard, so it counts toward "this phone has data".',

@@ -11,10 +11,6 @@ import { formatCompact } from '../../src/lib/money';
 import { shortDate } from '../../src/lib/dateFormat';
 import { useStore } from '../../src/store';
 
-import { getAllGroups } from '../../src/db/queries/groups';
-
-import { getRecurringForGroup } from '../../src/db/queries/recurring';
-
 import { FadeIn } from '../../src/components/ui/FadeIn';
 import { ErrorState } from '../../src/components/ui/ErrorState';
 import { EmptyState } from '../../src/components/ui/EmptyState';
@@ -37,7 +33,7 @@ import { StreakCard } from '../../src/components/finance/home/StreakCard';
 import { HealthSheet } from '../../src/components/finance/HealthSheet';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { greeting, healthBandColor } from '../../src/components/finance/home/helpers';
-import { loadHomeData, PREV_LABEL, PERIOD_LABEL, TXN_COUNT_PERIOD_LABEL, TARGET_FOR_TAB, type TabKey } from '../../src/lib/homeData';
+import { loadHomeData, loadCatchUp, PREV_LABEL, PERIOD_LABEL, TXN_COUNT_PERIOD_LABEL, TARGET_FOR_TAB, type TabKey } from '../../src/lib/homeData';
 
 // Month is the default and sits in the centre (Today · Month · Year).
 const TABS: { key: TabKey; label: string }[] = [
@@ -101,13 +97,14 @@ export default function DashboardScreen() {
   // On-focus maintenance, kept OUT of the data loader: read the hide-amounts
   // setting and run the recurring catch-up check (a maintenance WRITE, not a read).
   useFocusEffect(useCallback(() => {
-    // Both were floating promises, and `checkCatchUp` WRITES (it stamps the last
+    // Both were floating promises, and `loadCatchUp` WRITES (it stamps the last
     // open time) plus queries every group — so a rejection here was an unhandled
     // one on every focus of the app's first screen. Neither failing is worth
     // interrupting the user for; both are worth not crashing over.
     let alive = true;
     settings.hideAmounts().then(v => { if (alive) setHideAmounts(v); }).catch(() => {});
-    checkCatchUp().catch(() => {});
+    // Not gated on `alive`: the open is already stamped, so a dropped answer is lost for good.
+    loadCatchUp(db).then(n => { if (n) setCatchUpBanner(n); }).catch(() => {});
     return () => { alive = false; };
   }, []));
 
@@ -121,22 +118,6 @@ export default function DashboardScreen() {
       }
     })();
   }, []);
-
-  async function checkCatchUp() {
-    const now = Date.now();
-    const lastOpen = (await settings.appLastOpen()) ?? now;
-    // Record current open time immediately so the next open can compare.
-    await settings.setAppLastOpen(now);
-    const gapDays = Math.floor((now - lastOpen) / (1000 * 60 * 60 * 24));
-    if (gapDays < 30) return;
-    // Count active recurring rules across all groups.
-    const grps = await getAllGroups(db);
-    const rulesPerGroup = await Promise.all(grps.map(g => getRecurringForGroup(db, g.id)));
-    const ruleCount = rulesPerGroup.flat().filter(r => r.recur_freq && r.recur_state !== 'paused').length;
-    if (ruleCount > 0) {
-      setCatchUpBanner({ days: gapDays, ruleCount });
-    }
-  }
 
   // A first-run tile is offered only when the thing it creates is still absent.
   // `budget.exists` and not `budget.allocated`: the allocation is rolled up at the
@@ -254,7 +235,7 @@ export default function DashboardScreen() {
               </View>
             )}
 
-            {(spending === 0 && income === 0 && !budget.exists && !everHadCats) ? (
+            {(!data?.everLogged && !budget.exists) ? (
               <>
                 {/* Dedicated first-run empty home (design Screen 6).
                     The CONTENTS are the shared `EmptyState`; the card around it is

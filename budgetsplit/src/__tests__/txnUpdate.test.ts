@@ -67,8 +67,42 @@ describe('updateTxn column scope', () => {
     );
     await db.runAsync("INSERT INTO group_member (group_id, person_id) VALUES ('g2', ?)", [ME]);
 
-    await updateTxn(db, edit('t1', { groupId: 'g2' }));
-    expect((await getTxnById(db, 't1'))?.group_id).toBe('g2');
+    await db.runAsync("UPDATE txn SET attachment_uri = 'file://r.jpg' WHERE id = 't1'");
+    await db.runAsync("INSERT INTO sync_version (entity, entity_id, version) VALUES ('transactions', 't1', 3)");
+    await db.runAsync('DELETE FROM sync_queue');
+
+    const moved = await updateTxn(db, edit('t1', { groupId: 'g2' }));
+
+    // The server never moves an entry between groups, so a move is a new entry
+    // there and the old one deleted — never the same id with a new group_id.
+    expect(moved).not.toBe('t1');
+    const now = await getTxnById(db, moved);
+    expect(now?.group_id).toBe('g2');
+    expect(now?.attachment_uri).toBe('file://r.jpg');
+    expect(await splitOf(db, moved)).toEqual(await splitOf(db, 't2'));
+    const old = await getTxnById(db, 't1');
+    expect(old?.group_id).toBe('g');
+    expect(old?.is_deleted).toBe(1);
+    expect(old?.attachment_uri).toBeNull();
+    const queued = (await db.getAllAsync<{ local_id: string }>('SELECT local_id FROM sync_queue')).map(r => r.local_id).sort();
+    expect(queued).toEqual([moved, 't1'].sort());
+  });
+
+  it('a move of an entry the server never saw sends no delete for it', async () => {
+    const db = await seed();
+    await db.runAsync(
+      `INSERT INTO budget_group (id,name,icon,color,is_personal,is_archived,created_at,created_by)
+       VALUES ('g2','Trip','map','#fff',0,0,0,?)`, [ME],
+    );
+    const moved = await updateTxn(db, edit('t1', { groupId: 'g2' }));
+    const queued = (await db.getAllAsync<{ local_id: string }>('SELECT local_id FROM sync_queue')).map(r => r.local_id);
+    expect(queued).toContain(moved);
+    expect(queued).not.toContain('t1');
+  });
+
+  it('keeps the id when the group does not change', async () => {
+    const db = await seed();
+    expect(await updateTxn(db, edit('t1', { category: 'Travel' }))).toBe('t1');
   });
 
   it('round-trips a receipt, and clears it when explicitly nulled', async () => {

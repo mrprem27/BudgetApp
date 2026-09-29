@@ -1,6 +1,7 @@
 import * as SQLite from 'expo-sqlite';
 import { queueEntry, queueSeries, queueUpsertWhere } from './syncQueue';
 import { NOT_AWAITING_APPROVAL, AWAITING_APPROVAL_COL } from './approvalSql';
+import { RULE_IN_LIVE_GROUP } from './memberSql';
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
 import { nextOccurrenceOnOrAfter, occurrenceDatesUpTo } from '../../lib/recurrence';
@@ -325,7 +326,8 @@ export async function materializeDueOccurrences(db: SQLite.SQLiteDatabase): Prom
       WHERE t.recur_freq IS NOT NULL AND t.is_deleted = 0 AND t.recur_state = 'active'
         AND t.recur_mode = 'auto'
         AND t.author_person_id IS NULL
-        AND ${NOT_AWAITING_APPROVAL}`,
+        AND ${NOT_AWAITING_APPROVAL}
+        AND ${RULE_IN_LIVE_GROUP}`,
   );
   if (templates.length === 0) return 0;
 

@@ -9,7 +9,7 @@ import { storageVerdict, storageAdvice, allowsAttachments } from '../lib/storage
 import { haptic } from '../lib/haptics';
 import { pickAttachment, deleteAttachment, AttachmentStorageError } from '../lib/attachment';
 import {
-  getTxnById, getLineItems, setTxnAttachment, softDeleteTxn, restoreTxn,
+  getTxnById, getLineItems, setTxnAttachment, softDeleteTxn, restoreTxn, attachmentInUse,
 } from '../db/queries/transactions';
 import { getGroupById } from '../db/queries/groups';
 import { getGroupMembers, getMe, getPersonById } from '../db/queries/persons';
@@ -94,9 +94,10 @@ export function useTxnDetail(id: string) {
     try {
       const uri = await pickAttachment(source);
       if (!uri) return;
-      // Replacing an existing receipt → remove the old file from disk first.
-      if (txn?.attachment_uri) await deleteAttachment(txn.attachment_uri);
+      // Replacing an existing receipt → remove the old file, unless another row shares it.
+      const old = txn?.attachment_uri;
       await setTxnAttachment(db, id, uri);
+      if (old && !(await attachmentInUse(db, old))) await deleteAttachment(old);
       haptic.success();
       await reload();
     } catch (e) {
@@ -136,7 +137,7 @@ export function useTxnDetail(id: string) {
         text: 'Remove', style: 'destructive', onPress: async () => {
           const old = txn.attachment_uri;
           await setTxnAttachment(db, id, null);
-          if (old) await deleteAttachment(old);
+          if (old && !(await attachmentInUse(db, old))) await deleteAttachment(old);
           haptic.warning();
           setShowAttachment(false);
           await reload();

@@ -26,3 +26,4 @@ export { syncOnce, hasPendingChanges, type SyncOutcome, type Transport } from '.
 export { selfPersonId, syncIds, isSyncedPreference } from './ids';
 export type { Vanished } from '../../db/queries/syncApply';
 export type { MergeDuplicate } from '../../db/queries/mergeLedger';
+export { setQueueListener } from '../../db/queries/syncQueue';

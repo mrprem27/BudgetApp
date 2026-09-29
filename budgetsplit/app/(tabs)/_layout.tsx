@@ -11,7 +11,7 @@ import { askAboutPendingPayment, recordScannedPayment } from '../../src/lib/conf
 import { askAboutPendingSettlement } from '../../src/lib/confirmSettlement';
 import { settings } from '../../src/lib/settings';
 import { drainVoiceInbox } from '../../src/lib/voiceDrain';
-import { runSync, scheduleSync, type SyncOutcome, type Vanished } from '../../src/lib/sync';
+import { runSync, scheduleSync, setQueueListener, type SyncOutcome, type Vanished } from '../../src/lib/sync';
 import { pendingRestoreOffer } from '../../src/lib/restoreOffer';
 import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -93,7 +93,7 @@ function AppTabBar({ state, navigation }: { state: any; navigation: any }) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { flags } = useFeatureFlags();
-  const { refresh, version } = useDataRefresh();
+  const { refresh } = useDataRefresh();
   const db = useSQLiteContext();
   const [scanPay, setScanPay] = useState(false);
   const [showHint, setShowHint] = useState(false);
@@ -131,12 +131,13 @@ function AppTabBar({ state, navigation }: { state: any; navigation: any }) {
     runSync(db).then(r => { if (r?.changed) refresh(); announceVanished(r); }).catch(() => {});
   }, [db, refresh]);
 
-  // After a write: send it within seconds while the app is open. Every write calls
-  // refresh(), which moves `version`; scheduleSync debounces and does nothing
-  // when the queue is empty, so a pull's own refresh cannot schedule another.
+  // After a write: send it within seconds while the app is open. Scheduled by the
+  // queue itself, so a write reaches the server whether or not its screen called
+  // refresh(); scheduleSync debounces and does nothing when the queue is empty.
   useEffect(() => {
-    scheduleSync(db, refresh);
-  }, [db, refresh, version]);
+    setQueueListener(() => scheduleSync(db, refresh));
+    return () => setQueueListener(null);
+  }, [db, refresh]);
 
   /*
    * "Used BudgetSplit before?" — on a replacement phone, signing in is the way
