@@ -216,7 +216,11 @@ Options tasks come first; each build task is sized once you've picked.
   - `settings/account.tsx`: the two stacked signed-in footnotes collapsed to one (phone-privacy fact kept, sign-out restatement cut for the same reason); the sign-in hero's two paragraphs (`note`+`noteWarn`) each cut to one line, keeping both real facts (what's stored; no auto-backup)
   - `FirstSignInStep.tsx`: `restore`/`merge` sentences trimmed to one each. `ask`'s two sentences deliberately kept — they're the only place stating what three buttons do to your data, on a screen whose action is hard to reverse (the rule's own exception, not restated context)
   - Gates: `tsc` clean app+server; full suite 216/216, 2685/2685; no test pinned the old copy
-- [ ] **B-99 · Recurring placement (S)**
+- [x] **B-99 · Recurring placement (S)** — done 2026-09-29, no code change
+  - Decision: Recurring stays on Plan's header rail; the Home bell still opens `/upcoming`. A recurring rule can span groups or be personal-only, so a per-person home would put a shared bill's rule on an arbitrary member — Plan (money-wide) is the correct scope
+  - The "something felt off at the bottom of Plan" half of the original `DQ-99` complaint stays explicitly open — not enough signal in the ticket to act on
+  - `docs/TRACKER.md`/`FINDINGS.md` updated: `DQ-99` closed with this reasoning. Also caught up `DQ-100`/`DQ-101`/`DQ-102`/`DQ-103` — all four were still marked `DECIDE` with pre-session text despite being fully built this session (`EN11`, `B-101`, `B-102`, `B-103`); moved to Closed with what actually shipped. Tracker's own open-count (`194 items, N open`) corrected 110→105
+  - Gates: `tsc` clean app+server; full suite 216/216, 2685/2685; `trackerIntegrity`/`docCoverage`/`docIdGraph` guards pass
 
 When each Phase 5 item closes, its tracker row moves to `DONE` and its `FINDINGS.md` entry records the answer.
 

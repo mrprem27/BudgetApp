@@ -2,7 +2,7 @@
 
 `Last verified: 2026-09-07 · Guarded by: trackerIntegrity.test.ts · countClaims.test.ts · docIdGraph.test.ts`
 
-**194 items, 110 of them still open.** One row each: what it is, and where it stands.
+**194 items, 105 of them still open.** One row each: what it is, and where it stands.
 Nothing else.
 
 **The evidence is not here.** Why each item exists, what it costs, what breaks if you touch it, and
@@ -124,11 +124,6 @@ is defined in two places.
 | `DQ-95` | Workers Paid ($5/mo) before the pilot, now that D1 Free hard-stops at 100k rows written/day? | `DECIDE` | Free while developing; Paid before the first non-you sign-in |
 | `DQ-96` | May a group member edit someone else's transaction (Splitwise's model)? | `DECIDE` | No — author-only; approve/reject answers someone else's entry |
 | `DQ-98` | How is the UPI app chosen when paying? | `OPEN` | Answered 2026-09-26: last-used app's logo button + "Change app" logo grid, same on iOS and Android. Building |
-| `DQ-99` | Where do Recurring and Upcoming live — Plan's top, the Person screen, or both? | `DECIDE` | Stays as it is: Recurring on Plan, the bell opens Upcoming |
-| `DQ-100` | What should "Can I afford?" answer, and how? | `DECIDE` | Today's engine: one of three words, "Tight" for almost everything |
-| `DQ-101` | Settings has ~27 rows in 8 sections: consolidate? | `DECIDE` | Stays as it is |
-| `DQ-102` | The app explains too much: a copy budget for every screen? | `DECIDE` | Stays as it is |
-| `DQ-103` | Safe-to-Spend feels vague: how does it earn trust? | `DECIDE` | The breakdown sheet as it is — lines you can read but not check |
 | `DQ-80` | Paid Apple Developer account, $99/yr | `BLOCKED` | Apple |
 | `DQ-81` | Google OAuth **CASA Tier-3** for `gmail.readonly` | `BLOCKED` | Google |
 | `DQ-82` | The GPay export format | `BLOCKED` | Google |
@@ -137,7 +132,7 @@ is defined in two places.
 | `DQ-85` | R2 object storage | `BLOCKED` | A Cloudflare dashboard opt-in that asks for a card |
 | `DQ-86` | Cloudflare Email Sending | `BLOCKED` | Workers Paid $5/mo + an owned domain |
 
-**Closed (10), detail in `FINDINGS.md`:** `DQ-07` `DQ-26` `DQ-28` `DQ-31` `DQ-32` `DQ-88` `DQ-89` `DQ-91` `DQ-93` `DQ-97`
+**Closed (15), detail in `FINDINGS.md`:** `DQ-07` `DQ-26` `DQ-28` `DQ-31` `DQ-32` `DQ-88` `DQ-89` `DQ-91` `DQ-93` `DQ-97` `DQ-99` `DQ-100` `DQ-101` `DQ-102` `DQ-103`
 
 ---
 ## §4 · Walk 1 — `W1-`
