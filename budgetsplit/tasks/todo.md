@@ -210,7 +210,12 @@ Options tasks come first; each build task is sized once you've picked.
   - Left Import/Review inbox/Reports & export/Export all data as four separate rows on purpose — flagged, not merged, since collapsing four different actions into fewer taps is a bigger IA call than removing a repeated link
   - Cleaned up now-dead state (`backupAt`, `onAccount`) and imports (`linkedUser`, `formatAgoCompact`) that only existed for the removed rows
   - Gates: `tsc` clean app+server; full suite 216/216, 2685/2685; `entryPointCount`/`screenIdMap`/`deadComponents` guards pass; both dropped destinations confirmed still reachable via Account
-- [ ] **B-102 · Copy rule + pass (M)** — rule into `AGENTS.md`, then screen by screen
+- [x] **B-102 · Copy rule + pass (M)** — done 2026-09-29
+  - `AGENTS.md` §14 added: at most one caption line of supporting copy per control; the "why" goes to Help or nowhere; never cut copy that states a constraint a decision depends on
+  - `settings/sync.tsx`: the 4-Fact "What this does" card + a trailing footnote collapsed to two lines that state real constraints (server can read your data; entries wait for approval); the sign-out-behavior half of the footnote cut as redundant — it already fires contextually as an Alert at sign-out (`DQ-97`, `useSignOut.ts`)
+  - `settings/account.tsx`: the two stacked signed-in footnotes collapsed to one (phone-privacy fact kept, sign-out restatement cut for the same reason); the sign-in hero's two paragraphs (`note`+`noteWarn`) each cut to one line, keeping both real facts (what's stored; no auto-backup)
+  - `FirstSignInStep.tsx`: `restore`/`merge` sentences trimmed to one each. `ask`'s two sentences deliberately kept — they're the only place stating what three buttons do to your data, on a screen whose action is hard to reverse (the rule's own exception, not restated context)
+  - Gates: `tsc` clean app+server; full suite 216/216, 2685/2685; no test pinned the old copy
 - [ ] **B-99 · Recurring placement (S)**
 
 When each Phase 5 item closes, its tracker row moves to `DONE` and its `FINDINGS.md` entry records the answer.

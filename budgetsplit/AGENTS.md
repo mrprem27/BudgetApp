@@ -670,6 +670,23 @@ collect-request manipulation. The app is built against both. Keep it that way:
 
 ---
 
+## 14. Copy — one line, not a paragraph
+
+Decided 2026-09-29 (`DQ-102`, `B-102`), after screens accumulated paragraph footnotes and "what
+this does" blocks (`settings/sync.tsx`'s explainer, `settings/account.tsx`'s five footnote blocks,
+first-sign-in's two-sentence step body) that repeated context the control itself already implied.
+
+- **At most one short line of supporting copy under any control** — a `caption`-styled hint, not a
+  `body` paragraph. If it needs two sentences, it needs its own screen (Help), not more room under
+  the control.
+- **Explaining why a feature exists is not the screen's job.** A control's own label plus one hint
+  line should carry the "what"; the "why" belongs in Help (`/help`) or nowhere.
+- **Never cut copy that is the only place a constraint is stated** — a warning before a destructive
+  action, a real limitation the user needs to decide with. This rule is about restated context and
+  explanation, not about withholding information a decision depends on.
+
+---
+
 ## Code Quality Rules
 
 - **Money is always integer paise.** `parseToPaise()` to convert. `formatRupees()` to display. Never floats.

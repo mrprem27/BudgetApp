@@ -196,8 +196,8 @@ export default function AccountScreen() {
         {!configured ? (
           <Card padded>
             <Text style={styles.note}>
-              This build has no server configured, so there’s nothing to sign in to. Everything
-              works offline — use Backup & restore to keep an encrypted copy of your data.
+              No server configured — everything works offline. Keep an encrypted copy under Backup
+              & restore.
             </Text>
           </Card>
         ) : !ready ? (
@@ -266,15 +266,12 @@ export default function AccountScreen() {
               />
             </Card>
 
+            {/* `B-102`/`DQ-102`: this used to be two stacked footnotes — one
+                real constraint (phone privacy) and one restating what
+                sign-out does, which the sign-out flow itself already warns
+                about, contextually, at the moment it matters (`DQ-97`). */}
             <Text style={styles.footnote}>
-              Your number is never used to find you — nobody can look you up by it, and it is
-              only ever shown to people you have linked with and allowed to see it.
-            </Text>
-
-            <Text style={styles.footnote}>
-              Your transactions, groups and goals are saved to your account and work offline on
-              this phone. Signing out uploads anything left, then clears this phone — sign in
-              again, here or on a new phone, and everything comes back.
+              Your number is never used to find you — shown only to people you've linked with.
             </Text>
           </>
         ) : sentTo ? (
@@ -323,14 +320,12 @@ export default function AccountScreen() {
             <Card padded style={styles.heroCard}>
               <IconCircle icon="cloud" size={56} iconSize={20} color={colors.accent} bg={colors.accentMuted} />
               <Text style={styles.heroTitle}>Sign in to keep your place</Text>
-              <Text style={styles.note}>
-                Signing in is how this phone knows it’s you. It stores your email and who you’re
-                linked with — never your transactions. Everything works without it.
-              </Text>
-              <Text style={styles.noteWarn}>
-                It does not back anything up on its own. Make a backup under Backup &amp; restore,
-                or losing this phone still loses your data.
-              </Text>
+              {/* `B-102`/`DQ-102`: collapsed from two stacked paragraphs into
+                  one line each — both facts are real constraints (what's
+                  stored, that sign-in alone doesn't back anything up), so
+                  neither is cut, just no longer restated at paragraph length. */}
+              <Text style={styles.note}>Optional — stores only your email and who you're linked with, never your transactions.</Text>
+              <Text style={styles.noteWarn}>Doesn't back anything up on its own — use Backup &amp; restore for that.</Text>
             </Card>
 
             <Card padded>

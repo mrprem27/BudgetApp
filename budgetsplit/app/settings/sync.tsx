@@ -126,47 +126,19 @@ export default function SyncScreen() {
         )}
 
         {/*
-          The things people get wrong, answered before they have to ask. Each is a
-          real surprise, not reassurance: a user who assumes the opposite of any of
-          these would make a decision they wouldn't otherwise have made.
+          `B-102`/`DQ-102`: trimmed from a "What this does" card of four
+          multi-sentence Facts plus a footnote to the two lines that state a
+          real constraint a decision depends on (§14: cut restated context,
+          keep what the user needs to decide with). The sign-out warning that
+          used to live in the footnote already fires contextually, at sign-out
+          itself (`DQ-97`) — restating it here was the redundant half.
         */}
-        <Text style={styles.heading}>What this does</Text>
-        <Card padded>
-          <Fact
-            title="Everything goes to your account"
-            body="Your groups, and your own spending, goals, budgets and net worth. A new phone gets all of it back when you sign in. It works offline, and catches up when there's a connection."
-          />
-          <Divider indent="none" />
-          <Fact
-            title="The server can read it"
-            body="Your account's copy is stored as it is, not sealed. That's what lets the server check who may change what in a shared group, and bring everything back on a new phone."
-          />
-          <Divider indent="none" />
-          <Fact
-            title="Nothing lands without your say-so"
-            body="An entry someone else adds shows up in the group, but moves none of your own numbers until you accept it — unless you have marked that person trusted."
-          />
-          <Divider indent="none" />
-          <Fact
-            title="It isn't live"
-            body="Changes go up a few seconds after you make them while the app is open, and catch up when you come back to it. A ledger doesn't need to be a chat."
-          />
-        </Card>
-
         <Text style={styles.footnote}>
-          Signing out sends anything not yet sent, then empties this phone. Your account keeps
-          everything, and signing in again brings it back.
+          Your account's copy is stored readable, not sealed — that's what lets it check who may
+          change what in a shared group. An entry someone else adds moves none of your numbers
+          until you accept it, unless you've marked them trusted.
         </Text>
       </ScrollView>
-    </View>
-  );
-}
-
-function Fact({ title, body }: { title: string; body: string }) {
-  return (
-    <View style={styles.fact}>
-      <Text style={styles.factTitle}>{title}</Text>
-      <Text style={styles.factBody}>{body}</Text>
     </View>
   );
 }
@@ -175,9 +147,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   content: { padding: layout.screenPaddingH, paddingBottom: space.xl },
   heading: { ...type.sectionLabel, color: colors.textSecondary, marginTop: space.lg, marginBottom: space.sm },
-  fact: { paddingVertical: space.smd },
-  factTitle: { ...type.bodySemi, color: colors.textPrimary, marginBottom: space.xs },
-  factBody: { ...type.caption, color: colors.textSecondary, lineHeight: 18 },
   accept: { ...type.button, color: colors.accent },
   footnote: { ...type.caption, color: colors.textMuted, lineHeight: 18, marginTop: space.lg },
 });

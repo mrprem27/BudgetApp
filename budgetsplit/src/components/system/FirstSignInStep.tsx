@@ -29,8 +29,13 @@ export function FirstSignInStep(props: Props) {
   const title = props.kind === 'restore' ? 'Bringing back your data'
     : props.kind === 'merge' ? 'Bringing your account in'
     : 'This phone already has data';
+  // `B-102`/`DQ-102`: `restore`/`merge` trimmed to one sentence each (AGENTS.md
+  // §14). `ask`'s two sentences stay — they're the only place that says what
+  // each of three buttons does to your data, on a screen where the action is
+  // hard to reverse; that's the rule's own exception (a constraint a decision
+  // depends on), not restated context.
   const sentence = props.kind === 'restore' ? 'Keep the app open — this takes a moment.'
-    : props.kind === 'merge' ? 'Keep the app open — this takes a moment. This phone’s own data goes up next.'
+    : props.kind === 'merge' ? 'Keep the app open — this phone’s own data goes up next.'
     : (props as Extract<Props, { kind: 'ask' }>).canMerge
       ? 'So does your account. “Merge” keeps both, adding this phone’s data to your account. “Use my account” saves this phone’s data to a file in Files first, then replaces it. “Not now” signs you out and changes nothing.'
       : 'So does your account, and they can’t be merged. “Use my account” saves this phone’s data to a file in Files first, then replaces it. “Not now” signs you out and changes nothing.';
