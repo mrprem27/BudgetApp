@@ -57,7 +57,9 @@ export function Chip({
     >
       {leading ?? (icon ? <Feather name={icon} size={14} color={selected ? accent : colors.textSecondary} /> : null)}
 
-      <Text style={[styles.label, selected && { color: accent, ...type.labelSemi }]} numberOfLines={1}>
+      {/* A chip that fills its row puts the label on the free width, so a trailing ⌄/✕
+          sits at the far right edge like a dropdown — not hugging the end of the text. */}
+      <Text style={[styles.label, grow && styles.labelGrow, selected && { color: accent, ...type.labelSemi }]} numberOfLines={1}>
         {label}
       </Text>
 
@@ -116,5 +118,6 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   label: { ...type.label, color: colors.textSecondary, flexShrink: 1 },
+  labelGrow: { flex: 1 },
   grow: { flex: 1 },
 });

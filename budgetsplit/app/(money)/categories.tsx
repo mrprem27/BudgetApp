@@ -15,7 +15,7 @@ import { loadCategoryCatalog } from '../../src/lib/categoryData';
 import { useCategoryWrites } from '../../src/hooks/useCategoryWrites';
 import { haptic } from '../../src/lib/haptics';
 import {
-  CATEGORY_SECTIONS, INCOME_SECTIONS, TRANSFER_SECTIONS, categorySection, categoryVisual,
+  CATEGORY_SECTIONS, INCOME_SECTIONS, TRANSFER_SECTIONS, TRANSFER_HIDDEN_FROM_PICKER, categorySection, categoryVisual,
   DEFAULT_CATEGORIES, INCOME_CATEGORIES, TRANSFER_CATEGORIES,
 } from '../../src/constants/categories';
 import {
@@ -70,6 +70,7 @@ export default function CategoriesScreen() {
     const titles = sections.map(s => s.title);
     const isLast = sectionTitle === titles[titles.length - 1];
     return categories.filter(c => {
+      if (kindTab === 'transfer' && TRANSFER_HIDDEN_FROM_PICKER.has(c.name)) return false;
       const sec = c.section ?? categorySection(c.name);
       if (sec === sectionTitle) return true;
       // Catch-all: a category whose stored/derived section isn't one of the

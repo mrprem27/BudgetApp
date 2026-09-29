@@ -42,6 +42,7 @@ import { buildUpiUri, buildUpiRequestUri } from '../lib/upiIntent';
 import type { BudgetGroup } from '../db/queries/groups';
 import type { Person } from '../db/queries/persons';
 import type { Category } from '../db/queries/categories';
+import { TRANSFER_HIDDEN_FROM_PICKER } from '../constants/categories';
 import { AddKind, ADD_KIND, PayMethod, RecurEndMode, INCOME_LANDING_DEFAULT, TRANSFER_SCOPE_ALL, asPayMethod, type TransferScope , defaultRecurMode, type RecurMode } from '../constants/enums';
 import type { SplitMode, RecurFreq } from '../constants/enums';
 
@@ -192,10 +193,13 @@ export function useAddTxnForm(params: AddTxnParams) {
   }
 
   async function loadGroup(gid: string, meRow: Person | null, preselectCategory?: string, catKind: CategoryKind = 'expense') {
-    const [cats, mems] = await Promise.all([
+    const [allCats, mems] = await Promise.all([
       getCategoriesByFrequency(db, gid, catKind),
       getGroupMembers(db, gid),
     ]);
+    // A transfer's reasons exclude Rent/Investment — but a settlement being edited that
+    // already carries one keeps it, or opening Edit would silently re-file the row.
+    const cats = allCats.filter(c => catKind !== 'transfer' || !TRANSFER_HIDDEN_FROM_PICKER.has(c.name) || c.name === preselectCategory);
     setCategories(cats);
     const pre = preselectCategory ? cats.find(c => c.name === preselectCategory) : null;
     setSelectedCategory(pre ?? cats[0] ?? null);

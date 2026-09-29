@@ -129,6 +129,16 @@ export const INVESTMENT_EXPENSE_CATEGORY = 'Investments / SIP';
 
 export const INVESTMENT_CATEGORY = 'Investment';
 
+/**
+ * A transfer is money moved between people — never spending, never income — so its
+ * "reason" list holds only moves of that kind. `Rent` is an expense and `Investment`
+ * is what the Invest kind files under; neither is a reason to settle up.
+ *
+ * Hidden from every picker, **not deleted**: the rows exist in the catalog, and past
+ * settlements and asset movements carry these names and must keep resolving them.
+ */
+export const TRANSFER_HIDDEN_FROM_PICKER: ReadonlySet<string> = new Set(['Rent', INVESTMENT_CATEGORY]);
+
 export const TRANSFER_CATEGORIES: CategoryDef[] = [
   { name: 'Repayment',   icon: 'corner-up-left',  color: '#8B7CF8' },
   { name: INVESTMENT_CATEGORY, icon: 'trending-up', color: '#6EE7B7' },
@@ -141,7 +151,7 @@ export const TRANSFER_CATEGORIES: CategoryDef[] = [
 
 /** Transfer categories grouped into sections (single section for now). */
 export const TRANSFER_SECTIONS: { title: string; names: string[] }[] = [
-  { title: 'Transfers', names: ['Repayment', 'Rent', 'Shared Bill', 'Lent', 'Borrowed'] },
+  { title: 'Transfers', names: ['Repayment', 'Shared Bill', 'Lent', 'Borrowed'] },
   // `INVESTMENT_CATEGORY` was in TRANSFER_CATEGORIES and in no section, so
   // `categorySection` fell it through to 'Other' — the one transfer category that
   // is not a transfer between people had no home in its own picker. It gets its

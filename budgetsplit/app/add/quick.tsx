@@ -257,7 +257,7 @@ export default function QuickAddScreen() {
                 * Invest pill is the control it was standing in for, so this now
                 * switches kind in place, keeping the amount already typed.
                 */}
-              {kind === 'expense' && f.selectedCategory?.name === INVESTMENT_EXPENSE_CATEGORY && (
+              {!isEditing && kind === 'expense' && f.selectedCategory?.name === INVESTMENT_EXPENSE_CATEGORY && (
                 <View style={styles.formBlock}>
                   <Banner
                     icon="trending-up"
@@ -268,7 +268,7 @@ export default function QuickAddScreen() {
                 </View>
               )}
 
-              {kind === 'expense' && nudgeColor != null && f.nudgeRemaining != null && f.selectedCategory && (
+              {!isEditing && kind === 'expense' && nudgeColor != null && f.nudgeRemaining != null && f.selectedCategory && (
                 <View style={styles.formBlock}>
                   <BudgetNudge color={nudgeColor} remaining={f.nudgeRemaining} categoryName={f.selectedCategory.name} afford={f.affordResult} />
                 </View>
