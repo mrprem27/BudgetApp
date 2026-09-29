@@ -9,10 +9,8 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { settings } from '../../src/lib/settings';
-import { linkedUser } from '../../src/db/queries/syncApply';
 import { colors, type, space, radius, layout, shadow } from '../../src/theme';
 import { haptic } from '../../src/lib/haptics';
-import { formatAgoCompact } from '../../src/lib/time';
 import { getMe, getAllPersons, updatePersonName, setPersonImage, setPersonUpiVpa } from '../../src/db/queries/persons';
 import { isValidVpa } from '../../src/lib/upiIntent';
 import { RequestQrSheet } from '../../src/components/finance/RequestQrSheet';
@@ -82,11 +80,6 @@ export default function SettingsScreen() {
 
   const [biometric, setBiometric] = useState(false);
   const [privacyScreen, setPrivacyScreen] = useState(true);
-  // `null` = never. Shown on the row because the only other prompt is a local
-  // notification, which needs flags.reminders + an OS grant + a dev build.
-  const [backupAt, setBackupAt] = useState<number | null>(null);
-  /** Joined to an account: it holds everything, so "never backed up" would be false. */
-  const [onAccount, setOnAccount] = useState(false);
 
   // Free space, shown on the row itself so a filling device is visible from Settings without
   // having to open the screen. Tinted only when it has become worth acting on.
@@ -143,11 +136,6 @@ export default function SettingsScreen() {
       setBiometric(await settings.biometricEnabled());
       setPrivacyScreen(await settings.privacyScreen());
       setHideAmounts(await settings.hideAmounts());
-      // `lastBackupAt`, not the reminder anchor: turning the backup *reminder* on
-      // writes the anchor, so this row used to read "Backed up just now" to someone
-      // who had never backed up at all.
-      setBackupAt(await settings.lastBackupAt().catch(() => null));
-      setOnAccount(!!(await linkedUser(db).catch(() => null)));
       // Narrowed, not cast: a database written before `once` was removed still
       // holds it here, and an unknown key would index CADENCE_LABELS to undefined.
       const dc = await settings.defaultCadence();
@@ -376,8 +364,10 @@ export default function SettingsScreen() {
       {/* PREFERENCES */}
       <Text style={styles.sectionTitle}>Preferences</Text>
       <View style={styles.card}>
-        <SettingsRow icon="globe" label="Currency" value="INR" onPress={undefined} />
-        <View style={settingsRowDivider} />
+        {/* `B-101`/`DQ-101`: Currency dropped — it was never tappable
+            (`onPress={undefined}`, INR only), which reads as a broken row,
+            not as "there's only one option." Comes back once there's a second
+            currency to pick between. */}
         <SettingsRow icon={PAY_METHOD_ICON[defaultPay]} label="Default pay method" value={PAY_METHOD_LABEL[defaultPay]} onPress={() => setShowPayMethod(true)} />
         <View style={settingsRowDivider} />
         <SettingsRow icon="repeat" label="Default budget cadence" value={CADENCE_LABELS[defaultCadence]} onPress={() => setShowCadence(true)} />
@@ -441,28 +431,18 @@ export default function SettingsScreen() {
           right={exportingAll ? <ActivityIndicator size="small" color={colors.accent} /> : undefined}
         />
         <View style={settingsRowDivider} />
-        <SettingsRow
-          icon="refresh-cw"
-          label="Sync"
-          value={serverSessionConfigured ? undefined : 'Not available'}
-          onPress={() => { router.push('/settings/sync'); }}
-        />
-        <View style={settingsRowDivider} />
+        {/* `B-101`: Sync and Backup & restore dropped as their own rows —
+            `/settings/account` already surfaces both (`SyncStatus` and a link
+            to Backup), so this stopped being a second, repeated path to the
+            same two things and started being a third and fourth (`DQ-101`).
+            When there's no server build (`!serverSessionConfigured`), Account
+            itself is hidden too, so there is nothing to sync either. */}
         <SettingsRow
           icon="hard-drive"
           label="Storage"
           value={storageLabel}
           tint={storageTint}
           onPress={() => { router.push('/settings/storage'); }}
-        />
-        <View style={settingsRowDivider} />
-        <SettingsRow
-          icon="shield"
-          label="Backup & restore"
-          // Amber, not red: no backup is a risk to act on, not a user error.
-          value={onAccount ? 'On your account' : backupAt ? `Backed up ${formatAgoCompact(backupAt)}` : 'Never backed up'}
-          tint={onAccount || backupAt ? colors.accent : colors.healthAmber}
-          onPress={() => { router.push('/settings/backup'); }}
         />
         <View style={settingsRowDivider} />
         <SettingsRow icon="help-circle" label="Help & Feedback" onPress={() => { router.push('/help'); }} />

@@ -205,7 +205,11 @@ Independent of Phase 3 (money engine) — zero file overlap (`finance/pay/*`, `S
 Options tasks come first; each build task is sized once you've picked.
 
 - [x] **O-99 / O-100 / O-101 / O-102 / O-103** — answered 2026-09-27: build the proposals recorded in `FINDINGS.md`; `DQ-99` decided from the Recurring rule
-- [ ] **B-101 · Settings consolidation (M)** — one Account & sync row, one Data row, Currency dropped
+- [x] **B-101 · Settings consolidation (M)** — done 2026-09-29, scope per `tasks/plan.md`'s spec
+  - Dropped the standalone **Sync** and **Backup & restore** rows — both already one tap from `/settings/account` (`SyncStatus` + an existing backup link); dropped the untappable **Currency** row (INR only, `onPress={undefined}`)
+  - Left Import/Review inbox/Reports & export/Export all data as four separate rows on purpose — flagged, not merged, since collapsing four different actions into fewer taps is a bigger IA call than removing a repeated link
+  - Cleaned up now-dead state (`backupAt`, `onAccount`) and imports (`linkedUser`, `formatAgoCompact`) that only existed for the removed rows
+  - Gates: `tsc` clean app+server; full suite 216/216, 2685/2685; `entryPointCount`/`screenIdMap`/`deadComponents` guards pass; both dropped destinations confirmed still reachable via Account
 - [ ] **B-102 · Copy rule + pass (M)** — rule into `AGENTS.md`, then screen by screen
 - [ ] **B-99 · Recurring placement (S)**
 
