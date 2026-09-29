@@ -295,3 +295,51 @@ describe('EG-1 · the 12-month surplus counts every recurring bill, not only the
     expect(monthlyAffordability(snapWith(monthly))[0].surplusPaise).toBe(R(12_000));
   });
 });
+
+describe('EG-2 · a due day is held to the month\'s length, and a due day in progress is today', () => {
+  const { knownEvents, projectKnown } = jest.requireActual('../lib/engine/projection') as typeof import('../lib/engine/projection');
+  const { purchaseEvents } = jest.requireActual('../lib/engine/assess') as typeof import('../lib/engine/assess');
+  type Snap = import('../lib/engine/types').FinanceSnapshot;
+  const card = (asOf: number, cardDueDay: number): Snap => ({
+    asOf, meId: 'me',
+    cash: { available: 1_000_000, creditUsed: 50_000, creditLimit: 0, cardDueDay },
+    recurring: { rules: [], skips: {} },
+    goals: { list: [], savedByGoal: {}, funding: { commitMonthly: 0, fundedThisMonth: 0, remaining: 0, goalsCount: 0 } },
+    exposure: { owe: 0, owed: 0, owedExpected: 0, net: 0, owePeople: 0, owedPeople: 0, perPerson: [] },
+    receivables: [], budgets: [], history: [], futureOneOffs: [],
+  });
+  const cardDate = (asOf: number, day: number) =>
+    knownEvents(card(asOf, day), asOf + 60 * 86_400_000).find(e => e.kind === 'card')!.date;
+
+  it('the 31st in a 30-day month is the 30th, not the 1st of the next', () => {
+    expect(cardDate(Date.UTC(2026, 3, 10, 12), 31)).toBe(Date.UTC(2026, 3, 30));
+  });
+
+  it('the 31st in February is the 28th', () => {
+    expect(cardDate(Date.UTC(2026, 1, 1, 12), 31)).toBe(Date.UTC(2026, 1, 28));
+  });
+
+  it('a card due today is due today, not a month out', () => {
+    const asOf = Date.UTC(2026, 3, 15, 12);
+    expect(cardDate(asOf, 15)).toBe(asOf);
+    // On the path from day one, so the low point sees it — not a stand-in day at the horizon's end.
+    expect(projectKnown(card(asOf, 15), 30).days[0].events.map(e => e.kind)).toContain('card');
+  });
+
+  it('a monthly purchase that starts on the 31st returns to the 31st after a short month', () => {
+    const start = Date.UTC(2026, 0, 31);
+    const dates = purchaseEvents({ amountPaise: 100, recurrence: 'monthly' } as never, start, start + 100 * 86_400_000).map(e => e.date);
+    expect(dates).toEqual([start, Date.UTC(2026, 1, 28), Date.UTC(2026, 2, 31), Date.UTC(2026, 3, 30)]);
+  });
+});
+
+describe('IM-3 · a reference number in a headerless row is not the amount', () => {
+  const { parseStatement } = jest.requireActual('../lib/importParse') as typeof import('../lib/importParse');
+  it('skips a long or zero-led bare number when the row has real amounts', () => {
+    const r = parseStatement(['02/06/2025,Coffee,402913847,120.00,9000.00', '03/06/2025,Tea,000124,60.00,8940.00'].join('\n'));
+    expect(r.rows.map(x => x.amount)).toEqual([12000, 6000]);
+  });
+  it('still reads a lone plain number as the amount', () => {
+    expect(parseStatement('02/06/2025,Coffee,120').rows.map(x => x.amount)).toEqual([12000]);
+  });
+});

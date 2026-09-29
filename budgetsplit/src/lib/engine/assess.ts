@@ -6,7 +6,7 @@
  * defaults on both, so Safe-to-Spend and Afford can't disagree.
  */
 import type { AffordReason, AffordVerdict, FinanceSnapshot, KnownEvent, Projection, Purchase, AffordResult, TippingReceivable, MonthlyAffordability } from './types';
-import { projectKnown, horizonDaysFor } from './projection';
+import { projectKnown, horizonDaysFor, utcMonthDay } from './projection';
 import { essentialFloor, defaultNecessity, repaymentModel, monthlyAffordability } from './behaviour';
 import { explain } from './explain';
 import { recurringMonthlyEquivalent } from '../recurrence';
@@ -67,10 +67,13 @@ export function purchaseEvents(purchase: Purchase, startMs: number, horizonEndMs
   if (purchase.recurrence === 'weekly') {
     for (let d = startMs; d <= horizonEndMs; d += 7 * DAY_MS) events.push({ date: d, amountPaise: -purchase.amountPaise, label, kind: 'purchase' });
   } else if (purchase.recurrence === 'monthly') {
-    for (let d = startMs; d <= horizonEndMs;) {
+    // Each month is worked out from the first date, not from the previous one, so a 31st that
+    // lands on a short month's last day comes back to the 31st the month after.
+    const first = new Date(startMs);
+    for (let k = 0; ; k++) {
+      const d = k === 0 ? startMs : utcMonthDay(first.getUTCFullYear(), first.getUTCMonth() + k, first.getUTCDate());
+      if (d > horizonEndMs) break;
       events.push({ date: d, amountPaise: -purchase.amountPaise, label, kind: 'purchase' });
-      const dt = new Date(d);
-      d = Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth() + 1, dt.getUTCDate());
     }
   } else {
     // No recurrence, or `yearly` — see the file-header note above.

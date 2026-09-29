@@ -73,15 +73,25 @@ function skipsToMap(skips: Record<string, number[]>): Map<string, Set<number>> {
 }
 
 /**
- * The day of `dueDay` on or after `fromMs`, in the same month if it hasn't
- * passed yet this month, else the next one. UTC, matching how the rest of the
- * engine treats dates (§4 E1's snapshot carries epoch ms throughout).
+ * `day` of a UTC month, held to that month's length: the 31st of a 30-day month is its
+ * last day, never the 1st of the next. `month` may run past 11 or below 0.
+ */
+export function utcMonthDay(year: number, month: number, day: number): number {
+  const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  return Date.UTC(year, month, Math.min(day, lastDay));
+}
+
+/**
+ * The day of `dueDay` on or after `fromMs`: this month's if it hasn't passed, else
+ * next month's. A due day still in progress counts as today (returned as `fromMs`,
+ * never a moment already behind us, which the walk would drop). UTC, matching how
+ * the rest of the engine treats dates (§4 E1's snapshot carries epoch ms throughout).
  */
 function nextDueDate(fromMs: number, dueDay: number): number {
   const d = new Date(fromMs);
-  const thisMonth = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), dueDay);
-  if (thisMonth >= fromMs) return thisMonth;
-  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, dueDay);
+  const thisMonth = utcMonthDay(d.getUTCFullYear(), d.getUTCMonth(), dueDay);
+  if (thisMonth + DAY_MS > fromMs) return Math.max(thisMonth, fromMs);
+  return utcMonthDay(d.getUTCFullYear(), d.getUTCMonth() + 1, dueDay);
 }
 
 /**

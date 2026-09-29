@@ -141,9 +141,14 @@ export function parseStatement(text: string): ParseResult {
   for (const line of lines) {
     const fields = (delim && line.includes(delim) ? splitFields(line, delim) : [line]).map(f => f.trim());
 
-    const moneyFields = fields
+    const allMoney = fields
       .map((f, i) => ({ i, m: parseMoney(f) }))
       .filter((x): x is { i: number; m: { paise: number; marker: MoneyMarker } } => x.m !== null);
+    // A long bare number, or one with a leading zero (`000123`, `402913847`), is a reference or
+    // cheque number, not money — unless it is the only number on the row.
+    const isReference = (i: number) => /^0\d+$|^\d{6,}$/.test(fields[i]);
+    const notReference = allMoney.filter(x => !isReference(x.i));
+    const moneyFields = notReference.length > 0 ? notReference : allMoney;
 
     // No money anywhere → header / junk. A header still says where the sides are.
     if (moneyFields.length === 0) {
