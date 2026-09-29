@@ -177,11 +177,6 @@ export default function StorageScreen() {
             Load a full demo dataset to explore every screen, or wipe everything back to an empty app.
           </Text>
           <SecondaryButton label={busy ? 'Working…' : 'Load demo data'} onPress={confirmLoadDemo} disabled={busy} icon="database" />
-          <SecondaryButton
-            label="Money engine comparison"
-            onPress={() => router.push('/dev/engine')}
-            icon="activity"
-          />
           <TouchableOpacity
             style={[styles.eraseBtn, busy && styles.eraseDisabled]}
             onPress={confirmReset}

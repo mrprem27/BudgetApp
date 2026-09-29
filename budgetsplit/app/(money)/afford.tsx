@@ -13,7 +13,8 @@ import { Chip } from '../../src/components/ui/Chip';
 import type { Category } from '../../src/db/queries/categories';
 import { loadAffordData } from '../../src/lib/affordData';
 import { afford } from '../../src/lib/engine/assess';
-import type { AffordResult, AffordVerdict, FinanceSnapshot } from '../../src/lib/engine/types';
+import { affordTrace, type TraceLine, type TraceStatus } from '../../src/lib/engine/trace';
+import type { AffordResult, AffordVerdict, Purchase } from '../../src/lib/engine/types';
 import { parseToPaise, formatRupees, formatCompact } from '../../src/lib/money';
 import { shortDate } from '../../src/lib/dateFormat';
 import type { FeatherName } from '../../src/constants/palette';
@@ -23,8 +24,9 @@ import type { FeatherName } from '../../src/constants/palette';
  * first" per the user's pick 2026-09-27: the headline and verdict lead, at
  * most 2 reasons (already ranked and phrased by the engine — no second copy
  * of the sentence to keep in sync with it), the largest comfortable amount,
- * a can-wait date, and the old always-open breakdown folds behind "How we
- * got this". The Need/Want chip is gone — nothing in v1 reads it (spec §5).
+ * a can-wait date, and the full working folds behind "How we got this" —
+ * `affordTrace` (`lib/engine/trace.ts`): every input, dated event, low point,
+ * check and the rule that turned them into the verdict, each with its number. The Need/Want chip is gone — nothing in v1 reads it (spec §5).
  *
  * `lib/afford.ts`'s six checks are deleted; this is the only caller of
  * the old formula's evaluator left, and it's gone too.
@@ -61,15 +63,23 @@ export default function AffordScreen() {
 
   const amount = parseToPaise(amountText);
 
+  const purchase: Purchase | null = useMemo(() => (amount > 0 ? {
+    amountPaise: amount,
+    category: categoryName ?? undefined,
+    when: canWait ? 'can-wait' : 'now',
+    recurrence: frequency === 'once' ? undefined : frequency,
+  } : null), [amount, categoryName, canWait, frequency]);
+
   const result: AffordResult | null = useMemo(() => {
-    if (!snapshot || amount <= 0) return null;
-    return afford(snapshot.snapshot, {
-      amountPaise: amount,
-      category: categoryName ?? undefined,
-      when: canWait ? 'can-wait' : 'now',
-      recurrence: frequency === 'once' ? undefined : frequency,
-    });
-  }, [snapshot, amount, categoryName, canWait, frequency]);
+    if (!snapshot || !purchase) return null;
+    return afford(snapshot.snapshot, purchase);
+  }, [snapshot, purchase]);
+
+  // Only built while the panel is open — it re-walks the projection twice.
+  const trace = useMemo(() => {
+    if (!showBreakdown || !snapshot || !purchase || !result) return null;
+    return affordTrace(snapshot.snapshot, purchase, result);
+  }, [showBreakdown, snapshot, purchase, result]);
 
   const showResult = amount > 0 && !!result;
   // A neutral fallback, not `null`: `verdict` is deliberately `null` when
@@ -186,16 +196,22 @@ export default function AffordScreen() {
                 accessibilityRole="button"
                 accessibilityState={{ expanded: showBreakdown }}
               >
-                <Text style={styles.disclosureText}>How we got this</Text>
+                <Text style={styles.disclosureText}>How we got this — full working</Text>
                 <Feather name={showBreakdown ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} />
               </TouchableOpacity>
-              {showBreakdown && result && (
-                <View style={styles.breakdownCard}>
-                  <BreakdownRow label="Low point before this purchase" hint={shortDate(result.lowPointBefore.date)} amount={result.lowPointBefore.amount} />
-                  <View style={styles.breakdownDivider} />
-                  <BreakdownRow label="Low point after" hint={shortDate(result.lowPointAfter.date)} amount={result.lowPointAfter.amount} />
-                  <View style={styles.breakdownDivider} />
-                  <BreakdownRow label="Floor (a week of essentials)" hint="The cushion below which it's Tight, not just lower" amount={result.floor} />
+              {trace && (
+                <View style={styles.traceWrap}>
+                  {trace.sections.map((section, si) => (
+                    <View key={section.key} style={styles.breakdownCard}>
+                      <Text style={styles.sectionTitle}>{si + 1}. {section.title}</Text>
+                      {section.lines.map((line, i) => (
+                        <React.Fragment key={i}>
+                          {i > 0 && <View style={styles.breakdownDivider} />}
+                          <TraceRow line={line} />
+                        </React.Fragment>
+                      ))}
+                    </View>
+                  ))}
                 </View>
               )}
             </View>
@@ -226,14 +242,26 @@ export default function AffordScreen() {
   );
 }
 
-function BreakdownRow({ label, hint, amount }: { label: string; hint: string; amount: number }) {
+const STATUS_STYLE: Record<TraceStatus, { icon: FeatherName; color: string }> = {
+  pass: { icon: 'check-circle', color: colors.income },
+  warn: { icon: 'alert-triangle', color: colors.healthAmber },
+  fail: { icon: 'x-circle', color: colors.expense },
+  info: { icon: 'info', color: colors.textMuted },
+};
+
+function TraceRow({ line }: { line: TraceLine }) {
+  const st = line.status ? STATUS_STYLE[line.status] : null;
+  const valueColor = st && line.status !== 'info'
+    ? st.color
+    : line.amountPaise != null && line.amountPaise < 0 ? colors.expense : colors.textPrimary;
   return (
     <View style={styles.breakdownRow}>
+      {st && <Feather name={st.icon} size={14} color={st.color} style={styles.statusIcon} />}
       <View style={{ flex: 1 }}>
-        <Text style={styles.breakdownLabel}>{label}</Text>
-        <Text style={styles.breakdownHint}>{hint}</Text>
+        <Text style={styles.breakdownLabel}>{line.label}</Text>
+        {!!line.detail && <Text style={styles.breakdownHint}>{line.detail}</Text>}
       </View>
-      <Text style={[styles.breakdownAmount, { color: amount < 0 ? colors.expense : colors.textPrimary }]}>{formatRupees(amount)}</Text>
+      <Text style={[styles.breakdownAmount, { color: valueColor }]}>{line.value}</Text>
     </View>
   );
 }
@@ -258,12 +286,15 @@ const styles = StyleSheet.create({
   confidenceText: { ...type.caption, color: colors.healthAmber, marginTop: space.xs, textAlign: 'center' },
   disclosureRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: space.sm },
   disclosureText: { ...type.label, color: colors.textMuted },
+  traceWrap: { gap: space.sm },
+  sectionTitle: { ...type.labelSemi, color: colors.textPrimary, paddingTop: space.md, paddingBottom: space.xs },
+  statusIcon: { alignSelf: 'flex-start', marginTop: 3 },
   breakdownCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md },
   breakdownDivider: { height: 1, backgroundColor: colors.border },
-  breakdownRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: space.md, gap: space.md },
+  breakdownRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: space.sm, gap: space.sm },
   breakdownLabel: { ...type.body, color: colors.textSecondary },
   breakdownHint: { ...type.caption, color: colors.textMuted, marginTop: 2 },
-  breakdownAmount: { fontFamily: 'SpaceMono_400Regular', fontSize: 15 },
+  breakdownAmount: { fontFamily: 'SpaceMono_400Regular', fontSize: 13, maxWidth: '45%', textAlign: 'right' },
   actionRow: { flexDirection: 'row', gap: space.sm },
   ghostBtn: { flex: 1, height: 48, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   ghostBtnText: { ...type.button, color: colors.accent },

@@ -24,6 +24,8 @@ import { PayMethodSelector } from '../../src/components/finance/PayMethodSelecto
 import { Input } from '../../src/components/ui/Input';
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
 import { SettingsRow, settingsRowDivider } from '../../src/components/ui/SettingsRow';
+import { IconCircle } from '../../src/components/ui/IconCircle';
+import { decor } from '../../src/constants/palette';
 import { freeBytes } from '../../src/lib/deviceStorage';
 import { StorageVerdict, storageVerdict, formatBytes } from '../../src/lib/storage';
 import { DEV_TOOLS_ENABLED } from '../../src/constants/devTools';
@@ -37,6 +39,37 @@ import { ErrorState } from '../../src/components/ui/ErrorState';
 
 const CADENCE_LABELS: Record<BudgetCadence, string> = { daily: 'Daily', monthly: 'Monthly', yearly: 'Yearly' };
 const CADENCE_KEYS: BudgetCadence[] = ['daily', 'monthly', 'yearly'];
+
+/**
+ * One hue per row, the way iOS Settings does it: every icon in teal made the
+ * list one undifferentiated block, and the eye had nothing to land on. Colour
+ * here is identity, not meaning — a row keeps its hue whatever its state; a
+ * state tint (`storageTint`, pending imports) still overrides it.
+ */
+const TINT = {
+  account: decor.blue,
+  upiId: colors.income,
+  upiQr: colors.accent,
+  friends: decor.blue,
+  categories: decor.orange,
+  budget: colors.income,
+  payMethod: colors.settle,
+  cadence: decor.orange,
+  features: colors.accent,
+  voice: decor.pink,
+  notifications: colors.healthAmber,
+  trust: colors.income,
+  lock: decor.blue,
+  privacy: decor.violet,
+  hideAmounts: decor.orange,
+  import: decor.blue,
+  reports: colors.income,
+  export: decor.violet,
+  storage: colors.textSecondary,
+  audit: decor.orange,
+  help: decor.pink,
+  tour: colors.accent,
+} as const;
 
 export default function SettingsScreen() {
   const db = useSQLiteContext();
@@ -282,6 +315,7 @@ export default function SettingsScreen() {
             <SettingsRow
               icon={serverSession ? 'user-check' : 'cloud'}
               label={serverSession ? 'Account' : 'Sign in'}
+              tint={TINT.account}
               value={serverSession ? serverSession.user.email : 'Keep a copy on your account'}
               onPress={() => { router.push('/settings/account'); }}
             />
@@ -299,6 +333,7 @@ export default function SettingsScreen() {
             <SettingsRow
               icon="credit-card"
               label="Your UPI ID"
+              tint={TINT.upiId}
               value={me?.upi_vpa ?? 'Not set'}
               onPress={() => { setVpaText(me?.upi_vpa ?? ''); setShowVpa(true); }}
             />
@@ -306,6 +341,7 @@ export default function SettingsScreen() {
             <SettingsRow
               icon="maximize"
               label="Show my UPI QR"
+              tint={TINT.upiQr}
               value="Any UPI app"
               onPress={() => setShowMyQr(true)}
             />
@@ -319,6 +355,7 @@ export default function SettingsScreen() {
         <SettingsRow
           icon="users"
           label="Friends"
+          tint={TINT.friends}
           value={contactCount > 0 ? `${contactCount} contact${contactCount !== 1 ? 's' : ''}` : undefined}
           onPress={() => { router.push('/friends'); }}
         />
@@ -326,6 +363,7 @@ export default function SettingsScreen() {
         <SettingsRow
           icon="tag"
           label="Categories"
+          tint={TINT.categories}
           value={categoryCount > 0 ? `${categoryCount} categor${categoryCount === 1 ? 'y' : 'ies'}` : undefined}
           onPress={() => { router.push('/categories'); }}
         />
@@ -333,6 +371,7 @@ export default function SettingsScreen() {
         <SettingsRow
           icon="target"
           label="My Budget"
+          tint={TINT.budget}
           value={budgetMonthly > 0 ? `${formatCompact(budgetMonthly)}/mo` : 'Not set'}
           onPress={() => router.push('/budget')}
         />
@@ -345,14 +384,20 @@ export default function SettingsScreen() {
             (`onPress={undefined}`, INR only), which reads as a broken row,
             not as "there's only one option." Comes back once there's a second
             currency to pick between. */}
-        <SettingsRow icon={PAY_METHOD_ICON[defaultPay]} label="Default pay method" value={PAY_METHOD_LABEL[defaultPay]} onPress={() => setShowPayMethod(true)} />
+        <SettingsRow icon={PAY_METHOD_ICON[defaultPay]} label="Default pay method" tint={TINT.payMethod} value={PAY_METHOD_LABEL[defaultPay]} onPress={() => setShowPayMethod(true)} />
         <View style={settingsRowDivider} />
-        <SettingsRow icon="repeat" label="Default budget cadence" value={CADENCE_LABELS[defaultCadence]} onPress={() => setShowCadence(true)} />
+        <SettingsRow icon="repeat" label="Default budget cadence" tint={TINT.cadence} value={CADENCE_LABELS[defaultCadence]} onPress={() => setShowCadence(true)} />
         <View style={settingsRowDivider} />
-        <SettingsRow icon="sliders" label="Feature management" value="Modules & toggles" onPress={() => { router.push('/features'); }} />
+        <SettingsRow icon="sliders" label="Feature management" tint={TINT.features} value="Modules & toggles" onPress={() => { router.push('/features'); }} />
+        {/* Notifications used to be a section of its own holding one row — a
+            heading for a single item. It's a preference like the rest. */}
+        {flags.reminders && (<>
+          <View style={settingsRowDivider} />
+          <SettingsRow icon="bell" label="Notifications & Reminders" tint={TINT.notifications} value="Bills · daily log" onPress={() => { router.push('/settings/notifications'); }} />
+        </>)}
         {flags.voiceEntry && (<>
           <View style={settingsRowDivider} />
-          <SettingsRow icon="mic" label="Voice entry" value="Hands-free with Siri" onPress={() => { router.push('/settings/voice'); }} />
+          <SettingsRow icon="mic" label="Voice entry" tint={TINT.voice} value="Hands-free with Siri" onPress={() => { router.push('/settings/voice'); }} />
         </>)}
       </View>
 
@@ -363,26 +408,18 @@ export default function SettingsScreen() {
             to my numbers", which is a question about exposure rather than about
             contacts. It was previously answerable only one person at a time. */}
         {flags.splitting && (<>
-          <SettingsRow icon="shield" label="Who can add to my ledger" onPress={() => { router.push('/trust'); }} />
+          <SettingsRow icon="shield" label="Who can add to my ledger" tint={TINT.trust} onPress={() => { router.push('/trust'); }} />
           <View style={settingsRowDivider} />
         </>)}
-        <ToggleRow icon="lock" label="Face ID / Touch ID lock" value={biometric} onValueChange={toggleLock} />
+        <ToggleRow icon="lock" tint={TINT.lock} label="Face ID / Touch ID lock" value={biometric} onValueChange={toggleLock} />
         <View style={settingsRowDivider} />
-        <ToggleRow icon="eye-off" label="Privacy screen in app switcher" value={privacyScreen} onValueChange={(v) => toggle(settings.setPrivacyScreen, v, setPrivacyScreen)} />
+        <ToggleRow icon="eye-off" tint={TINT.privacy} label="Privacy screen in app switcher" value={privacyScreen} onValueChange={(v) => toggle(settings.setPrivacyScreen, v, setPrivacyScreen)} />
         <View style={settingsRowDivider} />
-        <ToggleRow icon="eye" label="Hide amounts on home" value={hideAmounts} onValueChange={(v) => toggle(settings.setHideAmounts, v, setHideAmounts)} />
+        <ToggleRow icon="eye" tint={TINT.hideAmounts} label="Hide amounts on home" value={hideAmounts} onValueChange={(v) => toggle(settings.setHideAmounts, v, setHideAmounts)} />
       </View>
 
-      {/* NOTIFICATIONS & REMINDERS — all reminder config lives on its own screen now */}
-      {flags.reminders && (<>
-      <Text style={styles.sectionTitle}>Notifications</Text>
-      <View style={styles.card}>
-        <SettingsRow icon="bell" label="Notifications & Reminders" value="Bills · daily log" onPress={() => { router.push('/settings/notifications'); }} />
-      </View>
-      </>)}
-
-      {/* DATA & HELP */}
-      <Text style={styles.sectionTitle}>Data & Help</Text>
+      {/* YOUR DATA */}
+      <Text style={styles.sectionTitle}>Your data</Text>
       <View style={styles.card}>
         {/* Each row carries its own trailing divider so a hidden row leaves no seam. */}
         {/* `B-101` follow-up: Import and Review inbox were two rows for one pipeline.
@@ -394,18 +431,19 @@ export default function SettingsScreen() {
             icon={pendingCount > 0 ? 'inbox' : 'upload'}
             label="Import & review"
             value={pendingCount > 0 ? `${pendingCount} to review` : 'CSV / text'}
-            tint={pendingCount > 0 ? colors.healthAmber : undefined}
+            tint={pendingCount > 0 ? colors.healthAmber : TINT.import}
             onPress={() => { router.push(pendingCount > 0 ? '/review' : '/import'); }}
           />
           <View style={settingsRowDivider} />
         </>)}
         {flags.reports && (<>
-          <SettingsRow icon="download" label="Reports & export" value="CSV / PDF" onPress={() => { router.push('/reports'); }} />
+          <SettingsRow icon="download" label="Reports & export" tint={TINT.reports} value="CSV / PDF" onPress={() => { router.push('/reports'); }} />
           <View style={settingsRowDivider} />
         </>)}
         <SettingsRow
           icon="database"
           label="Export all data"
+          tint={TINT.export}
           value={exportingAll ? undefined : 'CSV'}
           onPress={exportingAll ? undefined : handleExportAll}
           right={exportingAll ? <ActivityIndicator size="small" color={colors.accent} /> : undefined}
@@ -421,15 +459,20 @@ export default function SettingsScreen() {
           icon="hard-drive"
           label="Storage"
           value={storageLabel}
-          tint={storageTint}
+          tint={storageTint ?? TINT.storage}
           onPress={() => { router.push('/settings/storage'); }}
         />
         <View style={settingsRowDivider} />
-        <SettingsRow icon="help-circle" label="Help & Feedback" onPress={() => { router.push('/help'); }} />
+        <SettingsRow icon="clock" label="Audit log" tint={TINT.audit} onPress={() => { router.push('/history'); }} />
+      </View>
+
+      {/* HELP — split from data: "where are my numbers" and "how does this work"
+          are different questions, and seven rows under one heading hid both. */}
+      <Text style={styles.sectionTitle}>Help</Text>
+      <View style={styles.card}>
+        <SettingsRow icon="help-circle" label="Help & Feedback" tint={TINT.help} onPress={() => { router.push('/help'); }} />
         <View style={settingsRowDivider} />
-        <SettingsRow icon="play-circle" label="Replay welcome tour" onPress={async () => { await settings.clearOnboardingDone(); haptic.light(); Alert.alert('Welcome tour reset', 'Fully close and reopen BudgetSplit to see the intro again.'); }} />
-        <View style={settingsRowDivider} />
-        <SettingsRow icon="clock" label="Audit log" onPress={() => { router.push('/history'); }} />
+        <SettingsRow icon="play-circle" label="Replay welcome tour" tint={TINT.tour} onPress={async () => { await settings.clearOnboardingDone(); haptic.light(); Alert.alert('Welcome tour reset', 'Fully close and reopen BudgetSplit to see the intro again.'); }} />
       </View>
 
       {/* About — tap version 7× to open the developer storage screen. Gated on
@@ -516,10 +559,10 @@ export default function SettingsScreen() {
   );
 }
 
-function ToggleRow({ icon, label, value, onValueChange }: { icon: keyof typeof Feather.glyphMap; label: string; value: boolean; onValueChange: (v: boolean) => void }) {
+function ToggleRow({ icon, tint = colors.accent, label, value, onValueChange }: { icon: keyof typeof Feather.glyphMap; tint?: string; label: string; value: boolean; onValueChange: (v: boolean) => void }) {
   return (
     <View style={styles.toggleRow}>
-      <View style={styles.toggleIcon}><Feather name={icon} size={16} color={colors.accent} /></View>
+      <IconCircle icon={icon} color={tint} size={layout.iconCircle} />
       <Text style={styles.toggleLabel}>{label}</Text>
       <Switch value={value} onValueChange={onValueChange} trackColor={{ true: colors.accent, false: colors.bgMuted }} thumbColor={colors.textPrimary} accessibilityLabel={label} />
     </View>
@@ -546,7 +589,6 @@ const styles = StyleSheet.create({
   nameInputGap: { marginBottom: space.md },
   vpaHint: { ...type.label, color: colors.textSecondary, marginBottom: space.md, lineHeight: 19 },
   toggleRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm, paddingHorizontal: space.md, minHeight: 52 },
-  toggleIcon: { width: 32, height: 32, borderRadius: radius.lg, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
   toggleLabel: { ...type.body, color: colors.textPrimary, flex: 1 },
   cadOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: space.md, paddingHorizontal: space.md, borderRadius: radius.md },
   cadOptionActive: { backgroundColor: colors.accentMuted },

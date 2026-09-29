@@ -59,7 +59,7 @@ export function safeToSpendV2(
  * — telling it apart from a one-time purchase needs the 12-month commitment
  * view, which is `EN6`'s sinking-fund machinery, not built yet.
  */
-function purchaseEvents(purchase: Purchase, startMs: number, horizonEndMs: number): KnownEvent[] {
+export function purchaseEvents(purchase: Purchase, startMs: number, horizonEndMs: number): KnownEvent[] {
   const label = purchase.category ?? 'Purchase';
   const events: KnownEvent[] = [];
   if (startMs > horizonEndMs) return events;
@@ -90,6 +90,19 @@ function purchaseEvents(purchase: Purchase, startMs: number, horizonEndMs: numbe
  * category on the purchase at all: no reason.
  */
 function overBudgetReason(snapshot: FinanceSnapshot, purchase: Purchase): AffordReason | null {
+  const check = budgetCheck(snapshot, purchase);
+  if (!check || check.afterPaise <= check.budgetPaise) return null;
+  return { code: 'over_budget', amountPaise: check.afterPaise - check.budgetPaise, label: `Over your ${purchase.category} budget` };
+}
+
+/**
+ * The numbers `overBudgetReason` judges on — exported so `affordTrace` shows the
+ * very figures the verdict read, not a re-derivation of them. `null` when there
+ * is no category, or no monthly budget for it.
+ */
+export function budgetCheck(snapshot: FinanceSnapshot, purchase: Purchase): {
+  budgetPaise: number; spentPaise: number; effectPaise: number; afterPaise: number;
+} | null {
   if (!purchase.category) return null;
   const budget = snapshot.budgets.find(b => b.category === purchase.category && b.cadence === 'monthly');
   if (!budget) return null;
@@ -103,9 +116,7 @@ function overBudgetReason(snapshot: FinanceSnapshot, purchase: Purchase): Afford
     ? recurringMonthlyEquivalent(purchase.amountPaise, purchase.recurrence)
     : purchase.amountPaise;
 
-  const after = spent + effect;
-  if (after <= budget.amount) return null;
-  return { code: 'over_budget', amountPaise: after - budget.amount, label: `Over your ${purchase.category} budget` };
+  return { budgetPaise: budget.amount, spentPaise: spent, effectPaise: effect, afterPaise: spent + effect };
 }
 
 /**
