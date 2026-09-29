@@ -3,6 +3,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { IconCircle } from './IconCircle';
 import { PressableScale } from './PressableScale';
+import { fullTextOnHold } from './fullTextOnHold';
 import { colors, type, space, layout } from '../tokens';
 
 type Props = {
@@ -89,6 +90,9 @@ export function ListRow({
   return (
     <PressableScale
       onPress={onPress}
+      // A title the row cut short can always be read in full (AGENTS §12: one line in a list, the
+      // whole text on hold).
+      {...fullTextOnHold(title)}
       accessibilityLabel={accessibilityLabel ?? title}
       accessibilityState={selected == null ? undefined : { selected }}
     >

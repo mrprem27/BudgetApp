@@ -37,12 +37,27 @@ or committed; `[ ]` is not.
 - [x] Demo **personas** on the dev screen: Salaried renter · 1 year (high confidence) · New user · 2 weeks (verdict held back) · Freelancer (irregular, 60-day horizon) · Student (owes friends, over budget) — `db/demoPersonas.ts`, states asserted in `demoPersonas.test.ts`
 - [x] Navigation: **Home · Groups · [+] · Money · Insights**; Settings opens from the avatar on every tab
 
-### Open — in this order
-- [ ] **P3** One filter structure everywhere (Search, Reports, Review, Personal, Group): frequent filters inline, the rest in a modal (this is G2, widened)
-- [ ] **P4** Phase 5c modules 1–6 (`docs/SPEC-FORMS-GROUP.md`): AmountRow + Your money · Members "+ Add" first · clean notes · full text on hold · group header card · forms to the Edit-group shape
-- [ ] **P6** Docs for the navigation change (SCREENS/SYSTEM), decisions kept here + memory
-- [ ] **P9** Card due day: the engine reads `money.card_due_day` but no screen asks for it and it doesn't sync. Add the field (card sheet) + a `money_profiles.card_due_day` column (live D1 ALTER before deploy)
-- [ ] **P7** DEVICE (yours): Money, Insights, Settings-from-avatar, Plan zones, forecast, time picker, Help, filters, forms
+### Open — in this order (plan, 2026-09-30)
+
+**A. Money tab restructure** (decided: three tabs, forecast moves to Insights)
+- [x] **A1** `Overview | Assets | Goals` pills under the Money header. Assets = `AssetsSection` (extracted, shared with `/assets`). Goals = the goal list and its sheets. Each with an empty state and one main action
+- [x] **A2** Month-end forecast card leaves Money (Insights owns it); Overview keeps Available money, Afford/Recurring rows, overspend prompt, Coming up
+- [x] **A3** Guard: Money has the three sections; no ForecastCard on Money; `/assets` and the tab render the same component
+
+**B. Forms and notes** (`docs/SPEC-FORMS-GROUP.md`)
+- [x] **B1** Goal Add funds / Withdraw and the new-goal sheet on `AmountRow` in a `Card`
+- [x] **B2** `GroupForm` (Edit group) to the card-grouped shape, one hint line
+- [x] **B3** Notes: a transfer shows its note as the second line; `oneLine` trims and collapses; trimmed on save
+- [x] **B4** Long-press for the full name on `ListRow` / `Chip` rows (`fullTextOnHold` exists)
+
+**C. Backend**
+- [ ] **C1** Card due day: a field on the card sheet + `money_profiles.card_due_day` (schema, sync map, server column) + live D1 ALTER first, then deploy
+
+**D. Close out**
+- [ ] **D1** SCREENS / SYSTEM docs for the new navigation, Money tabs, filters, headers
+- [ ] **D2** Independent code review of the whole branch, then fixes
+- [ ] **D3** Squash to a few commits, gates, push
+- [ ] **D4** DEVICE (yours): headers on all four tabs, Money tabs, filters, group header, Scan & Pay with icons, Settings from Home avatar, time picker, demo personas
 
 ### Decisions taken (so they are not re-litigated)
 - Asset ↔ liquid moves are internal movements, never expense or income; word is "Moved". Budget keeps a "moved to assets" line.

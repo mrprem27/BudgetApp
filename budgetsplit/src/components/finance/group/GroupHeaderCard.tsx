@@ -7,7 +7,7 @@ import { alpha } from '../../../theme';
 import { asFeather } from '../../../constants/palette';
 import { formatCompact } from '../../../lib/money';
 import { headerBalance } from '../../../lib/owe';
-import { fullTextOnHold } from '../../../hooks/useFullTextOnHold';
+import { fullTextOnHold } from '../../ui/fullTextOnHold';
 import { AvatarStack } from '../AvatarStack';
 import type { BudgetGroup } from '../../../db/queries/groups';
 import type { Person } from '../../../db/queries/persons';

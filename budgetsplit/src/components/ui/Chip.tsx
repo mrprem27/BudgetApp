@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { PressableScale } from './PressableScale';
+import { fullTextOnHold } from './fullTextOnHold';
 import { colors, type, space, radius, layout } from '../tokens';
 import { alpha } from '../../theme';
 
@@ -82,6 +83,7 @@ export function Chip({
   const pressable = (
     <PressableScale
       onPress={onPress}
+      {...(maxWidth ? fullTextOnHold(label) : {})}
       hitSlop={{ top: 4, bottom: 4, left: 0, right: 0 }}
       accessibilityLabel={accessibilityLabel ?? label}
       // Announce the selection, like every other choosable thing in `ui/`

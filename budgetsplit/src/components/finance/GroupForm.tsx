@@ -1,10 +1,11 @@
 import React from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { colors, type, space, radius } from '../tokens';
-import { GROUP_TYPES } from '../../constants/palette';
+import { colors, type, space, radius, layout } from '../tokens';
+import { GROUP_TYPES, asFeather } from '../../constants/palette';
 import { MemberAvatar } from './MemberAvatar';
 import { IconCircle } from '../ui/IconCircle';
+import { Card } from '../ui/Card';
 import { TabPills } from '../ui/TabPills';
 import type { Person } from '../../db/queries/persons';
 import { SPLIT_MODE, SPLIT_MODE_LABEL, type SplitMode } from '../../constants/enums';
@@ -61,17 +62,23 @@ export function GroupForm({ values, onChange, allPersons, showMembers = true, au
 
   return (
     <View>
-      <TextInput
-        style={styles.input}
-        placeholder="Group name"
-        placeholderTextColor={colors.textMuted}
-        value={values.name}
-        onChangeText={(t) => onChange({ name: t })}
-        autoFocus={autoFocusName}
-        autoCapitalize="words"
-        maxLength={40}
-        accessibilityLabel="Group name"
-      />
+      {/* The name in a card row beside the group's own icon, so choosing a type below previews on it. */}
+      <Card clip>
+        <View style={styles.nameRow}>
+          <IconCircle icon={asFeather(values.icon, 'users')} size={layout.iconCircle} color={colors.onAccent} bg={values.color} />
+          <TextInput
+            style={styles.nameInput}
+            placeholder="Group name"
+            placeholderTextColor={colors.textMuted}
+            value={values.name}
+            onChangeText={(t) => onChange({ name: t })}
+            autoFocus={autoFocusName}
+            autoCapitalize="words"
+            maxLength={40}
+            accessibilityLabel="Group name"
+          />
+        </View>
+      </Card>
 
       <Text style={styles.fieldLabel}>Type</Text>
       <View style={styles.typeGrid}>
@@ -97,6 +104,14 @@ export function GroupForm({ values, onChange, allPersons, showMembers = true, au
         <>
           <Text style={styles.fieldLabel}>Members</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.memberRow} keyboardShouldPersistTaps="handled">
+            {onRequestNewPerson && (
+              <TouchableOpacity style={styles.memberPick} onPress={onRequestNewPerson} accessibilityRole="button" accessibilityLabel="Add a new friend">
+                <View style={styles.memberAddWrap}>
+                  <Feather name="plus" size={18} color={colors.accent} />
+                </View>
+                <Text style={styles.memberPickName} numberOfLines={1}>New</Text>
+              </TouchableOpacity>
+            )}
             {allPersons.map(p => {
               const on = values.members.includes(p.id);
               return (
@@ -109,14 +124,6 @@ export function GroupForm({ values, onChange, allPersons, showMembers = true, au
                 </TouchableOpacity>
               );
             })}
-            {onRequestNewPerson && (
-              <TouchableOpacity style={styles.memberPick} onPress={onRequestNewPerson} accessibilityRole="button" accessibilityLabel="Add a new friend">
-                <View style={styles.memberAddWrap}>
-                  <Feather name="plus" size={18} color={colors.accent} />
-                </View>
-                <Text style={styles.memberPickName} numberOfLines={1}>New</Text>
-              </TouchableOpacity>
-            )}
           </ScrollView>
         </>
       )}
@@ -136,7 +143,8 @@ export function GroupForm({ values, onChange, allPersons, showMembers = true, au
 }
 
 const styles = StyleSheet.create({
-  input: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, padding: space.md, borderWidth: 1, borderColor: colors.border },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: space.smd, paddingHorizontal: space.md, minHeight: layout.rowMinHeight },
+  nameInput: { ...type.body, color: colors.textPrimary, flex: 1, paddingVertical: space.smd },
   fieldLabel: { ...type.label, color: colors.textSecondary, marginTop: space.md, marginBottom: space.xs },
   // Type tiles — fixed width rather than `flex: 1` (CategoryPicker's grid
   // shape): six items wrap to two rows on a narrow phone, and a fixed width

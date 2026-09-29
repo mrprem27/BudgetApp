@@ -24,7 +24,8 @@ import { TotalMoneyCard } from '../../src/components/finance/plan/TotalMoneyCard
 import { MoneyEditorSheet } from '../../src/components/finance/plan/MoneyEditorSheet';
 import { PayCardBillSheet } from '../../src/components/finance/plan/PayCardBillSheet';
 import { MoveMoneySheet } from '../../src/components/finance/plan/MoveMoneySheet';
-import { ForecastCard } from '../../src/components/finance/plan/ForecastCard';
+import { AmountRow } from '../../src/components/ui/AmountRow';
+import { AssetsSection } from '../../src/components/finance/plan/AssetsSection';
 import { HeaderIconButton } from '../../src/components/ui/HeaderIconButton';
 import { Card } from '../../src/components/ui/Card';
 import { ListRow } from '../../src/components/ui/ListRow';
@@ -81,6 +82,8 @@ const FREQS: { key: SavingsFrequency; label: string }[] = [
   { key: 'yearly', label: 'Yearly' },
 ];
 
+type MoneyTab = 'overview' | 'assets' | 'goals';
+
 export default function SavingsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -89,9 +92,10 @@ export default function SavingsScreen() {
   // underneath the button — the exact failure `useContentInset` was written for.
   const contentInset = useContentInset({ fab: true, tabBar: true });
   const { flags } = useFeatureFlags();
+  const [tab, setTab] = useState<MoneyTab>('overview');
   // All state, reads and write-handlers live in the hook; this screen renders.
   const {
-    goals, saved, money, profile, assets, byBucket, unattributed, forecastMonthEnd, forecastBudget, upcoming,
+    goals, saved, money, profile, assets, byBucket, unattributed, upcoming,
     loading, error, refreshing, onRefresh, reload,
     overspend, applied, handleApproveOverspend, handleUndoOverspend, handleDismissOverspend,
     showMoneyEditor, setShowMoneyEditor, handleSaveMoney,
@@ -119,10 +123,24 @@ export default function SavingsScreen() {
           </>
         )}
       />
+      {/* Three sections, one thing each: what you can spend, what you own, what you're saving for. */}
+      <View style={styles.tabsWrap}>
+        <TabPills
+          tabs={[
+            { key: 'overview', label: 'Overview' },
+            { key: 'assets', label: 'Assets' },
+            ...(flags.savingsGoals ? [{ key: 'goals', label: 'Goals' }] : []),
+          ]}
+          active={tab}
+          onChange={k => setTab(k as MoneyTab)}
+        />
+      </View>
       {error ? (
         <ErrorState onRetry={() => reload()} />
       ) : (
       <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: contentInset }]} refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
+        {tab === 'overview' && (
+          <>
         <SectionHeader title="Now" first />
 
         {/* Total Money — cash + assets + available credit, with breakdown */}
@@ -148,12 +166,7 @@ export default function SavingsScreen() {
           </Card>
         )}
 
-        {(forecastMonthEnd !== null || (overspend?.total ?? 0) > 0 || upcoming.length > 0) && <SectionHeader title="This month" />}
-
-        {/* Month-end spend forecast */}
-        {forecastMonthEnd !== null && (
-          <ForecastCard forecastMonthEnd={forecastMonthEnd} forecastBudget={forecastBudget} />
-        )}
+        {((overspend?.total ?? 0) > 0 || upcoming.length > 0) && <SectionHeader title="This month" />}
 
         {/* Overspend — ASKS before pulling from goals (`V2-10`). It used to move the
             money during app boot and tell you afterwards. */}
@@ -215,6 +228,13 @@ export default function SavingsScreen() {
           <ComingUpList items={upcoming} showIcon />
         )}
 
+          </>
+        )}
+
+        {tab === 'assets' && <AssetsSection />}
+
+        {tab === 'goals' && (
+          <>
         {/* Savings insights moved to the global Insights screen (header link above). */}
 
         {/* Goals — three sections by priority tag (Emergency/Need/Want), each its
@@ -286,6 +306,9 @@ export default function SavingsScreen() {
           />
         ))}
 
+          </>
+        )}
+
         <View style={{ height: space.lg }} />
       </ScrollView>
       )}
@@ -322,16 +345,9 @@ export default function SavingsScreen() {
 
       {/* Fund a goal directly from cash */}
       <SheetModal visible={fundGoalId !== null} onClose={() => setFundGoalId(null)} title={fundGoalObj ? `Add to ${fundGoalObj.name}` : 'Add to goal'}>
-        <TextInput
-          style={styles.amountInput}
-          value={fundAmt}
-          onChangeText={setFundAmt}
-          keyboardType="decimal-pad"
-          placeholder="₹0"
-          placeholderTextColor={colors.textMuted}
-          autoFocus
-          accessibilityLabel="Amount"
-        />
+        <Card clip style={styles.amountCard}>
+          <AmountRow icon="plus-circle" label="Amount" value={fundAmt} onChangeText={setFundAmt} autoFocus />
+        </Card>
         <Text style={styles.hint}>
           {money ? `${formatCompact(money.cashAvailable)} cash available · ` : ''}comes out of your Cash available.
         </Text>
@@ -345,8 +361,9 @@ export default function SavingsScreen() {
         <>
           <Input value={name} onChangeText={setName} placeholder="Goal name (e.g. New Phone)" autoCapitalize="words" maxLength={40} style={styles.inputGap} />
 
-          <Text style={styles.fieldLabel}>Target amount</Text>
-          <Input value={target} onChangeText={setTarget} keyboardType="decimal-pad" placeholder="₹0" style={styles.inputGap} />
+          <Card clip style={styles.amountCard}>
+            <AmountRow icon="flag" label="Target" value={target} onChangeText={setTarget} />
+          </Card>
 
           {/* Protect-from-raid tag, not the funding order — that's still drag
               order within the section this goal lands in. */}
@@ -373,8 +390,9 @@ export default function SavingsScreen() {
             ))}
           </View>
 
-          <Text style={styles.fieldLabel}>Fixed allocation (optional)</Text>
-          <Input value={allocation} onChangeText={setAllocation} keyboardType="decimal-pad" placeholder="₹0 per period" style={styles.inputGap} />
+          <Card clip style={styles.amountCard}>
+            <AmountRow icon="repeat" label="Set aside each period" value={allocation} onChangeText={setAllocation} />
+          </Card>
           <View style={styles.segRow}>
             {FREQS.map(f => (
               <TouchableOpacity key={f.key} style={[styles.segSm, frequency === f.key && { backgroundColor: colors.accentMuted, borderColor: colors.accent }]} onPress={() => setFrequency(f.key)} accessibilityRole="button" accessibilityState={{ selected: frequency === f.key }}>
@@ -410,6 +428,8 @@ export default function SavingsScreen() {
 }
 
 const styles = StyleSheet.create({
+  amountCard: { marginBottom: space.md },
+  tabsWrap: { paddingHorizontal: layout.screenPaddingH, paddingBottom: space.sm },
   container: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: layout.screenPaddingH, gap: space.md },
 
@@ -450,7 +470,6 @@ const styles = StyleSheet.create({
   // keeps the target at §6's floor even though the painted glyph is 18pt.
   headerIconBtn: { minWidth: layout.touchMin, minHeight: layout.touchMin, alignItems: 'center', justifyContent: 'center', gap: space.xs, paddingHorizontal: space.xs, flexShrink: 1 },
   headerIconLabel: { ...type.caption, color: colors.accent },
-  amountInput: { fontFamily: 'SpaceMono_400Regular', fontSize: 32, color: colors.textPrimary, textAlign: 'center', paddingVertical: space.md },
   hint: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginBottom: space.md },
   inputGap: { marginBottom: space.sm },
   fieldLabel: { ...type.label, color: colors.textSecondary, marginTop: space.sm, marginBottom: space.xs },

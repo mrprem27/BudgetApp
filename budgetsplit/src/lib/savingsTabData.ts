@@ -1,22 +1,15 @@
 import type * as SQLite from 'expo-sqlite';
-import { getDate, getDaysInMonth, startOfMonth, endOfMonth, subMonths, differenceInCalendarDays } from 'date-fns';
+import { endOfMonth, differenceInCalendarDays } from 'date-fns';
 import { getGoals, getGoalSavedMap, getCashPosition } from '../db/queries/savings';
 import { getMoneyProfile } from '../db/queries/moneyProfile';
 import { computeTotalMoney } from './cash';
 import { getMe } from '../db/queries/persons';
-import { getTransactionsInRange } from '../db/queries/transactions';
 import { getAllRecurringRules, getSkipsMap } from '../db/queries/recurring';
-import { getMyGlobalBudgetSummary } from './budget';
-import { monthEndFromEngine } from './forecast';
-import { getSafeToSpendV2 } from '../db/queries/spendPower';
-import { billsWithin } from './safeToSpend';
 import { buildUpcoming, type UpcomingItem } from './upcoming';
-import { myShareOf } from './splitMath';
 import { getAssets } from '../db/queries/assets';
 
 /**
- * Data assembly for the Savings/Plan tab — goals, money profile, the month-end
- * forecast and its budget comparison, and upcoming bills.
+ * Data assembly for the Money tab — goals, money profile, assets and upcoming bills.
  *
  * Lifted out of `useSavingsTab` so the forecast comparison is reachable by a test:
  * both of its halves were wrong in opposite directions. The spend side summed every
@@ -45,32 +38,6 @@ export async function loadSavingsTabData(
   const money = computeTotalMoney(cashPos, profile);
   const meId = me?.id ?? '';
 
-  // My share of this month's spend — the basis the budget below is measured in.
-  const monthTxns = await getTransactionsInRange(db, null, startOfMonth(now).getTime(), now.getTime());
-  let totalMonthSpend = 0;
-  for (const t of monthTxns) {
-    if (t.kind === 'expense') totalMonthSpend += myShareOf(t, meId);
-  }
-
-  const lastMonth = subMonths(now, 1);
-  const prevTxns = await getTransactionsInRange(
-    db, null, startOfMonth(lastMonth).getTime(), endOfMonth(lastMonth).getTime());
-  let priorMonthTotal = 0;
-  for (const t of prevTxns) {
-    if (t.kind === 'expense') priorMonthTotal += myShareOf(t, meId);
-  }
-
-  // The engine's month-end spend — the same model Home and Insights use. Hidden until the engine
-  // has a rate (30 days of history).
-  const sts = await getSafeToSpendV2(db, now.getTime());
-  const f = monthEndFromEngine(totalMonthSpend, getDate(now), getDaysInMonth(now), sts.dailyRate,
-    billsWithin(sts, now.getTime(), getDaysInMonth(now) - getDate(now)));
-  const forecastMonthEnd = f.ready ? f.projected : null;
-
-  const forecastBudget = meId
-    ? (await getMyGlobalBudgetSummary(db, meId, { now })).allocated
-    : 0;
-
   let upcoming: UpcomingItem[] = [];
   if (me) {
     const rules = await getAllRecurringRules(db);
@@ -90,8 +57,5 @@ export async function loadSavingsTabData(
     upcoming = buildUpcoming(rules, me.id, now.getTime(), 5, daysLeftInMonth, skips);
   }
 
-  // `monthSpend` is returned as well as consumed: it is the basis half of the
-  // forecast-vs-budget comparison, and a forecast is null before day 3, so this is
-  // the only way to assert that both halves are my share.
-  return { goals, saved, money, profile, assets, byBucket: cashPos.byBucket, unattributed: cashPos.unattributed, monthSpend: totalMonthSpend, forecastMonthEnd, forecastBudget, upcoming };
+  return { goals, saved, money, profile, assets, byBucket: cashPos.byBucket, unattributed: cashPos.unattributed, upcoming };
 }

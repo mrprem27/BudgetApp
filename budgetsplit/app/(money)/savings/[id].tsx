@@ -13,6 +13,8 @@ import { PrimaryButton } from '../../../src/components/ui/PrimaryButton';
 import { GoalCelebration } from '../../../src/components/finance/GoalCelebration';
 import { EmptyState } from '../../../src/components/ui/EmptyState';
 import { ErrorState } from '../../../src/components/ui/ErrorState';
+import { Card } from '../../../src/components/ui/Card';
+import { AmountRow } from '../../../src/components/ui/AmountRow';
 import { SheetModal } from '../../../src/components/ui/SheetModal';
 import { TabPills } from '../../../src/components/ui/TabPills';
 import { ASSET_BUCKET, type AssetBucket } from '../../../src/constants/enums';
@@ -273,7 +275,7 @@ export default function GoalDetailScreen() {
       </ScrollView>
 
       <SheetModal visible={showAdd} onClose={() => setShowAdd(false)} title="Add funds">
-        <TextInput style={styles.amountInput} value={amt} onChangeText={setAmt} keyboardType="decimal-pad" placeholder="₹0" placeholderTextColor={colors.textMuted} autoFocus accessibilityLabel="Amount" />
+        <Card clip style={styles.amountCard}><AmountRow icon="plus-circle" label="Amount" value={amt} onChangeText={setAmt} autoFocus /></Card>
         {/* Which bucket it comes out of — recorded so a later withdrawal can put
             it back there rather than landing wherever. */}
         <Text style={styles.bucketLabel}>Out of</Text>
@@ -290,7 +292,7 @@ export default function GoalDetailScreen() {
       {/* "Withdraw to cash" was the old title, and it was wrong the moment money
           could come from a bank or a wallet. It goes back where it came from. */}
       <SheetModal visible={showWithdraw} onClose={() => setShowWithdraw(false)} title="Withdraw">
-        <TextInput style={styles.amountInput} value={amt} onChangeText={setAmt} keyboardType="decimal-pad" placeholder="₹0" placeholderTextColor={colors.textMuted} autoFocus accessibilityLabel="Amount" />
+        <Card clip style={styles.amountCard}><AmountRow icon="minus-circle" label="Amount" value={amt} onChangeText={setAmt} iconColor={colors.expense} autoFocus /></Card>
         {withdrawTo ? (
           <>
             <Text style={styles.bucketLabel}>Back to</Text>
@@ -328,16 +330,9 @@ export default function GoalDetailScreen() {
           maxLength={40}
           accessibilityLabel="Goal name"
         />
-        <Text style={styles.adjLabel}>Target amount</Text>
-        <TextInput
-          style={styles.adjInput}
-          value={adjustTarget}
-          onChangeText={setAdjustTarget}
-          keyboardType="decimal-pad"
-          placeholder="₹0"
-          placeholderTextColor={colors.textMuted}
-          accessibilityLabel="Target amount"
-        />
+        <Card clip style={styles.amountCard}>
+          <AmountRow icon="flag" label="Target" value={adjustTarget} onChangeText={setAdjustTarget} />
+        </Card>
         {/* Protect-from-raid tag, not the funding order — that's still drag
             order within the section this goal lands in. */}
         <Text style={styles.adjLabel}>Priority</Text>
@@ -348,16 +343,9 @@ export default function GoalDetailScreen() {
           size="sm"
         />
 
-        <Text style={styles.adjLabel}>Auto-save per period (optional)</Text>
-        <TextInput
-          style={styles.adjInput}
-          value={adjustAlloc}
-          onChangeText={setAdjustAlloc}
-          keyboardType="decimal-pad"
-          placeholder="₹0"
-          placeholderTextColor={colors.textMuted}
-          accessibilityLabel="Allocation amount"
-        />
+        <Card clip style={styles.amountCard}>
+          <AmountRow icon="repeat" label="Set aside each period" value={adjustAlloc} onChangeText={setAdjustAlloc} />
+        </Card>
         <Text style={styles.adjLabel}>Frequency</Text>
         <View style={styles.freqRow}>
           {(['none', 'daily', 'monthly', 'yearly'] as SavingsFrequency[]).map(f => (
@@ -471,7 +459,7 @@ const styles = StyleSheet.create({
   deleteBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, paddingVertical: space.md, marginTop: space.sm },
   deleteText: { ...type.body, color: colors.expense, fontFamily: 'Inter_600SemiBold' },
 
-  amountInput: { fontFamily: 'SpaceMono_400Regular', fontSize: 32, color: colors.textPrimary, textAlign: 'center', paddingVertical: space.md },
+  amountCard: { marginBottom: space.md },
   bucketLabel: { ...type.caption, color: colors.textSecondary, marginBottom: space.xs, marginTop: space.sm },
   hint: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginBottom: space.md },
 

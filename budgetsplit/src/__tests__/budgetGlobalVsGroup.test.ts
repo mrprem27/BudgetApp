@@ -7,7 +7,6 @@ import { getMyGlobalBudgetSummary } from '../lib/budget';
 import { getBudgetAnalytics } from '../lib/analytics';
 import { loadHomeData } from '../lib/homeData';
 import { loadInsightsData } from '../lib/insightsData';
-import { loadSavingsTabData } from '../lib/savingsTabData';
 import { loadReportsData } from '../lib/reportsData';
 import { loadCategoryDetail, categoryPeriodBudget } from '../lib/categoryDetailData';
 
@@ -75,18 +74,16 @@ describe('My Budget is never added to a group budget', () => {
     expect(total).toBe(600000);
   });
 
-  it('gives Home, Insights and Plan the same one figure', async () => {
+  it('gives Home and Insights the same one figure', async () => {
     const { db, me } = await fixture();
     const groups = await getAllGroups(asDb(db));
-    const [home, insights, plan] = await Promise.all([
+    const [home, insights] = await Promise.all([
       loadHomeData(asDb(db), groups, 'month'),
       loadInsightsData(asDb(db), {}, now()),
-      loadSavingsTabData(asDb(db), now()),
     ]);
-    expect([home.budget.allocated, insights.budget, plan.forecastBudget]).toEqual([800000, 800000, 800000]);
-    // Both halves of Plan's "over budget" line share the basis. Its spend side used
-    // to sum every member's share, so the comparison was wrong in both directions.
-    expect([home.budget.spent, insights.monthSpend, plan.monthSpend]).toEqual([500000, 500000, 500000]);
+    expect([home.budget.allocated, insights.budget]).toEqual([800000, 800000]);
+    // Both share my-share as the basis for spend.
+    expect([home.budget.spent, insights.monthSpend]).toEqual([500000, 500000]);
   });
 
   it("charges Home's pace bar my share of a shared bill, not the whole bill", async () => {

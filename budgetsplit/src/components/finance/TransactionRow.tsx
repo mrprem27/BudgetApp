@@ -9,6 +9,7 @@ import { MemberAvatar } from './MemberAvatar';
 import { colors, type, space, layout } from '../tokens';
 import { formatRupees, formatCompact } from '../../lib/money';
 import { myShareOf, myPaidOf } from '../../lib/splitMath';
+import { rowText } from '../../lib/noteText';
 import { settlementView } from '../../lib/settlementView';
 import { categoryVisual } from '../../constants/categories';
 import type { TxnWithSplits } from '../../db/queries/transactions';
@@ -143,9 +144,7 @@ export const TransactionRow = React.memo(function TransactionRow({
   // rather than the bare category "Investment", which said neither what happened
   // nor where the money went. With no note it becomes the primary, so the row
   // still names itself.
-  const note = txn.note?.trim();
-  const primaryText = settlementTitle ?? (note || settleLine || txn.category);
-  const secondaryText = !settlementTitle && note ? (settleLine ?? txn.category) : null;
+  const { primary: primaryText, secondary: secondaryText } = rowText({ settlementTitle, note: txn.note, settleLine, category: txn.category });
 
   return (
     <PressableScale

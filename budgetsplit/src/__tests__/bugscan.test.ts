@@ -576,7 +576,7 @@ describe('G1 · the group header states where I stand', () => {
 
 describe('T1 · long-press shows a whole name', () => {
   jest.mock('react-native', () => ({ Alert: { alert: jest.fn() } }), { virtual: true });
-  const { fullTextOnHold } = jest.requireActual('../hooks/useFullTextOnHold') as typeof import('../hooks/useFullTextOnHold');
+  const { fullTextOnHold } = jest.requireActual('../components/ui/fullTextOnHold') as typeof import('../components/ui/fullTextOnHold');
   it('gives a handler for real text and nothing for empty', () => {
     expect(typeof fullTextOnHold('A very long group name').onLongPress).toBe('function');
     expect(fullTextOnHold('   ')).toEqual({});
@@ -706,5 +706,68 @@ describe('UP-3 · the pay picker: CRED and Airtel first, real icons, choices alw
 
   it('Scan & Pay types the amount in the same hero field as Add', () => {
     expect(fs.readFileSync('src/components/finance/ScanPaySheet.tsx', 'utf8')).toMatch(/<AmountField/);
+  });
+});
+
+describe('A · Money has three sections, and the forecast lives in Insights', () => {
+  const fs = jest.requireActual('fs') as typeof import('fs');
+  const money = fs.readFileSync('app/(tabs)/savings.tsx', 'utf8');
+  it('Overview | Assets | Goals, each rendered on its own', () => {
+    for (const k of ['overview', 'assets', 'goals']) expect(money).toMatch(new RegExp(`tab === '${k}'`));
+    expect(money).toMatch(/<TabPills/);
+  });
+  it('the Assets tab and the /assets screen are the same section', () => {
+    expect(money).toMatch(/<AssetsSection/);
+    expect(fs.readFileSync('app/(money)/assets.tsx', 'utf8')).toMatch(/<AssetsSection/);
+  });
+  it('Money no longer carries the month-end forecast', () => {
+    expect(money).not.toMatch(/ForecastCard|forecastMonthEnd/);
+    expect(fs.readFileSync('app/(tabs)/insights.tsx', 'utf8')).toMatch(/Month-end forecast/);
+  });
+});
+
+describe('B1 · every goal amount is typed in an AmountRow', () => {
+  const fs = jest.requireActual('fs') as typeof import('fs');
+  it.each(['app/(tabs)/savings.tsx', 'app/(money)/savings/[id].tsx'])('%s has no bare decimal-pad input', f => {
+    const src = fs.readFileSync(f, 'utf8');
+    expect(src).toMatch(/<AmountRow/);
+    expect(src).not.toMatch(/keyboardType="decimal-pad"/);
+  });
+});
+
+describe('B3 · notes read as one clean line, and a transfer keeps its note', () => {
+  const { oneLine, rowText } = jest.requireActual('../lib/noteText') as typeof import('../lib/noteText');
+  it('trims and collapses whitespace, empty is null', () => {
+    expect(oneLine('  dinner\n  with   Aarav \n')).toBe('dinner with Aarav');
+    expect(oneLine('   \n  ')).toBeNull();
+    expect(oneLine(null)).toBeNull();
+  });
+  it('a transfer shows its sentence, then its note', () => {
+    expect(rowText({ settlementTitle: 'Aarav paid you', note: ' for the\ncab ', settleLine: null, category: 'Repayment' }))
+      .toEqual({ primary: 'Aarav paid you', secondary: 'for the cab' });
+  });
+  it('otherwise the note leads, then the category; no note means the category alone', () => {
+    expect(rowText({ settlementTitle: null, note: 'Zomato', settleLine: null, category: 'Food Delivery' })).toEqual({ primary: 'Zomato', secondary: 'Food Delivery' });
+    expect(rowText({ settlementTitle: null, note: '  ', settleLine: 'Moved to Gold', category: 'Investment' })).toEqual({ primary: 'Moved to Gold', secondary: null });
+  });
+});
+
+describe('B2 · Edit group: the name sits in a card row by its icon, and New person comes first', () => {
+  const fs = jest.requireActual('fs') as typeof import('fs');
+  const src = fs.readFileSync('src/components/finance/GroupForm.tsx', 'utf8');
+  it('no bordered free-standing name field', () => {
+    expect(src).toMatch(/styles\.nameRow/);
+    expect(src).not.toMatch(/styles\.input\b/);
+  });
+  it('the add-person tile precedes the people', () => {
+    expect(src.indexOf('Add a new friend')).toBeLessThan(src.indexOf('allPersons.map'));
+  });
+});
+
+describe('B4 · the shared rows and chips give the full text on long-press', () => {
+  const fs = jest.requireActual('fs') as typeof import('fs');
+  it('ListRow and a width-capped Chip use fullTextOnHold', () => {
+    expect(fs.readFileSync('src/components/ui/ListRow.tsx', 'utf8')).toMatch(/fullTextOnHold\(title\)/);
+    expect(fs.readFileSync('src/components/ui/Chip.tsx', 'utf8')).toMatch(/fullTextOnHold\(label\)/);
   });
 });

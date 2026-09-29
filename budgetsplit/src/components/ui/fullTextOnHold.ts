@@ -5,10 +5,10 @@ import { Alert } from 'react-native';
  * works inside sheets without a nested modal (the bug `ScanPaySheet` once had), and it needs no
  * layout of its own. The rule everywhere: one line and an ellipsis in a list, the full text on hold.
  *
- * Spread onto a Pressable / `PressableScale`: `<PressableScale {...fullTextOnHold(name)} />`.
+ * Spread onto a `PressableScale`: `<PressableScale {...fullTextOnHold(name)} />`.
  */
-export function fullTextOnHold(text: string | null | undefined): { onLongPress?: () => void; delayLongPress?: number } {
+export function fullTextOnHold(text: string | null | undefined): { onLongPress?: () => void } {
   const t = text?.trim();
   if (!t) return {};
-  return { onLongPress: () => Alert.alert(t), delayLongPress: 350 };
+  return { onLongPress: () => Alert.alert(t) };
 }
