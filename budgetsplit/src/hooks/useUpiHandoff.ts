@@ -81,6 +81,11 @@ export type UpiHandoff = {
    * so `UpiPayButton`'s grid IS the picker, not a caller of one.
    */
   payWith: (app: UpiAppSpec | null, req: UpiRequest, hooks?: PayHooks, opts?: PayOpts) => Promise<boolean>;
+  /**
+   * Make `app` the target without paying — the inline picker under the Pay button selects,
+   * and the button itself is still the one thing that sends money.
+   */
+  choose: (app: UpiAppSpec) => void;
   /** Forget the remembered app, so the next payment defaults to popularity order again. */
   forget: () => void;
 };
@@ -190,10 +195,15 @@ export function useUpiHandoff(noAppMessage: string): UpiHandoff {
     return open(req, app, hooks, opts);
   }, [apps, preferredKey, noAppMessage, open]);
 
+  const choose = useCallback((app: UpiAppSpec) => {
+    setPreferredKey(app.key);
+    settings.setPreferredUpiApp(app.key).catch(() => {});
+  }, []);
+
   const forget = useCallback(() => {
     setPreferredKey(null);
     settings.setPreferredUpiApp(null).catch(() => {});
   }, []);
 
-  return { apps, blocked, target, canChoose, payWith, forget };
+  return { apps, blocked, target, canChoose, payWith, choose, forget };
 }

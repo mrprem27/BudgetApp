@@ -94,7 +94,6 @@ export function ScanPaySheet({
   const [amount, setAmount] = useState('');
   const [badCode, setBadCode] = useState(false);
   const [showUris, setShowUris] = useState(false);
-  const [pickerOpen, setPickerOpen] = useState(false);
   const [place, setPlace] = useState<CapturedPlace | null>(null);
   const handoff = useUpiHandoff('Install a UPI app like PhonePe, Google Pay, Paytm or BHIM to pay from here.');
 
@@ -208,16 +207,16 @@ export function ScanPaySheet({
 
   if (!visible) return null;
 
-  // `pickerOpen`/`showUris` each host their own `SheetModal`, and this one wraps
-  // the whole screen around them — a nested `SheetModal` claims the global
+  // `showUris` hosts its own `SheetModal`, and this one wraps the whole
+  // screen around it — a nested `SheetModal` claims the global
   // stage (`lib/sheetStage.ts`) the instant it opens, which unmounts THIS one
-  // immediately with nothing to bring it back. Folding both into this sheet's
+  // immediately with nothing to bring it back. Folding it into this sheet's
   // own `visible` is the "swap, don't stack" pattern `QuickAddSheets` already
-  // uses: opening either flips this one's effective `visible` to false in the
+  // uses: opening it flips this one's effective `visible` to false in the
   // same render, and closing it flips this one back to true, re-claiming the
   // stage (`SheetModal`'s own effect only re-fires on a `visible` change).
   return (
-    <SheetModal visible={visible && !pickerOpen && !showUris} onClose={close} title={target ? 'Pay' : 'Scan to pay'}>
+    <SheetModal visible={visible && !showUris} onClose={close} title={target ? 'Pay' : 'Scan to pay'}>
       {!target ? (
         !permission?.granted ? (
           <View style={styles.pad}>
@@ -327,8 +326,6 @@ export function ScanPaySheet({
               // Long-press reveals the exact URIs — see UpiUriSheet for why that exists.
               onLongPress={() => canPay && setShowUris(true)}
               onDone={onPaid}
-              pickerOpen={pickerOpen}
-              onPickerOpenChange={setPickerOpen}
             />
           )}
 

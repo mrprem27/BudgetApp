@@ -65,7 +65,6 @@ export function TransferBody({
    * cancel: the same person stays on the same side, and only the arrow turns.
    */
   const [reversed, setReversed] = React.useState(false);
-  const [pickerOpen, setPickerOpen] = React.useState(false);
   const leftRole: 'from' | 'to' = reversed ? 'to' : 'from';
   const rightRole: 'from' | 'to' = reversed ? 'from' : 'to';
   const leftPerson = reversed ? to : from;
@@ -189,10 +188,10 @@ export function TransferBody({
       {canPay && (
         <>
           <Text style={styles.label}>PAY NOW</Text>
-          {/* `UpiPayButton` owns the destination line, the "Change" affordance and the app
-              grid — settling up used to hand-roll its own copy of all three (down to a
-              comment reading "mirrors ScanPaySheet's destination row"), which is exactly
-              the duplication a shared component removes. */}
+          {/* `UpiPayButton` owns the app choice (an inline disclosure) and the button —
+              settling up used to hand-roll its own copy (down to a comment reading
+              "mirrors ScanPaySheet's destination row"), which is exactly the
+              duplication a shared component removes. */}
           <UpiPayButton
             handoff={handoff}
             request={payee}
@@ -206,8 +205,6 @@ export function TransferBody({
             // deliberately — see UpiUriSheet. Settling up is where a P2P route actually gets
             // tested, so the sheet has to be reachable from here and not only from Scan & Pay.
             onLongPress={onOpenUpiUri}
-            pickerOpen={pickerOpen}
-            onPickerOpenChange={setPickerOpen}
           />
           {/* Opens their UPI app pre-filled; the money moves between their own
               accounts. The app still never records a settlement it did not

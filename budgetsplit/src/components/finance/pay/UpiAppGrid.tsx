@@ -3,7 +3,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import { PressableScale } from '../../ui/PressableScale';
 import { UpiAppIcon } from './UpiAppIcon';
 import { handoffVerb, type PayOpts } from '../../../hooks/useUpiHandoff';
-import { colors, type, space } from '../../tokens';
+import { colors, type, space, radius } from '../../tokens';
 import type { UpiAppSpec } from '../../../lib/upiIntent';
 
 /**
@@ -19,24 +19,38 @@ import type { UpiAppSpec } from '../../../lib/upiIntent';
 export function UpiAppGrid({
   apps,
   opts,
+  selectedKey,
   onSelect,
 }: {
   apps: UpiAppSpec[];
   /** Same options the pay button hands off with, so a row's caption matches what tapping it does. */
   opts?: PayOpts;
+  /** The app the Pay button will open — ringed, so the current choice is visible in the grid. */
+  selectedKey?: string | null;
   onSelect: (app: UpiAppSpec) => void;
 }) {
   return (
     <View style={styles.grid}>
-      {apps.map(app => (
-        <PressableScale key={app.key} onPress={() => onSelect(app)} style={styles.cell} accessibilityLabel={app.label}>
-          <UpiAppIcon app={app} size={48} />
-          <Text style={styles.label} numberOfLines={1}>{app.label}</Text>
+      {apps.map(app => {
+        const selected = app.key === selectedKey;
+        return (
+        <PressableScale
+          key={app.key}
+          onPress={() => onSelect(app)}
+          style={styles.cell}
+          accessibilityLabel={app.label}
+          accessibilityState={{ selected }}
+        >
+          <View style={[styles.ring, selected && styles.ringOn]}>
+            <UpiAppIcon app={app} size={44} />
+          </View>
+          <Text style={[styles.label, selected && styles.labelOn]} numberOfLines={1}>{app.label}</Text>
           {(opts?.bare || app.blocked) && (
             <Text style={styles.sub} numberOfLines={1}>{handoffVerb(opts)}</Text>
           )}
         </PressableScale>
-      ))}
+        );
+      })}
     </View>
   );
 }
@@ -44,6 +58,10 @@ export function UpiAppGrid({
 const styles = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.md, paddingBottom: space.sm },
   cell: { width: 72, alignItems: 'center', gap: space.xs },
+  // Always 2pt, transparent when unselected, so selecting doesn't shift the grid.
+  ring: { padding: 2, borderRadius: radius.pill, borderWidth: 2, borderColor: 'transparent' },
+  ringOn: { borderColor: colors.accent },
   label: { ...type.caption, color: colors.textPrimary, textAlign: 'center' },
+  labelOn: { color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   sub: { ...type.caption, color: colors.textMuted, fontSize: 10, textAlign: 'center' },
 });
