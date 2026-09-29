@@ -34,16 +34,11 @@ import { BulkGroupSheet } from '../../src/components/finance/review/BulkGroupShe
 import { ReviewBulkSheets } from '../../src/components/finance/review/ReviewBulkSheets';
 import { ReviewOverflowSheet } from '../../src/components/finance/review/ReviewOverflowSheet';
 import { SavedViewsSheet } from '../../src/components/finance/review/SavedViewsSheet';
-import {
-  getPending, deletePending, updatePendingDraft, restorePending,
-  type PendingTxn, type PendingDraft,
-} from '../../src/db/queries/pending';
-import { insertTxnRows, softDeleteTxn, findDuplicatesAmong } from '../../src/db/queries/transactions';
+import type { PendingTxn, PendingDraft } from '../../src/db/queries/pending';
+import type { Category } from '../../src/db/queries/categories';
+import type { Person } from '../../src/db/queries/persons';
+import { loadReview, saveDraft, convertSuggestions } from '../../src/lib/reviewData';
 import { confirmDuplicates } from '../../src/lib/confirm';
-import { convertToRecurring } from '../../src/db/queries/recurring';
-import { getMe, getGroupMembers, type Person } from '../../src/db/queries/persons';
-import { getAllGroups } from '../../src/db/queries/groups';
-import { getCategoriesByFrequency, type Category } from '../../src/db/queries/categories';
 import { parseToPaise } from '../../src/lib/money';
 import { recordCorrection } from '../../src/lib/smartCategoryLearn';
 import { detectRecurringCandidates, toRecurRows, type RecurringCandidate } from '../../src/lib/recurringSuggest';
@@ -62,7 +57,6 @@ import { useDataRefresh } from '../../src/components/system/DataRefreshProvider'
 import { useToast } from '../../src/components/system/Toast';
 import { haptic } from '../../src/lib/haptics';
 import { saveFailureMessage } from '../../src/lib/dbErrors';
-import { openConflicts } from '../../src/db/queries/syncConflicts';
 import {
   type TxnSource, TXN_SOURCE_LABEL,
 } from '../../src/constants/enums';
@@ -115,29 +109,7 @@ export default function ReviewScreen() {
 
   useEffect(() => { loadViews().then(setSavedViews).catch(() => {}); }, []);
 
-  const { data, loading, error, refreshing, onRefresh, reload } = useScreenData(async (db) => {
-    const me = await getMe(db);
-    const groups = await getAllGroups(db);
-    const personalId = groups.find(g => g.is_personal === 1)?.id ?? groups[0]?.id ?? '';
-    // A pending row can only be assigned to an active shared group.
-    const shared = groups.filter(g => g.is_personal !== 1 && g.is_archived !== 1);
-    const [conflicts, pending, expenseCats, incomeCats, transferCats, ...memberLists] = await Promise.all([
-      openConflicts(db),
-      getPending(db),
-      getCategoriesByFrequency(db, personalId, 'expense'),
-      getCategoriesByFrequency(db, personalId, 'income'),
-      getCategoriesByFrequency(db, personalId, 'transfer'),
-      ...shared.map(g => getGroupMembers(db, g.id)),
-    ]);
-    const groupMembers: Record<string, Person[]> = {};
-    shared.forEach((g, i) => { groupMembers[g.id] = memberLists[i] as Person[]; });
-    return {
-      conflicts: conflicts.map(c => c.txnId),
-      pending, meId: me?.id ?? '', personalId,
-      sharedGroups: shared.map(g => ({ id: g.id, name: g.name })),
-      groupMembers, expenseCats, incomeCats, transferCats,
-    };
-  }, []);
+  const { data, loading, error, refreshing, onRefresh, reload } = useScreenData(loadReview, []);
 
   // Footer height is measured (see `footerH`), so the last row always clears it.
   const listPad = useContentInset({ footer: footerH });
@@ -183,12 +155,12 @@ export default function ReviewScreen() {
     if (p.counterparty !== undefined) draft.counterparty_id = p.counterparty === '' ? null : p.counterparty;
     if (p.direction !== undefined) draft.direction = p.direction;
     // amount is flushed on blur (below), not on every keystroke.
-    if (Object.keys(draft).length) updatePendingDraft(db, id, draft).catch(() => {});
+    if (Object.keys(draft).length) saveDraft(db, id, draft);
   }
   const patchAmountLocal = (id: string, amount: string) =>
     setEdits(prev => ({ ...prev, [id]: { ...prev[id], amount } }));
   const flushAmount = (id: string, amount: string) =>
-    updatePendingDraft(db, id, { amount: parseToPaise(amount) }).catch(() => {});
+    saveDraft(db, id, { amount: parseToPaise(amount) });
 
   const setDestMany = (ids: string[], dest: string) => {
     setEdits(prev => {
@@ -198,7 +170,7 @@ export default function ReviewScreen() {
       return next;
     });
     const gid = dest === 'personal' ? null : dest;
-    for (const id of ids) updatePendingDraft(db, id, { dest_group_id: gid, counterparty_id: null }).catch(() => {});
+    for (const id of ids) saveDraft(db, id, { dest_group_id: gid, counterparty_id: null });
   };
 
   /** Loops `patch` rather than duplicating its RowEdit→PendingDraft mapping. */
@@ -212,7 +184,7 @@ export default function ReviewScreen() {
   function patchSplit(row: PendingTxn, p: Partial<SplitState>) {
     const next = { ...splitState(row), ...p };
     setSplits(prev => ({ ...prev, [row.id]: next }));
-    updatePendingDraft(db, row.id, { split_draft: JSON.stringify(next) }).catch(() => {});
+    saveDraft(db, row.id, { split_draft: JSON.stringify(next) });
   }
 
   /** Set a category, teach the shared learner, and offer to apply it to lookalike rows.
@@ -248,9 +220,7 @@ export default function ReviewScreen() {
   }
 
   async function confirmRecurringSuggestions(chosen: RecurringCandidate[]) {
-    for (const c of chosen) {
-      await convertToRecurring(db, c.mostRecentTxnId, 'monthly', 1).catch(() => {});
-    }
+    await convertSuggestions(db, chosen);
     haptic.success();
     setShowRecurSheet(false);
     setRecurCandidates([]);

@@ -734,6 +734,7 @@ and no in-memory data mirror. Layering:
 | Layer | Lives in | Rule |
 |---|---|---|
 | Data (SQLite reads/writes) | `src/db/queries/` | All SQL here. Screens never inline SQL. |
+| Screen data + writes | `src/lib/*Data.ts`, `*Writes.ts` | What a screen loads or does with the data — the only bridge from `app/` and `components/` to `db/`. **They import nothing but types from `src/db`; `uiLayering.test.ts` fails on a value import or any SQL.** `app/_layout.tsx` (boot) is the one exemption. |
 | Pure logic / engines | `src/lib/` | No React, no `db`, no RN. Unit-testable (e.g. `settle`, `owe`, `savingsEngine`, `money`). |
 | Reusable hooks | `src/hooks/` | React hooks shared across screens (e.g. `useScreenData`). |
 | Global client state | `src/store/` (zustand) | Tiny + app-wide only (`me`, `groups`). **Not** a data mirror. |

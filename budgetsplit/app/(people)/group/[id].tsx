@@ -5,16 +5,12 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, type, space, radius, layout } from '../../../src/theme';
-import { getGroupById, setSimplifyDebt, archiveGroupSafe, getGroupContext } from '../../../src/db/queries/groups';
-import { getTransactionsForGroup } from '../../../src/db/queries/transactions';
-import { getRecurringForGroup, getSkipsMap } from '../../../src/db/queries/recurring';
+import { loadGroupHub, setSimplifyDebt, archiveGroup, setCategoryBudgets, trustPeople } from '../../../src/lib/groupsData';
 import { useScreenData } from '../../../src/hooks/useScreenData';
 import { useGroupTxnActions } from '../../../src/hooks/useGroupTxnActions';
-import { getGroupMembers, getMe, setTrustState } from '../../../src/db/queries/persons';
 import { asTrustState } from '../../../src/constants/enums';
 import { confirmAsync } from '../../../src/lib/confirm';
 import { trustMeans } from '../../../src/lib/trustCopy';
-import { getGroupNet } from '../../../src/db/queries/balances';
 import { getCategoryBudgetStatus } from '../../../src/lib/budget';
 import type { CategoryBudgetStatus } from '../../../src/lib/budget';
 import { getBudgetAnalytics } from '../../../src/lib/analytics';
@@ -39,7 +35,6 @@ import { TransactionsTab } from '../../../src/components/finance/group/Transacti
 import { BudgetTab } from '../../../src/components/finance/group/BudgetTab';
 import { RebalanceSheet } from '../../../src/components/finance/group/RebalanceSheet';
 import { planRebalance, applyRebalance, type RebalancePlan } from '../../../src/lib/rebalance';
-import { setCategoryBudgets, getCategoryBudgetRows } from '../../../src/db/queries/categoryBudgets';
 import { MembersTab } from '../../../src/components/finance/group/MembersTab';
 import { RecurringTab } from '../../../src/components/finance/group/RecurringTab';
 import { buildGroupExportCsv } from '../../../src/lib/groupExport';
@@ -65,48 +60,7 @@ export default function GroupDetailScreen() {
 
   // Pure read: group + its txns/members/balances/budget/recurring. Refetches on
   // focus and on cross-screen writes; retry = reload().
-  const { data, loading, error, refreshing, onRefresh, reload } = useScreenData(async (db) => {
-    const [grp, txnList, memberList, meRow] = await Promise.all([
-      getGroupById(db, id),
-      getTransactionsForGroup(db, id),
-      getGroupMembers(db, id),
-      getMe(db),
-    ]);
-    const netMap = await getGroupNet(db, id);
-
-    let ctx: Awaited<ReturnType<typeof getGroupContext>> | null = null;
-    let overrideCount = 0;
-    let catStatus: CategoryBudgetStatus[] = [];
-    let analytics: BudgetAnalytics | null = null;
-    let recurringRules: TxnWithSplits[] = [];
-    let recurSkips = new Map<string, Set<number>>();
-    if (grp) {
-      const meId = meRow?.id ?? '';
-      const [cs, an, gctx, budgetRows] = await Promise.all([
-        getCategoryBudgetStatus(db, grp, { meId }),
-        getBudgetAnalytics(db, grp, { meId }),
-        getGroupContext(db, id, meId),
-        getCategoryBudgetRows(db, id),
-      ]);
-      ctx = gctx;
-      overrideCount = budgetRows.filter(r => r.person_id === meId && r.amount > 0).length;
-      catStatus = cs;
-      analytics = an;
-      const rules = await getRecurringForGroup(db, id);
-      /*
-       * Paused rules stay listed, same as the global screen.
-       *
-       * Filtering them out here meant pausing a rule from the rule's own screen
-       * — reached FROM this tab — made it vanish from the tab you came back to,
-       * with Resume reachable only by remembering the deep link. That is the
-       * defect `app/plan/recurring.tsx` documents as fixed, still live one level
-       * down.
-       */
-      recurringRules = rules.filter(r => r.recur_state !== 'ended');
-      recurSkips = await getSkipsMap(db, recurringRules.map(r => r.id));
-    }
-    return { group: grp, txns: txnList, members: memberList, me: meRow, net: netMap, catStatus, analytics, recurringRules, recurSkips, ctx, overrideCount };
-  }, [id]);
+  const { data, loading, error, refreshing, onRefresh, reload } = useScreenData((db) => loadGroupHub(db, id), [id]);
 
   const group = data?.group ?? null;
   const txns = data?.txns ?? [];
@@ -211,11 +165,14 @@ export default function GroupDetailScreen() {
     if (!ok) return;
     setTrusting(true);
     try {
-      for (const m of trustable) await setTrustState(db, m.id, 'trusted');
+      await trustPeople(db, trustable);
       haptic.success();
+    } catch {
+      haptic.error();
+      Alert.alert('Couldn’t save that', 'Some people may not have been trusted. Please try again.');
+    } finally {
       await reload();
       refresh();
-    } finally {
       setTrusting(false);
     }
   }
@@ -376,7 +333,7 @@ export default function GroupDetailScreen() {
             setShowMenu(false);
             Alert.alert('Archive group?', `${group.name} will be hidden. Its data is kept.`, [
               { text: 'Cancel', style: 'cancel' },
-              { text: 'Archive', style: 'destructive', onPress: async () => { const ok = await archiveGroupSafe(db, id); if (ok) { haptic.warning(); router.back(); } } },
+              { text: 'Archive', style: 'destructive', onPress: async () => { const ok = await archiveGroup(db, id); if (ok) { haptic.warning(); refresh(); router.back(); } } },
             ]);
           }}
           accessibilityRole="button"

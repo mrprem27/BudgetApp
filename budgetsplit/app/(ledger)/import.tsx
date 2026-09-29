@@ -13,12 +13,8 @@ import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
 import { parseAnyText, parseAnyWorkbook, type DetectedParse, type PasteSource } from '../../src/lib/importDetect';
 import { readXlsx } from '../../src/lib/xlsx';
-import { detectPayMethod } from '../../src/lib/payMethodDetect';
 import { PdfTextExtractor } from '../../src/components/system/PdfTextExtractor';
-import { matchCategory } from '../../src/lib/smartCategory';
-import { getCategories } from '../../src/db/queries/categories';
-import type { TxnKind } from '../../src/constants/enums';
-import { insertPending } from '../../src/db/queries/pending';
+import { queueImportedRows } from '../../src/lib/importCommit';
 import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
 import { haptic } from '../../src/lib/haptics';
 import { IconCircle } from '../../src/components/ui/IconCircle';
@@ -143,34 +139,8 @@ export default function ImportScreen() {
   async function handleAdd() {
     if (!parsed || parsed.result.rows.length === 0) return;
     setSaving(true);
-    const { result, source: rowSource } = parsed;
     try {
-      // The USER'S catalog, per kind — `matchCategory`'s contract is "never
-      // guess a category they don't have", and guessing from the seed list
-      // (as this did) could assign one they renamed or deleted. Same source
-      // the voice and confirm paths already use.
-      const [expenseCats, incomeCats, transferCats] = await Promise.all([
-        getCategories(db, 'expense'), getCategories(db, 'income'), getCategories(db, 'transfer'),
-      ]);
-      const catalogFor: Record<TxnKind, { name: string }[]> = {
-        expense: expenseCats, income: incomeCats, settlement: transferCats,
-      };
-      await insertPending(db, result.rows.map(r => ({
-        date: r.date,
-        amount: r.amount,
-        description: r.description,
-        kind: r.kind,
-        // Keep the category when the source already carries one (our own export,
-        // a Paytm tag); otherwise guess it from the description, against the
-        // user's catalog for that kind.
-        category: r.category ?? matchCategory(r.description, catalogFor[r.kind]),
-        direction: r.direction,
-        source: rowSource,
-        // Prefer the parser's detected method; else sniff the row's raw text. Null
-        // when nothing matches — the user sets it in Review.
-        pay_method: r.payMethod ?? detectPayMethod(r.raw) ?? null,
-        raw: r.raw,
-      })));
+      await queueImportedRows(db, parsed);
       haptic.success();
       refresh();
       router.replace('/review');

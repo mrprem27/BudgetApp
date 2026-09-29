@@ -5,7 +5,6 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useScreenData } from '../../../../src/hooks/useScreenData';
-import { getGroupContext } from '../../../../src/db/queries/groups';
 import { canDeleteGroup, canEditGroup, isAdmin } from '../../../../src/lib/permissions';
 import { colors, type, space, radius, layout } from '../../../../src/theme';
 import { ScreenHeader } from '../../../../src/components/ui/ScreenHeader';
@@ -14,13 +13,11 @@ import { Banner } from '../../../../src/components/ui/Banner';
 import { PrimaryButton } from '../../../../src/components/ui/PrimaryButton';
 import { GroupForm } from '../../../../src/components/finance/GroupForm';
 import { PersonNameSheet } from '../../../../src/components/finance/PersonNameSheet';
+import type { SplitMode } from '../../../../src/db/queries/groups';
 import {
-  getGroupById, updateGroup, archiveGroupSafe, deleteGroup, leaveGroup,
-  type SplitMode,
-} from '../../../../src/db/queries/groups';
-import { getGroupNet } from '../../../../src/db/queries/balances';
+  loadGroupEdit, saveGroupEdit, archiveGroup, deleteGroup, leaveGroup, addPersonToPool,
+} from '../../../../src/lib/groupsData';
 import { oweView } from '../../../../src/lib/owe';
-import { getGroupMembers, getAllPersons, getMe, addMemberToGroup, removeMemberFromGroup, insertPerson, type Person } from '../../../../src/db/queries/persons';
 import { GROUP_COLORS } from '../../../../src/constants/palette';
 import { useDataRefresh } from '../../../../src/components/system/DataRefreshProvider';
 import { haptic } from '../../../../src/lib/haptics';
@@ -44,18 +41,7 @@ export default function EditGroupScreen() {
 
   // Read-only load: the group's current values + selectable persons + the
   // initial-members snapshot (used by handleSave to diff adds/removals).
-  const { data, error, reload } = useScreenData(async (db) => {
-    const group = id ? await getGroupById(db, id) : null;
-    if (!group) return { group: null, allPersons: [] as Person[], initialMembers: [] as string[], meId: '', ctx: null, myNet: 0 };
-    const [mems, persons, me] = await Promise.all([getGroupMembers(db, id), getAllPersons(db), getMe(db)]);
-    const meId = me?.id;
-    const initialMembers = mems.filter(p => p.id !== meId).map(p => p.id);
-    const ctx = meId ? await getGroupContext(db, id, meId) : null;
-    // Where I stand in this group, so leaving can say the figure rather than
-    // block on it. Read from the group's own net — never recomputed here.
-    const myNet = meId ? (await getGroupNet(db, id))[meId] ?? 0 : 0;
-    return { group, allPersons: persons.filter(p => p.id !== meId), initialMembers, meId: meId ?? '', ctx, myNet };
-  }, [id]);
+  const { data, error, reload } = useScreenData((db) => loadGroupEdit(db, id), [id]);
 
   const allPersons = data?.allPersons ?? [];
   const initialMembers = data?.initialMembers ?? [];
@@ -89,7 +75,7 @@ export default function EditGroupScreen() {
     const t = addPersonName.trim();
     if (!t) return;
     try {
-      const p = await insertPerson(db, t, GROUP_COLORS[allPersons.length % GROUP_COLORS.length]);
+      const p = await addPersonToPool(db, t, GROUP_COLORS[allPersons.length % GROUP_COLORS.length]);
       setShowAddPerson(false);
       setAddPersonName('');
       setMembers(prev => [...prev, p.id]);
@@ -106,16 +92,7 @@ export default function EditGroupScreen() {
     if (!name.trim()) return;
     setSaving(true);
     try {
-      await updateGroup(db, id, name.trim(), icon, color, defaultSplit, meId);
-      if (!isPersonal) {
-        const added = members.filter(m => !initialMembers.includes(m));
-        const removed = initialMembers.filter(m => !members.includes(m));
-        // `meId` is not optional here. Passing nothing used to skip the check
-        // entirely, which let any member add or remove anyone from this screen —
-        // including the creator, who is un-removable by design.
-        for (const pid of added) await addMemberToGroup(db, id, pid, meId);
-        for (const pid of removed) await removeMemberFromGroup(db, id, pid, meId);
-      }
+      await saveGroupEdit(db, id, meId, { name: name.trim(), icon, color, split: defaultSplit, isPersonal, initialMembers, members });
       haptic.success();
       refresh();
       router.back();
@@ -131,7 +108,7 @@ export default function EditGroupScreen() {
     Alert.alert('Archive this group?', 'It’s hidden from your main view but all data is kept. You can restore it later.', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Archive', style: 'destructive', onPress: async () => {
-        const ok = await archiveGroupSafe(db, id);
+        const ok = await archiveGroup(db, id);
         // `dismissTo`, like delete and leave below — `replace` swaps only THIS
         // screen, leaving the group's detail screen underneath it, so Back from
         // the groups list walked straight back into the group just archived.
@@ -187,7 +164,9 @@ export default function EditGroupScreen() {
       [
         { text: 'Cancel', style: 'cancel' },
         ...(settleFirst
-          ? [{ text: 'Settle up first', onPress: () => router.dismissTo('/groups') }]
+          // Back to the group's own page, where its balances and Settle are — this
+          // went to the Groups list, which settles nothing.
+          ? [{ text: 'Settle up first', onPress: () => router.dismissTo(`/group/${id}`) }]
           : []),
         { text: settleFirst ? 'Leave anyway' : 'Leave', style: 'destructive' as const, onPress: async () => {
           const res = await leaveGroup(db, id, meId);

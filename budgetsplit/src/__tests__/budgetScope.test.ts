@@ -100,8 +100,10 @@ describe('the scope decision is not re-derived anywhere', () => {
     // The shape that made a personal-sounding entry point open a shared group's budget
     // editor. `voiceDrain` is the one legitimate holder: it needs somewhere to FILE a
     // dictated expense, and filing it beats dropping it — a different question from
-    // which rows are my budget.
+    // which rows are my budget. `reviewData` is the second, for the same reason: it
+    // picks where an imported row is filed (it lived in `app/review.tsx`, which this
+    // scan never reached, until the screen's loader moved into lib).
     const offenders = sources.filter(s => /\?\?\s*groups\[0\]/.test(s.text)).map(s => s.file);
-    expect(offenders).toEqual(['lib/voiceDrain.ts']);
+    expect(offenders).toEqual(['lib/reviewData.ts', 'lib/voiceDrain.ts']);
   });
 });

@@ -11,20 +11,13 @@ import { Feather } from '@expo/vector-icons';
 import { settings } from '../../src/lib/settings';
 import { colors, type, space, radius, layout, shadow } from '../../src/theme';
 import { haptic } from '../../src/lib/haptics';
-import { getPendingCount } from '../../src/db/queries/pending';
-import { getMe, getAllPersons, updatePersonName, setPersonImage, setPersonUpiVpa } from '../../src/db/queries/persons';
+import { loadSettingsTab, exportAllGroups, saveMyName, saveMyVpa } from '../../src/lib/settingsData';
+import { replacePersonPhoto } from '../../src/lib/personWrites';
+import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
 import { isValidVpa } from '../../src/lib/upiIntent';
 import { RequestQrSheet } from '../../src/components/finance/RequestQrSheet';
-import { getAllGroups } from '../../src/db/queries/groups';
-import { getMyGlobalBudgetRows } from '../../src/db/queries/categoryBudgets';
-import { rollUpBudgets } from '../../src/lib/budget';
 import { formatCompact } from '../../src/lib/money';
-import { buildAllGroupsExportCsv } from '../../src/lib/groupExport';
 import { shareCsv } from '../../src/lib/shareCsv';
-import { getCategories } from '../../src/db/queries/categories';
-import { seedGlobalCategories } from '../../src/db/seedCategories';
-import { pickAndSaveAvatar } from '../../src/lib/avatar';
-import { deleteAttachment } from '../../src/lib/attachment';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { SheetModal } from '../../src/components/ui/SheetModal';
 import { PayMethodSelector } from '../../src/components/finance/PayMethodSelector';
@@ -47,6 +40,7 @@ const CADENCE_KEYS: BudgetCadence[] = ['daily', 'monthly', 'yearly'];
 
 export default function SettingsScreen() {
   const db = useSQLiteContext();
+  const { refresh } = useDataRefresh();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { flags, setFlag } = useFeatureFlags();
@@ -60,21 +54,7 @@ export default function SettingsScreen() {
   // DB-backed values: one loader, with the hook owning focus refetch + errors.
   // The self-heal write is idempotent (only fires on an empty catalog), so it's
   // safe inside a loader that re-runs on focus.
-  const { data, error: loadError, reload } = useScreenData(async (database) => {
-    const [meRow, allPersons] = await Promise.all([getMe(database), getAllPersons(database)]);
-    let count = (await getCategories(database, 'expense')).length;
-    if (count === 0) { await seedGlobalCategories(database); count = (await getCategories(database, 'expense')).length; }
-    // Just the lines, rolled up — no spend queries: a settings row must not run an
-    // all-groups scan to render its subtitle.
-    const myBudget = meRow ? await getMyGlobalBudgetRows(database, meRow.id) : [];
-    return {
-      me: meRow,
-      contactCount: allPersons.filter(p => !p.is_me).length,
-      budgetMonthly: rollUpBudgets(myBudget, 'monthly', new Date()).amount,
-      categoryCount: count,
-      pendingCount: await getPendingCount(database),
-    };
-  }, []);
+  const { data, error: loadError, reload } = useScreenData(loadSettingsTab, []);
   const me = data?.me ?? null;
   const contactCount = data?.contactCount ?? 0;
   const categoryCount = data?.categoryCount ?? 0;
@@ -100,8 +80,7 @@ export default function SettingsScreen() {
     setExportingAll(true);
     haptic.light();
     try {
-      const groups = await getAllGroups(db);
-      const { csv, rowCount } = await buildAllGroupsExportCsv(db, groups);
+      const { csv, rowCount } = await exportAllGroups(db);
       if (rowCount === 0) { Alert.alert('Nothing to export', 'There are no transactions yet.'); return; }
       const { uri, shared } = await shareCsv(csv, 'budgetsplit_all.csv', 'Export all data');
       if (!shared) Alert.alert('Saved', `Sharing isn't available here. The CSV was saved to:\n${uri}`);
@@ -209,8 +188,9 @@ export default function SettingsScreen() {
   async function saveName() {
     const trimmed = nameText.trim();
     if (!trimmed || !me) return;
-    await updatePersonName(db, me.id, trimmed);
+    await saveMyName(db, me.id, trimmed);
     await reload();
+    refresh();
     haptic.success();
     setShowName(false);
   }
@@ -232,8 +212,9 @@ export default function SettingsScreen() {
       Alert.alert('That doesn’t look like a UPI ID', 'It should read like name@bank — for example prem@okhdfcbank.');
       return;
     }
-    await setPersonUpiVpa(db, me.id, trimmed || null);
+    await saveMyVpa(db, me.id, trimmed || null);
     await reload();
+    refresh();
     haptic.success();
     setShowVpa(false);
   }
@@ -262,16 +243,9 @@ export default function SettingsScreen() {
       <TouchableOpacity style={styles.profileCard} onPress={() => { setNameText(me?.name ?? ''); setShowName(true); }} accessibilityRole="button" accessibilityLabel="Edit profile">
         <TouchableOpacity
           onPress={me ? async () => {
-            const uri = await pickAndSaveAvatar(me.id);
-            if (uri) {
-              const old = me.image_uri;
-              await setPersonImage(db, me.id, uri);
-              // Every avatar pick writes a new timestamped file and never
-              // replaces one in place — unlink the one this photo replaces.
-              if (old) await deleteAttachment(old);
-              haptic.success();
-              await reload();
-            }
+            try {
+              if (await replacePersonPhoto(db, me)) { haptic.success(); await reload(); refresh(); }
+            } catch { haptic.error(); }
           } : undefined}
           accessibilityLabel="Change avatar"
           hitSlop={4}

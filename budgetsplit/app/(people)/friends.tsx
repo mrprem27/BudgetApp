@@ -13,13 +13,9 @@ import { SheetModal } from '../../src/components/ui/SheetModal';
 import { Input } from '../../src/components/ui/Input';
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
-import { getAllPersons, updatePersonName, setPersonImage, insertPerson, setPersonUpiVpa, setPersonContact, deletePerson } from '../../src/db/queries/persons';
-import { recordSentRequest, pendingInvitesByPerson } from '../../src/db/queries/friendRequests';
-import { sendFriendRequest, listFriendRequests, serverConfigured, getStoredSession } from '../../src/lib/serverApi';
-import { getFriendBalances, type FriendBalance } from '../../src/db/queries/balances';
+import type { FriendBalance } from '../../src/db/queries/balances';
+import { loadFriends, deletePerson, replacePersonPhoto, addFriend, saveFriendDetails, inviteFriendByEmail } from '../../src/lib/personWrites';
 import { AVATAR_COLORS } from '../../src/constants/categories';
-import { pickAndSaveAvatar } from '../../src/lib/avatar';
-import { deleteAttachment } from '../../src/lib/attachment';
 import { formatCompact } from '../../src/lib/money';
 import { oweView } from '../../src/lib/owe';
 import { refusalReason } from '../../src/lib/personCopy';
@@ -45,16 +41,7 @@ export default function FriendsScreen() {
   const [addPhone, setAddPhone] = useState('');
   const [query, setQuery] = useState('');
 
-  const { data, loading, error: loadError, refreshing, onRefresh, reload } = useScreenData(async (db) => {
-    const [all, bals, invited] = await Promise.all([
-      getAllPersons(db),
-      me ? getFriendBalances(db, me.id) : Promise.resolve([] as FriendBalance[]),
-      pendingInvitesByPerson(db),
-    ]);
-    const balances: Record<string, FriendBalance> = {};
-    for (const b of bals) balances[b.personId] = b;
-    return { people: all.filter(p => !p.is_me), balances, invited };
-  }, [me?.id]);
+  const { data, loading, error: loadError, refreshing, onRefresh, reload } = useScreenData((db) => loadFriends(db, me?.id), [me?.id]);
   const people = data?.people ?? [];
   const balances = data?.balances ?? {};
   const invited = data?.invited ?? new Map<string, string>();
@@ -63,14 +50,7 @@ export default function FriendsScreen() {
   const filtered = q ? people.filter(p => p.name.toLowerCase().includes(q)) : people;
 
   async function changePhoto(p: Person) {
-    const uri = await pickAndSaveAvatar(p.id);
-    if (uri) {
-      const old = p.image_uri;
-      await setPersonImage(db, p.id, uri);
-      // Every avatar pick writes a new timestamped file and never replaces
-      // one in place — unlink the one this photo replaces, now that the new
-      // one is safely recorded.
-      if (old) await deleteAttachment(old);
+    if (await replacePersonPhoto(db, p)) {
       haptic.success();
       refresh();
     }
@@ -81,11 +61,7 @@ export default function FriendsScreen() {
     if (!trimmed) return;
     try {
       const color = AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)];
-      const created = await insertPerson(db, trimmed, color);
-      // Captured at creation, not only via a long-press rename nobody discovers.
-      // Without it the WhatsApp reminder silently never appears for this person.
-      const phone = addPhone.trim();
-      if (created && phone) await setPersonContact(db, created.id, { mobile: phone });
+      await addFriend(db, trimmed, color, addPhone);
       haptic.success();
       setAddName(''); setAddPhone(''); setShowAdd(false);
       refresh();
@@ -159,13 +135,9 @@ export default function FriendsScreen() {
       setRenamePerson(null); return;
     }
     const person = renamePerson;
+    let invite: string | null = null;
     try {
-      if (trimmed !== person.name) await updatePersonName(db, person.id, trimmed);
-      if (vpaChanged) await setPersonUpiVpa(db, person.id, vpa);
-      // Stored as typed. No country-code guessing: this number is dialled by a
-      // human or handed to WhatsApp, never used as a key.
-      if (phoneChanged) await setPersonContact(db, person.id, { mobile: phone });
-      if (emailChanged) await setPersonContact(db, person.id, { email });
+      invite = await saveFriendDetails(db, person, { name: trimmed, vpa, phone, email });
       haptic.success();
       setRenamePerson(null);
       refresh();
@@ -174,7 +146,7 @@ export default function FriendsScreen() {
       Alert.alert('Something went wrong', 'Please try again.');
       return;
     }
-    if (emailChanged && email) await inviteByEmail(person, email);
+    if (invite) await inviteByEmail(person, invite);
   }
 
   /**
@@ -185,16 +157,8 @@ export default function FriendsScreen() {
    * chose, not on a match they are asked to make later and will not find.
    */
   async function inviteByEmail(person: Person, email: string) {
-    if (!serverConfigured() || !(await getStoredSession())) {
-      // No account yet. The address is saved, and the row will offer to invite
-      // once there is somewhere to send from — rather than failing at them now.
-      return;
-    }
     try {
-      await sendFriendRequest(email);
-      const sent = (await listFriendRequests()).outgoing
-        .find(r => r.email === email && r.state === 'pending');
-      if (sent) await recordSentRequest(db, { id: sent.id, email, personId: person.id });
+      if (!(await inviteFriendByEmail(db, person, email))) return;
       await reload();
       refresh();
     } catch (e) {

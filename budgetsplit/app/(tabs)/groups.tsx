@@ -12,17 +12,17 @@ import { colors, type, space, radius, layout, shadow, alpha } from '../../src/th
 import { useStore } from '../../src/store';
 import { useScreenData } from '../../src/hooks/useScreenData';
 import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
-import { insertGroup, getArchivedGroups, unarchiveGroup, archiveGroupSafe, listableGroups, type SplitMode } from '../../src/db/queries/groups';
+import type { SplitMode } from '../../src/db/queries/groups';
+import { loadGroupsTab, listableGroups, restoreGroup, archiveGroup, addPersonToPool, createGroup, type GroupHealth } from '../../src/lib/groupsData';
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
 import { SheetModal } from '../../src/components/ui/SheetModal';
-import { getMe, getGroupMembers, getAllPersons, insertPerson, type Person } from '../../src/db/queries/persons';
+import type { Person } from '../../src/db/queries/persons';
 import { PersonNameSheet } from '../../src/components/finance/PersonNameSheet';
-import { getGroupNet, getMyExposure, type FriendBalance } from '../../src/db/queries/balances';
-import { getBudgetAnalytics } from '../../src/lib/analytics';
+import type { FriendBalance } from '../../src/db/queries/balances';
 import { groupsTabView } from '../../src/lib/groupsView';
 import { formatCompact } from '../../src/lib/money';
 import { oweView } from '../../src/lib/owe';
-import { utilLabel, budgetHealth, isGlobalBudgetGroup, getMyGlobalBudgetSummary } from '../../src/lib/budget';
+import { utilLabel } from '../../src/lib/budget';
 import { BudgetBar } from '../../src/components/finance/BudgetBar';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { AvatarStack } from '../../src/components/finance/AvatarStack';
@@ -38,7 +38,6 @@ import { GroupForm, GROUP_TYPES } from '../../src/components/finance/GroupForm';
 import type { BudgetGroup } from '../../src/db/queries/groups';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 
-type GroupHealth = { pct: number | null; health: 'green' | 'amber' | 'red' | 'none'; spent: number; members: number; over: number; net: number };
 
 
 export default function GroupsScreen() {
@@ -80,63 +79,25 @@ export default function GroupsScreen() {
   // Everything the screen needs besides the groups list itself: archived groups,
   // per-group health/spend/net, member map, people balances. Recomputes when the
   // store's groups change (deps: [groups]).
-  const { data, loading, error, refreshing, onRefresh, reload } = useScreenData(async (db) => {
-    const archived = await getArchivedGroups(db);
-    const me = await getMe(db);
-    const meId = me?.id ?? '';
-    // Per-group usage + member counts + my net balance, in parallel.
-    const health: Record<string, GroupHealth> = {};
-    const memberMap: Record<string, Person[]> = {};
-    await Promise.all(groups.map(async g => {
-      // The Personal card's bar is My Budget — its lines are the global cap, and
-      // measuring them against Personal-group spend alone overstated headroom for
-      // anyone who also spends in a shared group.
-      const [budget, mems, gnet] = await Promise.all([
-        isGlobalBudgetGroup(g)
-          ? getMyGlobalBudgetSummary(db, meId)
-          : getBudgetAnalytics(db, g, { meId }),
-        getGroupMembers(db, g.id),
-        getGroupNet(db, g.id),
-      ]);
-      const pct = 'utilizationPct' in budget ? budget.utilizationPct : budget.pct;
-      const spent = 'totalSpent' in budget ? budget.totalSpent : budget.spent;
-      const over = 'overBudget' in budget ? budget.overBudget.length : budget.rows.filter(r => r.health === 'red').length;
-      health[g.id] = {
-        pct, health: budgetHealth(pct), spent, over,
-        members: mems.length, net: me ? (gnet[me.id] ?? 0) : 0,
-      };
-      memberMap[g.id] = mems;
-    }));
-
-    // People balances — who-owes-whom across all groups, from my view.
-    // Single source of truth: getMyExposure (per-person, after all settlements).
-    const persons = await getAllPersons(db);
-    return {
-      archived,
-      health,
-      memberMap,
-      allPersons: persons.filter(p => !p.is_me),
-      friends: me ? (await getMyExposure(db, me.id)).perPerson : [],
-    };
-  }, [groups]);
+  const { data, loading, error, refreshing, onRefresh, reload } = useScreenData((db) => loadGroupsTab(db, groups), [groups]);
 
   // Same rule as the active list: a pair group that was archived is still that
   // person's, and belongs on their screen rather than in a list of groups.
-  const archived: BudgetGroup[] = listableGroups(data?.archived ?? []);
+  const archived: BudgetGroup[] = data?.archived ?? [];
   const health: Record<string, GroupHealth> = data?.health ?? {};
   const memberMap: Record<string, Person[]> = data?.memberMap ?? {};
   const allPersons: Person[] = data?.allPersons ?? [];
   const friends: FriendBalance[] = data?.friends ?? [];
 
   async function handleRestore(g: BudgetGroup) {
-    await unarchiveGroup(db, g.id);
+    if (!(await restoreGroup(db, g.id))) { haptic.error(); return; }
     haptic.success();
     refresh();
   }
 
   async function handleArchive(g: BudgetGroup) {
     swipeableRefs.current.get(g.id)?.close();
-    const ok = await archiveGroupSafe(db, g.id);
+    const ok = await archiveGroup(db, g.id);
     if (ok) {
       haptic.warning();
       refresh();
@@ -168,7 +129,7 @@ export default function GroupsScreen() {
     const t = addPersonName.trim();
     if (!t) return;
     try {
-      const p = await insertPerson(db, t, GROUP_COLORS[allPersons.length % GROUP_COLORS.length]);
+      const p = await addPersonToPool(db, t, GROUP_COLORS[allPersons.length % GROUP_COLORS.length]);
       setShowAddPerson(false);
       setAddPersonName('');
       setGroupMembers(prev => [...prev, p.id]);
@@ -184,10 +145,8 @@ export default function GroupsScreen() {
   async function handleCreate() {
     if (!name.trim()) return;
     try {
-      const me = await getMe(db);
-      if (!me) return;
-      // Creator passed explicitly: you are creating it, so you administer it.
-      const group = await insertGroup(db, name.trim(), icon, color, [me.id, ...groupMembers], defaultSplit, me.id);
+      const group = await createGroup(db, { name: name.trim(), icon, color, memberIds: groupMembers, split: defaultSplit });
+      if (!group) return;
       haptic.success();
       setShowCreate(false);
       setName('');

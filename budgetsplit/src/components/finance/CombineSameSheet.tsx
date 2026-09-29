@@ -1,15 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { useSQLiteContext } from 'expo-sqlite';
 import { colors, type, space } from '../tokens';
 import { SheetModal } from '../ui/SheetModal';
 import { PrimaryButton } from '../ui/PrimaryButton';
 import { SecondaryButton } from '../ui/SecondaryButton';
 import { PersonPicker } from './PersonPicker';
-import { combinableWith, countCombinableEntries, type Person } from '../../db/queries/persons';
-import { combinePeople } from '../../db/queries/personRemap';
-import { useDataRefresh } from '../system/DataRefreshProvider';
-import { haptic } from '../../lib/haptics';
+import { useCombineSame } from '../../hooks/useCombineSame';
 
 /**
  * "Same person as…" (`DQ-94` part 2, task P3): two placeholders that are really
@@ -28,39 +24,7 @@ export function CombineSameSheet({
   personId: string;
   personName: string;
 }) {
-  const db = useSQLiteContext();
-  const { refresh } = useDataRefresh();
-  const [candidates, setCandidates] = useState<Person[]>([]);
-  const [picked, setPicked] = useState<Person | null>(null);
-  const [entryCount, setEntryCount] = useState(0);
-  const [busy, setBusy] = useState(false);
-
-  // Fresh every time the sheet opens — a person combined a moment ago on another
-  // screen must not still be offered here.
-  useEffect(() => {
-    if (!visible) { setPicked(null); return; }
-    combinableWith(db, personId).then(setCandidates);
-  }, [visible, db, personId]);
-
-  useEffect(() => {
-    if (!picked) return;
-    countCombinableEntries(db, picked.id).then(setEntryCount);
-  }, [picked, db]);
-
-  async function confirm() {
-    if (!picked) return;
-    setBusy(true);
-    try {
-      await combinePeople(db, personId, picked.id);
-      haptic.success();
-      refresh();
-      onClose();
-    } catch {
-      haptic.error();
-    } finally {
-      setBusy(false);
-    }
-  }
+  const { candidates, picked, setPicked, entryCount, busy, confirm } = useCombineSame(visible, personId, onClose);
 
   return (
     <SheetModal visible={visible} onClose={onClose} title="Same person as…">

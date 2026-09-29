@@ -8,12 +8,11 @@ import { useScreenData } from '../../../../src/hooks/useScreenData';
 import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius, layout, shadow } from '../../../../src/theme';
 import { AVATAR_COLORS } from '../../../../src/constants/categories';
-import { getGroupMembers, getAllPersons, insertPerson, addMemberToGroup, removeMemberFromGroup, setPersonImage, updatePersonName } from '../../../../src/db/queries/persons';
-import { pickAndSaveAvatar } from '../../../../src/lib/avatar';
+import { loadGroupMembers, addPersonToPool, addMemberToGroup, removeMemberFromGroup, setMemberRole, updatePersonName } from '../../../../src/lib/groupsData';
+import { replacePersonPhoto } from '../../../../src/lib/personWrites';
 import { ScreenHeader } from '../../../../src/components/ui/ScreenHeader';
 import { AppRefreshControl } from '../../../../src/components/ui/AppRefreshControl';
 import { useToast } from '../../../../src/components/system/Toast';
-import { getGroupNet } from '../../../../src/db/queries/balances';
 import { MemberAvatar } from '../../../../src/components/finance/MemberAvatar';
 import { PersonPicker } from '../../../../src/components/finance/PersonPicker';
 import { SheetModal } from '../../../../src/components/ui/SheetModal';
@@ -27,8 +26,6 @@ import { haptic } from '../../../../src/lib/haptics';
 import type { Person } from '../../../../src/db/queries/persons';
 import { IconCircle } from '../../../../src/components/ui/IconCircle';
 import { PersonNameSheet } from '../../../../src/components/finance/PersonNameSheet';
-import { getMe } from '../../../../src/db/queries/persons';
-import { getGroupContext, getGroupMembersWithRoles, setMemberRole, getGroupById } from '../../../../src/db/queries/groups';
 import { isAdmin, canRemoveMember, canChangeRole } from '../../../../src/lib/permissions';
 
 export default function MembersScreen() {
@@ -43,19 +40,7 @@ export default function MembersScreen() {
   const [renameText, setRenameText] = useState('');
   const swipeableRefs = useRef<Map<string, Swipeable>>(new Map());
 
-  const { data, error: loadError, refreshing, onRefresh, reload } = useScreenData(async (db) => {
-    const me = await getMe(db);
-    const meId = me?.id ?? '';
-    const [members, allPersons, net, roles, ctx, group] = await Promise.all([
-      getGroupMembers(db, groupId),
-      getAllPersons(db),
-      getGroupNet(db, groupId),
-      getGroupMembersWithRoles(db, groupId),
-      getGroupContext(db, groupId, meId),
-      getGroupById(db, groupId),
-    ]);
-    return { members, allPersons, net, roles, ctx, meId, group };
-  }, [groupId]);
+  const { data, error: loadError, refreshing, onRefresh, reload } = useScreenData((db) => loadGroupMembers(db, groupId), [groupId]);
   const members = data?.members ?? [];
   const allPersons = data?.allPersons ?? [];
   const net = data?.net ?? {};
@@ -242,7 +227,12 @@ export default function MembersScreen() {
                       color={item.avatar_color}
                       size={36}
                       imageUri={item.image_uri}
-                      onPress={async () => { const uri = await pickAndSaveAvatar(item.id); if (uri) { await setPersonImage(db, item.id, uri); haptic.success(); await reload(); refresh(); } }}
+                      onPress={async () => {
+                        // Through the shared helper: this copy never unlinked the photo it replaced.
+                        try {
+                          if (await replacePersonPhoto(db, item)) { haptic.success(); await reload(); refresh(); }
+                        } catch { haptic.error(); }
+                      }}
                     />
                     <TouchableOpacity
                       style={{ flex: 1 }}
@@ -327,7 +317,7 @@ export default function MembersScreen() {
           exclude={members.map(m => m.id)}
           onToggle={togglePending}
           onCreate={async (name) => {
-            const person = await insertPerson(db, name, AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)]);
+            const person = await addPersonToPool(db, name, AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)]);
             reload(); refresh();
             return person;
           }}

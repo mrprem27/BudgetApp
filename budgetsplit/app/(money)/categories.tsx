@@ -3,7 +3,6 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert,
 } from 'react-native';
 import { KeyboardForm } from '../../src/components/ui/KeyboardForm';
-import { useSQLiteContext } from 'expo-sqlite';
 import { useRouter } from 'expo-router';
 import { useScreenData } from '../../src/hooks/useScreenData';
 import { Feather } from '@expo/vector-icons';
@@ -12,11 +11,8 @@ import { CATEGORY_KIND, type CategoryKind } from '../../src/constants/enums';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { ErrorState } from '../../src/components/ui/ErrorState';
 import { Input } from '../../src/components/ui/Input';
-import {
-  getCategories, getUncategorizedNames, insertCategory, deleteCategory, renameCategory,
-} from '../../src/db/queries/categories';
-import { seedGlobalCategories } from '../../src/db/seedCategories';
-import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
+import { loadCategoryCatalog } from '../../src/lib/categoryData';
+import { useCategoryWrites } from '../../src/hooks/useCategoryWrites';
 import { haptic } from '../../src/lib/haptics';
 import {
   CATEGORY_SECTIONS, INCOME_SECTIONS, TRANSFER_SECTIONS, categorySection, categoryVisual,
@@ -34,8 +30,6 @@ import { SectionCard } from '../../src/components/ui/SectionCard';
 
 
 export default function CategoriesScreen() {
-  const db = useSQLiteContext();
-  const { refresh } = useDataRefresh();
   const router = useRouter();
   const [kindTab, setKindTab] = useState<CategoryKind>('expense');
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
@@ -47,33 +41,16 @@ export default function CategoriesScreen() {
   const [renameText, setRenameText] = useState('');
 
   // Categories are a single global catalog now — no group scoping.
-  const { data, loading, error: loadError, refreshing, onRefresh, reload } = useScreenData(async (db) => {
-    let cats = await getCategories(db, kindTab);
-    // Self-heal: the base catalog is app structure and should never be empty.
-    // If it is (e.g. an older DB that once wiped categories), reseed defaults.
-    if (cats.length === 0) {
-      await seedGlobalCategories(db);
-      cats = await getCategories(db, kindTab);
-    }
-    const unc = await getUncategorizedNames(db, kindTab);
-    return { categories: cats, uncategorized: unc };
-  }, [kindTab]);
+  const { data, loading, error: loadError, refreshing, onRefresh, reload } = useScreenData((db) => loadCategoryCatalog(db, kindTab), [kindTab]);
+  const writes = useCategoryWrites(kindTab, reload);
   const categories = data?.categories ?? [];
   const uncategorized = data?.uncategorized ?? [];
 
   // Adopt an uncategorized name into the global catalog (its spend then splits
   // out of "Others"). Defaults from the name's known visual; user can edit after.
-  async function adoptCategory(name: string) {
-    try {
-      const vis = categoryVisual(name);
-      await insertCategory(db, name, vis.icon, vis.color, kindTab, 'Other');
-      haptic.success();
-      reload();
-      refresh();
-    } catch {
-      haptic.error();
-      Alert.alert('Something went wrong', 'Please try again.');
-    }
+  function adoptCategory(name: string) {
+    const vis = categoryVisual(name);
+    return writes.adopt(name, vis.icon, vis.color);
   }
 
   function switchKind(k: CategoryKind) {
@@ -105,19 +82,11 @@ export default function CategoriesScreen() {
   async function addCategory() {
     const trimmed = name.trim();
     if (!trimmed) return;
-    try {
-      await insertCategory(db, trimmed, icon, color, kindTab, addingToSection);
-      haptic.success();
-      setName('');
-      setIcon('tag');
-      setColor(COLOR_CHOICES[0]);
-      setAddingToSection(null);
-      reload();
-      refresh();
-    } catch {
-      haptic.error();
-      Alert.alert('Something went wrong', 'Please try again.');
-    }
+    if (!(await writes.add(trimmed, icon, color, addingToSection))) return;
+    setName('');
+    setIcon('tag');
+    setColor(COLOR_CHOICES[0]);
+    setAddingToSection(null);
   }
 
   function startRename(cat: Category) {
@@ -133,19 +102,10 @@ export default function CategoriesScreen() {
     // Categories are keyed by name — block a collision so we never create two
     // with the same name (and never trip the budget UNIQUE constraint).
     if (categories.some(c => c.id !== cat.id && c.name.toLowerCase() === n.toLowerCase())) {
-      Alert.alert('Name already used', 'Another category in this group already uses that name.');
+      Alert.alert('Name already used', 'Another category already uses that name.');
       return;
     }
-    try {
-      await renameCategory(db, cat.id, n);
-      haptic.success();
-      setRenamingId(null);
-      reload();
-      refresh();
-    } catch {
-      haptic.error();
-      Alert.alert('Something went wrong', 'Please try again.');
-    }
+    if (await writes.rename(cat, n)) setRenamingId(null);
   }
 
   function confirmDelete(cat: Category) {
@@ -156,17 +116,7 @@ export default function CategoriesScreen() {
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete', style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteCategory(db, cat.id);
-              haptic.warning();
-              reload();
-              refresh();
-            } catch {
-              haptic.error();
-              Alert.alert('Something went wrong', 'Please try again.');
-            }
-          },
+          onPress: () => { writes.remove(cat); },
         },
       ],
     );

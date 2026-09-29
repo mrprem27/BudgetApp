@@ -20,12 +20,9 @@ import {
   BackupWrongPassphraseError, BackupVersionError, canReadCipher,
   type BackupEnvelope, type BackupPayload,
 } from '../../../src/lib/backup';
-import {
-  readAllTables, restoreAllTables, readPhotoFiles, restorePhotoFiles, reapUnreferencedPhotos,
-} from '../../../src/db/queries/backup';
+import { readBackupTables, readBackupPhotos, restoreBackup, isLinkedToAccount } from '../../../src/lib/backupOps';
 import { useServerSession } from '../../../src/hooks/useServerSession';
 import { beginRestore, endRestore } from '../../../src/lib/restoreGuard';
-import { linkedUser } from '../../../src/db/queries/syncApply';
 
 export default function BackupScreen() {
   const db = useSQLiteContext();
@@ -63,11 +60,11 @@ export default function BackupScreen() {
     setKdfPct(0);
     setCreating(true);
     try {
-      const tables = await readAllTables(db);
+      const tables = await readBackupTables(db);
       // Opt-in. Receipt photos dwarf the rows — a few hundred transactions is
       // tens of KB, one receipt can be a megabyte — so this is the user's call
       // rather than a default that quietly makes every backup unshareable.
-      const photos = includePhotos ? await readPhotoFiles(tables) : undefined;
+      const photos = includePhotos ? await readBackupPhotos(tables) : undefined;
       const payload = buildBackupPayload(tables, photos);
       const envelope = await encryptPayload(payload, passphrase, onKdf);
 
@@ -216,7 +213,7 @@ export default function BackupScreen() {
    * and it's a phone of its own again.
    */
   async function confirmRestore(payload: BackupPayload) {
-    if (await linkedUser(db)) {
+    if (await isLinkedToAccount(db)) {
       haptic.warning();
       Alert.alert(
         'Sign out first',
@@ -248,37 +245,7 @@ export default function BackupScreen() {
     // half-replaced database on its own connection. See `restoreGuard`.
     beginRestore();
     try {
-      // Photos first: the tables come back with every photo URI repointed at this
-      // install's directories, or nulled where the backup did not carry the file.
-      // Restoring the rows verbatim is what left every restore showing "Receipt
-      // attached" over a path that no longer exists.
-      const tables = await restorePhotoFiles(payload.tables, payload.photos);
-      await restoreAllTables(db, tables);
-      /*
-       * The previous install's receipts and avatars, now referenced by nothing.
-       *
-       * A restore hard-deletes every old row, which puts those files beyond the
-       * ordinary reaper forever — it looks for soft-deleted transactions, and
-       * these have no row at all. They would sit on disk being counted on the
-       * storage screen for the life of the install.
-       *
-       * After the transaction commits, never before: deciding what is
-       * unreferenced from a database about to be replaced would delete exactly
-       * the files the restore is about to need.
-       */
-      await reapUnreferencedPhotos(db).catch(() => {});
-      /*
-       * Stamped with the BACKUP's date, not now. Restoring is not backing up, and
-       * dating it now makes Settings read "Backed up just now" when the newest
-       * backup that exists may be six months old — the same class of lie the
-       * anchor exists to kill, reintroduced on the way back in.
-       *
-       * It follows that restoring an old backup makes the nudge fire immediately
-       * rather than go quiet for a month. That is correct: a phone holding
-       * six-month-old data is exactly when a fresh backup matters most.
-       */
-      await settings.setBackupAnchorAt(payload.createdAt);
-      await settings.setLastBackupAt(payload.createdAt);
+      await restoreBackup(db, payload);
       setLastBackupAt(payload.createdAt);
       haptic.success();
       refresh();

@@ -33,6 +33,10 @@ function walk(dir: string, keep: (f: string) => boolean, out: string[] = []): st
   return out;
 }
 
+// Screens no longer import `insertPerson` (`uiLayering.test.ts`); they create a
+// person through these two, which are `insertPerson` behind the lib seam.
+const CREATES_PERSON = /\b(insertPerson|addPersonToPool|addFriend)\(/;
+
 const SOURCE_FILES = [
   ...walk(join(ROOT, 'app'), f => f.endsWith('.tsx')),
   ...walk(join(ROOT, 'src', 'components'), f => f.endsWith('.tsx')),
@@ -47,7 +51,7 @@ describe('every place that creates a person renders PersonNameSheet', () => {
     const offenders: string[] = [];
     for (const f of SOURCE_FILES) {
       const src = readFileSync(f, 'utf8');
-      if (/\binsertPerson\(/.test(src) && !/<PersonNameSheet/.test(src)) {
+      if (CREATES_PERSON.test(src) && !/<PersonNameSheet/.test(src)) {
         offenders.push(f.replace(ROOT + '/', ''));
       }
     }
@@ -56,7 +60,7 @@ describe('every place that creates a person renders PersonNameSheet', () => {
 
   it('is exactly the four known call sites — a fifth needs a look, not a silent pass', () => {
     const callers = SOURCE_FILES
-      .filter(f => /\binsertPerson\(/.test(readFileSync(f, 'utf8')))
+      .filter(f => CREATES_PERSON.test(readFileSync(f, 'utf8')))
       .map(f => f.replace(ROOT + '/', ''))
       .sort();
     expect(callers).toEqual([

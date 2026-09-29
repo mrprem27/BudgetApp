@@ -1,6 +1,6 @@
 # SPEC-BUGSCAN — whole-app bug & scenario scan, then fix
 
-Status: **APPROVED 2026-09-29** (full separation move; app + server). Branch `claude/branch-selection-gi7lyy`.
+Status: **APPROVED 2026-09-29** (full separation move; app + server). Separation and route groups done; server scan and a device pass remain. Branch `claude/branch-selection-gi7lyy`.
 
 ## Objective
 Find and fix real defects across the app before the pilot, ranked by criticality, in four sections:
@@ -72,3 +72,15 @@ Today: 46 files in `app/`+`src/components/` import `src/db` directly; screens up
 | U3 | Low | Home | Literal 120pt spacer on top of the tab-bar padding (AGENTS §9) | open — layout |
 | U4 | Low | `useAssets` archive alert | Net-worth drop shown as `1234.00`, no ₹ | FIXED |
 | L1 | Low | `reopenApproval` | Taking back an approved retraction does not restore the retraction flag | open |
+| BS-6 | High | Groups tab | Archived list offered "tap to restore" for a group its owner deleted; the tap did nothing, with a success haptic | FIXED — list holds only restorable groups; a refused restore says so |
+| BS-7 | High | Group hub → Archive | Archived a group and went back without `refresh()`, so the Groups tab (reads a store) still listed it | FIXED |
+| BS-8 | Medium | Settings tab | Renaming yourself, your photo, your UPI ID never `refresh()`ed — the store's `me` stayed stale on other screens | FIXED |
+| BS-9 | Medium | Members screen | Changing a photo never unlinked the file it replaced (Friends and Settings did): one leaked file per change; also an unhandled rejection on failure | FIXED — one `replacePersonPhoto` |
+| BS-10 | Medium | History | Income read "Expense added" with a red −; nothing said who made a synced change | FIXED |
+| BS-11 | Medium | Recurring | A "this & future" edit returned to the rule it had just ended; a deleted rule still rendered as live with Pause/Skip | FIXED |
+| BS-12 | Medium | Search, report drill-down | Entries dated ahead were unfindable; archived groups' entries showed no group name | FIXED |
+| BS-13 | Medium | Leave group | "Settle up first" went to the Groups list and settled nothing | FIXED — goes to the group's page |
+| BS-14 | Low | Categories | Rename collision said "in this group" — categories are global | FIXED |
+| BS-15 | Low | Trust everyone | A failure part-way was an unhandled rejection | FIXED |
+| S | — | app/ ↔ db | 32 UI files imported `src/db` | DONE — 0 (only `_layout.tsx`, the boot root); `uiLayering.test.ts` enforces it |
+| R | — | `app/` layout | 20 loose files at the top level | DONE — `(money)` `(people)` `(ledger)` `(system)` route groups; URL set unchanged (46 routes) |
