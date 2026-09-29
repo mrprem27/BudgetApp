@@ -16,6 +16,7 @@ import { ErrorState } from '../../src/components/ui/ErrorState';
 import { EmptyState } from '../../src/components/ui/EmptyState';
 import { TabPills } from '../../src/components/ui/TabPills';
 import { Banner } from '../../src/components/ui/Banner';
+import { useContentInset } from '../../src/hooks/useContentInset';
 import { useStorageWarning } from '../../src/hooks/useStorageWarning';
 import { StorageVerdict } from '../../src/lib/storage';
 
@@ -46,6 +47,7 @@ export default function DashboardScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const bottomPad = useContentInset({ tabBar: true });
   const storage = useStorageWarning();
   const groups = useStore(s => s.groups);
   const { flags } = useFeatureFlags();
@@ -135,7 +137,7 @@ export default function DashboardScreen() {
   return (
     <View style={styles.container}>
       <ScrollView
-        contentContainerStyle={[styles.scroll, { paddingTop: insets.top + space.sm, paddingBottom: insets.bottom + layout.tabBarHeight + space.lg }]}
+        contentContainerStyle={[styles.scroll, { paddingTop: insets.top + space.sm, paddingBottom: bottomPad }]}
         refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
         <View style={styles.header}>
@@ -391,7 +393,6 @@ export default function DashboardScreen() {
           </FadeIn>
         )}
 
-        <View style={{ height: 120 }} />
       </ScrollView>
 
       {/* FAB now lives in the custom tab bar (centered, docked). */}

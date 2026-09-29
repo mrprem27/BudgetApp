@@ -26,7 +26,6 @@ import {
   MAGIC_LINK_WINDOW_MS,
   SESSION_TTL_MS,
   MAX_AVATAR_BYTES,
-  MAX_AVATAR_URL_LEN,
   MAX_NAME_LEN,
   authenticate,
   badRequest,
@@ -56,6 +55,7 @@ import {
   type UserRow,
 } from './types';
 import { mailProvider, sendMail } from './mailer';
+import { callerIp, magicLinkAllowed, recordMagicLink } from './rateLimit';
 import { storage } from './storage';
 import { handleSync, handleHistory, eraseAccount } from './sync';
 
@@ -215,20 +215,17 @@ async function requestLink(request: Request, env: Env, url: URL): Promise<Respon
   await env.DB.prepare('DELETE FROM magic_links WHERE expires_at < ?')
     .bind(now - MAGIC_LINK_WINDOW_MS).run();
 
-  // A row's `expires_at` is its creation time + MAGIC_LINK_TTL_MS, and that TTL
-  // equals the rate-limit window, so "still unexpired" is exactly "requested
-  // within the window" — no extra column needed, and it uses the email index.
-  const recent = await env.DB.prepare(
-    'SELECT COUNT(*) AS n FROM magic_links WHERE email = ? AND expires_at > ?',
-  ).bind(email, now).first<{ n: number }>();
-  if ((recent?.n ?? 0) >= MAGIC_LINK_MAX_PER_WINDOW) {
+  const ip = callerIp(request);
+  const verdict = await magicLinkAllowed(env.DB, email, ip, now);
+  if (verdict === 'email') {
     return tooManyRequests('Too many sign-in links requested for that address. Try again in a few minutes.');
+  }
+  if (verdict === 'caller') {
+    return tooManyRequests('Too many sign-in links requested from here. Try again in a few minutes.');
   }
 
   const token = randomToken();
-  await env.DB.prepare(
-    'INSERT INTO magic_links (token, email, expires_at, used_at) VALUES (?, ?, ?, NULL)',
-  ).bind(token, email, now + MAGIC_LINK_TTL_MS).run();
+  await recordMagicLink(env.DB, token, email, ip, now).run();
 
   const openUrl = `${url.origin}/auth/open?token=${token}`;
   try {
@@ -388,24 +385,18 @@ async function patchMe(request: Request, env: Env, url: URL): Promise<Response> 
   }
 
   if ('avatarUrl' in body) {
-    const raw = body.avatarUrl;
-    if (raw !== null && typeof raw !== 'string') return badRequest('avatarUrl must be a string or null');
-    const value = raw === null ? null : raw.trim() || null;
-    if (value !== null) {
-      if (value.length > MAX_AVATAR_URL_LEN) return badRequest('avatarUrl is too long');
-      // Only absolute https URLs: an on-device `file://` path means nothing to
-      // any other device, which is the whole reason this field exists. Upload
-      // the image itself with `PUT /me/avatar` instead.
-      if (!/^https:\/\//i.test(value)) return badRequest('avatarUrl must be an absolute https URL, or null');
-    }
-    // Clearing (or replacing with an external URL) orphans our own R2 object.
+    // Clearing is the only thing this field does. A picture is uploaded with
+    // `PUT /me/avatar`; a URL of the caller's choosing would be a link the server
+    // stores and hands to whoever renders this profile — an address it never vetted.
+    if (body.avatarUrl !== null) return badRequest('avatarUrl can only be cleared (null). Upload a picture with PUT /me/avatar.');
+    // Clearing orphans our own R2 object.
     const files = storage(env);
-    if (files && auth.user.avatar_url && isAvatarKey(auth.user.avatar_url) && value !== auth.user.avatar_url) {
+    if (files && auth.user.avatar_url && isAvatarKey(auth.user.avatar_url)) {
       await files.delete(auth.user.avatar_url);
     }
     sets.push('avatar_url = ?');
-    binds.push(value);
-    next.avatar_url = value;
+    binds.push(null);
+    next.avatar_url = null;
   }
 
   if (sets.length === 0) return badRequest('Nothing to update: send name, phone and/or avatarUrl');

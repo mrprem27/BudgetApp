@@ -54,7 +54,7 @@ Email magic link, no passwords.
    `expo-secure-store`, not AsyncStorage: it's the first real credential the app
    has ever held.
 
-Rate limit: 5 link requests per email per 15 minutes. `POST /auth/request-link`
+Rate limit: 5 link requests per email, and 30 per caller (`CF-Connecting-IP`, all addresses together), per 15 minutes — `rateLimit.ts`. The per-caller number is generous on purpose: mobile carriers put many phones behind one IP. `POST /auth/request-link`
 answers `{ok: true}` whether or not that address already has an account —
 accounts are created at verify time, so there is no account-existence signal to
 leak, and the response must not become one.
@@ -73,7 +73,7 @@ widen who can call this from a browser.
 | `POST /auth/verify` | — | `{token, deviceLabel?}` → `{sessionToken, user}`. |
 | `POST /auth/logout` | bearer | Deletes the session row. `{ok: true}` even for an unknown token, so a stale client can still clear itself. |
 | `GET /me` | bearer | `{user}` |
-| `PATCH /me` | bearer | `{name?, avatarUrl?}`; either may be `null` to clear. `avatarUrl` must be absolute `https://` — a `file://` path from the phone means nothing to another device. |
+| `PATCH /me` | bearer | `{name?, phone?, avatarUrl?}`. `avatarUrl` can only be `null` (clear the picture); upload one with `PUT /me/avatar`. The server does not store a URL of the caller's choosing. |
 | `PUT /me/avatar` | bearer | Raw `image/*` bytes (≤5 MB) → `{user}`. Stored at `avatars/{user_id}`, overwriting. |
 | `GET /me/avatar` | bearer | The uploaded image. 404 if the avatar is an external URL or unset. |
 | `POST /invites` | bearer | → `{token, url, expiresAt}`. The link you hand to one person (7 days). |
@@ -124,8 +124,8 @@ D1 has no interactive transactions, so every write guards itself with a
 `write_guard` row that fails the batch when a precondition no longer holds
 (`sync/utils/guard.ts`).
 
-**On `avatarUrl`:** `users.avatar_url` stores either an R2 key (`avatars/{user_id}`)
-or an absolute `https://` URL, and the DTO resolves a key to `{origin}/me/avatar`
+**On `avatarUrl`:** `users.avatar_url` stores an R2/KV key (`avatars/{user_id}`) — set only by
+`PUT /me/avatar`; `PATCH /me` can clear it but never set a URL. The DTO resolves the key to `{origin}/me/avatar`
 per request — so the row survives this Worker moving to a custom domain. That URL
 is bearer-authed, so a client rendering it needs to send the header (React
 Native's `Image` accepts `source={{ uri, headers }}`); today the app only reads

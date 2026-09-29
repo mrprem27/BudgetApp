@@ -30,7 +30,7 @@ export default function SyncScreen() {
   const { session } = useServerSession();
   const configured = serverConfigured();
 
-  const { invites, joining, accept } = useSyncInvites();
+  const { invites, joining, accept, decline } = useSyncInvites();
 
   return (
     <View style={styles.container}>
@@ -73,6 +73,15 @@ export default function SyncScreen() {
                       ? <ActivityIndicator color={colors.accent} />
                       : <Text style={styles.accept}>Accept</Text>}
                     onPress={joining ? undefined : () => accept(g)}
+                  />
+                  <Divider indent="text" />
+                  <ListRow
+                    icon="x"
+                    title="Decline"
+                    danger
+                    chevron={false}
+                    onPress={joining ? undefined : () => decline(g)}
+                    accessibilityLabel={`Decline the invitation to ${g.groupName}`}
                   />
                 </View>
               ))}

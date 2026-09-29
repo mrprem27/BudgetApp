@@ -64,13 +64,13 @@ export const FRIEND_REQUEST_RESEND_GAP_MS = 24 * 60 * 60 * 1000;
 export const FRIEND_REQUEST_WINDOW_MS = 24 * 60 * 60 * 1000;
 /** Magic-link requests allowed per email per window. Stops an email-bomb. */
 export const MAGIC_LINK_MAX_PER_WINDOW = 5;
+/** Per caller, across every address — generous, since carriers put many phones behind one IP. */
+export const MAGIC_LINK_MAX_PER_IP = 30;
 export const MAGIC_LINK_WINDOW_MS = 15 * 60 * 1000;
 /** Avatars are displayed at ~64px; anything larger than this is a mistake. */
 export const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
 /** `users.name` is a display name, not prose. */
 export const MAX_NAME_LEN = 80;
-/** Long enough for any real avatar URL, short enough to not be an upload. */
-export const MAX_AVATAR_URL_LEN = 2048;
 
 // --- Responses ------------------------------------------------------------
 

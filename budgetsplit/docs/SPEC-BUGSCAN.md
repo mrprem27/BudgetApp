@@ -69,9 +69,9 @@ Today: 46 files in `app/`+`src/components/` import `src/db` directly; screens up
 | BS-5 | High | sync scheduling | Push was scheduled off `refresh()`; swipe-delete, edits, goal funding and profile edits only `reload()`ed, so they sat queued until the next foreground | FIXED — the queue schedules the push (`setQueueListener`); missing `refresh()` calls added |
 | U1 | High | Home | "Nothing logged yet" first-run state (with the period pills hidden) shown to anyone with no spend this period and no budget — e.g. every 1st of the month | FIXED — keyed on the whole ledger (`everLogged`) |
 | U2 | Medium | Home catch-up banner | Counted ended, remind-only and other people's rules as having "ran while the app was closed" | FIXED — `loadCatchUp`, same filter as materialization |
-| U3 | Low | Home | Literal 120pt spacer on top of the tab-bar padding (AGENTS §9) | open — layout |
+| U3 | Low | Home | Literal 120pt spacer on top of the tab-bar padding (AGENTS §9) | FIXED — `useContentInset({ tabBar })` |
 | U4 | Low | `useAssets` archive alert | Net-worth drop shown as `1234.00`, no ₹ | FIXED |
-| L1 | Low | `reopenApproval` | Taking back an approved retraction does not restore the retraction flag | open |
+| L1 | Low | `reopenApproval` | Taking back an approved retraction does not restore the retraction flag | CLOSED, not a live bug — no screen calls it; limit written on the function |
 | BS-6 | High | Groups tab | Archived list offered "tap to restore" for a group its owner deleted; the tap did nothing, with a success haptic | FIXED — list holds only restorable groups; a refused restore says so |
 | BS-7 | High | Group hub → Archive | Archived a group and went back without `refresh()`, so the Groups tab (reads a store) still listed it | FIXED |
 | BS-8 | Medium | Settings tab | Renaming yourself, your photo, your UPI ID never `refresh()`ed — the store's `me` stayed stale on other screens | FIXED |
@@ -82,14 +82,23 @@ Today: 46 files in `app/`+`src/components/` import `src/db` directly; screens up
 | BS-13 | Medium | Leave group | "Settle up first" went to the Groups list and settled nothing | FIXED — goes to the group's page |
 | BS-14 | Low | Categories | Rename collision said "in this group" — categories are global | FIXED |
 | BS-15 | Low | Trust everyone | A failure part-way was an unhandled rejection | FIXED |
+| SV-3 | Medium | Sync screen | Group invitations could only be accepted | FIXED — Decline row (`useSyncInvites.decline`); the server already allowed it |
 | S | — | app/ ↔ db | 32 UI files imported `src/db` | DONE — 0 (only `_layout.tsx`, the boot root); `uiLayering.test.ts` enforces it |
 | R | — | `app/` layout | 20 loose files at the top level | DONE — `(money)` `(people)` `(ledger)` `(system)` route groups; URL set unchanged (46 routes) |
 | U5 | Low | `formatRupees` / `formatRupeesShort` | A negative amount printed `₹-50.00`; the compact form prints `-₹50` | FIXED |
-| SV-1 | Low | server `/auth/request-link` | Rate limit is per email address, not per caller: one client can request links for many addresses | open — needs an infra decision (Cloudflare rule vs code) |
-| SV-2 | Low | server `PATCH /me` | `avatarUrl` accepts any https URL, which other members' apps then load — a member can make everyone's phone contact a host they choose | open — restrict to the R2 avatar route, or proxy |
+| SV-1 | Low | server `/auth/request-link` | Rate limit was per email, not per caller: one client could request links for many addresses | FIXED — also 30 per caller per 15 min (`rateLimit.ts`, `magic_links.ip`). **The deployed D1 needs the column first** (see below) |
+| SV-2 | Low | server `PATCH /me` | `avatarUrl` accepted any https URL. Not live: other people's DTO sends `null` for it (`index.ts` link DTO), so it reached only its owner — but the server was storing an address it never vetted | FIXED — `PATCH` can only clear it; pictures come from `PUT /me/avatar` |
 
 ## Coverage — what this pass did and did not read
 
 Read line by line: every write path in `src/db/queries` for transactions, recurring, savings, sync queue/apply, approvals, and the group/person delete-leave-remove functions; server auth, sync push/pull/guards/access, transactions entity, erase and delete-account; `money`, `splitMath`; and every screen whose data code moved (32 files).
 
 **Not** read this pass: `upiIntent`, `voice*`, `importParse`/`paytmParse`, `engine/*` internals, `reviewCommit`, `settle`/`balances` SQL, the rest of `server/api/index.ts` (invites, links, friend requests), and most presentational components. UI/UX coverage is what the moved screens showed, not a device walk — no render tests exist, so anything visual needs a phone.
+
+### Deploy note (SV-1)
+
+`magic_links` gained a nullable `ip` column and an index, edited into `0001_schema.sql` (one file, by design). A database already created from the old file needs it before the new Worker runs, or every sign-in fails on the INSERT:
+
+```
+wrangler d1 execute budgetsplit-api --remote --command "ALTER TABLE magic_links ADD COLUMN ip TEXT; CREATE INDEX idx_magic_links_ip ON magic_links(ip, expires_at);"
+```

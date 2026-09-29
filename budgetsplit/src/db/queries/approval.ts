@@ -251,7 +251,15 @@ export async function rejectTxn(db: SQLite.SQLiteDatabase, txnId: string): Promi
   });
 }
 
-/** Undo either decision, putting the entry back in the queue exactly as it was. */
+/**
+ * Undo either decision, putting the entry back in the queue.
+ *
+ * No screen calls this today (a refusal "cannot be undone from this screen"), so
+ * the one gap is harmless and left open on purpose: an approved RETRACTION comes
+ * back as an ordinary pending entry, not as a retraction, because approving one
+ * clears `pending_delete` and nothing records that it was set. Wire an Undo to
+ * this and that has to be stored first.
+ */
 export async function reopenApproval(db: SQLite.SQLiteDatabase, txnId: string): Promise<void> {
   // Same reasoning as `rejectTxn`, mirrored: mark it pending first, so it is
   // filtered out again BEFORE it becomes visible. Restoring first would show a

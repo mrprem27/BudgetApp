@@ -31,9 +31,14 @@ CREATE TABLE magic_links (
   token       TEXT PRIMARY KEY,
   email       TEXT NOT NULL,
   expires_at  INTEGER NOT NULL,
-  used_at     INTEGER
+  used_at     INTEGER,
+  -- Who asked (`CF-Connecting-IP`), so a link request is limited per caller as well
+  -- as per address. Swept with the row, within a window — never kept against an
+  -- account. NULL in local dev, where there is no such header.
+  ip          TEXT
 );
 CREATE INDEX idx_magic_links_email  ON magic_links(email, expires_at);
+CREATE INDEX idx_magic_links_ip     ON magic_links(ip, expires_at);
 CREATE INDEX idx_magic_links_expiry ON magic_links(expires_at);
 
 CREATE TABLE sessions (
