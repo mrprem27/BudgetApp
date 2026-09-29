@@ -41,13 +41,13 @@ const files = tsxFiles(APP).map(p => ({ path: p, src: readFileSync(p, 'utf8') })
 
 describe('the recurring flow has two lists and one rule screen', () => {
   it('the rule screen exists', () => {
-    expect(existsSync(join(APP, 'recurring', '[id].tsx'))).toBe(true);
+    expect(existsSync(join(APP, '(money)', 'recurring', '[id].tsx'))).toBe(true);
   });
 
   it('the duplicate per-group list screen is gone', () => {
     // The group's Recurring *tab* is the per-group list. A pushed screen showing
     // the same rules again is the duplication this whole change removes.
-    expect(existsSync(join(APP, 'group', '[id]', 'recurring.tsx'))).toBe(false);
+    expect(existsSync(join(APP, '(people)', 'group', '[id]', 'recurring.tsx'))).toBe(false);
   });
 
   it('nothing links to the deleted screen', () => {
@@ -59,7 +59,7 @@ describe('the recurring flow has two lists and one rule screen', () => {
 
   it('every recurring row taps through to the rule itself', () => {
     // Each of these renders a list of rules and must open one.
-    for (const rel of ['plan/recurring.tsx', 'group/[id].tsx', 'category/[name].tsx', 'txn/[id].tsx']) {
+    for (const rel of ['(money)/plan/recurring.tsx', '(people)/group/[id].tsx', '(money)/category/[name].tsx', '(ledger)/txn/[id].tsx']) {
       const src = readFileSync(join(APP, rel), 'utf8');
       expect({ rel, links: /\/recurring\/\$\{/.test(src) }).toEqual({ rel, links: true });
     }
@@ -80,13 +80,13 @@ describe('the recurring flow has two lists and one rule screen', () => {
   it('Personal no longer carries a second copy of the global list', () => {
     // Its Recurring tab listed every rule in every SHARED group, so it was neither
     // personal nor different from `/plan/recurring`.
-    const src = readFileSync(join(APP, 'personal.tsx'), 'utf8');
+    const src = readFileSync(join(APP, '(people)', 'personal.tsx'), 'utf8');
     expect(src).not.toContain("label: 'Recurring'");
   });
 });
 
 describe('the rule screen shows the same figures as every other surface', () => {
-  const src = readFileSync(join(APP, 'recurring', '[id].tsx'), 'utf8');
+  const src = readFileSync(join(APP, '(money)', 'recurring', '[id].tsx'), 'utf8');
 
   it('shows my share, not the whole bill', () => {
     // The deleted screen summed ALL payments, so a ₹9,000 rent split three ways

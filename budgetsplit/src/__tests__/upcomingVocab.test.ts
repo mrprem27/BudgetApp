@@ -50,8 +50,8 @@ describe('no source file still targets the old /reminders route', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('app/upcoming.tsx exists and titles itself Upcoming', () => {
-    const src = readFileSync(join(ROOT, 'app', 'upcoming.tsx'), 'utf8');
+  it('app/(money)/upcoming.tsx exists and titles itself Upcoming', () => {
+    const src = readFileSync(join(ROOT, 'app', '(money)', 'upcoming.tsx'), 'utf8');
     expect(src).toMatch(/title="Upcoming"/);
   });
 });
@@ -60,7 +60,7 @@ describe('the next-charges list is one component, not two implementations', () =
   it('both Plan and the Upcoming screen render ComingUpList', () => {
     for (const f of [
       join(ROOT, 'app', '(tabs)', 'savings.tsx'),
-      join(ROOT, 'app', 'upcoming.tsx'),
+      join(ROOT, 'app', '(money)', 'upcoming.tsx'),
     ]) {
       expect(readFileSync(f, 'utf8')).toMatch(/<ComingUpList/);
     }

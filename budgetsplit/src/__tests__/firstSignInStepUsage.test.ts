@@ -10,8 +10,8 @@ import path from 'path';
 
 const SITES = [
   '../components/system/onboarding/SignInStage.tsx',
-  '../../app/auth.tsx',
-  '../../app/settings/account.tsx',
+  '../../app/(system)/auth.tsx',
+  '../../app/(system)/settings/account.tsx',
 ];
 
 it('renders the "both have data" step from exactly three call sites, each offering Merge', () => {

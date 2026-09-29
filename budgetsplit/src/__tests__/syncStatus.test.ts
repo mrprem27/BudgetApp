@@ -82,12 +82,12 @@ describe('where the line may appear (S15: Account and Sync, never Home)', () => 
     .map(f => path.relative(ROOT, f)).sort();
 
   it('one component serves every status surface, and Home is not one', () => {
-    expect(usedIn('SyncStatus')).toEqual(['app/settings/account.tsx', 'app/settings/sync.tsx']);
+    expect(usedIn('SyncStatus')).toEqual(['app/(system)/settings/account.tsx', 'app/(system)/settings/sync.tsx']);
   });
 
   it('the first-sign-in step is one component, on every way in', () => {
     expect(usedIn('FirstSignInStep')).toEqual([
-      'app/auth.tsx', 'app/settings/account.tsx', 'src/components/system/onboarding/SignInStage.tsx',
+      'app/(system)/auth.tsx', 'app/(system)/settings/account.tsx', 'src/components/system/onboarding/SignInStage.tsx',
     ]);
     // S14's interim Alert is gone.
     expect(fs.readFileSync(path.join(ROOT, 'src', 'hooks', 'useEmailSignIn.ts'), 'utf8')).not.toMatch(/Alert\.alert/);

@@ -93,8 +93,8 @@ describe('a transaction ledger filters through one predicate', () => {
    * ledger has. Different domain, different engine (`lib/reviewFilter.ts`).
    */
   const LEDGERS = [
-    join(ROOT, 'app', 'search.tsx'),
-    join(ROOT, 'app', 'personal.tsx'),
+    join(ROOT, 'app', '(ledger)', 'search.tsx'),
+    join(ROOT, 'app', '(people)', 'personal.tsx'),
     join(ROOT, 'src', 'components', 'finance', 'group', 'TransactionsTab.tsx'),
   ];
 

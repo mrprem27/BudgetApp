@@ -20,7 +20,7 @@ const DOC = path.join(ROOT, 'docs/SCREENS.md');
 /** Layout/group files are structure, not screens — documented as the nav shell instead. */
 const NOT_A_SCREEN = /^_layout\.tsx$/;
 
-/** Turn `app/group/[id]/budget.tsx` into the route path `/group/[id]/budget`. */
+/** Turn `app/(people)/group/[id]/budget.tsx` into the route path `/group/[id]/budget`. */
 function routePath(absFile: string): string {
   const rel = path.relative(APP, absFile).replace(/\.tsx$/, '');
   const segments = rel
@@ -55,7 +55,7 @@ const files = routeFiles(APP);
  * `/category/{name}`.
  */
 function mentioned(route: string, file: string): boolean {
-  const relFile = path.relative(ROOT, file); // e.g. app/review.tsx
+  const relFile = path.relative(ROOT, file); // e.g. app/(ledger)/review.tsx
   if (doc.includes(relFile)) return true;
   if (doc.includes(relFile.replace(/^app\//, ''))) return true; // e.g. group/[id]/budget.tsx
 
@@ -70,7 +70,7 @@ function mentioned(route: string, file: string): boolean {
 describe('SCREENS.md covers every screen', () => {
   it('finds the route files at all (guards against a bad path)', () => {
     expect(files.length).toBeGreaterThan(20);
-    expect(files.some(f => f.endsWith(path.join('app', 'review.tsx')))).toBe(true);
+    expect(files.some(f => f.endsWith(path.join('app', '(ledger)', 'review.tsx')))).toBe(true);
   });
 
   it.each(files.map(f => [routePath(f), f]))('documents %s', (route, file) => {

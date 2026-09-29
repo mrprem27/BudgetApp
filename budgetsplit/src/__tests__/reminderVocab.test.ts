@@ -65,7 +65,7 @@ describe('no source file still calls the reminder toggle by its old names', () =
 describe('Settings → Notifications and onboarding name the same toggle the same way', () => {
   it('both say "Reminders for upcoming charges"', () => {
     for (const f of [
-      join(ROOT, 'app', 'settings', 'notifications.tsx'),
+      join(ROOT, 'app', '(system)', 'settings', 'notifications.tsx'),
       join(ROOT, 'src', 'components', 'system', 'Onboarding.tsx'),
     ]) {
       expect(readFileSync(f, 'utf8')).toMatch(/Reminders for upcoming charges/);

@@ -228,7 +228,7 @@ describe('envelope version dispatch', () => {
   /**
    * The one that was missing, and the outage it would have caught.
    *
-   * `app/settings/backup.tsx` checked the version itself, before the passphrase
+   * `app/(system)/settings/backup.tsx` checked the version itself, before the passphrase
    * sheet, with its own hardcoded "must be v1". When `encryptPayload` moved to v2,
    * the screen was not updated — so **every backup this build wrote was refused by
    * this build**, on both the file and the server path, with "made by a newer
@@ -258,7 +258,7 @@ describe('envelope version dispatch', () => {
    * what drifted, and it drifted silently because both copies typechecked.
    */
   it('the backup screen asks the library instead of comparing versions itself', async () => {
-    const src = readFileSync(join(__dirname, '../../app/settings/backup.tsx'), 'utf8');
+    const src = readFileSync(join(__dirname, '../../app/(system)/settings/backup.tsx'), 'utf8');
     expect(src).toContain('canReadCipher');
     // The one pick path — a file (the server copy went with v1, S22).
     expect(src.match(/canReadCipher\(/g)?.length).toBeGreaterThanOrEqual(1);

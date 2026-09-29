@@ -1,0 +1,270 @@
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking, Alert } from 'react-native';
+import { useRouter } from 'expo-router';
+import { useSQLiteContext } from 'expo-sqlite';
+import * as Notifications from 'expo-notifications';
+import { useScreenData } from '../../../src/hooks/useScreenData';
+import { Feather } from '@expo/vector-icons';
+import { colors, type, space, radius, layout, shadow, alpha } from '../../../src/theme';
+import { ScreenHeader } from '../../../src/components/ui/ScreenHeader';
+import { ErrorState } from '../../../src/components/ui/ErrorState';
+import {
+  getReminderPrefs, setReminderPrefs, rescheduleReminders, formatReminderTime,
+  MAX_LEAD_DAYS, type ReminderPrefs, type ReminderTime,
+} from '../../../src/lib/reminders';
+import { sendTestReminder } from '../../../src/lib/notifications';
+import { TimePickerSheet } from '../../../src/components/ui/TimePickerSheet';
+import { settings } from '../../../src/lib/settings';
+import { haptic } from '../../../src/lib/haptics';
+
+type PermStatus = 'granted' | 'denied' | 'undetermined';
+
+export default function NotificationsScreen() {
+  const db = useSQLiteContext();
+  const router = useRouter();
+  const [permStatus, setPermStatus] = useState<PermStatus>('undetermined');
+  const [testSent, setTestSent] = useState(false);
+  const [timeEditing, setTimeEditing] = useState<null | 'renewal' | 'daily'>(null);
+
+  // Reminder prefs + OS permission load on focus / cross-screen write via useScreenData.
+  const { data, error: loadError, reload } = useScreenData(async () => {
+    const [prefs, perm] = await Promise.all([
+      getReminderPrefs(),
+      Notifications.getPermissionsAsync(),
+    ]);
+    const status: PermStatus = perm.granted ? 'granted' : perm.canAskAgain ? 'undetermined' : 'denied';
+    return { prefs, permStatus: status };
+  }, []);
+  const prefs = data?.prefs ?? null;
+
+  // Mirror the loaded OS permission into local state so toggle() can still apply its
+  // optimistic 'granted'/'denied' updates; each (re)load re-syncs to OS truth.
+  useEffect(() => { if (data) setPermStatus(data.permStatus); }, [data]);
+
+  // Turning a reminder ON asks for permission first; off needs none.
+  async function toggle(key: 'renewals' | 'daily' | 'backup') {
+    if (!prefs) return;
+    haptic.selection();
+    if (!prefs[key] && permStatus !== 'granted') {
+      const result = await Notifications.requestPermissionsAsync();
+      if (!result.granted) { setPermStatus('denied'); return; }
+      setPermStatus('granted');
+    }
+    // First time the backup reminder is turned on, anchor its monthly cadence
+    // to now — otherwise there's nothing to count a month from yet.
+    if (key === 'backup' && !prefs.backup && (await settings.backupAnchorAt()) === null) {
+      await settings.setBackupAnchorAt(Date.now());
+    }
+    await patchPrefs({ [key]: !prefs[key] });
+  }
+
+  // Lead-days / time changes — the reminder is already on, no permission prompt.
+  async function patchPrefs(patch: Partial<ReminderPrefs>) {
+    await setReminderPrefs(patch);
+    await rescheduleReminders(db);
+    await reload();
+  }
+
+  function onSaveTime(time: ReminderTime) {
+    if (timeEditing === 'renewal') patchPrefs({ renewalTime: time });
+    else if (timeEditing === 'daily') patchPrefs({ dailyTime: time });
+    setTimeEditing(null);
+  }
+
+  async function runTest() {
+    if (permStatus !== 'granted') return;
+    haptic.light();
+    // sendTestReminder reports WHY it couldn't fire; act on it. This used to
+    // show "Sent!" unconditionally and swallow every failure, so a user on Expo
+    // Go — where local notifications silently do nothing — had no way to tell a
+    // working setup from a broken one.
+    const result = await sendTestReminder().catch(() => 'unavailable' as const);
+    if (result === 'scheduled') {
+      setTestSent(true);
+      setTimeout(() => setTestSent(false), 6000);
+      return;
+    }
+    haptic.error();
+    if (result === 'denied') {
+      Alert.alert(
+        'Notifications are off',
+        'Allow notifications for BudgetSplit in your phone’s Settings, then try again.',
+      );
+    } else {
+      Alert.alert(
+        'Couldn’t send the test',
+        'Local notifications don’t run in Expo Go — they need a development build. Reminders you set will still be scheduled.',
+      );
+    }
+  }
+
+  const Toggle = ({ on, onPress, label }: { on: boolean; onPress: () => void; label: string }) => (
+    <TouchableOpacity style={[styles.toggle, on && styles.toggleOn]} hitSlop={{ top: 9, bottom: 9 }} onPress={onPress} accessibilityRole="switch" accessibilityState={{ checked: on }} accessibilityLabel={label}>
+      <View style={[styles.thumb, on && styles.thumbOn]} />
+    </TouchableOpacity>
+  );
+
+  return (
+    <View style={styles.container}>
+      <ScreenHeader title="Notifications & Reminders" onBack={() => router.back()} />
+      {loadError ? (
+        <ErrorState
+          title="Couldn't load reminder settings"
+          body="Your notification preferences couldn't be read. Try again."
+          onRetry={reload}
+        />
+      ) : (
+      <ScrollView contentContainerStyle={styles.scroll}>
+        {permStatus === 'denied' && (
+          <View style={styles.deniedBanner}>
+            <View style={styles.deniedLeft}>
+              <Feather name="bell-off" size={20} color={colors.expense} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.deniedTitle}>Notifications are off</Text>
+                <Text style={styles.deniedSub}>BudgetSplit can't send you reminders until you allow it.</Text>
+              </View>
+            </View>
+            <TouchableOpacity style={styles.deniedCta} onPress={() => Linking.openSettings()} accessibilityRole="button">
+              <Text style={styles.deniedCtaText}>Open Settings to allow</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Reminders — every reminder setting lives here */}
+        <Text style={styles.sectionLabel}>REMINDERS</Text>
+        <View style={styles.card}>
+          {/* Reminders for upcoming charges */}
+          <View style={styles.typeRow}>
+            <Feather name="calendar" size={20} color={colors.accent} style={styles.typeIcon} />
+            <View style={styles.typeInfo}>
+              <Text style={styles.typeLabel}>Reminders for upcoming charges</Text>
+              <Text style={styles.typeDesc}>Alert before recurring bills and memberships are due</Text>
+            </View>
+            <Toggle on={!!prefs?.renewals} onPress={() => toggle('renewals')} label="Reminders for upcoming charges" />
+          </View>
+          {prefs?.renewals && (
+            <>
+              <View style={styles.configRow}>
+                <Feather name="calendar" size={15} color={colors.accent} />
+                <Text style={styles.configLabel}>Start {prefs.renewalLeadDays} day{prefs.renewalLeadDays === 1 ? '' : 's'} before</Text>
+                <View style={styles.stepper}>
+                  <TouchableOpacity style={styles.stepperBtn} onPress={() => patchPrefs({ renewalLeadDays: prefs.renewalLeadDays - 1 })} disabled={prefs.renewalLeadDays <= 1} hitSlop={10} accessibilityRole="button" accessibilityLabel="Fewer days">
+                    <Feather name="minus" size={16} color={prefs.renewalLeadDays <= 1 ? colors.textMuted : colors.accent} />
+                  </TouchableOpacity>
+                  <Text style={styles.stepperVal}>{prefs.renewalLeadDays}</Text>
+                  <TouchableOpacity style={styles.stepperBtn} onPress={() => patchPrefs({ renewalLeadDays: prefs.renewalLeadDays + 1 })} disabled={prefs.renewalLeadDays >= MAX_LEAD_DAYS} hitSlop={10} accessibilityRole="button" accessibilityLabel="More days">
+                    <Feather name="plus" size={16} color={prefs.renewalLeadDays >= MAX_LEAD_DAYS ? colors.textMuted : colors.accent} />
+                  </TouchableOpacity>
+                </View>
+              </View>
+              <TouchableOpacity style={styles.configRow} onPress={() => setTimeEditing('renewal')} accessibilityRole="button">
+                <Feather name="clock" size={15} color={colors.accent} />
+                <Text style={styles.configLabel}>Reminder time</Text>
+                <Text style={styles.configValue}>{formatReminderTime(prefs.renewalTime)}</Text>
+                <Feather name="chevron-right" size={16} color={colors.textMuted} />
+              </TouchableOpacity>
+            </>
+          )}
+
+          {/* Daily log reminder */}
+          <View style={[styles.typeRow, styles.typeRowBorder]}>
+            <Feather name="book" size={20} color={colors.accent} style={styles.typeIcon} />
+            <View style={styles.typeInfo}>
+              <Text style={styles.typeLabel}>Daily log reminder</Text>
+              <Text style={styles.typeDesc}>Nudge to log your expenses at the end of the day</Text>
+            </View>
+            <Toggle on={!!prefs?.daily} onPress={() => toggle('daily')} label="Daily log reminder" />
+          </View>
+          {prefs?.daily && (
+            <TouchableOpacity style={styles.configRow} onPress={() => setTimeEditing('daily')} accessibilityRole="button">
+              <Feather name="clock" size={15} color={colors.accent} />
+              <Text style={styles.configLabel}>Daily reminder time</Text>
+              <Text style={styles.configValue}>{formatReminderTime(prefs.dailyTime)}</Text>
+              <Feather name="chevron-right" size={16} color={colors.textMuted} />
+            </TouchableOpacity>
+          )}
+
+          {/* Backup reminder — there's no cloud sync, so this is the only nudge
+              that a lost/broken phone won't silently take everything with it. */}
+          <View style={[styles.typeRow, styles.typeRowBorder]}>
+            <Feather name="save" size={20} color={colors.accent} style={styles.typeIcon} />
+            <View style={styles.typeInfo}>
+              <Text style={styles.typeLabel}>Back up your data</Text>
+              <Text style={styles.typeDesc}>Monthly nudge to export a CSV/PDF you keep yourself</Text>
+            </View>
+            <Toggle on={!!prefs?.backup} onPress={() => toggle('backup')} label="Back up your data" />
+          </View>
+        </View>
+
+        {/* Test notification */}
+        <Text style={styles.sectionLabel}>TEST</Text>
+        <View style={styles.card}>
+          <View style={styles.testRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.typeLabel}>Send a test notification</Text>
+              <Text style={styles.typeDesc}>{testSent ? 'Fires in ~5 seconds…' : 'Check that notifications are working'}</Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.testBtn, permStatus !== 'granted' && styles.testBtnDisabled]}
+              onPress={runTest}
+              disabled={permStatus !== 'granted'}
+              accessibilityRole="button"
+            >
+              <Text style={[styles.testBtnText, permStatus !== 'granted' && { color: colors.textMuted }]}>
+                {testSent ? 'Sent!' : 'Test'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <Text style={styles.footer}>All notifications are local — no server, no push, always offline.</Text>
+      </ScrollView>
+      )}
+
+      {prefs && (
+        <TimePickerSheet
+          visible={timeEditing !== null}
+          title={timeEditing === 'daily' ? 'Daily reminder time' : 'Reminder time'}
+          value={timeEditing === 'daily' ? prefs.dailyTime : prefs.renewalTime}
+          onClose={() => setTimeEditing(null)}
+          onSave={onSaveTime}
+        />
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.bg },
+  scroll: { padding: layout.screenPaddingH, gap: space.xs, paddingBottom: space.xxl },
+  deniedBanner: { backgroundColor: colors.expenseTintDeep, borderWidth: 1.5, borderColor: colors.expense, borderRadius: radius.lg, padding: space.md, gap: space.sm, marginBottom: space.xs },
+  deniedLeft: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm },
+  deniedTitle: { ...type.body, color: colors.expense, fontFamily: 'Inter_600SemiBold', marginBottom: 2 },
+  deniedSub: { ...type.caption, color: colors.textSecondary },
+  deniedCta: { backgroundColor: alpha(colors.expense, 13), borderWidth: 1, borderColor: colors.expense, borderRadius: radius.sm, paddingHorizontal: space.md, paddingVertical: space.sm, alignSelf: 'flex-start' },
+  deniedCtaText: { ...type.label, color: colors.expense, fontFamily: 'Inter_600SemiBold' },
+  sectionLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, fontWeight: '700', marginTop: space.md, marginBottom: space.xs },
+  card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden', ...shadow.sm },
+  typeRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, padding: space.md },
+  typeRowBorder: { borderTopWidth: 1, borderTopColor: colors.border },
+  typeIcon: { width: 32, textAlign: 'center', flexShrink: 0 },
+  typeInfo: { flex: 1 },
+  typeLabel: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold', marginBottom: 2 },
+  typeDesc: { ...type.caption, color: colors.textSecondary },
+  // Sub-config rows under an enabled reminder.
+  configRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm, paddingHorizontal: space.md, minHeight: 48, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: alpha(colors.bg, 33) },
+  configLabel: { ...type.body, color: colors.textSecondary, flex: 1 },
+  configValue: { ...type.body, color: colors.textPrimary, fontFamily: 'SpaceMono_400Regular' },
+  stepper: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  stepperBtn: { width: 32, height: 32, borderRadius: radius.lg, backgroundColor: colors.bgMuted, alignItems: 'center', justifyContent: 'center' },
+  stepperVal: { ...type.body, color: colors.textPrimary, fontFamily: 'SpaceMono_400Regular', minWidth: 18, textAlign: 'center' },
+  toggle: { width: 44, height: 26, borderRadius: 13, backgroundColor: colors.bgMuted, justifyContent: 'center', paddingHorizontal: 3, flexShrink: 0 },
+  toggleOn: { backgroundColor: colors.accent },
+  thumb: { width: 20, height: 20, borderRadius: 10, backgroundColor: colors.textMuted },
+  thumbOn: { backgroundColor: colors.bg, alignSelf: 'flex-end' },
+  testRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, padding: space.md },
+  testBtn: { backgroundColor: alpha(colors.accent, 13), borderWidth: 1, borderColor: colors.accent, borderRadius: radius.sm, paddingHorizontal: space.md, paddingVertical: space.sm, flexShrink: 0 },
+  testBtnDisabled: { backgroundColor: colors.bgMuted, borderColor: colors.border },
+  testBtnText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
+  footer: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginTop: space.lg },
+});

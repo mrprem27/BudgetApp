@@ -60,18 +60,18 @@ describe('every place that creates a person renders PersonNameSheet', () => {
       .map(f => f.replace(ROOT + '/', ''))
       .sort();
     expect(callers).toEqual([
+      'app/(people)/friends.tsx',
+      'app/(people)/group/[id]/edit.tsx',
+      'app/(people)/group/[id]/members.tsx',
       'app/(tabs)/groups.tsx',
-      'app/friends.tsx',
-      'app/group/[id]/edit.tsx',
-      'app/group/[id]/members.tsx',
     ]);
   });
 });
 
 describe('every removal is a destructive confirm, never silent', () => {
   it('deletePerson (friends.tsx) and removeMemberFromGroup (members.tsx) both confirm destructively', () => {
-    const friends = readFileSync(join(ROOT, 'app', 'friends.tsx'), 'utf8');
-    const members = readFileSync(join(ROOT, 'app', 'group', '[id]', 'members.tsx'), 'utf8');
+    const friends = readFileSync(join(ROOT, 'app', '(people)', 'friends.tsx'), 'utf8');
+    const members = readFileSync(join(ROOT, 'app', '(people)', 'group', '[id]', 'members.tsx'), 'utf8');
     expect(friends).toMatch(/style: 'destructive'/);
     expect(members).toMatch(/style: 'destructive'/);
     // Deliberately NOT asserted: that the two confirms share wording. They

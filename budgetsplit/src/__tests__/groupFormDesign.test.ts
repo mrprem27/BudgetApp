@@ -57,7 +57,7 @@ describe('a new friend can be added without leaving the sheet', () => {
   it('both New Group and Edit Group wire it to a PersonNameSheet', () => {
     for (const f of [
       join(ROOT, 'app', '(tabs)', 'groups.tsx'),
-      join(ROOT, 'app', 'group', '[id]', 'edit.tsx'),
+      join(ROOT, 'app', '(people)', 'group', '[id]', 'edit.tsx'),
     ]) {
       const callerSrc = readFileSync(f, 'utf8');
       expect(callerSrc).toMatch(/onRequestNewPerson=\{/);

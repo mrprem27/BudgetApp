@@ -142,7 +142,7 @@ rather than by being fixed, and that is worth exactly one read to avoid rediscov
 
 Nothing below has ever rendered on a device. **Load demo data first**
 (Settings → tap the version row 7× → Load demo data) — an empty app hides most
-layout problems. Note the "tap 7×" hint is now `__DEV__`-only, and `app/storage.tsx`
+layout problems. Note the "tap 7×" hint is now `__DEV__`-only, and `app/(system)/storage.tsx`
 is reachable only in a dev build.
 
 Run it in two once-per-session passes as well: **Reduce Motion on**, and
@@ -253,7 +253,7 @@ Needs the rebuild: npx expo prebuild --clean && npx expo run:ios
       - [ ] First section isn't double-spaced from the profile card; none is crushed
       - [ ] Version row shows NO “tap 7×” hint — that's dev-only now
 
-- [ ] **S-36 Account** — `app/settings/account.tsx`  
+- [ ] **S-36 Account** — `app/(system)/settings/account.tsx`  
       Open: Settings → Account  
       *Changed:* Entire screen is new
       - [ ] Signed out: the card reads as an invitation, not a warning
@@ -262,7 +262,7 @@ Needs the rebuild: npx expo prebuild --clean && npx expo run:ios
       - [ ] Signed in: avatar, name, email and device line read as one identity block
       - [ ] Sign out looks destructive without shouting
 
-- [ ] **S-38 Linked people** — `app/settings/linked.tsx`  
+- [ ] **S-38 Linked people** — `app/(system)/settings/linked.tsx`  
       Open: Settings → Account → Linked people  
       *Changed:* Entire screen is new
       - [ ] Empty state explains what linking is FOR, not just that there's nothing
@@ -271,27 +271,27 @@ Needs the rebuild: npx expo prebuild --clean && npx expo run:ios
       - [ ] “Link” / “Not them” read as a real decision, not a confirm dialog
       - [ ] The share-my-number explanation is legible and doesn't wrap oddly
 
-- [ ] **S-39 Invite landing** — `app/link.tsx`  
+- [ ] **S-39 Invite landing** — `app/(people)/link.tsx`  
       Open: Tap an invite link  
       *Changed:* New
       - [ ] “Asked to link” reads as success, not as an error or a hang
       - [ ] Signed-out path offers sign-in instead of dead-ending
 
-- [ ] **S-37 Sign-in callback** — `app/auth.tsx`  
+- [ ] **S-37 Sign-in callback** — `app/(system)/auth.tsx`  
       Open: Tap the link in the sign-in email  
       *Changed:* New — this is the screen that showed “unmatched route” before the rebuild
       - [ ] The spinner is brief and doesn't flash
       - [ ] Lands on Account, signed in, with no visible double-navigation
       - [ ] An expired link explains what to do next
 
-- [ ] **S-34 Backup & restore** — `app/settings/backup.tsx`  
+- [ ] **S-34 Backup & restore** — `app/(system)/settings/backup.tsx`  
       Open: Settings → Backup & restore  
       *Changed:* server backup removed; the explainer copy; restore refused while signed in
       - [ ] Explainer copy changes when signed in, and reads true
       - [ ] Signed in, Restore from backup says "Sign out first" and opens Account
       - [ ] The red warnings still read as the last word on the screen
 
-- [ ] **S-26 People** — `app/friends.tsx`  
+- [ ] **S-26 People** — `app/(people)/friends.tsx`  
       Open: Settings → People  
       *Changed:* Phone field added to the rename sheet
       - [ ] Three fields (name, UPI ID, phone) don't push Save off-screen with the keyboard up
@@ -307,14 +307,14 @@ Needs the rebuild: npx expo prebuild --clean && npx expo run:ios
       - [ ] The section header reads as a header, not another goal card
       - [ ] The hint under each title explains the tag without being a paragraph
 
-- [ ] **S-17 Goal detail** — `app/savings/[id].tsx`  
+- [ ] **S-17 Goal detail** — `app/(money)/savings/[id].tsx`  
       Open: Plan → any goal  
       *Changed:* Priority picker in the Adjust sheet
       - [ ] The Adjust sheet's priority picker reads as “pick exactly one”
       - [ ] Changing the tag moves the goal to the right section on the way back
       - [ ] The card isn't busier than before
 
-- [ ] **S-33 Afford check** — `app/afford.tsx`  
+- [ ] **S-33 Afford check** — `app/(money)/afford.tsx`  
       Open: Home → Can I afford this  
       *Changed:* Frequency chips, owed-to-you row, real upcoming bills
       - [ ] “How often?” chips read as one-of-four, with Once clearly the default
@@ -322,7 +322,7 @@ Needs the rebuild: npx expo prebuild --clean && npx expo run:ios
       - [ ] “Owed to you (not counted above)” is clearly excluded, not another balance
       - [ ] The verdict is still the hero — the new rows didn't demote it
 
-- [ ] **S-19 Review** — `app/review.tsx`  
+- [ ] **S-19 Review** — `app/(ledger)/review.tsx`  
       Open: Home → inbox badge → Review  
       *Changed:* Banner badge fix. Never device-tested at all
       - [ ] Saved-view banner shows the count AND payer even with a long view name
@@ -347,25 +347,25 @@ Needs the rebuild: npx expo prebuild --clean && npx expo run:ios
             is no "Coming up" card on Home to check any more — `DQ-92`)
       - [ ] The last card clears the FAB and the tab bar
 
-- [ ] **S-09 Group detail** — `app/group/[id].tsx`  
+- [ ] **S-09 Group detail** — `app/(people)/group/[id].tsx`  
       Open: Groups → any group
       - [ ] Tabs (Expenses / Budget / Members) don't truncate
       - [ ] The balance card says who owes whom in words, not just numbers
       - [ ] A settled group shows the check-circle state, not blankness
 
-- [ ] **S-11 Members & settle** — `app/group/[id]/members.tsx`  
+- [ ] **S-11 Members & settle** — `app/(people)/group/[id]/members.tsx`  
       Open: Group → Members
       - [ ] Each balance is readable at a glance and correctly signed
       - [ ] Settle states amount and direction before you commit
       - [ ] Swipe-remove blocked with a reason where a balance exists
 
-- [ ] **S-10 Budgets (mine + group)** — `app/budget.tsx · group/[id]/budget.tsx`  
+- [ ] **S-10 Budgets (mine + group)** — `app/(money)/budget.tsx · group/[id]/budget.tsx`  
       Open: Settings → My Budget; Group → Budget
       - [ ] Over / near / under differ without relying on colour alone
       - [ ] The group editor says “my share” where that's what it means
       - [ ] Long category names don't truncate the amount beside them
 
-- [ ] **S-14 Personal** — `app/personal.tsx`  
+- [ ] **S-14 Personal** — `app/(people)/personal.tsx`  
       Open: Home → Personal
       - [ ] Section headers space the blocks; rows inside a card stay contiguous
       - [ ] Empty state has all four parts
@@ -377,7 +377,7 @@ Needs the rebuild: npx expo prebuild --clean && npx expo run:ios
       - [ ] “Must equal total ₹X” is impossible to miss when payers don't balance
       - [ ] A failed scan doesn't strand you
 
-- [ ] **S-15 Transaction detail** — `app/txn/[id].tsx`  
+- [ ] **S-15 Transaction detail** — `app/(ledger)/txn/[id].tsx`  
       Open: Any transaction
       - [ ] Amount is the hero; shares and payments read as supporting detail
       - [ ] Receipt thumbnail opens and closes cleanly
@@ -385,18 +385,18 @@ Needs the rebuild: npx expo prebuild --clean && npx expo run:ios
 
 #### Block C — Analytics and data-in (dense — where truncation hides)
 
-- [ ] **S-20 Reports** — `app/reports.tsx`  
+- [ ] **S-20 Reports** — `app/(money)/reports.tsx`  
       Open: Settings → Reports & export
       - [ ] Donut legend labels don't truncate; slices are distinguishable
       - [ ] Month selector can't go past the current month
       - [ ] “Top categories” and “Biggest expense” agree with the donut
 
-- [ ] **S-21 Report transactions** — `app/report-transactions.tsx`  
+- [ ] **S-21 Report transactions** — `app/(money)/report-transactions.tsx`  
       Open: Reports → tap a donut slice
       - [ ] The filter says what it filters, and “All” really includes transfers
       - [ ] No single “total” spanning income, expense and transfer
 
-- [ ] **S-22 Insights** — `app/insights.tsx`  
+- [ ] **S-22 Insights** — `app/(money)/insights.tsx`  
       Open: Home → Insights
       - [ ] X-axis day labels are whole numbers, not “1…” “2…”
       - [ ] Forecast headline and chart tell the same story
@@ -405,22 +405,22 @@ Needs the rebuild: npx expo prebuild --clean && npx expo run:ios
       - [ ] Nothing is stated twice — no overrun in both a note and a row
       - [ ] Sections open and close, and a closed one still says how much is in it
 
-- [ ] **S-16 Category detail** — `app/category/[name].tsx`  
+- [ ] **S-16 Category detail** — `app/(money)/category/[name].tsx`  
       Open: Reports or Home → a category
       - [ ] Skeleton appears while loading, not a blank screen
       - [ ] No dead space under the header
 
-- [ ] **S-23 Search** — `app/search.tsx`  
+- [ ] **S-23 Search** — `app/(ledger)/search.tsx`  
       Open: Home → search
       - [ ] The chip row's edge fade reads as “more to scroll”
       - [ ] Empty copy switches between “Search your transactions” and “No matches”
 
-- [ ] **S-18 Import** — `app/import.tsx`  
+- [ ] **S-18 Import** — `app/(ledger)/import.tsx`  
       Open: Settings → Import transactions
       - [ ] Gibberish → “No transactions found” is helpful, not a dead end
       - [ ] A scanned PDF explains the 0-characters case in plain words
 
-- [ ] **S-28 Audit log** — `app/history.tsx`  
+- [ ] **S-28 Audit log** — `app/(money)/history.tsx`  
       Open: Settings → Audit log
       - [ ] Dots and EDIT/DEL badges are legible at row size
       - [ ] “Load older” doesn't jump the scroll position
@@ -432,36 +432,36 @@ Needs the rebuild: npx expo prebuild --clean && npx expo run:ios
       - [ ] “No groups yet” and “No archived groups” aren't equal-weight empties
       - [ ] Group cards clear the FAB
 
-- [ ] **S-25 Categories** — `app/categories.tsx`  
+- [ ] **S-25 Categories** — `app/(money)/categories.tsx`  
       Open: Settings → Categories
       - [ ] Kind tabs read as one-of-three
       - [ ] The Uncategorized section explains what “adopt” does
 
-- [ ] **S-24 Feature management** — `app/features.tsx`  
+- [ ] **S-24 Feature management** — `app/(system)/features.tsx`  
       Open: Settings → Feature management
       - [ ] “Always on” pillars visibly differ from switchable modules
       - [ ] Turning splitting off names how many balances would disappear
       - [ ] Cloud Receipt Scanning row isn't dimmed when off
 
-- [ ] **S-31 Notifications** — `app/settings/notifications.tsx`  
+- [ ] **S-31 Notifications** — `app/(system)/settings/notifications.tsx`  
       Open: Settings → Notifications
       - [ ] Denied-permission banner offers Open Settings
       - [ ] Test notification confirms it fired
 
-- [ ] **S-35 Voice entry** — `app/settings/voice.tsx`  
+- [ ] **S-35 Voice entry** — `app/(system)/settings/voice.tsx`  
       Open: Settings → Voice entry  
       *Changed:* Privacy copy no longer absolute
       - [ ] Setup steps are followable without prior context
       - [ ] The privacy line reads honestly — it changed today
 
-- [ ] **S-27a Storage** — `app/settings/storage.tsx`  
+- [ ] **S-27a Storage** — `app/(system)/settings/storage.tsx`  
       Open: Settings → Storage  
       *Changed:* pdf.js row removed
       - [ ] Free space is the hero; the breakdown supports it
       - [ ] The pdf.js row is GONE — it's bundled now
       - [ ] Both reclaim actions say what they will and won't delete
 
-- [ ] **S-30 Upcoming & recurring** — `app/upcoming.tsx · plan/recurring.tsx · recurring/[id].tsx`  
+- [ ] **S-30 Upcoming & recurring** — `app/(money)/upcoming.tsx · plan/recurring.tsx · recurring/[id].tsx`  
       Open: Home → the bell (Upcoming); Plan → Recurring
       - [ ] Next-occurrence dates read unambiguously
       - [ ] Skip / Pause / Stop are distinguishable and look reversible
@@ -472,18 +472,18 @@ Needs the rebuild: npx expo prebuild --clean && npx expo run:ios
             the same figure Plan shows
       - [ ] A rule with a note shows the note ("Netflix"), not its category
 
-- [ ] **S-13 Edit group** — `app/group/[id]/edit.tsx`  
+- [ ] **S-13 Edit group** — `app/(people)/group/[id]/edit.tsx`  
       Open: Group → ⋯ → Edit
       - [ ] Icon and colour pickers show the current selection clearly
       - [ ] Archive vs delete differ in weight
 
-- [ ] **S-29 Help** — `app/help.tsx`  
+- [ ] **S-29 Help** — `app/(system)/help.tsx`  
       Open: Settings → Help & Feedback  
       *Changed:* Privacy copy
       - [ ] Accordions open smoothly; copy matches what the app now does
       - [ ] “Offline by default” reads true — it changed today
 
-- [ ] **S-27 Storage (dev)** — `app/storage.tsx`  
+- [ ] **S-27 Storage (dev)** — `app/(system)/storage.tsx`  
       Open: Settings → version ×7  
       *Changed:* Gated to __DEV__
       - [ ] Reachable ONLY in a dev build

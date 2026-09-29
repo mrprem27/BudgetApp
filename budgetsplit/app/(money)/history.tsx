@@ -1,0 +1,154 @@
+import React, { useState, useMemo, useCallback } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useScreenData } from '../../src/hooks/useScreenData';
+import { Feather } from '@expo/vector-icons';
+import { isSameDay } from 'date-fns';
+import { shortDate, timeOfDay } from '../../src/lib/dateFormat';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { colors, type, space, radius, layout, shadow } from '../../src/theme';
+import { EmptyState } from '../../src/components/ui/EmptyState';
+import { ErrorState } from '../../src/components/ui/ErrorState';
+import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
+import { AppRefreshControl } from '../../src/components/ui/AppRefreshControl';
+import { formatCompact } from '../../src/lib/money';
+import type { AuditAction } from '../../src/constants/enums';
+import { loadHistory, historySections, auditEntryView, type HistorySection } from '../../src/lib/historyData';
+
+const PAGE_SIZE = 30;
+
+const DOT_COLOR: Record<AuditAction, string> = {
+  created: colors.accent,
+  updated: colors.healthAmber,
+  deleted: colors.expense,
+  archived: colors.textMuted,
+  settled: colors.settle,
+  paused:  colors.healthAmber,
+  resumed: colors.income,
+  ended:   colors.textMuted,
+};
+
+const BADGE_LABEL: Record<string, string> = {
+  updated:  'EDIT',
+  deleted:  'DEL',
+  archived: 'ARCH',
+};
+
+/** One date-grouped card. Memoized so off-screen sections don't re-render (and the
+ *  per-entry date formatting only runs when the section is actually rendered). */
+const SectionCard = React.memo(function SectionCard({ section }: { section: HistorySection }) {
+  return (
+    <View>
+      <Text style={styles.sectionLabel}>{section.title}</Text>
+      <View style={styles.card}>
+        {section.data.map((item, i) => {
+          const dotColor = DOT_COLOR[item.action] ?? colors.accent;
+          const { label, sign, tone } = auditEntryView(item);
+          const badge = BADGE_LABEL[item.action];
+          const itemDate = new Date(item.created_at);
+          const dateStr = isFinite(itemDate.getTime())
+            ? (isSameDay(itemDate, new Date()) ? `Today ${timeOfDay(itemDate)}` : `${shortDate(itemDate)} · ${timeOfDay(itemDate)}`)
+            : '';
+          const amtColor = tone === 'in' ? colors.income : tone === 'out' ? colors.expense : colors.textSecondary;
+
+          return (
+            <View
+              key={item.id}
+              style={[styles.entry, i < section.data.length - 1 && styles.entryBorder]}
+            >
+              <View style={[styles.entryDot, { backgroundColor: dotColor }]} />
+              <View style={styles.entryBody}>
+                <Text style={styles.entryLabel}>{label}</Text>
+                <Text style={styles.entrySummary} numberOfLines={2}>{item.summary}</Text>
+                {dateStr ? <Text style={styles.entryTime}>· {item.actorName ?? 'you'} · {dateStr}</Text> : null}
+              </View>
+              {badge ? (
+                <View style={[styles.actionBadge, { backgroundColor: badge === 'DEL' ? colors.expenseTint : colors.amberTint }]}>
+                  <Text style={[styles.actionBadgeText, { color: badge === 'DEL' ? colors.expense : colors.healthAmber }]}>{badge}</Text>
+                </View>
+              ) : item.amount != null ? (
+                <Text style={[styles.entryAmt, { color: amtColor }]}>
+                  {sign}{formatCompact(item.amount)}
+                </Text>
+              ) : null}
+            </View>
+          );
+        })}
+      </View>
+    </View>
+  );
+});
+
+export default function HistoryScreen() {
+  const { groupId } = useLocalSearchParams<{ groupId?: string }>();
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const [pageLimit, setPageLimit] = useState(PAGE_SIZE);
+  const { data, loading, error: loadError, refreshing, onRefresh, reload } = useScreenData(
+    (db) => loadHistory(db, groupId || undefined),
+    [groupId],
+  );
+  const entries = data ?? [];
+  const sections = useMemo(() => historySections(entries, pageLimit), [entries, pageLimit]);
+
+  const hasMore = entries.length > pageLimit;
+
+  const renderSection = useCallback(
+    ({ item }: { item: HistorySection }) => <SectionCard section={item} />,
+    [],
+  );
+
+  return (
+    <View style={styles.container}>
+      <ScreenHeader title="Audit log" onBack={() => router.back()} />
+
+      {loadError ? (
+        <ErrorState onRetry={reload} />
+      ) : (
+        <FlatList
+          data={sections}
+          keyExtractor={(s) => s.title}
+          renderItem={renderSection}
+          contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + space.xl }]}
+          initialNumToRender={8}
+          maxToRenderPerBatch={8}
+          windowSize={9}
+          refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          ListHeaderComponent={<Text style={styles.subtitle}>Every change made to your data, in order.</Text>}
+          ListEmptyComponent={
+            loading ? null : (
+              <EmptyState icon="clock" title="Nothing logged yet" body="Every change you make — adding, editing, deleting, settling — is recorded here." />
+            )
+          }
+          ListFooterComponent={
+            hasMore ? (
+              <TouchableOpacity style={styles.loadMore} onPress={() => setPageLimit(p => p + PAGE_SIZE)} accessibilityRole="button">
+                <Text style={styles.loadMoreText}>Load older entries</Text>
+              </TouchableOpacity>
+            ) : null
+          }
+        />
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.bg },
+  scroll: { paddingHorizontal: layout.screenPaddingH, paddingTop: space.xs },
+  subtitle: { fontSize: 13, color: colors.textMuted, marginBottom: space.md, lineHeight: 18 },
+  sectionLabel: { fontSize: 10, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, fontFamily: 'Inter_600SemiBold', marginBottom: space.sm, marginTop: space.xs },
+  card: { backgroundColor: colors.bgCard, borderRadius: 14, borderWidth: 1, borderColor: colors.border, marginBottom: 10, overflow: 'hidden', ...shadow.sm },
+  entry: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingHorizontal: 14, paddingVertical: 12 },
+  entryBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
+  entryDot: { width: 8, height: 8, borderRadius: 4, flexShrink: 0, marginTop: 5 },
+  entryBody: { flex: 1 },
+  entryLabel: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: colors.textPrimary, marginBottom: 2 },
+  entrySummary: { fontSize: 11, color: colors.textMuted, marginBottom: 2, lineHeight: 15 },
+  entryTime: { fontSize: 10, color: colors.textMuted },
+  entryAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 12, flexShrink: 0 },
+  actionBadge: { borderRadius: 4, paddingHorizontal: 7, paddingVertical: 2, flexShrink: 0, alignSelf: 'flex-start', marginTop: 2 },
+  actionBadgeText: { fontSize: 10, fontFamily: 'Inter_600SemiBold' },
+  loadMore: { alignItems: 'center', paddingVertical: space.md },
+  loadMoreText: { fontSize: 12, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
+});

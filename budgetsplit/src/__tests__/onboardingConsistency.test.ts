@@ -316,7 +316,7 @@ describe('welcome forks before the questionnaire starts', () => {
   it('sign-in shares one hook with the Account screen, not a second form', () => {
     expect(src).toMatch(/<SignInStage/);
     const signInStage = read(join(ROOT, 'src', 'components', 'system', 'onboarding', 'SignInStage.tsx'));
-    const accountScreen = read(join(ROOT, 'app', 'settings', 'account.tsx'));
+    const accountScreen = read(join(ROOT, 'app', '(system)', 'settings', 'account.tsx'));
     expect(signInStage).toMatch(/useEmailSignIn/);
     expect(accountScreen).toMatch(/useEmailSignIn/);
   });

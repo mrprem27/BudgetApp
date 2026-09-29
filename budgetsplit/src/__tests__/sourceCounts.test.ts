@@ -89,7 +89,7 @@ describe('screen size ceilings', () => {
     // fit under the old ceiling. The rule working, a third time.
     //
     // Lower it again when you extract more; never raise it.
-    'app/review.tsx': 620,
+    'app/(ledger)/review.tsx': 620,
   };
 
   for (const [rel, ceiling] of Object.entries(CEILINGS)) {

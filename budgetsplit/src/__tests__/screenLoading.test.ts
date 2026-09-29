@@ -77,6 +77,6 @@ describe('only the screen that relabels its figures reacts to `stale`', () => {
     // Reports puts a month name above every figure, so showing the previous
     // month's numbers under it is a lie rather than a lag. Everywhere else,
     // content a beat behind beats no content.
-    expect(users).toEqual(['reports.tsx']);
+    expect(users).toEqual(['(money)/reports.tsx']);
   });
 });

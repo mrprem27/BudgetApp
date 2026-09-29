@@ -111,7 +111,7 @@ describe('no screen writes its own version', () => {
    * came to disagree about what trust actually does.
    */
   it('keeps the transfer carve-out in the long-form explanation too', () => {
-    const help = readFileSync(join(__dirname, '..', '..', 'app', 'help.tsx'), 'utf8');
+    const help = readFileSync(join(__dirname, '..', '..', 'app', '(system)', 'help.tsx'), 'utf8');
     const para = /trusted[^']*'/.exec(help.slice(help.indexOf('Nothing lands without your say-so')))?.[0] ?? '';
     expect(para).toMatch(/transfer always waits/i);
   });

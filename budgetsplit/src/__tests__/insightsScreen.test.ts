@@ -13,7 +13,7 @@ import { join } from 'path';
  * Rendering isn't reachable here (node environment, no React renderer), so this
  * reads the real source — the same mechanism as `screenLoading` and `touchTargets`.
  */
-const SCREEN = join(__dirname, '..', '..', 'app', 'insights.tsx');
+const SCREEN = join(__dirname, '..', '..', 'app', '(money)', 'insights.tsx');
 const src = readFileSync(SCREEN, 'utf8');
 /** Comments stripped: prose describing the old screen is not the old screen. */
 const code = src.replace(/\{?\/\*[\s\S]*?\*\/\}?/g, '').replace(/^\s*\/\/.*$/gm, '');

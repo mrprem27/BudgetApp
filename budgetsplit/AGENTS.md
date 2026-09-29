@@ -748,7 +748,7 @@ and no in-memory data mirror. Layering:
     [groupId],
   );
   ```
-  Reference implementations: [app/friends.tsx](app/friends.tsx) (simple), [app/personal.tsx](app/personal.tsx) (multi-value).
+  Reference implementations: [app/(people)/friends.tsx](app/(people)/friends.tsx) (simple), [app/(people)/personal.tsx](app/(people)/personal.tsx) (multi-value).
 - **After a write, call `refresh()`** from `useDataRefresh()` (`components/system/DataRefreshProvider`).
   That re-runs every mounted screen's `useScreenData` *and* re-hydrates the store — never manually
   poke other screens. (A screen-local re-fetch is `reload()` from the hook.)
@@ -802,8 +802,13 @@ BudgetApp/
 │   │   ├── _layout.tsx          # Boot: DB init, providers, gates, Stack
 │   │   ├── (tabs)/              # Custom 5-slot tab bar over 4 tab routes
 │   │   ├── add/                 # quick.tsx · itemized.tsx — the only fullScreenModal routes
-│   │   ├── group/[id].tsx       # Group hub + [id]/{budget,edit,members}
-│   │   └── …                    # 46 routes in total
+│   │   ├── (money)/             # reports · insights · budget · afford · categories · assets · history ·
+│   │   │                        #   upcoming · plan/ · savings/ · recurring/ · category/ · asset/
+│   │   ├── (people)/            # friends · personal · trust · approvals · link · person/ · group/[id]
+│   │   ├── (ledger)/            # review · import · search · txn/[id]
+│   │   └── (system)/            # help · features · storage · auth · dev/ · settings/
+│   │                            # 46 routes in total. `(group)` folders organise files and are
+│   │                            # NOT part of the URL — moving a file between them changes no route.
 │   ├── src/
 │   │   ├── components/
 │   │   │   ├── ui/              # Generic primitives, domain-free

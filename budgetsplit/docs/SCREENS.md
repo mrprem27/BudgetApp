@@ -219,64 +219,64 @@ Absorbed from `AUDIT.md` §2 so the IDs cited elsewhere resolve here. 46 route f
 
 | ID | Screen | File | Purpose |
 |---|---|---|---|
-| S-09 | **Group detail** | `app/group/[id].tsx` | Group hub; tabs differ by kind. `/group/{personalId}` `router.replace`s to `/personal`, so old deep links still resolve. |
-| S-10 | **My Budget** | `app/budget.tsx` | The **global** budget: your limits across personal spending and your share of every group. Stored as the Personal group's `person_id IS NULL` lines. No level control — there are no levels here. Takes **no group id**, which is what removed the `?? groups[0]` fallbacks that let a personal-sounding entry point open a *shared* group's editor. |
-| S-10b | **Group budget editor** | `app/group/[id]/budget.tsx` | A group's **default** (admin-only, what every member inherits) and **Mine** (your private per-category override). Switching to Mine asks first (`OwnBudgetSheet`) and only the categories you fill in become yours; blanks keep following the group. A personal group forwards to `/budget`. Both routes render `components/finance/budget/BudgetEditor`. |
-| S-11 | **Members** | `app/group/[id]/members.tsx` | Add/remove/rename members, avatars, per-member net. Swipe-remove with Undo. |
-| S-13 | **Edit group** | `app/group/[id]/edit.tsx` | Rename / re-icon / re-colour / default split + membership diff; archive and hard-delete. Shares `GroupForm` with the create sheet. |
-| S-14 | **Personal** | `app/personal.tsx` | The unified personal screen: Activity / Budget, filterable across personal-vs-group activity, CSV export. The **only** personal screen — S-09's `is_personal` branch was retired. A third *Recurring* tab was removed: it listed every rule in every shared group, so it was neither personal nor different from S-32. |
+| S-09 | **Group detail** | `app/(people)/group/[id].tsx` | Group hub; tabs differ by kind. `/group/{personalId}` `router.replace`s to `/personal`, so old deep links still resolve. |
+| S-10 | **My Budget** | `app/(money)/budget.tsx` | The **global** budget: your limits across personal spending and your share of every group. Stored as the Personal group's `person_id IS NULL` lines. No level control — there are no levels here. Takes **no group id**, which is what removed the `?? groups[0]` fallbacks that let a personal-sounding entry point open a *shared* group's editor. |
+| S-10b | **Group budget editor** | `app/(people)/group/[id]/budget.tsx` | A group's **default** (admin-only, what every member inherits) and **Mine** (your private per-category override). Switching to Mine asks first (`OwnBudgetSheet`) and only the categories you fill in become yours; blanks keep following the group. A personal group forwards to `/budget`. Both routes render `components/finance/budget/BudgetEditor`. |
+| S-11 | **Members** | `app/(people)/group/[id]/members.tsx` | Add/remove/rename members, avatars, per-member net. Swipe-remove with Undo. |
+| S-13 | **Edit group** | `app/(people)/group/[id]/edit.tsx` | Rename / re-icon / re-colour / default split + membership diff; archive and hard-delete. Shares `GroupForm` with the create sheet. |
+| S-14 | **Personal** | `app/(people)/personal.tsx` | The unified personal screen: Activity / Budget, filterable across personal-vs-group activity, CSV export. The **only** personal screen — S-09's `is_personal` branch was retired. A third *Recurring* tab was removed: it listed every rule in every shared group, so it was neither personal nor different from S-32. |
 
 ### 3.5 Detail screens
 
 | ID | Screen | File | Purpose |
 |---|---|---|---|
-| S-15 | **Transaction detail** | `app/txn/[id].tsx` | Hero amount, kind badge, per-person split, read-only line items, receipt attachment + full-screen viewer, audit history, Delete + Edit. |
-| S-16 | **Category detail** | `app/category/[name].tsx` | One category across day/month/year: my-share totals, budget bar, transactions, related recurring rules and goals. Fetches **the whole year across all categories** and filters client-side so period tabs switch without a re-query — correct, but the heaviest single read in the app (DEBT-06). |
-| S-17 | **Goal detail** | `app/savings/[id].tsx` | Ring progress, add/withdraw, adjust target/allocation/frequency/deadline, lock, delete, contribution history, completion celebration. |
+| S-15 | **Transaction detail** | `app/(ledger)/txn/[id].tsx` | Hero amount, kind badge, per-person split, read-only line items, receipt attachment + full-screen viewer, audit history, Delete + Edit. |
+| S-16 | **Category detail** | `app/(money)/category/[name].tsx` | One category across day/month/year: my-share totals, budget bar, transactions, related recurring rules and goals. Fetches **the whole year across all categories** and filters client-side so period tabs switch without a re-query — correct, but the heaviest single read in the app (DEBT-06). |
+| S-17 | **Goal detail** | `app/(money)/savings/[id].tsx` | Ring progress, add/withdraw, adjust target/allocation/frequency/deadline, lock, delete, contribution history, completion celebration. |
 
 ### 3.6 Import / review
 
 | ID | Screen | File | Purpose |
 |---|---|---|---|
-| S-18 | **Import** | `app/import.tsx` | Pick a PDF / xlsx / CSV / text file *or* paste text; format auto-detected; rows land in `pending_txn`. See §10.1. |
-| S-19 | **Review** | `app/review.tsx` (**largest screen in the repo**) | The staging inbox — every pending row editable in place, draft auto-save, bulk actions, focus workspace, filters, saved views. See §10.2. |
-| S-40 | **Waiting for you** | `app/approvals.tsx` | Entries **other people** wrote that are waiting on your approval. Grouped by author, with approve / not-mine per entry and "Trust <name>" per person. Unreachable today — nothing can author a peer entry until sync exists. See §10.3. |
+| S-18 | **Import** | `app/(ledger)/import.tsx` | Pick a PDF / xlsx / CSV / text file *or* paste text; format auto-detected; rows land in `pending_txn`. See §10.1. |
+| S-19 | **Review** | `app/(ledger)/review.tsx` (**largest screen in the repo**) | The staging inbox — every pending row editable in place, draft auto-save, bulk actions, focus workspace, filters, saved views. See §10.2. |
+| S-40 | **Waiting for you** | `app/(people)/approvals.tsx` | Entries **other people** wrote that are waiting on your approval. Grouped by author, with approve / not-mine per entry and "Trust <name>" per person. Unreachable today — nothing can author a peer entry until sync exists. See §10.3. |
 
 ### 3.7 Analytics
 
 | ID | Screen | File | Purpose |
 |---|---|---|---|
-| S-20 | **Reports** | `app/reports.tsx` | Factual monthly history: donut, trend bars, per-group budget summaries, year stats, CSV + PDF export. Month selector cannot advance past the current month. |
-| S-21 | **Report transactions** | `app/report-transactions.tsx` | Month-scoped transaction list with category / type / group / sort filters — the drill-down from a Reports category. |
-| S-22 | **Insights** | `app/insights.tsx` | The single narrative-insight home: an always-present headline (spend vs budget, pace, month-end verdict) over collapsible sections — Needs attention · Month-end forecast · Changed vs last month · What if I cut back? · Ways to save. |
-| S-23 | **Search** | `app/search.tsx` | Free-text search over 3 years, month-sectioned, 6 rows/section with a "more" expander. 150 ms debounce. Deliberately **no** pull-to-refresh. |
+| S-20 | **Reports** | `app/(money)/reports.tsx` | Factual monthly history: donut, trend bars, per-group budget summaries, year stats, CSV + PDF export. Month selector cannot advance past the current month. |
+| S-21 | **Report transactions** | `app/(money)/report-transactions.tsx` | Month-scoped transaction list with category / type / group / sort filters — the drill-down from a Reports category. |
+| S-22 | **Insights** | `app/(money)/insights.tsx` | The single narrative-insight home: an always-present headline (spend vs budget, pace, month-end verdict) over collapsible sections — Needs attention · Month-end forecast · Changed vs last month · What if I cut back? · Ways to save. |
+| S-23 | **Search** | `app/(ledger)/search.tsx` | Free-text search over 3 years, month-sectioned, 6 rows/section with a "more" expander. 150 ms debounce. Deliberately **no** pull-to-refresh. |
 
 ### 3.8 Settings sub-screens & utilities
 
 | ID | Screen | File | Purpose |
 |---|---|---|---|
-| S-24 | **Feature management** | `app/features.tsx` | Non-toggleable "Core" pillars + the switchable modules in sections. Every switch here changes something. Location tagging sits in this list but writes to `settings`, not the flag namespace — deliberately, because it must await an OS grant and refuse if denied (§17). |
-| S-25 | **Categories** | `app/categories.tsx` | Global category catalog (expense / income / transfer), sectioned. Create, rename, delete, and **adopt** an uncategorized name. Self-heals an empty catalog. |
-| S-45 | **Who can add to my ledger** | `app/trust.tsx` | The one place that answers it. Everyone who could write to your numbers, in three groups — **counts straight away**, **waits for you**, and **cannot reach you yet** (no linked account, so the setting is stored and inert; listing them as "waiting" would reassure in the wrong direction). A per-group exception is named on the row rather than hidden behind a tap. Tapping a row opens the same `TrustSheet` the person screen uses, so the two cannot drift. Carries the standing note that trusting somebody is not handing over the keys: even a trusted person is asked before anything claiming YOUR money moved. Reached from Settings → Security and from the `/approvals` empty state. |
-| S-46 | **One asset** | `app/asset/[id].tsx` | The movements behind an asset's balance — hero (icon, balance, kind, movement count) then date-sectioned `TxnCell`+`TransactionRow` rows, the same shape as every other ledger. The exit surface `OV-30` was missing: the register showed a balance and `deleteAsset`'s refusal check was the app's only other reader of `asset_id`, so the rows that built the figure were unreachable. Rows read as "Invested · Gold" because `lib/settlementView.ts` decides that once, and the asset name is passed in — no loader joins `asset`, so it otherwise survives only as a default note a user-written note erases. **No CTA on the empty state**: the register owns both halves of a movement and is one tap back, so a second door to a write this screen does not perform would be a duplicate. Reached from Plan → Assets. |
-| S-26 | **People / Friends** | `app/friends.tsx` | Name-only contacts, no accounts. Add, rename, avatar, per-person net, search. |
-| S-26a | **Person detail** | `app/person/[id].tsx` | Everything shared with one person, across every group: the net (with the per-group breakdown behind it, from `computeTransferScopes`), how often they settle up, and every transaction you are **both** on — payer or sharer, expenses, settlements and income alike. Settle from here. Reached from S-26 and from the Groups-tab balance chips; personal-group rows are excluded, since a personal settlement is deliberately one-sided. |
-| S-27 | **Storage (dev)** | `app/storage.tsx` | Hidden QA screen: attachment stats, clear attachments, **load demo data, erase all data**. Settings → version ×7. Kept separate from S-27a precisely so those two destructive actions are never one tap from Settings. |
-| SC-47 | **Money engine (dev)** | `app/dev/engine.tsx` | Old Safe-to-Spend beside the new engine's day-by-day projection (`EN2`, `SPEC-ENGINE.md`), one card per fixture persona plus this device's own ledger — matching figures read "Matches", a mid-horizon bill reads "Differs" with the day and amount named below it. Read-only. Reached from S-27's TESTING section. |
-| S-27a | **Storage** | `app/settings/storage.tsx` | User-facing: free space on the device (hero), what BudgetSplit uses broken out (receipts / cached exports / pdf.js reader / profile photos), and two safe reclaim actions — **Clear cached exports** and **Delete all receipt photos**. Nothing here can lose a transaction. Reached from Settings → Data & Help, and from the low-storage banner on Home. |
-| S-35 | **Voice entry** | `app/settings/voice.tsx` | Sets up hands-free capture: what to say, which words route to a split, and the one-time Siri-shortcut setup (one-tap iCloud install when `VOICE_SHORTCUT_URL` is set, otherwise the four manual Shortcuts actions). Creates the `voice-inbox` folder the shortcut writes into, and shows how many captures are waiting. Gated on `voiceEntry`. |
-| S-28 | **Audit log** | `app/history.tsx` | Paged (30/page) date-grouped log of created/updated/deleted/settled/paused/resumed/ended. `?groupId=` scopes it. |
-| S-29 | **Help** | `app/help.tsx` | Static accordion of help copy, ordered by screen flow — Getting Started → Your Home Screen → Groups → **Settling Up & Paying** → Budgets → Savings → Recurring → Reports → Categories → Privacy → Tips. No data access. |
-| S-30 | **Upcoming** | `app/upcoming.tsx` | Read-only "what's coming": bills due in 14 days + pending settle-ups involving me. Renamed from Reminders/`reminders.tsx` (2026-09-24, `SPEC-2026-09-FEEDBACK.md` §6) — its bills section now renders `ComingUpList`, the same component Plan uses, rather than its own hand-rolled row. |
-| S-31 | **Notifications** | `app/settings/notifications.tsx` | Reminder prefs (renewals / daily log / backup nudge), OS permission handling, send-a-test. See §18. |
-| S-32 | **Recurring (global)** | `app/plan/recurring.tsx` | All active recurring expense rules across groups, sorted by next occurrence, with a monthly-equivalent total. No per-row actions — the row taps through to S-35, where they live. |
-| S-41 | **Recurring rule** | `app/recurring/[id].tsx` | **One** rule: name (`note \|\| category`), cadence, **your share** (with the whole bill named under it when they differ), state, started/next dates, skipped-occurrence banner, and the actions as full rows — Edit · Skip the next one · Undo the next skip · Pause/Resume · Stop (shared `useRecurringActions`). Every recurring list in the app taps into this, and so does a `renew_*` reminder. Replaced `group/[id]/recurring.tsx`, which was the *group's* list rendered a second time and was the only place carrying the actions — so tapping a rule opened a list of rules. |
-| S-33 | **Afford check** | `app/afford.tsx` | Amount + optional category + optional necessity (*Need · Want · Can wait*) → Comfortable / Tight / No verdict with plain-English reasons, plus a **what this costs you** block (projected month-end, goal delay). Seven axes: cash, buffer, category budget, category norm, income share, month projection, typical-basket size. **Only cash produces a hard No**; necessity softens the buffer axis alone and never overrides it. The same `evaluateAfford` drives the one-line verdict in Add's `BudgetNudge`. |
-| S-34 | **Backup & restore** | `app/settings/backup.tsx` | Passphrase-encrypted whole-DB backup out to the share sheet — a file you keep, separate from the account; restore **replaces all data** and is refused while signed in. See §13.3. |
-| S-36 | **Account** | `app/settings/account.tsx` | Optional server account (`server/api`): sign in by email magic link — no password — see the profile the server holds, push this device's name/picture up, sign out, delete the account. Exists only in a build with `EXPO_PUBLIC_API_URL` set. Signing in joins the phone to the account's copy of everything (§13.4, §13.6). |
-| S-38 | **Linked people** | `app/settings/linked.tsx` | Who you're linked with, who is **waiting for your approval**, and per-person "show them my number". Invite by link or QR. No search, no directory — a link you generated is the only way in. Server-configured builds only. See §13.5. |
-| S-39 | **Invite landing** | `app/link.tsx` | Where a tapped invite link lands (`budgetsplit:///link?token=…`, bounced from the Worker's `/invite/open`). Claiming **asks**; it links nothing until the sender confirms. Deep-link target only. |
-| S-37 | **Sign-in callback** | `app/auth.tsx` | Where a tapped magic link lands (`budgetsplit:///auth?token=…`, redirected from the Worker's `/auth/open`). Spends the token once, then replaces itself with S-36. Not reachable from any button — a deep-link target only. |
+| S-24 | **Feature management** | `app/(system)/features.tsx` | Non-toggleable "Core" pillars + the switchable modules in sections. Every switch here changes something. Location tagging sits in this list but writes to `settings`, not the flag namespace — deliberately, because it must await an OS grant and refuse if denied (§17). |
+| S-25 | **Categories** | `app/(money)/categories.tsx` | Global category catalog (expense / income / transfer), sectioned. Create, rename, delete, and **adopt** an uncategorized name. Self-heals an empty catalog. |
+| S-45 | **Who can add to my ledger** | `app/(people)/trust.tsx` | The one place that answers it. Everyone who could write to your numbers, in three groups — **counts straight away**, **waits for you**, and **cannot reach you yet** (no linked account, so the setting is stored and inert; listing them as "waiting" would reassure in the wrong direction). A per-group exception is named on the row rather than hidden behind a tap. Tapping a row opens the same `TrustSheet` the person screen uses, so the two cannot drift. Carries the standing note that trusting somebody is not handing over the keys: even a trusted person is asked before anything claiming YOUR money moved. Reached from Settings → Security and from the `/approvals` empty state. |
+| S-46 | **One asset** | `app/(money)/asset/[id].tsx` | The movements behind an asset's balance — hero (icon, balance, kind, movement count) then date-sectioned `TxnCell`+`TransactionRow` rows, the same shape as every other ledger. The exit surface `OV-30` was missing: the register showed a balance and `deleteAsset`'s refusal check was the app's only other reader of `asset_id`, so the rows that built the figure were unreachable. Rows read as "Invested · Gold" because `lib/settlementView.ts` decides that once, and the asset name is passed in — no loader joins `asset`, so it otherwise survives only as a default note a user-written note erases. **No CTA on the empty state**: the register owns both halves of a movement and is one tap back, so a second door to a write this screen does not perform would be a duplicate. Reached from Plan → Assets. |
+| S-26 | **People / Friends** | `app/(people)/friends.tsx` | Name-only contacts, no accounts. Add, rename, avatar, per-person net, search. |
+| S-26a | **Person detail** | `app/(people)/person/[id].tsx` | Everything shared with one person, across every group: the net (with the per-group breakdown behind it, from `computeTransferScopes`), how often they settle up, and every transaction you are **both** on — payer or sharer, expenses, settlements and income alike. Settle from here. Reached from S-26 and from the Groups-tab balance chips; personal-group rows are excluded, since a personal settlement is deliberately one-sided. |
+| S-27 | **Storage (dev)** | `app/(system)/storage.tsx` | Hidden QA screen: attachment stats, clear attachments, **load demo data, erase all data**. Settings → version ×7. Kept separate from S-27a precisely so those two destructive actions are never one tap from Settings. |
+| SC-47 | **Money engine (dev)** | `app/(system)/dev/engine.tsx` | Old Safe-to-Spend beside the new engine's day-by-day projection (`EN2`, `SPEC-ENGINE.md`), one card per fixture persona plus this device's own ledger — matching figures read "Matches", a mid-horizon bill reads "Differs" with the day and amount named below it. Read-only. Reached from S-27's TESTING section. |
+| S-27a | **Storage** | `app/(system)/settings/storage.tsx` | User-facing: free space on the device (hero), what BudgetSplit uses broken out (receipts / cached exports / pdf.js reader / profile photos), and two safe reclaim actions — **Clear cached exports** and **Delete all receipt photos**. Nothing here can lose a transaction. Reached from Settings → Data & Help, and from the low-storage banner on Home. |
+| S-35 | **Voice entry** | `app/(system)/settings/voice.tsx` | Sets up hands-free capture: what to say, which words route to a split, and the one-time Siri-shortcut setup (one-tap iCloud install when `VOICE_SHORTCUT_URL` is set, otherwise the four manual Shortcuts actions). Creates the `voice-inbox` folder the shortcut writes into, and shows how many captures are waiting. Gated on `voiceEntry`. |
+| S-28 | **Audit log** | `app/(money)/history.tsx` | Paged (30/page) date-grouped log of created/updated/deleted/settled/paused/resumed/ended. `?groupId=` scopes it. |
+| S-29 | **Help** | `app/(system)/help.tsx` | Static accordion of help copy, ordered by screen flow — Getting Started → Your Home Screen → Groups → **Settling Up & Paying** → Budgets → Savings → Recurring → Reports → Categories → Privacy → Tips. No data access. |
+| S-30 | **Upcoming** | `app/(money)/upcoming.tsx` | Read-only "what's coming": bills due in 14 days + pending settle-ups involving me. Renamed from Reminders/`reminders.tsx` (2026-09-24, `SPEC-2026-09-FEEDBACK.md` §6) — its bills section now renders `ComingUpList`, the same component Plan uses, rather than its own hand-rolled row. |
+| S-31 | **Notifications** | `app/(system)/settings/notifications.tsx` | Reminder prefs (renewals / daily log / backup nudge), OS permission handling, send-a-test. See §18. |
+| S-32 | **Recurring (global)** | `app/(money)/plan/recurring.tsx` | All active recurring expense rules across groups, sorted by next occurrence, with a monthly-equivalent total. No per-row actions — the row taps through to S-35, where they live. |
+| S-41 | **Recurring rule** | `app/(money)/recurring/[id].tsx` | **One** rule: name (`note \|\| category`), cadence, **your share** (with the whole bill named under it when they differ), state, started/next dates, skipped-occurrence banner, and the actions as full rows — Edit · Skip the next one · Undo the next skip · Pause/Resume · Stop (shared `useRecurringActions`). Every recurring list in the app taps into this, and so does a `renew_*` reminder. Replaced `group/[id]/recurring.tsx`, which was the *group's* list rendered a second time and was the only place carrying the actions — so tapping a rule opened a list of rules. |
+| S-33 | **Afford check** | `app/(money)/afford.tsx` | Amount + optional category + optional necessity (*Need · Want · Can wait*) → Comfortable / Tight / No verdict with plain-English reasons, plus a **what this costs you** block (projected month-end, goal delay). Seven axes: cash, buffer, category budget, category norm, income share, month projection, typical-basket size. **Only cash produces a hard No**; necessity softens the buffer axis alone and never overrides it. The same `evaluateAfford` drives the one-line verdict in Add's `BudgetNudge`. |
+| S-34 | **Backup & restore** | `app/(system)/settings/backup.tsx` | Passphrase-encrypted whole-DB backup out to the share sheet — a file you keep, separate from the account; restore **replaces all data** and is refused while signed in. See §13.3. |
+| S-36 | **Account** | `app/(system)/settings/account.tsx` | Optional server account (`server/api`): sign in by email magic link — no password — see the profile the server holds, push this device's name/picture up, sign out, delete the account. Exists only in a build with `EXPO_PUBLIC_API_URL` set. Signing in joins the phone to the account's copy of everything (§13.4, §13.6). |
+| S-38 | **Linked people** | `app/(system)/settings/linked.tsx` | Who you're linked with, who is **waiting for your approval**, and per-person "show them my number". Invite by link or QR. No search, no directory — a link you generated is the only way in. Server-configured builds only. See §13.5. |
+| S-39 | **Invite landing** | `app/(people)/link.tsx` | Where a tapped invite link lands (`budgetsplit:///link?token=…`, bounced from the Worker's `/invite/open`). Claiming **asks**; it links nothing until the sender confirms. Deep-link target only. |
+| S-37 | **Sign-in callback** | `app/(system)/auth.tsx` | Where a tapped magic link lands (`budgetsplit:///auth?token=…`, redirected from the Worker's `/auth/open`). Spends the token once, then replaces itself with S-36. Not reachable from any button — a deep-link target only. |
 
 ### 3.9 Reachability
 
@@ -345,7 +345,7 @@ outside the loader: reads AsyncStorage `hide_amounts` (obfuscates the hero), `ap
    → `insertGroup` → reload → `/group/{newId}`. (2026-09-24, `SPEC-2026-09-FEEDBACK.md` §5 T14.)
 
 > **Personal card** (pinned first, "Everything involving you") → **`/personal`** (not
-> `/group/{id}`): the unified view (`app/personal.tsx`) — Owe/Lent/Net header + 🔘 tabs
+> `/group/{id}`): the unified view (`app/(people)/personal.tsx`) — Owe/Lent/Net header + 🔘 tabs
 > **Activity · Budget · Recurring**. Activity = every txn involving me (`getMyActivity`) with
 > 🔘 filters `Personal · Groups · All · {each group}`, my-share amounts, tap → source
 > `/txn/{id}`. Recurring = collapsible, grouped by group. Budget links to the personal budget
@@ -360,7 +360,7 @@ global net, all persons, friend balances via `simplify`.
 
 ## 6. Group detail & sub-screens
 
-### Group hub — `app/group/[id].tsx`
+### Group hub — `app/(people)/group/[id].tsx`
 **Reached from:** Groups list, Home group cards, Insights "See what to cut".
 **Tabs (local state, haptic on switch):** non-personal → **Expenses · Recurring · Budget ·
 Members**. A personal id never renders here — it `router.replace`s to `/personal`.
@@ -522,7 +522,7 @@ off** (`dimWhenOff: false`): dimming would read as "scanning is disabled", which
 7. **ComingUpList** "Upcoming this month".
 8. **plan/ForecastCard** — month-end projection (a distinct component from the Home `home/ForecastCard`).
 
-### Goal detail — `app/savings/[id].tsx`
+### Goal detail — `app/(money)/savings/[id].tsx`
 SVG progress ring; Saved/Remaining/Goal tiles; monthly-contribution card with nudge;
 overfunded banner; contribution history.
 - **States:** skeleton while loading · `EmptyState` "Goal not found" · `EmptyState` "No contributions yet" for an unfunded goal · error + retry · pull-to-refresh.
@@ -1119,7 +1119,7 @@ not a silent failure.
 The ingestion pipeline. Nothing an import produces touches balances, budgets or reports until
 a row is confirmed in Review — `pending_txn` is a genuine staging table.
 
-### 10.1 Import — `app/import.tsx`
+### 10.1 Import — `app/(ledger)/import.tsx`
 **States:** no loading/error/empty states — it's a form, and every failure is a specific `Alert`
 (see below). No pull-to-refresh.
 
@@ -1148,7 +1148,7 @@ Pay (`gpayParse.ts`), transaction-alert emails (`emailTxnParse.ts`), then generi
 | pdf.js / WebView threw | "PDF read failed" + the **real** underlying message, not a generic one. |
 | Picker or file read threw | "Could not read that file" + the accepted formats. |
 
-### 10.2 Review — `app/review.tsx`
+### 10.2 Review — `app/(ledger)/review.tsx`
 The staging inbox. One screen, no wizard: every pending row is fully editable in place, edits
 auto-save as drafts, and **only Confirm/Save commits**.
 
@@ -1224,7 +1224,7 @@ that person — the "someone else always pays for this group" case.
 
 ---
 
-### 10.3 Waiting for you — `app/approvals.tsx`
+### 10.3 Waiting for you — `app/(people)/approvals.tsx`
 
 **Not reachable today.** Nothing in the app can author an entry on your behalf —
 there is no peer write path — so this queue is always empty until sync ships. It
@@ -1265,7 +1265,7 @@ date, and a back-dated entry must not bury itself at the bottom of the queue.
 
 ## 11. Transaction & category detail
 
-### Transaction detail — `app/txn/[id].tsx`
+### Transaction detail — `app/(ledger)/txn/[id].tsx`
 **States:** error + retry · `EmptyState` "Transaction not found" · no pull-to-refresh (it
 refetches on focus already — it's a detail + actions surface, not a feed).
 
@@ -1276,7 +1276,7 @@ viewer** (`Modal transparent animationType="fade"`); split summary; itemized lin
 (read-only); audit-log timeline; **Delete** (soft-delete + undo → back).
 - **Edit** (only if not a materialized recurring occurrence) → routes to the right add screen (itemized / transfer / income / quick).
 
-### Category insights — `app/category/[name].tsx`
+### Category insights — `app/(money)/category/[name].tsx`
 **States:** `Skeleton`/`SkeletonCard` while loading · error + retry · `EmptyState` "No
 transactions" scoped to the period noun · pull-to-refresh.
 
@@ -1291,7 +1291,7 @@ transaction list → `/txn/{id}`.
 
 ## 12. Analytics — Reports, drill-down, Insights
 
-### Reports — `app/reports.tsx` (the analytics home)
+### Reports — `app/(money)/reports.tsx` (the analytics home)
 **States:** `Skeleton`/`SkeletonCard` behind an **artificial 450 ms floor** so the skeleton never
 flashes · error + retry · `EmptyState` "Nothing to report yet" · pull-to-refresh.
 
@@ -1303,14 +1303,14 @@ so picking a category in any one redraws the trend for it. Un-adopted category n
 one **"Others"** slice (`foldUncategorized`). Forecast line; year-in-review; export CSV / PDF.
 Tapping a category opens the drill-down.
 
-### Report transactions — `app/report-transactions.tsx`
+### Report transactions — `app/(money)/report-transactions.tsx`
 **States:** error + retry · `EmptyState` "No transactions" · pull-to-refresh.
 
 The month-scoped drill-down from Reports. Accepts `?month=yyyy-MM` and `?category=` (encoded),
 which sets the window and pre-applies the filter. Filters by category / type / group + sort;
 rows → `/txn/{id}`.
 
-### Insights — `app/insights.tsx` (narrative only)
+### Insights — `app/(money)/insights.tsx` (narrative only)
 **States:** error + retry · `EmptyState` "No insights yet" · pull-to-refresh.
 
 All figures are **my share**, on the same basis as Home (`getMyGlobalBudgetStatus` for the budget it
@@ -1378,7 +1378,7 @@ above it (`sectionTop(isFirst)`) — Account when configured, else Getting paid,
 | **Backup & restore** | `settings/backup.tsx` | §13.3. | `ActivityIndicator` per row while busy; every failure is an Alert |
 | **Account** | `settings/account.tsx` | §13.4. Absent entirely without `EXPO_PUBLIC_API_URL`. | Spinner while the stored session is read · inline error text (not an Alert — the retry is right there) |
 
-### 13.3 Backup & restore — `app/settings/backup.tsx`
+### 13.3 Backup & restore — `app/(system)/settings/backup.tsx`
 The highest-consequence flow in the app. It builds a passphrase-encrypted file of the whole
 database and hands it to the OS share sheet. It is a file of your own, **separate from the
 account**: when signed in, the account already keeps everything (§13.4) and a new phone gets it
@@ -1416,7 +1416,7 @@ which one they hit.
 
 ---
 
-### 13.4 Account — `app/settings/account.tsx` (optional, server-backed)
+### 13.4 Account — `app/(system)/settings/account.tsx` (optional, server-backed)
 
 Exists only in a build with `EXPO_PUBLIC_API_URL` set (`serverConfigured()`); the default build
 has no account UI at all, and nothing is uploaded. Backed by the Worker in `server/api`
@@ -1463,7 +1463,7 @@ in stay: they are the group's record.
 
 ---
 
-### 13.6 Sync — `app/settings/sync.tsx` (optional, server-backed)
+### 13.6 Sync — `app/(system)/settings/sync.tsx` (optional, server-backed)
 
 **No switch.** Signing in is what joins a phone to its account and signing out is what leaves it;
 a second control that could say "off" while the account still held everything would be one more
@@ -1505,7 +1505,7 @@ fresh start. Offering sign-in promises nothing — it says the door is there.
 
 ---
 
-### 13.5 Linked people — `app/settings/linked.tsx` (optional, server-backed)
+### 13.5 Linked people — `app/(system)/settings/linked.tsx` (optional, server-backed)
 
 Linking two accounts so they can see details each has chosen to share. Today that is a name,
 an email and — only if switched on — a phone number. It is **not** group sharing or sync;
@@ -1622,7 +1622,7 @@ Absorbed from `AUDIT.md` §3. Each step names the code that does it.
 | # | Step | Code |
 |---|---|---|
 | 1 | Settings → "Feature management" | `app/(tabs)/settings.tsx` |
-| 2 | S-24 renders the non-toggleable "Core" pillars + the module switches in sections | `app/features.tsx` |
+| 2 | S-24 renders the non-toggleable "Core" pillars + the module switches in sections | `app/(system)/features.tsx` |
 | 3 | Flipping a switch calls `setFlag(key, value)` from context | `components/system/FeatureFlagsProvider.tsx:25-28` |
 | 4 | Local state updates optimistically; `AsyncStorage.setItem('feature_' + key, …)` is best-effort | `src/lib/featureFlags.ts:67-69` |
 | 5 | Consuming screens re-render and gate with `{flags.x && …}` | e.g. `app/(tabs)/index.tsx` |
@@ -1686,14 +1686,14 @@ See §4 — the layout list there is this flow's step 6, in order. The load path
 ### FLOW-08 — Import a statement → Review → committed transactions
 | # | Step | Code |
 |---|---|---|
-| 1 | Settings → Import. Pick a file or paste text | `app/import.tsx` |
+| 1 | Settings → Import. Pick a file or paste text | `app/(ledger)/import.tsx` |
 | 2 | PDF → base64 → `PdfTextExtractor` WebView runs pdf.js; xlsx → `readXlsx`; else read as text | `import.tsx:100-113` |
 | 3 | `parseAnyText` / `parseAnyWorkbook` pick a parser most-specific-first | `src/lib/importDetect.ts` |
 | 4 | 0 rows → one of three *specific* Alerts (§10.1) | `import.tsx:120-146` |
 | 5 | Each row gets a category guess and a pay method | `import.tsx:153-168` |
 | 6 | `insertPending` → `pending_txn`. **Nothing touches balances or budgets yet** | `src/db/queries/pending.ts:37` |
 | 7 | `refresh()` → `router.replace('/review')`; Home shows an inbox badge | `import.tsx:170-171` |
-| 8 | In Review each row is editable in place; edits auto-save to the row's draft columns | `app/review.tsx`, `updatePendingDraft` |
+| 8 | In Review each row is editable in place; edits auto-save to the row's draft columns | `app/(ledger)/review.tsx`, `updatePendingDraft` |
 | 9 | `planCommit` resolves a row to its insert shape or refuses it | `src/lib/reviewCommit.ts` |
 | 10 | Confirm → `insertTxn` → `deletePending`, plus `recordCorrection` to teach the category learner | `review.tsx:206-266` |
 | 11 | Undo: `softDeleteTxn(txnId)` + `restorePending(snap)` — a true inverse from the pre-commit snapshot | `review.tsx:288-291` |
@@ -1703,7 +1703,7 @@ See §4 — the layout list there is this flow's step 6, in order. The load path
 ### FLOW-09 — Set and track a budget
 | # | Step | Code |
 |---|---|---|
-| 1 | Entry: Settings → Budget, Home get-started tile, group Budget tab, or a category's "Set budget" CTA (`?category=` + auto-scroll) | `app/group/[id]/budget.tsx:69-71` |
+| 1 | Entry: Settings → Budget, Home get-started tile, group Budget tab, or a category's "Set budget" CTA (`?category=` + auto-scroll) | `app/(people)/group/[id]/budget.tsx:69-71` |
 | 2 | Categories load by frequency-of-use; an empty catalog self-heals via `seedGlobalCategories` | `budget.tsx:98-102` |
 | 3 | Per line: amount + cadence (once / daily / monthly / yearly). `refetchOnDataChange:false` so a mid-edit reload can't wipe unsaved amounts | `budget.tsx:104` |
 | 4 | Save → `setCategoryBudgets` upserts `category_budget` rows | `src/db/queries/categoryBudgets.ts:47` |
@@ -1780,7 +1780,7 @@ toggle can be *refused by the OS*, so it must await a result and then decline to
 Folding it into `FeatureKey` would mean adding async validation to the flag API for one case.
 It lives in `settings` (AsyncStorage) instead and appears in the same Feature-management list —
 that split is intentional and commented at the call site (`toggleSaveLocation` in
-`app/features.tsx`, which cites AUDIT F-30 / DEBT-04 where it was originally filed as an
+`app/(system)/features.tsx`, which cites AUDIT F-30 / DEBT-04 where it was originally filed as an
 inconsistency).
 
 **Biometrics are not a permission** but behave like one: `LockGate` handles the
@@ -1900,7 +1900,7 @@ The default OCR provider is `gemini`, so out of the box a scanned receipt photo 
 party. **Feature management → Smart capture → Cloud Receipt Scanning** turns that off and keeps
 everything on the phone (§7.4). Because of that, and now because signing in is possible at all,
 any absolute in-app claim ("zero network calls", "nothing ever leaves your device") would be
-false as written. The strings in `app/help.tsx`, `app/(tabs)/settings.tsx`, `app/storage.tsx` and
+false as written. The strings in `app/(system)/help.tsx`, `app/(tabs)/settings.tsx`, `app/(system)/storage.tsx` and
 `VOICE_SHORTCUT_PRIVACY` are scoped instead: local-first, no tracking, no analytics, nothing
 uploaded **unless you ask** — with receipt scanning and signing in named as the two
 exceptions, and the way out named for each (the OCR toggle; not signing in). Help → *The server
@@ -1950,7 +1950,7 @@ vs. surfaced").
 | `/txn/[id]` | none | `ErrorState` + retry | "Transaction not found" | ✖ refetches on focus |
 | `_layout` (boot) | `BrandedLoader` | `ErrorState`, Retry re-runs DB init | n/a | n/a |
 
-**The clearest statement of intent in the codebase** is `app/afford.tsx:27-34`: load errors must
+**The clearest statement of intent in the codebase** is `app/(money)/afford.tsx:27-34`: load errors must
 **not** be swallowed here, because a zeroed snapshot would render as a confident "₹0 available" —
 a wrong answer stated with certainty. Screens that answer a question surface their errors;
 screens that decorate (streak, forecast teaser, insights nudges) self-hide instead.
@@ -2049,12 +2049,12 @@ Every sheet routes through `ui/SheetModal` (an RN `<Modal transparent>` wrapping
 | "Add to {goal}" · "New goal" | `app/(tabs)/savings.tsx` |
 | "Your name" · "Default budget cadence" | `app/(tabs)/settings.tsx` |
 | "Add Tax" / "Add Tip" / "Add Service Charge" / "Add Discount" | `app/add/itemized.tsx` |
-| "{group.name}" options (Audit log · Export as CSV · Edit group · Archive group) | `app/group/[id].tsx` |
-| "How often?" (per-category cadence) | `app/group/[id]/budget.tsx` |
-| "Add to group" (`PersonPicker`) | `app/group/[id]/members.tsx` |
-| "Personal" options (Audit log · Export as CSV) | `app/personal.tsx` |
-| "Personal or group" · "Who paid you?/Who did you pay?" · "How was it paid?" · "Assign N to a group" · "Filter" · "Review options" · "Saved views" · "Save view" | `app/review.tsx` (**8**) |
-| "Add funds" · "Withdraw to cash" · "Adjust goal" | `app/savings/[id].tsx` |
+| "{group.name}" options (Audit log · Export as CSV · Edit group · Archive group) | `app/(people)/group/[id].tsx` |
+| "How often?" (per-category cadence) | `app/(people)/group/[id]/budget.tsx` |
+| "Add to group" (`PersonPicker`) | `app/(people)/group/[id]/members.tsx` |
+| "Personal" options (Audit log · Export as CSV) | `app/(people)/personal.tsx` |
+| "Personal or group" · "Who paid you?/Who did you pay?" · "How was it paid?" · "Assign N to a group" · "Filter" · "Review options" · "Saved views" · "Save view" | `app/(ledger)/review.tsx` (**8**) |
+| "Add funds" · "Withdraw to cash" · "Adjust goal" | `app/(money)/savings/[id].tsx` |
 
 ### Non-sheet overlays
 | Overlay | File | Shown when |
@@ -2068,7 +2068,7 @@ Every sheet routes through `ui/SheetModal` (an RN `<Modal transparent>` wrapping
 | PDF text extractor | `system/PdfTextExtractor.tsx` | `/import` PDF parse |
 | `ScanningOverlay` | `finance/add/ScanningOverlay.tsx` | Receipt scan in flight |
 | `GoalCelebration` | `finance/GoalCelebration.tsx` | Goal hits 100% |
-| Attachment viewer | inline `Modal` in `app/txn/[id].tsx` | Receipt thumbnail tap |
+| Attachment viewer | inline `Modal` in `app/(ledger)/txn/[id].tsx` | Receipt thumbnail tap |
 
 ---
 

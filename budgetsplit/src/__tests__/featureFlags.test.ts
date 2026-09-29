@@ -10,7 +10,7 @@ beforeEach(() => store.__reset());
 // --- Source scan, for the "no dead flags" invariant below -------------------
 const ROOT = path.resolve(__dirname, '../..');
 const FLAG_DEF = path.join(ROOT, 'src/lib/featureFlags.ts');
-const FEATURES_SCREEN = path.join(ROOT, 'app/features.tsx');
+const FEATURES_SCREEN = path.join(ROOT, 'app/(system)/features.tsx');
 
 function sourceFiles(dir: string): string[] {
   const out: string[] = [];

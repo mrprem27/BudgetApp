@@ -42,7 +42,7 @@ export function walk(dir: string, keep: (f: string) => boolean): string[] {
   return out;
 }
 
-/** `app/group/[id]/budget.tsx` → `/group/[id]/budget`; `app/(tabs)/index.tsx` → `/`. */
+/** `app/(people)/group/[id]/budget.tsx` → `/group/[id]/budget`; `app/(tabs)/index.tsx` → `/`. */
 export function routePath(absFile: string): string {
   const rel = path.relative(APP, absFile).replace(/\.tsx$/, '');
   const segments = rel.split(path.sep).filter(s => !/^\(.*\)$/.test(s));
