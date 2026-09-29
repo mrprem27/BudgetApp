@@ -7,6 +7,7 @@ import { materializeDueOccurrences } from '../db/queries/recurring';
 import { queueUpsert, setQueueListener } from '../db/queries/syncQueue';
 import { loadCatchUp } from '../lib/homeData';
 import { settings } from '../lib/settings';
+import { formatRupees, formatRupeesShort } from '../lib/money';
 
 // Regressions for docs/SPEC-BUGSCAN.md. Each was proven by reverting its fix.
 
@@ -120,5 +121,16 @@ describe('U2 · Home catch-up counts only rules that posted', () => {
     expect(await loadCatchUp(db)).toEqual({ days: 40, ruleCount: 1 });
     // Stamped: the next open, moments later, says nothing.
     expect(await loadCatchUp(db)).toBeNull();
+  });
+});
+
+describe('U5 · a negative amount reads "-₹50.00", like the compact form', () => {
+  it('puts the sign before the symbol, and never prints -₹0', () => {
+    expect(formatRupees(-5000)).toBe('-₹50.00');
+    expect(formatRupees(5000)).toBe('₹50.00');
+    expect(formatRupees(-0)).toBe('₹0.00');
+    expect(formatRupees(-0.4)).toBe('₹0.00');
+    expect(formatRupeesShort(-150050)).toBe('-₹1,501');
+    expect(formatRupeesShort(-20)).toBe('₹0');
   });
 });

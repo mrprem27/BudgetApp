@@ -2,7 +2,9 @@ import { CURRENCY_MAP, DEFAULT_CURRENCY, type CurrencyCode } from '../constants/
 import type { SplitMode } from '../constants/enums';
 
 export function formatRupees(paise: number): string {
-  return '₹' + (paise / 100).toLocaleString('en-IN', {
+  // Sign first, as `formatCompact` writes it: "₹-50.00" is neither.
+  const sign = paise < 0 && Math.round(Math.abs(paise)) > 0 ? '-' : '';
+  return sign + '₹' + (Math.abs(paise) / 100).toLocaleString('en-IN', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
@@ -10,7 +12,8 @@ export function formatRupees(paise: number): string {
 
 /** Rounded, no paise — for dashboard cards and summaries. e.g. 150050 → "₹1,501". */
 export function formatRupeesShort(paise: number): string {
-  return '₹' + Math.round(paise / 100).toLocaleString('en-IN');
+  const rounded = Math.round(Math.abs(paise) / 100);
+  return (paise < 0 && rounded > 0 ? '-' : '') + '₹' + rounded.toLocaleString('en-IN');
 }
 
 /**

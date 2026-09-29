@@ -84,3 +84,12 @@ Today: 46 files in `app/`+`src/components/` import `src/db` directly; screens up
 | BS-15 | Low | Trust everyone | A failure part-way was an unhandled rejection | FIXED |
 | S | — | app/ ↔ db | 32 UI files imported `src/db` | DONE — 0 (only `_layout.tsx`, the boot root); `uiLayering.test.ts` enforces it |
 | R | — | `app/` layout | 20 loose files at the top level | DONE — `(money)` `(people)` `(ledger)` `(system)` route groups; URL set unchanged (46 routes) |
+| U5 | Low | `formatRupees` / `formatRupeesShort` | A negative amount printed `₹-50.00`; the compact form prints `-₹50` | FIXED |
+| SV-1 | Low | server `/auth/request-link` | Rate limit is per email address, not per caller: one client can request links for many addresses | open — needs an infra decision (Cloudflare rule vs code) |
+| SV-2 | Low | server `PATCH /me` | `avatarUrl` accepts any https URL, which other members' apps then load — a member can make everyone's phone contact a host they choose | open — restrict to the R2 avatar route, or proxy |
+
+## Coverage — what this pass did and did not read
+
+Read line by line: every write path in `src/db/queries` for transactions, recurring, savings, sync queue/apply, approvals, and the group/person delete-leave-remove functions; server auth, sync push/pull/guards/access, transactions entity, erase and delete-account; `money`, `splitMath`; and every screen whose data code moved (32 files).
+
+**Not** read this pass: `upiIntent`, `voice*`, `importParse`/`paytmParse`, `engine/*` internals, `reviewCommit`, `settle`/`balances` SQL, the rest of `server/api/index.ts` (invites, links, friend requests), and most presentational components. UI/UX coverage is what the moved screens showed, not a device walk — no render tests exist, so anything visual needs a phone.
