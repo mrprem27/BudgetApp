@@ -31,6 +31,7 @@ import { BalanceStrip } from '../../src/components/finance/home/BalanceStrip';
 import { CategoryRankList } from '../../src/components/finance/home/CategoryRankList';
 import { ForecastCard } from '../../src/components/finance/home/ForecastCard';
 import { StreakCard } from '../../src/components/finance/home/StreakCard';
+import { StreakBadge } from '../../src/components/finance/home/StreakBadge';
 import { HealthSheet } from '../../src/components/finance/HealthSheet';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { HeaderIconButton } from '../../src/components/ui/HeaderIconButton';
@@ -141,6 +142,7 @@ export default function DashboardScreen() {
       <ScreenHeader
         large
         title={meInfo?.name?.split(' ')[0] ?? 'BudgetSplit'}
+        titleAccessory={<StreakBadge days={streak} />}
         right={(
           <>
             {/* Distinct icon and an amber tint: this is someone else asking for a decision, not a
@@ -345,9 +347,6 @@ export default function DashboardScreen() {
               <ForecastCard
                 projected={forecast.projected}
                 budget={budget.monthlyAllocated}
-                spentSoFar={spending}
-                dayOfMonth={getDate(new Date())}
-                daysInMonth={getDaysInMonth(new Date())}
                 topShift={topShift}
                 obfuscate={hideAmounts}
                 onPressInsights={() => router.push('/insights')}

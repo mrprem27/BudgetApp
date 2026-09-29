@@ -12,6 +12,8 @@ type Props = {
   right?: React.ReactNode;
   /** Larger, left-aligned title for top-level tab screens. */
   large?: boolean;
+  /** A small badge that sits right after the title (Home's streak). */
+  titleAccessory?: React.ReactNode;
 };
 
 /**
@@ -19,7 +21,7 @@ type Props = {
  * never collide with the status bar / Dynamic Island, replacing the previous
  * hardcoded `paddingTop` on every screen.
  */
-export function ScreenHeader({ title, onBack, right, large }: Props) {
+export function ScreenHeader({ title, onBack, right, large, titleAccessory }: Props) {
   const insets = useSafeAreaInsets();
   return (
     <View style={[styles.wrap, { paddingTop: insets.top + space.sm }]}>
@@ -35,12 +37,15 @@ export function ScreenHeader({ title, onBack, right, large }: Props) {
             <Feather name="chevron-left" size={26} color={colors.textPrimary} />
           </TouchableOpacity>
         ) : null}
-        <Text
-          style={[large ? styles.titleLarge : styles.title, onBack && styles.titleWithBack]}
-          numberOfLines={1}
-        >
-          {title}
-        </Text>
+        <View style={styles.titleWrap}>
+          <Text
+            style={[large ? styles.titleLarge : styles.title, onBack && styles.titleWithBack, styles.titleText]}
+            numberOfLines={1}
+          >
+            {title}
+          </Text>
+          {titleAccessory}
+        </View>
         <View style={styles.right}>{right}</View>
       </View>
     </View>
@@ -70,4 +75,6 @@ const styles = StyleSheet.create({
   titleLarge: { ...type.title, color: colors.textPrimary, flex: 1 },
   titleWithBack: { ...type.heading },
   right: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  titleWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.sm, minWidth: 0 },
+  titleText: { flex: 0, flexShrink: 1 },
 });

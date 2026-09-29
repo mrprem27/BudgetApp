@@ -824,3 +824,26 @@ describe('RV · review fixes: links land on the right Money section; Clear filte
     expect(fs.readFileSync('app/(tabs)/savings.tsx', 'utf8')).toMatch(/assetsData\.onRefresh/);
   });
 });
+
+describe('H1 · Home says where the month is heading in one line, and shows the streak', () => {
+  const { forecastVerdict } = jest.requireActual('../lib/forecastVerdict') as typeof import('../lib/forecastVerdict');
+  const fs = jest.requireActual('fs') as typeof import('fs');
+  it('under budget reads as on track, with what is left', () => {
+    expect(forecastVerdict({ projected: 3_000_000, budget: 3_500_000 })).toEqual({ tone: 'good', headline: 'On track — ₹5K to spare', sub: 'by month end' });
+  });
+  it('over budget names the overshoot, and the category behind it when it moved', () => {
+    expect(forecastVerdict({ projected: 4_000_000, budget: 3_500_000, topShift: { cat: 'Eating Out', pct: 40 } }))
+      .toEqual({ tone: 'over', headline: '₹5K over budget by month end', sub: 'Eating Out up 40%' });
+    expect(forecastVerdict({ projected: 4_000_000, budget: 3_500_000, topShift: { cat: 'Fuel', pct: 2 } }).sub).toBeNull();
+  });
+  it('with no budget it states the projection and says how to get a verdict', () => {
+    expect(forecastVerdict({ projected: 3_000_000, budget: 0 }).tone).toBe('neutral');
+  });
+  it('hidden amounts stay hidden', () => {
+    expect(forecastVerdict({ projected: 4_000_000, budget: 3_500_000, mask: () => '••••' }).headline).toBe('•••• over budget by month end');
+  });
+  it('the streak badge sits beside the name on Home', () => {
+    expect(fs.readFileSync('app/(tabs)/index.tsx', 'utf8')).toMatch(/titleAccessory=\{<StreakBadge days=\{streak\} \/>\}/);
+    expect(fs.readFileSync('src/components/finance/home/StreakBadge.tsx', 'utf8')).toMatch(/icon="zap"/);
+  });
+});
