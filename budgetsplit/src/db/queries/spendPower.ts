@@ -153,8 +153,13 @@ export async function getSafeToSpend(db: SQLite.SQLiteDatabase, nowMs: number = 
 export async function getSafeToSpendV2(db: SQLite.SQLiteDatabase, nowMs: number = Date.now()): Promise<SafeToSpendBreakdown> {
   const snapshot = await getFinanceSnapshot(db, nowMs);
   const v2 = safeToSpendV2(snapshot);
-  const untilMs = v2.lowPoint.date;
-  const toLow = v2.projection.days.filter(d => d.date <= untilMs);
+  const days = v2.projection.days;
+  // L10: a low point at `asOf` itself means the balance never dipped below
+  // today's cash. The parts (all zero) still sum to `amount`; only the label
+  // changes — "safe through the horizon's end", not "until today".
+  const noDip = v2.lowPoint.date <= snapshot.asOf;
+  const untilMs = noDip && days.length > 0 ? days[days.length - 1].date : v2.lowPoint.date;
+  const toLow = noDip ? [] : days.filter(d => d.date <= untilMs);
 
   const parts = { income: 0, upcomingBills: 0, cardRepayment: 0, goalRemaining: 0, netIOwe: 0 };
   for (const e of toLow.flatMap(d => d.events)) {
@@ -173,6 +178,7 @@ export async function getSafeToSpendV2(db: SQLite.SQLiteDatabase, nowMs: number 
     daysLeft: toLow.length,
     dailyRate: v2.dailyRate,
     untilMs,
+    noDip,
     events: v2.projection.days.flatMap(d => d.events),
     warning: lowPointWarning(snapshot, v2.projection),
   };

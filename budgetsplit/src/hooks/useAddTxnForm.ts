@@ -20,7 +20,7 @@ import { parseTags } from '../lib/tags';
 import { deleteAttachment } from '../lib/attachment';
 import { parseToPaise, formatRupees, paiseToInput } from '../lib/money';
 import { computeShares as calcShares, computePayments as calcPayments, validateShares } from '../lib/splitMath';
-import { getAffordSnapshot, type AffordSnapshot } from '../db/queries/savings';
+import { categoryNudge } from '../lib/categoryNudge';
 import { getFinanceSnapshot } from '../db/queries/engineSnapshot';
 import { afford } from '../lib/engine/assess';
 import type { FinanceSnapshot, AffordResult } from '../lib/engine/types';
@@ -172,7 +172,6 @@ export function useAddTxnForm(params: AddTxnParams) {
    * The read path stays so that shipping a picker is one screen, not a migration.
    */
   const [currency, setCurrency] = useState<CurrencyCode>(DEFAULT_CURRENCY);
-  const [snapshot, setSnapshot] = useState<AffordSnapshot | null>(null);
   const [engineSnapshot, setEngineSnapshot] = useState<FinanceSnapshot | null>(null);
 
   const { place, setPlace, locEnabled, capturing: capturingLoc, capture: captureLocation } = useLocationCapture(isEditing);
@@ -211,7 +210,6 @@ export function useAddTxnForm(params: AddTxnParams) {
       const grps = groups.length ? groups : await getAllGroups(db);
       const meRow = me ?? await getMe(db);
       loadLearned().then(setLearned).catch(() => {});
-      getAffordSnapshot(db).then(setSnapshot).catch(() => {});
       getFinanceSnapshot(db).then(setEngineSnapshot).catch(() => {});
       // Fire-and-forget: the destination row renders from the selected group, so
       // it doesn't wait on this — only the sheet's ordering does.
@@ -410,7 +408,7 @@ export function useAddTxnForm(params: AddTxnParams) {
   const paymentRemainder = total - paymentsTotal;
 
   // Budget nudge: how much remains in the selected category this month.
-  const nudgeStat = selectedCategory ? snapshot?.byCategory[selectedCategory.name] : null;
+  const nudgeStat = selectedCategory && engineSnapshot ? categoryNudge(engineSnapshot, selectedCategory.name) : null;
   const nudgeRemaining = nudgeStat?.budget != null ? nudgeStat.budget - nudgeStat.spentThisMonth : null;
   const nudgePct = nudgeRemaining != null && nudgeStat?.budget ? nudgeRemaining / nudgeStat.budget : null;
 
@@ -890,7 +888,7 @@ export function useAddTxnForm(params: AddTxnParams) {
     // attachment / location
     attachmentUri, setAttachmentUri, tags, setTags, setTxnTime, applyVoiceDraft, place, setPlace, locEnabled, capturingLoc, captureLocation,
     // currency / nudge / derived
-    currency, snapshot, nudgeStat, nudgeRemaining, nudgePct, affordResult, composedNote, canSave,
+    currency, nudgeStat, nudgeRemaining, nudgePct, affordResult, composedNote, canSave,
     // actions
     handleSave,
   };

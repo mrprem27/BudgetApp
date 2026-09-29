@@ -106,6 +106,11 @@ export function StsSheet({ visible, onClose, sts }: Props) {
           </Text>
         </View>
       </Card>
+      {sts.noDip && (
+        <Text style={styles.noDipNote}>
+          Your balance doesn't drop below today's cash before {until}, so nothing is held back yet.
+        </Text>
+      )}
       {sts.amount < 0 && (
         <Text style={styles.overNote}>
           {biggest
@@ -126,5 +131,6 @@ const styles = StyleSheet.create({
   chevron: { marginLeft: -space.xs },
   totalLabel: { ...type.bodySemi, color: colors.textPrimary },
   total: { ...type.subheading, fontFamily: 'SpaceMono_400Regular' },
+  noDipNote: { ...type.caption, color: colors.textMuted, marginTop: space.sm, marginHorizontal: space.xs },
   overNote: { ...type.caption, color: colors.healthRed, marginTop: space.sm, marginHorizontal: space.xs },
 });

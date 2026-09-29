@@ -40,4 +40,20 @@ describe('getSafeToSpendV2 (EN10/EN13)', () => {
     expect(sts.goalRemaining).toBeGreaterThan(0);
     expect(sts.upcomingBills).toBeGreaterThan(0);
   });
+
+  it('L10: a balance that never dips reports noDip, zero claims, and an end date after today', async () => {
+    const db = createTestDb();
+    await buildPersona(db, 'thinData'); // no bills, no rate: the balance never falls below today's cash
+    const sts = await getSafeToSpendV2(db, PERSONA_NOW);
+    expect(sts.noDip).toBe(true);
+    expect(sts.upcomingBills + sts.cardRepayment + sts.goalRemaining + sts.netIOwe + sts.everydaySpend).toBe(0);
+    expect(sts.amount).toBe(sts.available);
+    expect(sts.untilMs).toBeGreaterThan(PERSONA_NOW); // "until today" was the bug
+  });
+
+  it('L10: a persona that does dip is not flagged', async () => {
+    const db = createTestDb();
+    await buildPersona(db, 'salariedRenter');
+    expect((await getSafeToSpendV2(db, PERSONA_NOW)).noDip).toBe(false);
+  });
 });

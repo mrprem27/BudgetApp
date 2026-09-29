@@ -88,6 +88,11 @@ export type SafeToSpendBreakdown = SafeToSpend & {
   untilMs: number;
   /** Every event on the projection, the whole horizon — the rows each line taps through to. */
   events: KnownEvent[];
+  /** The balance never drops below today's cash anywhere in the horizon (`L10`):
+   *  nothing has been claimed yet at the low point, so every line is ₹0 and
+   *  `untilMs` is the horizon's end, not today. The sheet says so instead of
+   *  showing a wall of zeros. */
+  noDip: boolean;
   /** `EN12` — a dip below the essential floor within 14 days, `null` otherwise. */
   warning: LowPointWarning | null;
 };
