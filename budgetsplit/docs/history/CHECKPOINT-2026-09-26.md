@@ -1,3 +1,5 @@
+> **FROZEN 2026-09-30.** Superseded by `docs/TRACKER.md` (the V1 tracker, start at §0) and `tasks/todo.md`. Open items and unticked phone checks were carried there; nothing here is live.
+
 # Checkpoint — resume here
 
 `Written 2026-09-26 · Branch: claude/branch-selection-gi7lyy · HEAD: ae2efcd`

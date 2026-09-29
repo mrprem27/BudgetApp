@@ -49,10 +49,10 @@ claim cites `file:line` or it gets deleted rather than debated.
 
 ---
 
-## 0 · What is left, in order → `TRACKER.md` §1
+## 0 · What is left, in order → `TRACKER.md` §0
 
-**Moved.** The ordered list of what is left, and what each step assumes, is in
-[`TRACKER.md`](./TRACKER.md) §1. The one thing worth repeating here, because it changes what you do
+**Moved.** The road to V1, in order, is [`TRACKER.md`](./TRACKER.md) §0; the blockers it names are
+§1, and tomorrow's phone list is `tasks/todo.md`. The one thing worth repeating here, because it changes what you do
 next: **the paid Apple account blocks less than it looks.** A free Apple ID signs a build onto your
 own phone for 7 days, which is everything the device pass in §2 needs. The paid account is only for
 handing the build to somebody else. Test now, distribute later.
@@ -298,8 +298,8 @@ Needs the rebuild: npx expo prebuild --clean && npx expo run:ios
       - [ ] The phone hint reads sensibly under the field
       - [ ] Balance chips still align now the sheet is taller
 
-- [ ] **S-05 Plan** — `app/(tabs)/savings.tsx`  
-      Open: Plan tab  
+- [ ] **S-05 Money** — `app/(tabs)/savings.tsx`  
+      Open: Money tab → Goals  
       *Changed:* Three-section layout, priority picker, funding and raid order
       - [ ] Goals render as THREE sections (Emergency / Need / Want), not one flat list
       - [ ] A section with one goal shows no “hold & drag” hint
@@ -449,7 +449,7 @@ Needs the rebuild: npx expo prebuild --clean && npx expo run:ios
       - [ ] Test notification confirms it fired
 
 - [ ] **S-35 Voice entry** — `app/(system)/settings/voice.tsx`  
-      Open: Settings → Voice entry  
+      Open: **no way in since 2026-09-30** — `TRACKER.md` `U-03` decides delete or link; skip until then  
       *Changed:* Privacy copy no longer absolute
       - [ ] Setup steps are followable without prior context
       - [ ] The privacy line reads honestly — it changed today

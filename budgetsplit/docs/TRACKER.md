@@ -1,9 +1,9 @@
 # TRACKER.md — what is left
 
-`Last verified: 2026-09-07 · Guarded by: trackerIntegrity.test.ts · countClaims.test.ts · docIdGraph.test.ts`
+`Last verified: 2026-09-30 (§0, §1, §9–§11 and every row whose status changed; the rest as of 2026-09-07) · Guarded by: trackerIntegrity.test.ts · countClaims.test.ts · docIdGraph.test.ts`
 
-**194 items, 105 of them still open.** One row each: what it is, and where it stands.
-Nothing else.
+**212 items, 119 of them still open.** One row each: what it is, and where it stands.
+Nothing else. **This is the V1 tracker** — start at §0.
 
 **The evidence is not here.** Why each item exists, what it costs, what breaks if you touch it, and
 the argument behind every verdict live in [`FINDINGS.md`](./FINDINGS.md) under the same id. This
@@ -21,24 +21,49 @@ is defined in two places.
 
 | Section | Open | Total |
 |---|---|---|
-| §1 · Ship blockers | **13** | 18 |
+| §1 · Ship blockers | **13** | 19 |
 | §2 · Complexity — `OV-` | **19** | 34 |
-| §3 · Decisions — `DQ-` | **47** | 57 |
-| §4 · Walk 1 — `W1-` | **17** | 39 |
+| §3 · Decisions — `DQ-` | **40** | 57 |
+| §4 · Walk 1 — `W1-` | **16** | 39 |
 | §5 · Sync — `SYNC-F` | **1** | 24 |
 | §6 · Debt — `D-` | **11** | 11 |
 | §7 · Accepted — `A-` | **2** | 11 |
+| §9 · Deferred from V1 — `V-` | **7** | 7 |
+| §11 · Open from the last pass, and your feedback — `U-` | **10** | 10 |
+
+§8 (parked scope) and §10 (built but easy to forget) carry no ids.
+
+---
+
+## §0 · V1 — the road to release
+
+V1 is the pilot: a TestFlight build for you and a few friends, not the public App Store. The order
+below is the plan; every line points at rows further down, where status lives.
+
+1. **Your phone pass** — `U-10` (the list for tomorrow), `B-12`, the sweep in
+   `RELEASE_CHECKLIST.md` §2 and the sync checks in §3.1. Everything it finds becomes a `U-` row in §11.
+2. **Answer the open questions** — `U-01` the Insights switch · `U-03` the voice screen · `U-04`
+   Afford's layout · `U-05` the backup nudge · `U-06` Afford's icon · `OV-27` the group screen's three
+   add buttons · `V-06` cash last confirmed · `V-07` Android before or after V1.
+3. **Fix what 1 and 2 turn up**, then the tidy-ups `U-07` and `U-08`, and measure `U-02`.
+4. **Ship steps** — `B-19` merge to `main` · `B-07` rotate the Brevo key · `B-02` the Apple
+   Developer Program (a free Apple ID already covers your own phone) · `DQ-95` Workers Paid before
+   the first sign-in that isn't you · `B-11` the voice shortcut link · `B-14` the no-enumeration
+   check · `B-04` / `B-05` the build env on whichever machine archives.
+5. **Before inviting anyone** — `B-08` privacy policy · `B-09` DPDP · `B-10` icon, splash,
+   screenshots · `B-13` store copy and privacy answers.
+6. **Not V1** — `B-01` (dev tools off) is for the public App Store. §9 is what was deferred on
+   purpose; §8 is larger scope parked with its trigger.
 
 ---
 
 ## §1 · Ship blockers — `B-`
 
-**18 items: 11 `OPEN`, 1 `DECIDE`, 1 `BLOCKED`, 5 `DONE`.** Nothing ships until every one is closed. Order of operations is in `FINDINGS.md` §1 — everything below `B-03` needs a phone.
+**19 items: 11 `OPEN`, 1 `DECIDE`, 1 `BLOCKED`, 6 `DONE`.** Nothing ships until every one is closed. Order of operations is in `FINDINGS.md` §1 — everything below `B-03` needs a phone.
 
 | | What | Status |
 |---|---|---|
 | `B-01` | Set `DEV_TOOLS_ENABLED` to `false` | `OPEN` |
-| `B-03` | Native rebuild | `OPEN` |
 | `B-04` | `EXPO_PUBLIC_API_URL` present wherever release builds run | `OPEN` |
 | `B-05` | `EXPO_PUBLIC_RECEIPT_OCR_PROXY_URL` likewise | `OPEN` |
 | `B-07` | Rotate the Brevo API key | `OPEN` |
@@ -48,10 +73,11 @@ is defined in two places.
 | `B-12` | Device-test Pass 4 | `OPEN` |
 | `B-13` | Paste the store copy into App Store Connect and confirm the privacy answers | `OPEN` |
 | `B-14` | Run §0a's no-enumeration diff | `OPEN` |
+| `B-19` | Merge the working branch into `main` (76 commits behind) | `OPEN` |
 | `B-09` | India DPDP posture | `DECIDE` |
 | `B-02` | Buy the Apple Developer Program | `BLOCKED` |
 
-**Closed (5), detail in `FINDINGS.md`:** `B-06` `B-15` `B-16` `B-17` `B-18`
+**Closed (6), detail in `FINDINGS.md`:** `B-03` `B-06` `B-15` `B-16` `B-17` `B-18`
 
 ---
 ## §2 · Complexity and overlap — `OV-`
@@ -85,7 +111,7 @@ is defined in two places.
 ---
 ## §3 · Open decisions — `DQ-`
 
-**57 items: 38 `DECIDE`, 2 `OPEN`, 7 `BLOCKED`, 10 `DONE`.** A `DQ-` is a question only you can answer, so every unanswered one is `DECIDE` by definition. The default column is what ships if you never decide.
+**57 items: 33 `DECIDE`, 7 `BLOCKED`, 17 `DONE`.** A `DQ-` is a question only you can answer, so every unanswered one is `DECIDE` by definition. The default column is what ships if you never decide.
 
 | | What | Status | Default if never decided |
 |---|---|---|---|
@@ -120,10 +146,8 @@ is defined in two places.
 | `DQ-87` | Does invest-mode Add still record as a transfer to an asset, or count as spending? | `DECIDE` | Transfer to an asset — net worth stays flat |
 | `DQ-90` | Does the Upcoming screen (was Reminders) keep the bell icon? | `DECIDE` | Yes, relabelled |
 | `DQ-92` | Home's "Coming up" list is gone (a badge count only); bring it back, or finish removing it from docs/demo expectations? | `DECIDE` | Leave it removed — a badge only, no card |
-| `DQ-94` | Phone and account both hold data at first sign-in: offer a merge? | `OPEN` | Answered 2026-09-26: yes — Merge adds the phone's data as new; only same-email people, "me" and Personal fold. Building |
 | `DQ-95` | Workers Paid ($5/mo) before the pilot, now that D1 Free hard-stops at 100k rows written/day? | `DECIDE` | Free while developing; Paid before the first non-you sign-in |
 | `DQ-96` | May a group member edit someone else's transaction (Splitwise's model)? | `DECIDE` | No — author-only; approve/reject answers someone else's entry |
-| `DQ-98` | How is the UPI app chosen when paying? | `OPEN` | Answered 2026-09-26: last-used app's logo button + "Change app" logo grid, same on iOS and Android. Building |
 | `DQ-80` | Paid Apple Developer account, $99/yr | `BLOCKED` | Apple |
 | `DQ-81` | Google OAuth **CASA Tier-3** for `gmail.readonly` | `BLOCKED` | Google |
 | `DQ-82` | The GPay export format | `BLOCKED` | Google |
@@ -132,12 +156,12 @@ is defined in two places.
 | `DQ-85` | R2 object storage | `BLOCKED` | A Cloudflare dashboard opt-in that asks for a card |
 | `DQ-86` | Cloudflare Email Sending | `BLOCKED` | Workers Paid $5/mo + an owned domain |
 
-**Closed (15), detail in `FINDINGS.md`:** `DQ-07` `DQ-26` `DQ-28` `DQ-31` `DQ-32` `DQ-88` `DQ-89` `DQ-91` `DQ-93` `DQ-97` `DQ-99` `DQ-100` `DQ-101` `DQ-102` `DQ-103`
+**Closed (17), detail in `FINDINGS.md`:** `DQ-07` `DQ-26` `DQ-28` `DQ-31` `DQ-32` `DQ-88` `DQ-89` `DQ-91` `DQ-93` `DQ-94` `DQ-97` `DQ-98` `DQ-99` `DQ-100` `DQ-101` `DQ-102` `DQ-103`
 
 ---
 ## §4 · Walk 1 — `W1-`
 
-**39 items: 7 `OPEN`, 10 `PARKED`, 22 `DONE`.** The cold sweep: an unpopulated app, opened as a first-time user. 38 ids were assigned — W1-38 was never used — and the nineteenth split into two leaves.
+**39 items: 7 `OPEN`, 9 `PARKED`, 23 `DONE`.** The cold sweep: an unpopulated app, opened as a first-time user. 38 ids were assigned — W1-38 was never used — and the nineteenth split into two leaves.
 
 | | What | Status | Un-parks when |
 |---|---|---|---|
@@ -148,7 +172,6 @@ is defined in two places.
 | `W1-29` | *"Transfer and Income have a bottom line, others don't."* **No divider asymmetry exists in… | `OPEN` |  |
 | `W1-31` | Tags are already saved for reuse and ranked by frequency, derived from your own rows | `OPEN` |  |
 | `W1-32` | The category chip is a `grow` chip with a chevron and may be clipped on the right | `OPEN` |  |
-| `W1-02` | Features should adapt to the intent picked at onboarding | `PARKED` | The persona → flag-defaults pass |
 | `W1-11` | A light "additional income" entry | `PARKED` | Weighed against `OV-08` — `/add/quick` already has… |
 | `W1-16` | `SC-16` could suggest a top 3 before any spend exists | `PARKED` | Taste, cheap, no urgency |
 | `W1-19b` | The policy | `PARKED` | `DQ-25` |
@@ -159,7 +182,7 @@ is defined in two places.
 | `W1-36` | Colours, view and position on `SC-18` | `PARKED` | Taste, cheap, no urgency |
 | `W1-37` | `SC-42` needs a clearer outline | `PARKED` | Taste, cheap, no urgency |
 
-**Closed (22), detail in `FINDINGS.md`:** `W1-01` `W1-03` `W1-04` `W1-05` `W1-07` `W1-08` `W1-09` `W1-10` `W1-12` `W1-13` `W1-14` `W1-15` `W1-19a` `W1-20` `W1-21` `W1-22` `W1-23` `W1-25` `W1-26` `W1-27` `W1-33` `W1-39`
+**Closed (23), detail in `FINDINGS.md`:** `W1-01` `W1-02` `W1-03` `W1-04` `W1-05` `W1-07` `W1-08` `W1-09` `W1-10` `W1-12` `W1-13` `W1-14` `W1-15` `W1-19a` `W1-20` `W1-21` `W1-22` `W1-23` `W1-25` `W1-26` `W1-27` `W1-33` `W1-39`
 
 ---
 ## §5 · Sync — `SYNC-F`
@@ -210,3 +233,85 @@ Fourteen larger things deliberately not now, each with the trigger that un-parks
 sync, App Intents, the widget, mic capture, the unified `SplitEditor`, nearby-friend suggestions,
 achievements, and the rest. They carry no
 id because none of them is a *finding*; they are scope. Listed in [`FINDINGS.md`](./FINDINGS.md) §8.
+
+---
+## §9 · Deferred from V1 — `V-`
+
+**7 items: 2 `DECIDE`, 5 `PARKED`.** Your ideas and asks that were weighed and held back on purpose. The reason and the trigger are in `FINDINGS.md` §9.
+
+| | What | Status | Un-parks when |
+|---|---|---|---|
+| `V-06` | "Cash last confirmed · Update" on Money | `DECIDE` | You decide it is worth a new stored input |
+| `V-07` | The Android port — before V1, or after it | `DECIDE` | You confirm or move the 2026-08-19 order |
+| `V-01` | Refunds lower spend | `PARKED` | You ask for it — spec first |
+| `V-02` | A hand-logged bill after its automatic occurrence already posted | `PARKED` | It shows up as a real duplicate on the phone |
+| `V-03` | Shop names from UPI handles (`razorpay@hdfcbank` → the shop) | `PARKED` | A names source exists |
+| `V-04` | Android: open a chosen UPI app directly | `PARKED` | The Android port (`V-07`) |
+| `V-05` | AI narration of your month | `PARKED` | A spec and an options pass |
+
+---
+## §10 · Built, but easy to forget — no ids
+
+Everything here exists and works today. It is listed because it is reached by a gesture, sits behind a
+switch that starts off, or lives one screen deeper than you would look — so it is easy to forget when
+testing or describing the app. Where one needs action, the id says where.
+
+| Feature | How you reach it | State |
+|---|---|---|
+| Scan & Pay — any UPI or merchant QR, pay, then record it | **Long-press the + button**; a one-time hint teaches it | On |
+| Request money by QR (push, never a collect request) | Settings → Show my UPI QR · Add → Transfer | On, needs your UPI ID |
+| WhatsApp reminder to someone who owes you | The chat icon on their row in Friends, their page, or Upcoming | On, needs their number |
+| Voice entry | The mic on Add's amount row | On |
+| Hands-free Siri capture | A Siri shortcut, filed at launch | Half-built: its setup screen has no way in (`U-03`), the shared link is unset (`B-11`) |
+| Itemized bill — line items, tax, tip, discount | Add → Itemize | On |
+| Receipt scan: cloud (Gemini) or on-device | Feature Management → Cloud Receipt Scanning | Cloud on |
+| Smart category, learning from your corrections | Add, as you type the note | On |
+| Duplicate warning (same amount within a day) | On save, and on a Review commit | On |
+| A hand-paid bill counts as its recurring occurrence | Automatic: same kind and category, ±10%, up to 4 days | On |
+| Recurring catch-up note | Home, after 30+ days away | On |
+| Recurring suggestions | Review, after a commit | On |
+| Budget re-plan for the rest of the month | Group → Budget → an over-budget line, if you can edit its budget | On |
+| Cover an overspend from goals — asks first, with Undo | Money → Overview, when a month is short | On |
+| Surplus sweep into goals | Feature Management → Sweep Surplus Into Goals | **Off** |
+| Location tagging | Feature Management → Location Tagging | **Off** |
+| Streak | ⚡ count beside your name from 2 days; the calendar card is a switch | **Card off** |
+| Face ID lock · privacy screen · hide amounts | Settings | **All off** |
+| Asset register — "Moved to / from" | Money → Assets | On, never on a phone |
+| Per-group CSV export that re-imports | Group ⋯ → Export as CSV | On |
+| Export all data | Insights → Export all data | On |
+| Paste import — bank SMS, email alert, GPay text | Import → paste | On |
+| Paytm statement import (CSV, xlsx, PDF) | Import | On |
+| Review: saved views, bulk actions, focus | Review ⋯ | On, never on a phone |
+| Trust per person, and per person per group | A person's page | On |
+| Write off what someone owes (stops it covering a raid) | A person's page | On |
+| Combine two entries for the same person | A person's page, when names match | On |
+| Merge duplicate people after signing in | Settings → Account | On |
+| Audit log | Settings → Audit log · group ⋯ → Audit log | On |
+| Encrypted backup to a file | Settings → Backup | On |
+| Storage — free space, clear caches, delete receipts | Settings → Storage | On |
+| Re-pick your setup (the onboarding answer) | Feature Management, top card | On |
+| Replay the welcome tour | Settings | On |
+| A tapped reminder opens what it is about | Renewal → its rule · daily → Add · backup → Backup | On |
+| Long-press for a whole name | Any cut-off row or chip | On |
+| Long-press a friend to rename | Friends | On |
+| Dev tools — demo data, four personas, erase everything | Settings → tap the version 7× | On for the pilot (`B-01`) |
+| UPI link inspector | Long-press Pay | Dev tools only |
+
+---
+## §11 · Open from the last pass, and your feedback — `U-`
+
+**10 items: 5 `OPEN`, 5 `DECIDE`.** From the 2026-09-30 pass (`SPEC-BUGSCAN.md` Pass 2); your phone-pass feedback lands here as the next ids. Evidence in `FINDINGS.md` §11.
+
+| | What | Status | Default if never decided |
+|---|---|---|---|
+| `U-02` | Screens reload in full on every focus — measure on the phone | `OPEN` |  |
+| `U-07` | Hand-rolled cards and banners where `Card` / `Banner` / `ListRow` exist | `OPEN` |  |
+| `U-08` | About 200 unused imports and locals | `OPEN` |  |
+| `U-09` | Friends: "name missing when I owe" | `OPEN` |  |
+| `U-10` | Your phone pass, and the feedback it produces | `OPEN` |  |
+| `U-01` | The Insights switch gates nothing since Insights became a tab | `DECIDE` | The switch stays and does nothing |
+| `U-03` | `/settings/voice` has no way in | `DECIDE` | Stays built and unreachable |
+| `U-04` | Afford: the answer sits under the keyboard while you type | `DECIDE` | You close the keyboard to see it |
+| `U-05` | The monthly backup nudge still fires when signed in | `DECIDE` | It keeps nudging a file backup |
+| `U-06` | Money's header opens Afford with a `help-circle` icon | `DECIDE` | It reads as Help |
+

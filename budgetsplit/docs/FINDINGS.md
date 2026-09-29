@@ -1,6 +1,6 @@
 # FINDINGS.md — why each tracker item is what it is
 
-`Last verified: 2026-09-07 · Guarded by: trackerIntegrity.test.ts · countClaims.test.ts · docIdGraph.test.ts`
+`Last verified: 2026-09-30 (§1, §3's answered list, §4's W1-02, §9–§11; the rest as of 2026-09-07) · Guarded by: trackerIntegrity.test.ts · countClaims.test.ts · docIdGraph.test.ts`
 
 **The evidence behind every id in [`TRACKER.md`](./TRACKER.md).** That file says what is left and
 where each item stands, in one row apiece. This one says *why*: what was counted, what it costs,
@@ -76,7 +76,7 @@ closed by discovering the claim was false, which is worth not rediscovering.
 |---|---|---|
 | `B-01` | **Set `DEV_TOOLS_ENABLED` to `false`** (`src/constants/devTools.ts`) before the App Store upload. Deliberately `true` for the pilot so a tester build can be erased and re-seeded — which means the shipped app currently contains a screen that **deletes every transaction, group, person, budget and goal**, no backup, no undo, reachable by tapping the version 7× in Settings → About. One edit closes every entry point. `devToolsGate.test.ts` fails the suite if the line and the constant disagree, so it cannot drift — but the *decision* is yours. Also `DQ-21`. | `OPEN` |
 | `B-02` | **Buy the Apple Developer Program** ($99/yr). Gate 0: TestFlight external testing, push, App Intents and the widget all sit behind it. Why `plugins/withoutPushEntitlement.js` exists. Also `DQ-80`. | `BLOCKED` |
-| `B-03` | **Native rebuild** — `npx expo prebuild --clean && npx expo run:ios`. `expo-secure-store` is a new native module; the current binary crashes at launch without it (degraded gracefully in `src/lib/serverApi.ts`, but the feature needs the rebuild). Gates the entire device pass. | `OPEN` |
+| `B-03` | ~~**Native rebuild**~~ — `npx expo prebuild --clean && npx expo run:ios`, needed for `expo-secure-store`. **2026-09-30** — done: `ios/Podfile.lock` was rewritten 2026-09-25 and Xcode last built the app 2026-09-30; the device testing since then ran on that binary. | `DONE` |
 | `B-04` | **`EXPO_PUBLIC_API_URL` present wherever release builds run.** Without it there is no account UI at all. | `OPEN` |
 | `B-05` | **`EXPO_PUBLIC_RECEIPT_OCR_PROXY_URL` likewise** — otherwise Scan degrades **silently**. `EXPO_PUBLIC_*` bakes into the bundle at build time, so a clean checkout, a stale Metro cache or an EAS build without `.env` gets `undefined`. See `.env.example`. | `OPEN` |
 | `B-06` | ~~**Confirm demo/seed data is off** in release builds.~~ **2026-09-25** — confirmed in code: first-run seeding never calls `seedDemo.ts`; demo data loads only from the dev storage screen (`app/(system)/storage.tsx`), whose every entry point is behind `DEV_TOOLS_ENABLED` (`B-01`, held by `devToolsGate.test.ts`). The CSV export's demo-row signatures still drift from `seedDemo.ts` by design. | `DONE` |
@@ -88,6 +88,7 @@ closed by discovering the claim was false, which is worth not rediscovering.
 | `B-12` | **Device-test Pass 4** (the persona/flag work). `src/lib/featureFlags.ts:47` alters the tab bar itself, and that has never rendered on a phone. | `OPEN` |
 | `B-13` | **Paste the store copy into App Store Connect and confirm the privacy answers.** The draft was rewritten for server sync on 2026-09-25: **Financial info and User content are now collected and linked** once someone signs in (`DQ-93`) — the old "not collected" answer rested on sealed data and is no longer true. Receipt photos count as collected because they leave the device, and they are ON by default; an undeclared data type is a rejection. **Yours to do.** | `OPEN` |
 | `B-14` | **Run §0a's no-enumeration diff.** It needs a real session, so it cannot be done without receiving a sign-in email. Procedure is in `RELEASE_CHECKLIST.md` §0a. **Yours to do.** | `OPEN` |
+| `B-19` | **Merge the working branch into `main`.** `origin/main` stops at `bf95278` (2026-09-07); `claude/branch-selection-gi7lyy` is 76 commits ahead, `feat/server-sync` included. A release should be built from `main`, and every day it waits the merge is bigger. Push is from the personal account only (`mrprem27`) — the active `gh` account is the company one, so it is a deliberate switch and restore. | `OPEN` |
 | `B-15` | ~~**`KDF_ITERATIONS`, and getting the cost off the drawing thread.**~~ 50,000 rounds, and `lib/pbkdf2.ts` unrolls the loop so it yields to the event loop rather than holding the thread for the whole derivation — backup and restore show a moving percentage instead of freezing. Output is byte-identical to `CryptoJS.PBKDF2`, asserted against CryptoJS itself rather than a fixture, because a one-byte difference would make every backup already written permanently unopenable. | `DONE` |
 | `B-16` | ~~**Rehearse `category_global_v1` against a populated database.**~~ **2026-08-19** — the rehearsal exists as a test. `categoryGlobalMigration.test.ts` builds the *actual* pre-migration shape a real device has on disk and runs the real migration SQL against it via `node:sqlite`. Stronger than a one-off scratch-device run, because it re-runs on every commit. Pilot users install fresh, so this migration never executes against their data at all. | `DONE` |
 | `B-17` | ~~**Push all 25 commits.**~~ **The claim was false.** `HEAD` is level with `origin` and both named branches are ancestors of it. The only unpushed commits are three merge commits on an unrelated `Test` branch. Verified with `git log --branches --not --remotes`. | `DONE` |
@@ -722,14 +723,14 @@ header, would have cost a whole band above the Total Money hero. `Can I afford?`
 
 ## §3 · Open decisions — `DQ-`
 
-**57 entries: 10 answered and kept, 38 still open, 2 answered and being built (`DQ-94`, `DQ-98`), 7 `BLOCKED` outside the codebase** (`DQ-80`–`DQ-86`,
+**57 entries: 17 answered, 33 still open, 7 `BLOCKED` outside the codebase** (`DQ-80`–`DQ-86`,
 in the **Blocked outside the codebase** table below). Each names **the default if nobody ever decides** — because most of these will
 not be decided, and the default is what actually ships.
 
 **Answered:** `DQ-07` (2026-08) · `DQ-26` (2026-09-05) · `DQ-28` and `DQ-31` (2026-09-04, both
 verified against the source tree rather than a changelog — see §5's `SYNC-F13` and `SYNC-F14`) ·
 `DQ-88` (2026-09-23) · `DQ-91` (2026-09-24) · `DQ-32`, `DQ-89` and `DQ-93` (2026-09-24, the sync
-direction and what it settles) · `DQ-97` (2026-09-25, amended 2026-09-26) · `DQ-94` and `DQ-98` (2026-09-26, answered, being built).
+direction and what it settles) · `DQ-97` (2026-09-25, amended 2026-09-26) · `DQ-94` and `DQ-98` (2026-09-26; both built — Merge into my account on first sign-in, and the logo button + app grid for UPI; device checks in `RELEASE_CHECKLIST.md`).
 
 `DQ-24` to `DQ-27` came out of Walk 1 (`WALK-01.md`) and share a shape worth naming: each is a
 question the app currently answers by **omission**, and in every case the omission is invisible.
@@ -858,7 +859,6 @@ that the money is right.
 
 | | Finding | Un-parks when |
 |---|---|---|
-| `W1-02` | Features should adapt to the intent picked at onboarding. Partly true already; the rest is an ask. | The persona → flag-defaults pass. |
 | `W1-11` | A light "additional income" entry. | Weighed against `OV-08` — `/add/quick` already has 11 params and 24 entry points. |
 | `W1-16` | `SC-16` could suggest a top 3 before any spend exists. | Taste, cheap, no urgency. |
 | `W1-19b` | **The policy:** whether a settled person can be removed at all. | `DQ-25`. |
@@ -873,6 +873,7 @@ that the money is right.
 
 | | Finding | Closed by |
 |---|---|---|
+| `W1-02` | Features should adapt to the intent picked at onboarding. | Built: onboarding applies the persona's switches (`lib/onboarding.ts` → `applyPersona`), and Feature Management can re-pick it — which now reloads the switches it wrote (`P2-7`). |
 | `W1-01` | Hero text preceded the animation — delays of 1400/1550/1700 against a mark that forms at **3250 ms**. | One `HERO_REVEAL_MS`, derived from `LogoAssembly`'s own constants and guarded, so it cannot drift from the animation again. |
 | `W1-03` | The name field sat under the keyboard: the footer was outside the scroll view, so the keyboard covered the field *and* the CTA. | `KeyboardStickyView` + a measured `bottomOffset`. The page still never resizes. |
 | `W1-04` | Payday should be a date, not chips. | All 31 days, as `ui/DayOfMonthGrid`. Revealed only once an income is given — the help line promised a salary entry that is only written for `incomeNum > 0`. |
@@ -1017,3 +1018,50 @@ Recorded so nobody re-discovers them as bugs. These are **decisions**, not negle
 | ~~**Multi-device sync (S2)**~~ / ~~**Shared groups (S3)**~~ | **Built, then rebuilt as server sync** (`DQ-93`, S0–S22): everything a signed-in account owns, offline-first, checked by the server. What is *not* proven is in `RELEASE_CHECKLIST.md` §3.1 — **sync has never run on a phone** | — |
 
 ---
+
+---
+
+## §9 · Deferred from V1
+
+Each was raised, weighed, and held back on purpose — not forgotten. Moved here from `tasks/todo.md` (now `docs/history/TASKS-2026-09-CLOSEOUT.md`)
+(2026-09-30), where they had been sitting outside the register.
+
+| | Why it is deferred | Trigger |
+|---|---|---|
+| `V-01` | **Refunds lower spend** (was `S1`). A refund is a credit today, so it counts as income and the original expense still counts in full — spend reads high twice over. Fixing it properly is a money-model change: a `refund_of` link on the credit, analysis subtracting linked refunds from the original's category, and Review offering "refund of…" when a credit's text says refund or reversal. It touches every analysis path and the server's positive-amount checks, so it is not something to rush into a close-out. | You ask for it — then a spec before any code. |
+| `V-02` | **A hand-logged bill after its automatic occurrence already posted** (was `R2b`). The match window (`recurring.ts`) covers the common case — you pay before or near the date and the occurrence claims your entry. The reverse needs *replacing* an automatic row the user may already have edited; today the duplicate warning on save catches the same amount within a day. | It shows up as a real duplicate on the phone. |
+| `V-03` | **Shop names from UPI handles** (was `S2`) — `razorpay@hdfcbank` → the shop. Needs a source of names; the app already learns a category per merchant string. | A names source exists. |
+| `V-04` | **Android: open a chosen UPI app directly** (was `U5`). Android keeps the OS chooser; targeting a package needs `expo-intent-launcher` (a new native dependency) and package names on the app specs. `D-03`. | The Android port. |
+| `V-05` | **AI narration of your month** (was Phase 6). No spec, no options pass; the engine is deterministic-only by decision and narration would be its first non-deterministic surface. | A spec and an options pass. |
+| `V-06` | **"Cash last confirmed · Update"** (was `B-103`). Money would say when you last confirmed your cash and offer an update. Needs a new stored input and a decision about what a stale cash figure should do to Safe-to-Spend. | You decide it is worth the input. |
+| `V-07` | **The Android port.** On 2026-08-19 you put it *before* the pilot (`RELEASE_CHECKLIST.md` §3.2); none of it is started. What it takes: an OCR module (`modules/expo-ocr` is Apple Vision only — ML Kit), keyboard handling (`RELEASE_CHECKLIST.md` notes Android has none), the UPI path never run (`D-03`), and SMS capture is a Play review. The India pilot is mostly Android phones, which argues for keeping the order; a TestFlight pilot of friends on iPhones argues for moving it after. | You confirm or move the order. |
+
+---
+
+## §10 · Built, but easy to forget
+
+No ids, like §8: these are not findings, they are features that exist and are easy to lose track of.
+The list is in `TRACKER.md` §10. Two of them are there *because* something went wrong: Hands-free Siri
+capture lost its setup screen's only entry (`U-03`), and the UPI link inspector was reachable by any
+tester until pass 2 put it behind the dev-tools switch (`P2-10`).
+
+---
+
+## §11 · Open from the last pass, and your feedback
+
+From `SPEC-BUGSCAN.md` Pass 2 (2026-09-30). Everything that pass could just fix, it fixed (`P2-1`–`P2-12`,
+each with a regression proven by reverting it); these are what is left. Your phone-pass feedback is filed
+here from `U-11` on.
+
+| | Evidence | Default if never decided |
+|---|---|---|
+| `U-01` | **The Insights switch gates nothing.** It hid Home's header button to Insights; commit `1c7b485` made Insights a tab and the switch stopped being read anywhere. The Trip / one-off setup turns it off expecting no Insights, and gets them. The flag guard passed because it looked for the key's *name*, and `'insights'` is also the tab's name — it now looks for a read of the flag, and lists this one as pending. Two ways out: hide the tab when off (the bar has four tab slots, so Money would sit alone on the right), or make Insights core and drop the switch. | The switch stays and does nothing. |
+| `U-02` | **Every focus re-runs the screen's whole loader.** Measured on ~3,100 entries (two years of use) in Node: Home 84 ms (year view 116 ms), Insights 59 ms, Groups 10 ms — a phone's JS engine is slower. `useScreenData` refetches on every focus even when nothing changed; writes and sync already mark screens dirty, so a focus with nothing dirty could skip. Not changed blind: measure on the phone first, and only then decide. | Every tab switch and every return from a pushed screen reloads. |
+| `U-03` | **`/settings/voice` has no way in** since its Settings row was removed (2026-09-30, your call). The Siri drain still files phrases for a shortcut already installed. Delete the screen now (the Shortcuts apparatus goes later, `§8`), or link it from Help. `deadRouteRef.test.ts` lists it as pending and fails the day it gains an entry, so this row cannot go stale. | Stays built and unreachable. |
+| `U-04` | **Afford's answer is under the keyboard.** The amount field auto-focuses and the verdict card renders below the frequency, category and Can-wait rows — typing shows nothing changing until you close the keyboard. Options: a one-line live verdict right under the amount, with the full card below; or the card moved above the categories. A layout choice, so yours. | You close the keyboard to see it. |
+| `U-05` | **The backup nudge still fires when signed in.** A signed-in account already keeps a readable copy of everything (`DQ-93`), but the monthly reminder still asks for an encrypted file backup. | It keeps nudging a file backup. |
+| `U-06` | **Money's header opens Afford with `help-circle`**, the glyph most apps use for Help. The body row below says "Can I afford this?", so the header icon is the only unlabelled door to it. | It reads as Help. |
+| `U-07` | **Hand-rolled chrome where the component exists.** About 20 files style their own `bgCard` + border + radius instead of `Card`; Home's catch-up note and "Get started" tiles, Money's overspend card and the group menu build their own rows and buttons. Visual — do it with your layout feedback, not before. | Looks close, drifts a little per screen. |
+| `U-08` | **About 200 unused imports and locals** (`tsc --noUnusedLocals`), and dead `StyleSheet` keys (Home's old header styles, Money's). Harmless to the user; noise for every reader. One mechanical pass. | Stays. |
+| `U-09` | **Friends: "name missing when I owe."** The Friends row renders the name in every balance direction; the payment rows were fixed as `FR-1`. Needs your screenshot to find where you saw it. | — |
+| `U-10` | **Your phone pass**, and what it finds: the checks in `tasks/todo.md`, `RELEASE_CHECKLIST.md` §2 and §3.1. Each finding becomes its own `U-` row. | — |

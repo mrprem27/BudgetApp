@@ -125,7 +125,7 @@ cd budgetsplit && npx jest && npx tsc --noEmit     # everything
 
 ## 11 · Remaining work
 
-Tracked in `tasks/todo.md` (Phase 3 tail + Phase 5). Nothing here is a task list.
+Tracked in `docs/TRACKER.md`; the build history is `docs/history/TASKS-2026-09-CLOSEOUT.md`. Nothing here is a task list.
 
 ## 12 · Open questions
 

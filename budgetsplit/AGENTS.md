@@ -859,7 +859,7 @@ scannable; the argument behind an item is read after you have picked it. Held to
 996-line file that was neither. So: **status goes in `TRACKER.md` and nowhere else, reasoning goes in
 `FINDINGS.md` and nowhere else.**
 
-**One register, one id.** An `OV-`, `DQ-`, `W1-`, `SYNC-F`, `B-`, `D-` or `A-` id gets exactly one
+**One register, one id.** An `OV-`, `DQ-`, `W1-`, `SYNC-F`, `B-`, `D-`, `A-`, `V-` or `U-` id gets exactly one
 row in `TRACKER.md` and exactly one entry in `FINDINGS.md`, and may be *cited* anywhere.
 `trackerIntegrity.test.ts` fails if an id has one without the other, or if a third document defines
 one — every contradiction that forced this rule came from exactly that.

@@ -1,6 +1,6 @@
 # SPEC — Forms, group screen, truncation (Phase 5c remainder)
 
-Closes the open build items of `tasks/todo.md` Phase 5c: F1–F3, N1–N3, G1–G2, T1. Approved 2026-09-30.
+Closes the open build items of `docs/history/TASKS-2026-09-CLOSEOUT.md` Phase 5c: F1–F3, N1–N3, G1–G2, T1. Approved 2026-09-30.
 Out of scope: the device checks (§0, CP1/CP3b/CP4 — yours) and Phase 6 (deferred).
 
 ## Objective
