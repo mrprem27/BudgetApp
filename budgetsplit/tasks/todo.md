@@ -240,6 +240,11 @@ Short and ordered: quick fixes first, the one design question last.
   - **No schema or server change.** The server's `groups.kind` is a CHECK of `personal | shared | pair` (a pair is exactly two people), so a new kind would mean rebuilding that table. The hidden group is an ordinary `shared` group on the wire, marked by `icon = 'link-2'` (`PEOPLE_SET_ICON`), which already syncs, so every member's phone hides it the same way. Looked up by its exact member set, never by name.
   - Balances stay correct with no extra work: friend balances already sum across every group a person shares with you.
 
+- [x] **F9 · Filters.** Review's amount is Min/Max (empty = none, one = at least/at most, both = between); category is one chip → searchable multi-select sheet; the AND/OR switch is gone (filters only narrow). Saved views from the old shape are migrated (`normalizeFilters`).
+- [x] **F10 · Date range.** One calendar, tap first then last day (`ui/DateRangeSheet`). Root cause of the bug: the picker's `onClose` cleared the state its `onChange` had just set, so "To" never opened. Review's filter sheet no longer nests its pickers (they are siblings, `ReviewFilterSheet`).
+- [x] **F11 · Settle direction.** Opening Settle with someone now points the way the money goes (they owe you → them → you) and pre-fills what is owed (`settleDirection`, seeded once in `useAddTxnForm`).
+- [x] **F12 · Upcoming + WhatsApp.** Upcoming loses the leftover "nudges" line and settings row; settle rows say who owes whom with Remind / Record payment / Pay. `useReminder` is shared by Person, Upcoming and Friends.
+
 Done, with tests (`peopleSetGroup`, `transferCategories`). Gates: `npx jest`, `npx tsc --noEmit`. DEVICE: F5 on Add (expense, income, transfer), F6 editing an expense, F7 the transfer picker, F8 splitting with 2 friends and no group.
 
 ---

@@ -1,7 +1,7 @@
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { ReviewFilters } from './reviewFilter';
+import { normalizeFilters, type ReviewFilters } from './reviewFilter';
 
 /**
  * Saved focus "views" for the Review inbox. A view bundles a filter with an
@@ -30,7 +30,8 @@ export function makeViewId(): string {
 export async function loadViews(): Promise<SavedView[]> {
   try {
     const raw = await AsyncStorage.getItem(KEY);
-    return raw ? (JSON.parse(raw) as SavedView[]) : [];
+    // Filters saved by an older build have a different shape — see `normalizeFilters`.
+    return raw ? (JSON.parse(raw) as SavedView[]).map(v => ({ ...v, filters: normalizeFilters(v.filters) })) : [];
   } catch { return []; }
 }
 

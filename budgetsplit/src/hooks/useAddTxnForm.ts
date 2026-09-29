@@ -43,6 +43,7 @@ import type { BudgetGroup } from '../db/queries/groups';
 import type { Person } from '../db/queries/persons';
 import type { Category } from '../db/queries/categories';
 import { TRANSFER_HIDDEN_FROM_PICKER } from '../constants/categories';
+import { settleDirection } from '../lib/owe';
 import { AddKind, ADD_KIND, PayMethod, RecurEndMode, INCOME_LANDING_DEFAULT, TRANSFER_SCOPE_ALL, asPayMethod, type TransferScope , defaultRecurMode, type RecurMode } from '../constants/enums';
 import type { SplitMode, RecurFreq } from '../constants/enums';
 
@@ -322,6 +323,31 @@ export function useAddTxnForm(params: AddTxnParams) {
       .catch(() => {});
   }, [db, me]);
   useEffect(() => { if (!transferFromId && me) setTransferFromId(me.id); }, [me, transferFromId]);
+
+  /**
+   * Settling with someone should open pointing the way the money actually goes.
+   *
+   * Every "Settle" button passes only `to=<them>`, and the form used to make *me* the
+   * payer — so settling with a friend who owed you opened as you paying them, and it was
+   * on you to notice the arrow. Once the balances load, a friend who owes you flips it to
+   * them → you, and the amount is filled with what is owed (editable — a part-payment is
+   * just a smaller number).
+   *
+   * Once only, and never for an edit or when the caller named both ends (`from` is set):
+   * a direction you flipped yourself must not be flipped back by a late balance refresh.
+   */
+  const directionSeeded = useRef(false);
+  useEffect(() => {
+    if (directionSeeded.current || kind !== AddKind.Transfer || isEditing || !me || paramFrom || !paramTo || paramTo === me.id) return;
+    const net = personNet[paramTo];
+    if (net === undefined) return; // balances not loaded yet, or no shared group with them
+    directionSeeded.current = true;
+    if (settleDirection(net) === 'they-pay') {
+      setTransferFromId(paramTo);
+      setTransferToId(me.id);
+    }
+    if (!paramAmount && net !== 0) setAmountText(paiseToInput(Math.abs(net)));
+  }, [personNet, me, kind, isEditing, paramFrom, paramTo, paramAmount]);
   useEffect(() => {
     if (kind !== 'transfer' || !transferFromId || !transferToId || transferFromId === transferToId) { setTransferScopes(null); return; }
     let alive = true;

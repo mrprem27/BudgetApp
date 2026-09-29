@@ -1,49 +1,53 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
-import { Feather } from '@expo/vector-icons';
-import { format } from 'date-fns';
 import { colors, type, space, radius } from '../../tokens';
 import { PrimaryButton } from '../../ui/PrimaryButton';
-import { DatePickerSheet } from '../../ui/DatePickerSheet';
-import { TimePickerSheet, type TimeValue } from '../../ui/TimePickerSheet';
-import { parseFilterDate, type ReviewFilters, type AmountMode } from '../../../lib/reviewFilter';
-import { FChip, reviewFormStyles as f } from './FChip';
+import { Chip } from '../../ui/Chip';
+import { shortDate } from '../../../lib/dateFormat';
+import { parseFilterDate, type ReviewFilters } from '../../../lib/reviewFilter';
+import { reviewFormStyles as f } from './FChip';
 
-const AMOUNT_MODES: { key: AmountMode; label: string }[] = [
-  { key: 'any', label: 'Any' },
-  { key: 'lt', label: '< less' },
-  { key: 'gt', label: '> more' },
-  { key: 'between', label: 'Between' },
-];
+/** "Any category" / "Food" / "Food +2" — one line, whatever is selected. */
+function categoryLabel(cats: string[]): string {
+  if (cats.length === 0) return 'Any category';
+  return cats.length === 1 ? cats[0] : `${cats[0]} +${cats.length - 1}`;
+}
+
+/** "Any date" / "12 Jun – 20 Jun" / "From 12 Jun" / "Until 20 Jun". */
+function dateLabel(from: string, to: string): string {
+  const a = parseFilterDate(from, false), b = parseFilterDate(to, true);
+  if (a == null && b == null) return 'Any date';
+  if (a != null && b != null) return `${shortDate(a)} – ${shortDate(b)}`;
+  return a != null ? `From ${shortDate(a)}` : `Until ${shortDate(b!)}`;
+}
 
 /**
- * The Review inbox filter sheet: name, category, amount range, date+time range
- * and AND/OR combination. Picking a date chains straight into the time picker
- * for that same bound, so a range can be set without re-opening the sheet.
+ * The Review inbox filter form: name, category, amount and date — each one line.
+ *
+ * - **Category** and **date** are a chip that opens a picker (searchable list; one
+ *   calendar you tap twice), not a wall of chips and two date fields.
+ * - **Amount** is two boxes, Min and Max: empty is no filter, one is "at least" or "at
+ *   most", both is "between". It was a four-way selector plus a field, to say the same.
+ *
+ * The pickers are hosted by `ReviewFilterSheet`, which hides this sheet while one is
+ * open — a sheet inside a sheet evicts the outer one (`lib/sheetStage.ts`).
  */
-export function FilterForm({ filters, categories, onChange, onClear, onDone }: {
+export function FilterForm({ filters, onChange, onClear, onDone, onOpenCategories, onOpenRange, canPickCategory }: {
   filters: ReviewFilters;
-  categories: string[];
   onChange: (f: ReviewFilters) => void;
   onClear: () => void;
   onDone: () => void;
+  onOpenCategories: () => void;
+  onOpenRange: () => void;
+  /** No categories in the list → nothing to pick, so the row is not offered. */
+  canPickCategory: boolean;
 }) {
   const set = (p: Partial<ReviewFilters>) => onChange({ ...filters, ...p });
-  const [pick, setPick] = useState<'from' | 'to' | null>(null);
-  const [timePick, setTimePick] = useState<'from' | 'to' | null>(null);
-  const pickValue = pick === 'to'
-    ? (parseFilterDate(filters.dateTo, true) ?? Date.now())
-    : (parseFilterDate(filters.dateFrom, false) ?? Date.now());
-  // Seed the time picker from the bound's existing time, else a sensible default.
-  const timeStr = timePick === 'to' ? filters.dateTo : timePick === 'from' ? filters.dateFrom : '';
-  const tm = /\s(\d{2}):(\d{2})$/.exec(timeStr);
-  const timeValue: TimeValue = tm
-    ? { hour: Number(tm[1]), minute: Number(tm[2]) }
-    : (timePick === 'to' ? { hour: 23, minute: 59 } : { hour: 0, minute: 0 });
+  const dateSet = !!(filters.dateFrom || filters.dateTo);
   return (
     <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: space.md, paddingBottom: space.md }}>
       <View>
-        <Text style={f.fLabel}>NAME</Text>
+        <Text style={f.fLabel}>Name</Text>
         <TextInput
           style={f.fInput}
           value={filters.query}
@@ -54,108 +58,60 @@ export function FilterForm({ filters, categories, onChange, onClear, onDone }: {
         />
       </View>
 
-      {categories.length > 0 && (
+      {canPickCategory && (
         <View>
-          <Text style={f.fLabel}>CATEGORY</Text>
-          <View style={f.fChipRow}>
-            <FChip label="Any" on={filters.category === ''} onPress={() => set({ category: '' })} />
-            {categories.map(c => (
-              <FChip key={c} label={c} on={filters.category === c} onPress={() => set({ category: c })} />
-            ))}
+          <Text style={f.fLabel}>Category</Text>
+          <View style={styles.row}>
+            <Chip
+              grow
+              chevron
+              icon="tag"
+              label={categoryLabel(filters.categories)}
+              selected={filters.categories.length > 0}
+              onPress={onOpenCategories}
+              accessibilityLabel={`Category: ${categoryLabel(filters.categories)}. Change`}
+            />
           </View>
         </View>
       )}
 
       <View>
-        <Text style={f.fLabel}>AMOUNT (₹)</Text>
-        <View style={styles.seg}>
-          {AMOUNT_MODES.map(m => (
-            <TouchableOpacity key={m.key} style={[styles.segBtn, filters.amountMode === m.key && styles.segBtnOn]} accessibilityState={{ selected: filters.amountMode === m.key }} onPress={() => set({ amountMode: m.key })} accessibilityRole="button">
-              <Text style={[styles.segText, filters.amountMode === m.key && styles.segTextOn]}>{m.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-        {filters.amountMode !== 'any' && (
-          <View style={styles.fDateRow}>
-            <TextInput
-              style={styles.fDateInput}
-              value={filters.amtA}
-              onChangeText={(t) => set({ amtA: t.replace(/[^0-9.]/g, '') })}
-              placeholder={filters.amountMode === 'between' ? 'From' : 'Amount'}
-              placeholderTextColor={colors.textMuted}
-              keyboardType="decimal-pad"
-            />
-            {filters.amountMode === 'between' && (
-              <TextInput
-                style={styles.fDateInput}
-                value={filters.amtB}
-                onChangeText={(t) => set({ amtB: t.replace(/[^0-9.]/g, '') })}
-                placeholder="To"
-                placeholderTextColor={colors.textMuted}
-                keyboardType="decimal-pad"
-              />
-            )}
-          </View>
-        )}
-      </View>
-
-      <View>
-        <Text style={f.fLabel}>DATE &amp; TIME RANGE</Text>
-        <View style={styles.fDateRow}>
-          <TouchableOpacity style={styles.fDateBtn} onPress={() => setPick('from')} accessibilityRole="button" accessibilityLabel="From date and time">
-            <Feather name="calendar" size={14} color={colors.textMuted} />
-            <Text style={[styles.fDateText, !filters.dateFrom && styles.fDatePlaceholder]}>{filters.dateFrom || 'From'}</Text>
-            {!!filters.dateFrom && (
-              <TouchableOpacity onPress={() => set({ dateFrom: '' })} hitSlop={8} accessibilityLabel="Clear from date"><Feather name="x" size={13} color={colors.textMuted} /></TouchableOpacity>
-            )}
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.fDateBtn} onPress={() => setPick('to')} accessibilityRole="button" accessibilityLabel="To date and time">
-            <Feather name="calendar" size={14} color={colors.textMuted} />
-            <Text style={[styles.fDateText, !filters.dateTo && styles.fDatePlaceholder]}>{filters.dateTo || 'To'}</Text>
-            {!!filters.dateTo && (
-              <TouchableOpacity onPress={() => set({ dateTo: '' })} hitSlop={8} accessibilityLabel="Clear to date"><Feather name="x" size={13} color={colors.textMuted} /></TouchableOpacity>
-            )}
-          </TouchableOpacity>
+        <Text style={f.fLabel}>Amount (₹)</Text>
+        <View style={styles.amountRow}>
+          <TextInput
+            style={styles.amountInput}
+            value={filters.amountMin}
+            onChangeText={(t) => set({ amountMin: t.replace(/[^0-9.]/g, '') })}
+            placeholder="Min"
+            placeholderTextColor={colors.textMuted}
+            keyboardType="decimal-pad"
+            accessibilityLabel="Minimum amount"
+          />
+          <Text style={styles.to}>to</Text>
+          <TextInput
+            style={styles.amountInput}
+            value={filters.amountMax}
+            onChangeText={(t) => set({ amountMax: t.replace(/[^0-9.]/g, '') })}
+            placeholder="Max"
+            placeholderTextColor={colors.textMuted}
+            keyboardType="decimal-pad"
+            accessibilityLabel="Maximum amount"
+          />
         </View>
       </View>
 
-      <DatePickerSheet
-        visible={pick !== null}
-        value={pickValue}
-        onClose={() => setPick(null)}
-        onChange={(ms) => {
-          const d = format(new Date(ms), 'yyyy-MM-dd');
-          const which = pick;
-          set(which === 'to' ? { dateTo: d } : { dateFrom: d });
-          setPick(null);
-          setTimePick(which); // chain into the time picker for this bound
-        }}
-      />
-
-      <TimePickerSheet
-        visible={timePick !== null}
-        value={timeValue}
-        title="Pick a time (optional)"
-        onClose={() => setTimePick(null)}
-        onSave={(t) => {
-          const cur = timePick === 'to' ? filters.dateTo : filters.dateFrom;
-          const datePart = (cur || '').split(' ')[0];
-          if (datePart) {
-            const withTime = `${datePart} ${String(t.hour).padStart(2, '0')}:${String(t.minute).padStart(2, '0')}`;
-            set(timePick === 'to' ? { dateTo: withTime } : { dateFrom: withTime });
-          }
-          setTimePick(null);
-        }}
-      />
-
       <View>
-        <Text style={f.fLabel}>MATCH</Text>
-        <View style={styles.seg}>
-          {(['and', 'or'] as const).map(c => (
-            <TouchableOpacity key={c} style={[styles.segBtn, filters.combine === c && styles.segBtnOn]} accessibilityState={{ selected: filters.combine === c }} onPress={() => set({ combine: c })} accessibilityRole="button">
-              <Text style={[styles.segText, filters.combine === c && styles.segTextOn]}>{c === 'and' ? 'All (AND)' : 'Any (OR)'}</Text>
-            </TouchableOpacity>
-          ))}
+        <Text style={f.fLabel}>Date</Text>
+        <View style={styles.row}>
+          <Chip
+            grow
+            chevron
+            icon="calendar"
+            label={dateLabel(filters.dateFrom, filters.dateTo)}
+            selected={dateSet}
+            onPress={onOpenRange}
+            accessibilityLabel={`Date: ${dateLabel(filters.dateFrom, filters.dateTo)}. Change`}
+          />
         </View>
       </View>
 
@@ -172,14 +128,8 @@ export function FilterForm({ filters, categories, onChange, onClear, onDone }: {
 }
 
 const styles = StyleSheet.create({
-  seg: { flexDirection: 'row', backgroundColor: colors.bgMuted, borderRadius: radius.md, padding: 3, gap: 3 },
-  segBtn: { flex: 1, alignItems: 'center', paddingVertical: space.sm, borderRadius: radius.sm },
-  segBtnOn: { backgroundColor: colors.accent },
-  segText: { ...type.label, color: colors.textSecondary },
-  segTextOn: { color: colors.bg, fontFamily: 'Inter_600SemiBold' },
-  fDateRow: { flexDirection: 'row', gap: space.sm, marginTop: space.sm },
-  fDateInput: { flex: 1, ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, paddingVertical: 10 },
-  fDateBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.bgInput, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, paddingVertical: 12 },
-  fDateText: { ...type.body, color: colors.textPrimary, flex: 1 },
-  fDatePlaceholder: { color: colors.textMuted },
+  row: { flexDirection: 'row' },
+  amountRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  amountInput: { flex: 1, ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, paddingVertical: 10 },
+  to: { ...type.label, color: colors.textMuted },
 });

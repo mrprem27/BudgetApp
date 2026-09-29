@@ -1,13 +1,13 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { loadViews, upsertView, deleteView, makeViewId, type SavedView } from '../lib/reviewViews';
-import type { ReviewFilters } from '../lib/reviewFilter';
+import { DEFAULT_FILTERS } from '../lib/reviewFilter';
 
 const store = AsyncStorage as unknown as { __reset: () => void; __failNextGet: () => void };
 
 const view = (id: string, name = id): SavedView => ({
   id,
   name,
-  filters: {} as ReviewFilters,
+  filters: DEFAULT_FILTERS,
   groupId: null,
   paidBy: null,
 });
@@ -37,6 +37,17 @@ describe('loadViews', () => {
   it('returns an empty list when storage itself fails', async () => {
     store.__failNextGet();
     await expect(loadViews()).resolves.toEqual([]);
+  });
+});
+
+describe('loadViews — a view saved by an older build', () => {
+  it('brings its filters up to the current shape instead of losing or crashing on them', async () => {
+    await AsyncStorage.setItem('review_saved_views', JSON.stringify([{
+      id: 'old', name: 'Big food', groupId: null, paidBy: null,
+      filters: { query: '', category: 'Food', amountMode: 'gt', amtA: '1000', amtB: '', dateFrom: '', dateTo: '', combine: 'or' },
+    }]));
+    const [v] = await loadViews();
+    expect(v.filters).toEqual({ ...DEFAULT_FILTERS, categories: ['Food'], amountMin: '1000' });
   });
 });
 

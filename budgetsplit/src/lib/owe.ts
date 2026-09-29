@@ -28,6 +28,17 @@ export type OweView = {
   thirdPerson: string;
 };
 
+/**
+ * Who pays whom when settling with one person, from the balance between you.
+ *
+ * `net > 0` — they owe you, so *they* pay and the money comes to you. Otherwise you pay
+ * them: you owe them, or you are already square and there is nothing to infer, in which
+ * case the default of "I pay" stands. Same sign convention as {@link oweView}.
+ */
+export function settleDirection(net: number): 'they-pay' | 'i-pay' {
+  return net > 0 ? 'they-pay' : 'i-pay';
+}
+
 export function oweView(net: number): OweView {
   if (net < 0) {
     return {

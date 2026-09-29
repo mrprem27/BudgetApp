@@ -8,29 +8,54 @@ import { TXN_SOURCE, type TxnSource } from '../constants/enums';
  * `rowMatches`. Kept here (not inline in the screen) so it's unit-testable.
  */
 
-export type AmountMode = 'any' | 'lt' | 'gt' | 'between';
-
+/**
+ * Every filter narrows the list further — there is no AND/OR switch. "Match any" made
+ * a category *and* an amount widen the list instead of narrowing it, which no one
+ * reading two filters expects; within one filter (several categories) it is "any of".
+ *
+ * Amount is one range, not a four-way mode: leave both ends empty for no filter, fill
+ * one for "at least"/"at most", fill both for "between".
+ */
 export type ReviewFilters = {
   query: string;
-  category: string;      // '' = any
-  amountMode: AmountMode;
-  amtA: string;          // rupees
-  amtB: string;          // rupees (Between upper bound)
+  categories: string[];  // [] = any; otherwise a row matches any of them
+  amountMin: string;     // rupees; '' = no lower bound
+  amountMax: string;     // rupees; '' = no upper bound
   dateFrom: string;      // yyyy-MM-dd [HH:mm]
   dateTo: string;
-  combine: 'and' | 'or';
 };
 
 export const DEFAULT_FILTERS: ReviewFilters = {
-  query: '', category: '', amountMode: 'any', amtA: '', amtB: '', dateFrom: '', dateTo: '', combine: 'and',
+  query: '', categories: [], amountMin: '', amountMax: '', dateFrom: '', dateTo: '',
 };
+
+/**
+ * Bring a filter saved by an older build up to the current shape. Saved views persist
+ * their filters in AsyncStorage, so the old `category` / `amountMode` / `amtA` / `amtB` /
+ * `combine` fields are still out there and must not crash or silently vanish.
+ */
+export function normalizeFilters(raw: unknown): ReviewFilters {
+  const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const str = (v: unknown) => (typeof v === 'string' ? v : '');
+  let amountMin = str(o.amountMin), amountMax = str(o.amountMax);
+  if (o.amountMode !== undefined) {
+    const a = str(o.amtA), b = str(o.amtB);
+    if (o.amountMode === 'gt') amountMin = a;
+    else if (o.amountMode === 'lt') amountMax = a;
+    else if (o.amountMode === 'between') { amountMin = a; amountMax = b; }
+  }
+  const categories = Array.isArray(o.categories)
+    ? o.categories.filter((c): c is string => typeof c === 'string' && c !== '')
+    : str(o.category) ? [str(o.category)] : [];
+  return { query: str(o.query), categories, amountMin, amountMax, dateFrom: str(o.dateFrom), dateTo: str(o.dateTo) };
+}
 
 /** The normalized row shape the filter needs (decoupled from PendingTxn). */
 export type FilterRow = { description: string; category: string; amountPaise: number; date: number };
 
 /** True when any filter is set (i.e. the working set is narrowed). */
 export function filtersActive(f: ReviewFilters): boolean {
-  return !!(f.query.trim() || f.category || f.amountMode !== 'any' || f.dateFrom.trim() || f.dateTo.trim());
+  return !!(f.query.trim() || f.categories.length > 0 || f.amountMin.trim() || f.amountMax.trim() || f.dateFrom.trim() || f.dateTo.trim());
 }
 
 /**
@@ -52,21 +77,24 @@ export function parseFilterDate(s: string, end: boolean): number | null {
   return isNaN(d.getTime()) ? null : d.getTime();
 }
 
-/** Does a row satisfy the active filters? Predicates combine with AND or OR. */
+/** Does a row satisfy every active filter? */
 export function rowMatches(row: FilterRow, f: ReviewFilters): boolean {
-  const preds: boolean[] = [];
-  if (f.query.trim()) preds.push(row.description.toLowerCase().includes(f.query.trim().toLowerCase()));
-  if (f.category) preds.push(row.category === f.category);
-  if (f.amountMode !== 'any') {
-    const a = parseToPaise(f.amtA || '0');
-    if (f.amountMode === 'lt') preds.push(row.amountPaise < a);
-    else if (f.amountMode === 'gt') preds.push(row.amountPaise > a);
-    else { const b = parseToPaise(f.amtB || '0'); const lo = Math.min(a, b), hi = Math.max(a, b); preds.push(row.amountPaise >= lo && row.amountPaise <= hi); }
+  if (f.query.trim() && !row.description.toLowerCase().includes(f.query.trim().toLowerCase())) return false;
+  if (f.categories.length > 0 && !f.categories.includes(row.category)) return false;
+
+  const hasMin = f.amountMin.trim() !== '', hasMax = f.amountMax.trim() !== '';
+  if (hasMin || hasMax) {
+    let lo = hasMin ? parseToPaise(f.amountMin) : null;
+    let hi = hasMax ? parseToPaise(f.amountMax) : null;
+    // Both ends given in the wrong order still means "between the two".
+    if (lo != null && hi != null && lo > hi) [lo, hi] = [hi, lo];
+    if (lo != null && row.amountPaise < lo) return false;
+    if (hi != null && row.amountPaise > hi) return false;
   }
-  if (f.dateFrom.trim()) { const t = parseFilterDate(f.dateFrom, false); if (t != null) preds.push(row.date >= t); }
-  if (f.dateTo.trim()) { const t = parseFilterDate(f.dateTo, true); if (t != null) preds.push(row.date <= t); }
-  if (preds.length === 0) return true;
-  return f.combine === 'and' ? preds.every(Boolean) : preds.some(Boolean);
+
+  if (f.dateFrom.trim()) { const t = parseFilterDate(f.dateFrom, false); if (t != null && row.date < t) return false; }
+  if (f.dateTo.trim()) { const t = parseFilterDate(f.dateTo, true); if (t != null && row.date > t) return false; }
+  return true;
 }
 
 /**

@@ -6,7 +6,7 @@ import { Card } from './Card';
 import { Divider } from './Divider';
 import { ListRow } from './ListRow';
 import { SheetModal } from './SheetModal';
-import { DatePickerSheet } from './DatePickerSheet';
+import { DateRangeSheet } from './DateRangeSheet';
 import { colors, type, space, radius } from '../tokens';
 import { shortDate } from '../../lib/dateFormat';
 import { TXN_KIND, TXN_KIND_LABEL_PLURAL } from '../../constants/enums';
@@ -93,7 +93,7 @@ export function FilterBar({
 }: Props) {
   const [searchOpen, setSearchOpen] = useState(!!search);
   const [sheet, setSheet] = useState<'range' | 'person' | null>(null);
-  const [datePick, setDatePick] = useState<'from' | 'to' | null>(null);
+  const [rangeOpen, setRangeOpen] = useState(false);
   const inputRef = useRef<TextInput>(null);
 
   function openSearch() {
@@ -194,7 +194,7 @@ export function FilterBar({
                 selected={range === r}
                 value={range === r && r !== 'custom' ? <Feather name="check" size={18} color={colors.accent} /> : undefined}
                 onPress={() => {
-                  if (r === 'custom') { setSheet(null); setDatePick('from'); return; }
+                  if (r === 'custom') { setSheet(null); setRangeOpen(true); return; }
                   const { from, to } = resolveRange(r);
                   onRange?.(r, from, to);
                   setSheet(null);
@@ -205,26 +205,16 @@ export function FilterBar({
         </Card>
       </SheetModal>
 
-      {/* Custom bounds. Two passes through the same picker — from, then to — so
-          there is one calendar in the app rather than a bespoke range widget.
-          No time step: a ledger row is found by day. Review chains into
-          `TimePickerSheet` because a parsed import genuinely carries a moment. */}
-      <DatePickerSheet
-        visible={datePick !== null}
-        value={(datePick === 'to' ? customTo : customFrom) ?? Date.now()}
-        onClose={() => setDatePick(null)}
-        onChange={(ms) => {
-          if (datePick === 'from') {
-            const start = new Date(ms); start.setHours(0, 0, 0, 0);
-            onRange?.('custom', start.getTime(), customTo);
-            setDatePick('to');
-          } else {
-            // End of the chosen day, so "to 15 June" includes the 15th.
-            const end = new Date(ms); end.setHours(23, 59, 59, 999);
-            onRange?.('custom', customFrom, end.getTime());
-            setDatePick(null);
-          }
-        }}
+      {/* Custom bounds: one calendar, tap the first day then the last. It was two passes
+          through a single-date picker, and the hand-off between them was lost (the
+          picker's own `onClose` cleared the state `onChange` had just set), so choosing
+          "from" left the range half-set. No time step: a ledger row is found by day. */}
+      <DateRangeSheet
+        visible={rangeOpen}
+        from={customFrom}
+        to={customTo}
+        onClose={() => setRangeOpen(false)}
+        onApply={(f, t) => onRange?.('custom', f, t)}
       />
 
       <SheetModal visible={sheet === 'person'} onClose={() => setSheet(null)} title="Who's on it">

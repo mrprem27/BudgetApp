@@ -14,11 +14,13 @@ import { useScreenData } from '../../src/hooks/useScreenData';
 import { loadUpcomingScreen } from '../../src/lib/upcomingData';
 import { formatCompact } from '../../src/lib/money';
 import { oweView } from '../../src/lib/owe';
-import { IconCircle } from '../../src/components/ui/IconCircle';
+import { canRemind } from '../../src/lib/whatsappReminder';
+import { useReminder } from '../../src/hooks/useReminder';
 
 
 export default function UpcomingScreen() {
   const router = useRouter();
+  const remind = useReminder();
   const insets = useSafeAreaInsets();
   const { data, loading, error, refreshing, onRefresh, reload } = useScreenData(loadUpcomingScreen, []);
 
@@ -36,8 +38,6 @@ export default function UpcomingScreen() {
         contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + space.lg }]}
         refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-        <Text style={styles.intro}>Nudges before bills and settle-ups.</Text>
-
         {/* UPCOMING — recurring bills due soon. Same component Plan uses
             (`ComingUpList`) — this screen used to hand-roll its own row for
             the identical data, which is the duplication `SPEC-2026-09-FEEDBACK.md` §6 exists
@@ -63,30 +63,45 @@ export default function UpcomingScreen() {
           />
         )}
 
-        {/* SETTLE UP — pending balances with people */}
+        {/* SETTLE UP — open balances with people, worded by who owes whom. Someone who
+            owes you gets a Remind (WhatsApp) and a way to record their payment; someone
+            you owe gets Pay. The direction of the settle-up itself follows the balance
+            (`settleDirection`), so both buttons open pointing the right way. */}
         {settles.length > 0 && (
           <>
             <Text style={[styles.secLabel, styles.secLabelSettle]}>SETTLE UP · {settles.length}</Text>
             <View style={styles.card}>
-              {settles.map((s, i) => (
-                <View key={`settle-${s.from}-${s.to}`} style={[styles.row, i < settles.length - 1 ? styles.rowBorder : null]}>
-                  <MemberAvatar name={s.counterpart.name} color={s.counterpart.avatar_color} size={40} imageUri={s.counterpart.image_uri} />
-                  <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text style={styles.rowTitle} numberOfLines={1}>Settle {s.counterpart.name.split(' ')[0]}</Text>
-                    {(() => {
-                      const ov = oweView(s.iOwe ? -s.amount : s.amount);
-                      return (
-                        <Text style={[styles.rowSub, { color: ov.color }]}>
-                          {ov.label} {formatCompact(s.amount)}
-                        </Text>
-                      );
-                    })()}
-                    <TouchableOpacity style={[styles.actionBtn, styles.actionBtnSettle]} onPress={() => router.push(`/add/quick?kind=transfer&to=${s.counterpart.id}`)} accessibilityRole="button">
-                      <Text style={[styles.actionBtnText, { color: colors.onAccent }]}>Settle now</Text>
-                    </TouchableOpacity>
+              {settles.map((s, i) => {
+                const net = s.iOwe ? -s.amount : s.amount;
+                const ov = oweView(net);
+                const first = s.counterpart.name.split(' ')[0];
+                const settle = () => router.push(`/add/quick?kind=transfer&to=${s.counterpart.id}`);
+                return (
+                  <View key={`settle-${s.from}-${s.to}`} style={[styles.row, i < settles.length - 1 ? styles.rowBorder : null]}>
+                    <MemberAvatar name={s.counterpart.name} color={s.counterpart.avatar_color} size={40} imageUri={s.counterpart.image_uri} />
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={styles.rowTitle} numberOfLines={1}>{ov.withName(first)}</Text>
+                      <Text style={[styles.rowSub, { color: ov.color }]}>{formatCompact(s.amount)}</Text>
+                      <View style={styles.actions}>
+                        {canRemind(net, s.counterpart.mobile) && (
+                          <TouchableOpacity
+                            style={[styles.actionBtn, styles.actionBtnGhost]}
+                            onPress={() => remind(s.counterpart, s.amount)}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Remind ${first} on WhatsApp`}
+                          >
+                            <Feather name="message-circle" size={14} color={colors.accent} />
+                            <Text style={[styles.actionBtnText, { color: colors.accent }]}>Remind</Text>
+                          </TouchableOpacity>
+                        )}
+                        <TouchableOpacity style={[styles.actionBtn, styles.actionBtnSettle]} onPress={settle} accessibilityRole="button">
+                          <Text style={[styles.actionBtnText, { color: colors.onAccent }]}>{s.iOwe ? 'Pay' : 'Record payment'}</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
                   </View>
-                </View>
-              ))}
+                );
+              })}
             </View>
           </>
         )}
@@ -95,20 +110,11 @@ export default function UpcomingScreen() {
           <EmptyState
             icon="bell"
             title="Nothing due"
-            body="No upcoming bills or settle-ups right now. Recurring bills and balances you owe show up here as they approach."
+            body="No bills due soon and no open balances with anyone."
             tint={colors.textSecondary}
           />
         )}
 
-        {/* Manage reminder timing/notifications */}
-        <TouchableOpacity style={styles.manageRow} onPress={() => router.push('/settings/notifications')} accessibilityRole="button">
-          <IconCircle icon="settings" size={36} iconSize={16} color={colors.accent} bg={colors.accentMuted} />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.manageTitle}>Reminder settings</Text>
-            <Text style={styles.manageSub}>When and how you're nudged</Text>
-          </View>
-          <Feather name="chevron-right" size={16} color={colors.textMuted} />
-        </TouchableOpacity>
       </ScrollView>
       )}
     </View>
@@ -118,7 +124,6 @@ export default function UpcomingScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: layout.screenPaddingH, gap: space.sm },
-  intro: { ...type.label, color: colors.textMuted, marginBottom: space.xs },
   secLabel: { fontSize: 10, color: colors.healthAmber, textTransform: 'uppercase', letterSpacing: 1, fontFamily: 'Inter_600SemiBold', marginBottom: space.sm, marginTop: space.xs },
   secLabelSettle: { color: colors.settle, marginTop: space.md },
   card: { backgroundColor: colors.bgCard, borderRadius: 14, borderWidth: 1, borderColor: colors.border, ...shadow.sm },
@@ -126,10 +131,9 @@ const styles = StyleSheet.create({
   rowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
   rowTitle: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold', flexShrink: 1 },
   rowSub: { ...type.caption, color: colors.textSecondary, marginBottom: space.sm },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
+  actionBtnGhost: { flexDirection: 'row', alignItems: 'center', gap: space.xs, backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.accent },
   actionBtn: { alignSelf: 'flex-start', backgroundColor: colors.accent, borderRadius: radius.sm, paddingVertical: 7, paddingHorizontal: 14 },
   actionBtnSettle: { backgroundColor: colors.settle },
   actionBtnText: { ...type.label, color: colors.bg, fontFamily: 'Inter_600SemiBold' },
-  manageRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, marginTop: space.sm, ...shadow.sm },
-  manageTitle: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
-  manageSub: { ...type.caption, color: colors.textMuted, marginTop: 2 },
 });

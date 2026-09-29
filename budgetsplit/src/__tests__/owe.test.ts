@@ -1,4 +1,4 @@
-import { oweView } from '../lib/owe';
+import { oweView, settleDirection } from '../lib/owe';
 import { colors } from '../theme';
 import { summarizeExposure } from '../db/queries/balances';
 import type { FriendBalance } from '../db/queries/balances';
@@ -34,6 +34,24 @@ describe('oweView', () => {
     expect(ov.sign).toBe('');
     expect(ov.label).toBe('Settled up');
     expect(ov.withName('Rohan')).toBe('Settled up');
+  });
+});
+
+describe('settleDirection', () => {
+  it('they pay when they owe me', () => {
+    expect(settleDirection(50000)).toBe('they-pay');
+  });
+  it('I pay when I owe them', () => {
+    expect(settleDirection(-50000)).toBe('i-pay');
+  });
+  it('I pay by default when square — nothing to infer', () => {
+    expect(settleDirection(0)).toBe('i-pay');
+  });
+  it('agrees with oweView about who owes whom', () => {
+    for (const net of [-900, -1, 0, 1, 900]) {
+      const owed = oweView(net).direction === 'owed';
+      expect(settleDirection(net) === 'they-pay').toBe(owed);
+    }
   });
 });
 

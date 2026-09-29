@@ -27,7 +27,7 @@ import {
   effectiveRow, effectiveSplit, snapshotRow, planCommit as planCommitPure, txnInputFromPlan,
   type RowEdit, type SplitState, type CommitPlan, type ReviewContext,
 } from '../../src/lib/reviewCommit';
-import { FilterForm } from '../../src/components/finance/review/FilterForm';
+import { ReviewFilterSheet } from '../../src/components/finance/review/ReviewFilterSheet';
 import { SaveViewForm } from '../../src/components/finance/review/SaveViewForm';
 import { ReviewRowCard } from '../../src/components/finance/review/ReviewRowCard';
 import { BulkGroupSheet } from '../../src/components/finance/review/BulkGroupSheet';
@@ -533,15 +533,14 @@ export default function ReviewScreen() {
       />
 
       {/* Filter sheet — narrows the working set (ephemeral). */}
-      <SheetModal visible={filterSheet} onClose={() => setFilterSheet(false)} title="Filter" scroll={false}>
-        <FilterForm
-          filters={filters}
-          categories={distinctCats}
-          onChange={setFilters}
-          onClear={() => setFilters(DEFAULT_FILTERS)}
-          onDone={() => setFilterSheet(false)}
-        />
-      </SheetModal>
+      <ReviewFilterSheet
+        visible={filterSheet}
+        onClose={() => setFilterSheet(false)}
+        filters={filters}
+        categories={distinctCats}
+        onChange={setFilters}
+        onClear={() => setFilters(DEFAULT_FILTERS)}
+      />
 
       {/* Overflow menu. */}
       <ReviewOverflowSheet

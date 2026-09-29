@@ -22,6 +22,8 @@ import { refusalReason } from '../../src/lib/personCopy';
 import { haptic } from '../../src/lib/haptics';
 import type { Person } from '../../src/db/queries/persons';
 import { useScreenData } from '../../src/hooks/useScreenData';
+import { useReminder } from '../../src/hooks/useReminder';
+import { canRemind } from '../../src/lib/whatsappReminder';
 import { useStore } from '../../src/store';
 import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
 import { PersonNameSheet } from '../../src/components/finance/PersonNameSheet';
@@ -29,6 +31,7 @@ import { PersonNameSheet } from '../../src/components/finance/PersonNameSheet';
 export default function FriendsScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
+  const remind = useReminder();
   const me = useStore((s) => s.me);
   const { refresh } = useDataRefresh();
   const [renamePerson, setRenamePerson] = useState<Person | null>(null);
@@ -295,6 +298,11 @@ export default function FriendsScreen() {
                               : null}
                         </View>
                       </TouchableOpacity>
+                      {canRemind(net, p.mobile) && (
+                        <TouchableOpacity style={styles.settlePill} onPress={() => remind(p, net)} accessibilityRole="button" accessibilityLabel={`Remind ${p.name} on WhatsApp`}>
+                          <Feather name="message-circle" size={14} color={colors.accent} />
+                        </TouchableOpacity>
+                      )}
                       {net !== 0 && (
                         <TouchableOpacity style={styles.settlePill} onPress={() => router.push(`/add/quick?kind=transfer&to=${p.id}`)} accessibilityRole="button" accessibilityLabel={`Settle with ${p.name}`}>
                           <Text style={styles.settlePillText}>Settle</Text>

@@ -1,5 +1,5 @@
 import {
-  DEFAULT_FILTERS, filtersActive, parseFilterDate, rowMatches, isSimilarMerchant,
+  DEFAULT_FILTERS, filtersActive, parseFilterDate, rowMatches, isSimilarMerchant, normalizeFilters,
   type ReviewFilters, type FilterRow,
 } from '../lib/reviewFilter';
 
@@ -15,8 +15,9 @@ describe('filtersActive', () => {
   });
   it('is true when any field is set', () => {
     expect(filtersActive(f({ query: 'a' }))).toBe(true);
-    expect(filtersActive(f({ category: 'Fuel' }))).toBe(true);
-    expect(filtersActive(f({ amountMode: 'gt' }))).toBe(true);
+    expect(filtersActive(f({ categories: ['Fuel'] }))).toBe(true);
+    expect(filtersActive(f({ amountMin: '100' }))).toBe(true);
+    expect(filtersActive(f({ amountMax: '900' }))).toBe(true);
     expect(filtersActive(f({ dateFrom: '2026-07-01' }))).toBe(true);
     expect(filtersActive(f({ dateTo: '2026-07-31' }))).toBe(true);
   });
@@ -52,21 +53,29 @@ describe('rowMatches — single predicate', () => {
     expect(rowMatches(row(), f({ query: 'swig' }))).toBe(true);
     expect(rowMatches(row(), f({ query: 'ZOMATO' }))).toBe(false);
   });
-  it('category is an exact match', () => {
-    expect(rowMatches(row(), f({ category: 'Eating Out' }))).toBe(true);
-    expect(rowMatches(row(), f({ category: 'Eating' }))).toBe(false);
+  it('category is an exact match, and several mean "any of"', () => {
+    expect(rowMatches(row(), f({ categories: ['Eating Out'] }))).toBe(true);
+    expect(rowMatches(row(), f({ categories: ['Eating'] }))).toBe(false);
+    expect(rowMatches(row(), f({ categories: ['Fuel', 'Eating Out'] }))).toBe(true);
+    expect(rowMatches(row(), f({ categories: ['Fuel', 'Rent'] }))).toBe(false);
   });
-  it('amount less-than / greater-than (thresholds in rupees)', () => {
-    expect(rowMatches(row({ amountPaise: 45000 }), f({ amountMode: 'lt', amtA: '500' }))).toBe(true);  // ₹450 < ₹500
-    expect(rowMatches(row({ amountPaise: 45000 }), f({ amountMode: 'lt', amtA: '400' }))).toBe(false);
-    expect(rowMatches(row({ amountPaise: 45000 }), f({ amountMode: 'gt', amtA: '400' }))).toBe(true);
-    expect(rowMatches(row({ amountPaise: 45000 }), f({ amountMode: 'gt', amtA: '500' }))).toBe(false);
+  it('a lone Min is "at least" and a lone Max is "at most" (rupees, inclusive)', () => {
+    const r = row({ amountPaise: 45000 }); // ₹450
+    expect(rowMatches(r, f({ amountMin: '400' }))).toBe(true);
+    expect(rowMatches(r, f({ amountMin: '450' }))).toBe(true);   // == bound
+    expect(rowMatches(r, f({ amountMin: '500' }))).toBe(false);
+    expect(rowMatches(r, f({ amountMax: '500' }))).toBe(true);
+    expect(rowMatches(r, f({ amountMax: '450' }))).toBe(true);   // == bound
+    expect(rowMatches(r, f({ amountMax: '400' }))).toBe(false);
   });
-  it('amount between is inclusive and tolerates swapped bounds', () => {
-    expect(rowMatches(row({ amountPaise: 45000 }), f({ amountMode: 'between', amtA: '400', amtB: '500' }))).toBe(true);
-    expect(rowMatches(row({ amountPaise: 45000 }), f({ amountMode: 'between', amtA: '500', amtB: '400' }))).toBe(true); // swapped
-    expect(rowMatches(row({ amountPaise: 45000 }), f({ amountMode: 'between', amtA: '100', amtB: '400' }))).toBe(false);
-    expect(rowMatches(row({ amountPaise: 40000 }), f({ amountMode: 'between', amtA: '400', amtB: '500' }))).toBe(true); // == lower bound
+  it('both Min and Max is between, inclusive, tolerating swapped ends', () => {
+    expect(rowMatches(row({ amountPaise: 45000 }), f({ amountMin: '400', amountMax: '500' }))).toBe(true);
+    expect(rowMatches(row({ amountPaise: 45000 }), f({ amountMin: '500', amountMax: '400' }))).toBe(true); // swapped
+    expect(rowMatches(row({ amountPaise: 45000 }), f({ amountMin: '100', amountMax: '400' }))).toBe(false);
+    expect(rowMatches(row({ amountPaise: 40000 }), f({ amountMin: '400', amountMax: '500' }))).toBe(true); // == lower bound
+  });
+  it('both ends empty is no amount filter', () => {
+    expect(rowMatches(row({ amountPaise: 1 }), f({ amountMin: '', amountMax: '  ' }))).toBe(true);
   });
   it('date range is inclusive of the whole to-day', () => {
     const on15 = row({ date: new Date(2026, 6, 15, 23, 30).getTime() });
@@ -76,15 +85,35 @@ describe('rowMatches — single predicate', () => {
   });
 });
 
-describe('rowMatches — AND / OR combine', () => {
+describe('rowMatches — every filter narrows', () => {
   const r = row({ category: 'Eating Out', amountPaise: 45000 });
-  it('AND requires every active predicate', () => {
-    expect(rowMatches(r, f({ combine: 'and', category: 'Eating Out', amountMode: 'gt', amtA: '400' }))).toBe(true);
-    expect(rowMatches(r, f({ combine: 'and', category: 'Eating Out', amountMode: 'gt', amtA: '500' }))).toBe(false); // amount fails
+  it('requires every active filter to pass', () => {
+    expect(rowMatches(r, f({ categories: ['Eating Out'], amountMin: '400' }))).toBe(true);
+    expect(rowMatches(r, f({ categories: ['Eating Out'], amountMin: '500' }))).toBe(false); // amount fails
+    expect(rowMatches(r, f({ categories: ['Fuel'], amountMin: '400' }))).toBe(false);       // category fails
   });
-  it('OR needs only one active predicate', () => {
-    expect(rowMatches(r, f({ combine: 'or', category: 'Fuel', amountMode: 'gt', amtA: '400' }))).toBe(true);  // amount passes
-    expect(rowMatches(r, f({ combine: 'or', category: 'Fuel', amountMode: 'gt', amtA: '500' }))).toBe(false); // neither passes
+});
+
+describe('normalizeFilters — saved views from before the rewrite', () => {
+  it('maps the old amount modes onto Min/Max', () => {
+    expect(normalizeFilters({ amountMode: 'gt', amtA: '400' })).toMatchObject({ amountMin: '400', amountMax: '' });
+    expect(normalizeFilters({ amountMode: 'lt', amtA: '500' })).toMatchObject({ amountMin: '', amountMax: '500' });
+    expect(normalizeFilters({ amountMode: 'between', amtA: '400', amtB: '500' })).toMatchObject({ amountMin: '400', amountMax: '500' });
+    expect(normalizeFilters({ amountMode: 'any', amtA: '9' })).toMatchObject({ amountMin: '', amountMax: '' });
+  });
+  it('turns the single category into a list', () => {
+    expect(normalizeFilters({ category: 'Fuel' }).categories).toEqual(['Fuel']);
+    expect(normalizeFilters({ category: '' }).categories).toEqual([]);
+  });
+  it('keeps text and dates, drops combine, and survives junk', () => {
+    const n = normalizeFilters({ query: 'x', dateFrom: '2026-07-01', dateTo: '2026-07-31', combine: 'or' });
+    expect(n).toEqual({ ...DEFAULT_FILTERS, query: 'x', dateFrom: '2026-07-01', dateTo: '2026-07-31' });
+    expect(normalizeFilters(null)).toEqual(DEFAULT_FILTERS);
+    expect(normalizeFilters({})).toEqual(DEFAULT_FILTERS);
+  });
+  it('leaves a current-shape filter unchanged', () => {
+    const cur = { ...DEFAULT_FILTERS, categories: ['A', 'B'], amountMin: '1', amountMax: '2' };
+    expect(normalizeFilters(cur)).toEqual(cur);
   });
 });
 
