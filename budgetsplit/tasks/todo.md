@@ -249,6 +249,66 @@ Done, with tests (`peopleSetGroup`, `transferCategories`). Gates: `npx jest`, `n
 
 ---
 
+## Phase 5c · Money movement, forms, group screen (2026-09-29)
+
+Ordered by value; each item ends with its gate. Design decisions are stated so they can be
+overruled, not assumed.
+
+### M · One way to move money (assets, buckets, everything)
+Today: `Add`, `Take out`, `Worth now`, `Edit` are four buttons under every asset row; Plan has a
+separate "Moved to investments" sheet; Add has its own Invest kind; buckets (Bank/Cash/Wallet)
+can't be moved between at all. All are the same act — *money goes from one place to another*.
+
+- [ ] **M1 · `moveMoney(db, from, to, amount)`** in `db/queries/assets.ts`. An endpoint is a bucket
+  (`bank|cash|wallet`) or an asset. Four cases, **no schema change**, one DB transaction each:
+  bucket→asset = `transferToAsset`; asset→bucket = `transferFromAsset`;
+  asset→asset = redeem A into a bucket + invest B from the same bucket (cash net zero, both asset
+  pages show it); bucket→bucket = a payments-only row out of one, a shares-only row into the other
+  (net cash zero, bucket flows move). Assets never overdraw (same SQL guard). Net worth is flat in all four.
+- [ ] **M2 · `MoveMoneySheet`** — From / To chip rows (Bank, Cash, Wallet + every asset, dynamic,
+  truncating), a swap ⇅ button, amount, one hint line. `to === from` disabled. Replaces
+  `MoveToInvestmentsSheet` and the Add/Take-out modes of `AssetSheet`.
+- [ ] **M3 · Assets screen: frequent out, rare in.** A row = icon, name, balance; tap opens the
+  asset. **One** inline action per row: `Move`. Header keeps `Add` (new asset); the duplicate
+  bottom "Add an asset" goes. **Rare actions move inside the asset page**: `Update worth`, and a
+  `⋯` menu (Edit, Stop counting, Delete). Asset page gets `Move money` (primary) + `Update worth`.
+- [ ] **M4 · Plan's "moved to investments" entry** opens `MoveMoneySheet` pre-set to Bank → asset.
+- Left alone on purpose: Add's Invest kind (a full entry with date/note, not a quick move) and
+  `PayCardBillSheet` (a card repayment is a debt, not a holding). Both keep working unchanged.
+- Gate: data tests for all four cases (cash net zero, net worth flat, overdraw refused, sync queued).
+
+### F · Forms
+- [ ] **F1 · `ui/AmountRow`** — the AGENTS §4 form row for money: icon disc, label, right-aligned
+  amount input with ₹, no inner border, 52pt, inside a `Card` with dividers.
+- [ ] **F2 · "Your money" form** (`MoneyEditorSheet`): Bank / Cash / Wallet as three AmountRows with a
+  live total, Credit limit + Used as a second card with the available-credit line; hints shrink to
+  one line behind an ⓘ (`InfoLabel`). It was three cramped side-by-side inputs.
+- [ ] **F3 · Same rows** in the asset create/restate sheets and the card-bill sheet.
+
+### G · Group screen
+- [ ] **G1 · One header card** replacing `GroupHero` + `GroupBalanceCard`: group icon + name
+  (truncates, long-press shows it in full) + members stack on the left; **top right the balance**
+  — "You're owed ₹1,200" / "You owe ₹300" / "Settled up" — coloured by direction, with `Settle up`
+  beneath only when there is someone to settle with. A minimal gradient from the group's colour
+  (≈18% → transparent). No second card.
+- [ ] **G2 · Filter bar rebuilt** (`ui/FilterBar`, same props, so Personal/Search/Group all get it):
+  a full-width search field (always visible — no icon-at-the-edge, no clipped chips) + a `Filters`
+  button with an active-count badge; active filters show below as removable chips only when set.
+  The sheet holds Type, When (presets + the range calendar), Who, **Tags** (new), and any
+  screen-specific scope chips. `lib/txnFilter` gains `tags` (any-of), derived from the rows.
+- Gate: `filtersActive`/tag tests; revert-check tag matching.
+
+### T · Truncation, everywhere
+- [ ] **T1 · `useFullTextOnHold`** — long-press on any truncated name shows it in full (native
+  alert: no nested modal, works inside sheets). Wired into `ListRow` (title/subtitle), `Chip`,
+  the group header, member/asset/friend names. Rule: **one line + ellipsis in lists, full text on hold.**
+
+### Decisions (overrule if wrong)
+- Bucket↔bucket moves are included (Bank→Cash is the ATM case) — that is what "even money is one of
+  the ways" reads as.
+- Asset→asset settles through a bucket internally (Bank); the user never sees that.
+- Tags are filtered *any-of* and are additional to free-text search (which still matches tags).
+
 ## Phase 6 · AI context & narration — deferred, not yet broken into tasks
 
 Decided 2026-09-26; see `plan.md`'s Phase 6 for the three-stage design (guardrailed structured
