@@ -11,7 +11,7 @@ export function StreakBadge({ days }: { days: number }) {
   if (days < 2) return null;
   return (
     <View accessible accessibilityLabel={`${days}-day logging streak`}>
-      <Chip icon="zap" label={String(days)} selected accent={colors.healthAmber} />
+      <Chip icon="zap" label={String(days)} selected accent={colors.accent} />
     </View>
   );
 }
