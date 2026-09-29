@@ -12,7 +12,8 @@ import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 import { SheetModal } from '../../src/components/ui/SheetModal';
 import { IconCircle } from '../../src/components/ui/IconCircle';
-import { FEATURE_KEYS } from '../../src/lib/featureFlags';
+import { FEATURE_KEYS, setFlag as persistFlag } from '../../src/lib/featureFlags';
+import { rescheduleReminders } from '../../src/lib/reminders';
 import { applyPersona, asIntent, PERSONA_OPTIONS, type OnboardingIntent } from '../../src/lib/personaDefaults';
 import { haptic } from '../../src/lib/haptics';
 
@@ -32,7 +33,7 @@ const CORES: { icon: keyof typeof Feather.glyphMap; tint: string; label: string;
 export default function FeaturesScreen() {
   const router = useRouter();
   const db = useSQLiteContext();
-  const { flags, setFlag } = useFeatureFlags();
+  const { flags, setFlag, reload: reloadFlags } = useFeatureFlags();
   const [saveLocation, setSaveLocation] = useState(false);
   const [autoSweep, setAutoSweep] = useState(false);
   const [intent, setIntent] = useState<OnboardingIntent | null>(null);
@@ -69,9 +70,19 @@ export default function FeaturesScreen() {
         {
           text: 'Apply',
           onPress: async () => {
+            try {
+              await applyPersona(next, FEATURE_KEYS);
+            } catch {
+              haptic.error();
+              Alert.alert('Couldn’t apply that setup', 'Please try again.');
+              return;
+            }
+            // The provider holds its own copy; without this the switches (and every tab they
+            // gate) kept the old setup until the next cold start.
+            await reloadFlags();
             haptic.success();
-            await applyPersona(next, FEATURE_KEYS);
             setIntent(next);
+            rescheduleReminders(db).catch(() => {});
           },
         },
       ],
@@ -134,6 +145,13 @@ export default function FeaturesScreen() {
     haptic.selection();
     setCloudOcr(v);
     await settings.setOcrProvider(v ? 'gemini' : 'device');
+  }
+
+  /** Scheduled notifications outlive a switch that governs them, so they are rebuilt with it. */
+  async function toggleScheduled(key: 'reminders' | 'recurring', v: boolean) {
+    setFlag(key, v);
+    await persistFlag(key, v).catch(() => {});
+    rescheduleReminders(db).catch(() => {});
   }
 
   /**
@@ -201,10 +219,10 @@ export default function FeaturesScreen() {
       title: 'Money tools',
       items: [
         { icon: 'target', label: 'Savings Goals', caption: 'Track goals and fund them directly from cash', value: flags.savingsGoals, onChange: v => setFlag('savingsGoals', v) },
-        { icon: 'refresh-cw', label: 'Recurring', caption: 'Track repeating bills & charges', value: flags.recurring, onChange: v => setFlag('recurring', v) },
+        { icon: 'refresh-cw', label: 'Recurring', caption: 'Track repeating bills & charges', value: flags.recurring, onChange: v => toggleScheduled('recurring', v) },
         { icon: 'help-circle', label: 'Afford Check', caption: 'Weighs cash, your habits, the month ahead and your goals before a buy', value: flags.affordCheck, onChange: v => setFlag('affordCheck', v) },
-        { icon: 'bell', label: 'Reminders', caption: 'Nudges before bills and settle-up deadlines', value: flags.reminders, onChange: v => setFlag('reminders', v) },
-        { icon: 'award', label: 'Tracking Streak', caption: 'A daily-logging streak on Home (shows at 3+ days)', value: flags.streak, onChange: v => setFlag('streak', v) },
+        { icon: 'bell', label: 'Reminders', caption: 'Nudges before bills and settle-up deadlines', value: flags.reminders, onChange: v => toggleScheduled('reminders', v) },
+        { icon: 'award', label: 'Streak Calendar', caption: 'Your logging days on Home, from 3 in a row. The ⚡ count shows either way', value: flags.streak, onChange: v => setFlag('streak', v) },
       ],
     },
     {

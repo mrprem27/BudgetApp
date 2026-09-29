@@ -34,7 +34,7 @@ import { Divider } from '../../src/components/ui/Divider';
 import { SectionHeader } from '../../src/components/ui/SectionHeader';
 import { formatCompact, parseToPaise } from '../../src/lib/money';
 
-import { addMonths } from 'date-fns';
+import { addMonths, differenceInCalendarMonths } from 'date-fns';
 import { monthLabel } from '../../src/lib/dateFormat';
 
 // Goal deadline as quick durations (avoids a fragile date-picker modal-in-modal).
@@ -45,12 +45,12 @@ const DEADLINE_OPTS: { label: string; months: number | null }[] = [
   { label: '1 yr', months: 12 },
   { label: '2 yr', months: 24 },
 ];
-function deadlineOn(dateMs: number | null, months: number | null): boolean {
-  if (months === null) return dateMs === null;
-  if (dateMs === null) return false;
-  const t = addMonths(new Date(), months);
-  const d = new Date(dateMs);
-  return d.getFullYear() === t.getFullYear() && d.getMonth() === t.getMonth();
+/** The option a date was picked from — the nearest one, so a month turning over while the sheet is open still highlights it. */
+function nearestDeadline(dateMs: number | null): number | null {
+  if (dateMs === null) return null;
+  const months = differenceInCalendarMonths(dateMs, new Date());
+  const picks = DEADLINE_OPTS.flatMap(o => (o.months === null ? [] : [o.months]));
+  return picks.reduce((best, m) => (Math.abs(m - months) < Math.abs(best - months) ? m : best));
 }
 
 import { type Priority, type SavingsFrequency } from '../../src/db/queries/savings';
@@ -404,31 +404,16 @@ export default function SavingsScreen() {
           <Card clip style={styles.amountCard}>
             <AmountRow icon="repeat" label="Set aside each period" value={allocation} onChangeText={setAllocation} />
           </Card>
-          <View style={styles.segRow}>
-            {FREQS.map(f => (
-              <TouchableOpacity key={f.key} style={[styles.segSm, frequency === f.key && { backgroundColor: colors.accentMuted, borderColor: colors.accent }]} onPress={() => setFrequency(f.key)} accessibilityRole="button" accessibilityState={{ selected: frequency === f.key }}>
-                <Text style={[styles.segText, frequency === f.key && { color: colors.accent, fontFamily: 'Inter_600SemiBold' }]}>{f.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+          {/* Pick-one choices are TabPills, like Priority above (AGENTS.md §9). */}
+          <TabPills tabs={FREQS} active={frequency} onChange={k => setFrequency(k as SavingsFrequency)} size="sm" />
 
           <Text style={styles.fieldLabel}>Target date (optional)</Text>
-          <View style={styles.segRow}>
-            {DEADLINE_OPTS.map(o => {
-              const on = deadlineOn(newDate, o.months);
-              return (
-                <TouchableOpacity
-                  key={o.label}
-                  style={[styles.segSm, on && { backgroundColor: colors.accentMuted, borderColor: colors.accent }]}
-                  onPress={() => setNewDate(o.months === null ? null : addMonths(new Date(), o.months).getTime())}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: on }}
-                >
-                  <Text style={[styles.segText, on && { color: colors.accent, fontFamily: 'Inter_600SemiBold' }]}>{o.label}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+          <TabPills
+            tabs={DEADLINE_OPTS.map(o => ({ key: String(o.months), label: o.label }))}
+            active={String(nearestDeadline(newDate))}
+            onChange={k => setNewDate(k === 'null' ? null : addMonths(new Date(), Number(k)).getTime())}
+            size="sm"
+          />
           {newDate != null && <Text style={styles.deadlineHint}>Target: {monthLabel(newDate)}</Text>}
 
           <PrimaryButton label="Create goal" onPress={handleCreate} disabled={!name.trim() || parseToPaise(target) <= 0} style={{ marginTop: space.md }} />
@@ -485,9 +470,6 @@ const styles = StyleSheet.create({
   inputGap: { marginBottom: space.sm },
   fieldLabel: { ...type.label, color: colors.textSecondary, marginTop: space.sm, marginBottom: space.xs },
   deadlineHint: { ...type.caption, color: colors.textMuted, marginTop: space.xs },
-  segRow: { flexDirection: 'row', gap: space.xs, flexWrap: 'wrap' },
-  segSm: { paddingHorizontal: space.md, paddingVertical: space.sm, alignItems: 'center', borderRadius: radius.md, backgroundColor: colors.bgMuted, borderWidth: 1, borderColor: 'transparent' },
-  segText: { ...type.label, color: colors.textSecondary },
   iconGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs, marginBottom: space.sm },
   iconOpt: { width: 40, height: 40, borderRadius: radius.sm, backgroundColor: colors.bgMuted, alignItems: 'center', justifyContent: 'center' },
   colorRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },

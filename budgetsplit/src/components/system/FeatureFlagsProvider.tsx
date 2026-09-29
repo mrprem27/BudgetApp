@@ -50,7 +50,8 @@ export function FeatureFlagsProvider({ children, initialFlags }: Props) {
    * onboarding gate, so it has already loaded (and cached) the defaults by the time
    * the questionnaire writes the persona's flags. Without this, a user who picks
    * "Track my own spending" would still see the Groups tab until the next cold
-   * start. Only onboarding needs it — `setFlag` keeps state in step otherwise.
+   * start. Anything that writes flags without `setFlag` needs it: onboarding, and
+   * re-picking a setup in Feature Management (`P2-7`).
    */
   const reload = useCallback(async () => {
     try { setFlags(await loadFlags()); } catch { /* keep what we have */ }

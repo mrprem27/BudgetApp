@@ -99,16 +99,21 @@ export default function FriendsScreen() {
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Remove', style: 'destructive', onPress: async () => {
-          const res = await deletePerson(db, person.id);
-          if (!res.ok) {
+          try {
+            const res = await deletePerson(db, person.id);
+            if (!res.ok) {
+              haptic.error();
+              Alert.alert(`Can't remove ${person.name}`, refusalReason(res));
+              return;
+            }
+            haptic.warning();
+            setRenamePerson(null);
+            await reload();
+            refresh();
+          } catch {
             haptic.error();
-            Alert.alert(`Can't remove ${person.name}`, refusalReason(res));
-            return;
+            Alert.alert(`Couldn't remove ${person.name}`, 'Please try again.');
           }
-          haptic.warning();
-          setRenamePerson(null);
-          await reload();
-          refresh();
         } },
       ],
     );
@@ -257,7 +262,7 @@ export default function FriendsScreen() {
                   const net = bal?.net ?? 0;
                   const groupCount = bal?.groupCount ?? 0;
                   return (
-                    <View key={p.id} style={[styles.row, i < people.length - 1 && styles.rowBorder]}>
+                    <View key={p.id} style={[styles.row, i < filtered.length - 1 && styles.rowBorder]}>
                       <MemberAvatar name={p.name} color={p.avatar_color} size={46} imageUri={p.image_uri} onPress={() => changePhoto(p)} />
                       {/* Tap opens what you've shared; rename moves to long-press, the
                           app's existing secondary-action gesture. Renaming a contact is

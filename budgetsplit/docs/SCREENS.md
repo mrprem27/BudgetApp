@@ -1847,7 +1847,7 @@ to confirm the whole chain on a device without waiting for a real due date.
 |---|---|
 | `renew_{ruleId}_d{n}` | `/recurring/{ruleId}` — the rule itself, with **Skip the next one** on it |
 | `daily_log` | `/add/quick` — the thing it is asking you to do |
-| `backup_nudge` | `/reports`, where the export lives |
+| `backup_nudge` | `/settings/backup`, where a restorable copy is made |
 | anything else | nothing. A wrong destination is worse than none: it moves you away from what you were doing |
 
 The route is derived from the **identifier** (`lib/notificationRoutes.ts`), not from a payload,

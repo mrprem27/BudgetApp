@@ -31,8 +31,9 @@ export function routeForReminder(identifier: string): string | null {
   // "Log today's spending" → the thing it is asking for, not a screen about it.
   if (identifier === 'daily_log') return '/add/quick';
 
-  // "Export a CSV/PDF from Reports" → Reports.
-  if (identifier === 'backup_nudge') return '/reports';
+  // "Settings → Backup makes an encrypted copy" → Backup. It went to Reports, whose CSV
+  // cannot be restored — the body had already been corrected, the tap had not.
+  if (identifier === 'backup_nudge') return '/settings/backup';
 
   return null;
 }

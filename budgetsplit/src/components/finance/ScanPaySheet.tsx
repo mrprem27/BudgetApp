@@ -9,6 +9,7 @@ import { SheetModal } from '../ui/SheetModal';
 import { PrimaryButton } from '../ui/PrimaryButton';
 import { AmountField } from './add/AmountField';
 import { AddKind } from '../../constants/enums';
+import { DEV_TOOLS_ENABLED } from '../../constants/devTools';
 import { parseAnyUpiQr, buildUpiUri, type ScanTarget } from '../../lib/upiIntent';
 import { useUpiHandoff } from '../../hooks/useUpiHandoff';
 import { UpiPayButton } from './pay/UpiPayButton';
@@ -317,8 +318,8 @@ export function ScanPaySheet({
               opts={opts}
               label={amountPaise > 0 ? `Pay ${formatRupees(amountPaise)}` : 'Pay'}
               disabled={amountPaise <= 0 || (!bare && !canPay)}
-              // Long-press reveals the exact URIs — see UpiUriSheet for why that exists.
-              onLongPress={() => canPay && setShowUris(true)}
+              // Long-press reveals the exact URIs — see UpiUriSheet. Dev tools only (`B-01`).
+              onLongPress={DEV_TOOLS_ENABLED ? () => canPay && setShowUris(true) : undefined}
               onDone={onPaid}
             />
           )}

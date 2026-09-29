@@ -22,6 +22,7 @@ import * as Notifications from 'expo-notifications';
 import { rescheduleReminders } from '../src/lib/reminders';
 import { routeForReminder } from '../src/lib/notificationRoutes';
 import { setPendingOverspendNotice } from '../src/lib/overspendNotice';
+import { startForegroundMaintenance } from '../src/lib/maintenanceWrites';
 import { colors } from '../src/theme';
 import { loadFlags, DEFAULTS, type FeatureFlags } from '../src/lib/featureFlags';
 import { settings } from '../src/lib/settings';
@@ -150,11 +151,11 @@ export default function RootLayout() {
        *
        * Nothing is lost by skipping: the next foreground picks it all up.
        */
+      // Recurring occurrences + goal maintenance; the tab layout refreshes the screens after it.
+      // Started every time (it skips itself during a restore) so the tab layout never reads an
+      // earlier run's answer.
+      if (state === 'active' && dbRef) startForegroundMaintenance(dbRef);
       if (state === 'active' && dbRef && !isRestoring()) {
-        materializeDueOccurrences(dbRef).catch(() => {});
-        runSavingsMaintenance(dbRef)
-          .then((raid) => { if (raid.total > 0) return setPendingOverspendNotice(raid); })
-          .catch(() => {});
         rescheduleReminders(dbRef).catch(() => {});
         reapOrphanedAttachments(dbRef).catch(() => {});
       }

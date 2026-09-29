@@ -11,6 +11,7 @@ import {
 } from './notifications';
 import { formatRupees } from './money';
 import { settings } from './settings';
+import { loadFlags } from './featureFlags';
 import {
   type ReminderPrefs, type ReminderTime, type PlannedReminder,
   DEFAULT_RENEWAL_TIME, DEFAULT_DAILY_TIME, DEFAULT_BACKUP_TIME,
@@ -40,15 +41,28 @@ export { getReminderPrefs, setReminderPrefs };
  * capped. The daily nudge is a single repeating notification.
  * Call on app open and whenever a reminder pref or recurring rule changes.
  */
-export async function rescheduleReminders(db: SQLite.SQLiteDatabase): Promise<void> {
+export function rescheduleReminders(db: SQLite.SQLiteDatabase): Promise<void> {
+  // One rebuild at a time. The switches, the foreground and a re-picked setup can each start one;
+  // interleaved, a rebuild that read "on" could schedule after one that read "off" had cancelled.
+  const run = queue.then(() => rebuild(db));
+  queue = run.catch(() => {});
+  return run;
+}
+let queue: Promise<void> = Promise.resolve();
+
+async function rebuild(db: SQLite.SQLiteDatabase): Promise<void> {
   if (!(await hasNotificationPermission())) return;
   await ensureAndroidChannel();
   await cancelAllReminders();
+  // Feature Management's Reminders switch turns every nudge off, not only its Settings row; the
+  // Recurring switch turns off the renewal nudges, which would open a Recurring screen it hides.
+  const flags = await loadFlags();
+  if (!flags.reminders) return;
 
   const prefs = await getReminderPrefs();
   const now = Date.now();
 
-  if (prefs.renewals) {
+  if (prefs.renewals && flags.recurring) {
     const rules = await getActiveRecurringRules(db);
     // Skip-aware: a renewal the user explicitly skipped must not push
     // "renews tomorrow" — the next UNskipped date is the one that's due.

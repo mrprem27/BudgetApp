@@ -56,13 +56,27 @@ describe('DEFAULTS', () => {
  * back — they read the actual source, so a new key must be wired before it can
  * be added, and a surface can't quietly stop honouring its flag.
  */
+/** Keys known to gate nothing today, waiting on a decision. Leaves this list the day it gates again. */
+const DEAD_PENDING: Record<string, string> = {
+  insights: 'P2-13 — Insights became a tab (2026-09-30) and the switch stopped hiding anything: hide the tab, or make it core',
+};
+
+/** `flags.x`, `flags?.x`, `flags['x']`, or `(await loadFlags()).x` — a read of the flag itself. */
+const readsFlag = (key: string) =>
+  new RegExp(String.raw`flags\??\.${key}\b|flags\['${key}'\]|loadFlags\(\)\)\.${key}\b`).test(CONSUMER_SOURCE);
+
 describe('no dead flags', () => {
   it('every key is read by some screen or lib', () => {
-    const unused = (Object.keys(DEFAULTS) as FeatureKey[]).filter(key => {
-      const patterns = [`flags.${key}`, `flags['${key}']`, `'${key}'`];
-      return !patterns.some(p => CONSUMER_SOURCE.includes(p));
-    });
+    // A READ of the flag, not the key's name anywhere: `'insights'` and `'recurring'` are also a
+    // tab's name, which is how both switches went dead with this test still green (P2-1, P2-13).
+    const unused = (Object.keys(DEFAULTS) as FeatureKey[])
+      .filter(key => !(key in DEAD_PENDING) && !readsFlag(key));
     expect(unused).toEqual([]);
+  });
+
+  it('keeps the pending list true: each key there still gates nothing', () => {
+    const revived = Object.keys(DEAD_PENDING).filter(readsFlag);
+    expect(revived).toEqual([]);
   });
 
   it('every key is exposed in the Feature Management screen', () => {

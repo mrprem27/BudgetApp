@@ -9,7 +9,8 @@ import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { SecondaryButton } from '../../src/components/ui/SecondaryButton';
 import { ErrorState } from '../../src/components/ui/ErrorState';
 import { CategoryChip } from '../../src/components/finance/CategoryChip';
-import { Chip } from '../../src/components/ui/Chip';
+import { TabPills } from '../../src/components/ui/TabPills';
+import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 import type { Category } from '../../src/db/queries/categories';
 import { loadAffordData } from '../../src/lib/affordData';
 import { afford } from '../../src/lib/engine/assess';
@@ -50,6 +51,7 @@ const NEUTRAL_STYLE = { color: colors.textMuted, icon: 'help-circle' as FeatherN
 
 export default function AffordScreen() {
   const router = useRouter();
+  const { flags } = useFeatureFlags();
   const [amountText, setAmountText] = useState('');
   const [categoryName, setCategoryName] = useState<string | null>(null);
   const [frequency, setFrequency] = useState<PurchaseFrequency>('once');
@@ -88,8 +90,9 @@ export default function AffordScreen() {
   // of one. Gating the card on `V` being non-null used to skip it entirely.
   const V = result?.verdict != null ? VERDICT_STYLE[result.verdict] : NEUTRAL_STYLE;
 
+  // The title already says "Not enough data yet"; the line under it says what is missing.
   const headline = !result ? '' : result.explanation.suppressVerdict
-    ? `Not enough data yet — ${result.explanation.missing}`
+    ? `Needs ${result.explanation.missing}`
     : `${result.headline}, ${shortDate(result.lowPointAfter.date)}`;
 
   return (
@@ -117,11 +120,8 @@ export default function AffordScreen() {
             />
           </View>
 
-          <View style={styles.chipRow}>
-            {FREQUENCY_OPTS.map(o => (
-              <Chip key={o.key} label={o.label} selected={frequency === o.key} onPress={() => setFrequency(o.key)} />
-            ))}
-          </View>
+          {/* Pick exactly one → a segmented control, not a chip row (AGENTS.md §9). */}
+          <TabPills tabs={FREQUENCY_OPTS} active={frequency} onChange={k => setFrequency(k as PurchaseFrequency)} size="sm" />
 
           {snapshot && snapshot.categories.length > 0 && (
             <ScrollView
@@ -219,7 +219,9 @@ export default function AffordScreen() {
 
           {showResult && (
             <View style={{ gap: space.sm, marginTop: space.sm }}>
-              <SecondaryButton label="Save toward it in a goal" onPress={() => router.replace('/savings?tab=goals')} />
+              {flags.savingsGoals && (
+                <SecondaryButton label="Save toward it in a goal" onPress={() => router.replace('/savings?tab=goals')} />
+              )}
               <View style={styles.actionRow}>
                 <TouchableOpacity
                   style={styles.ghostBtn}

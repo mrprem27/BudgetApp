@@ -112,7 +112,15 @@ export function useAssets() {
           {
             text: 'Delete', style: 'destructive',
             onPress: async () => {
-              const res = await deleteAsset(db, asset.id);
+              let res: Awaited<ReturnType<typeof deleteAsset>>;
+              try {
+                res = await deleteAsset(db, asset.id);
+              } catch {
+                haptic.error();
+                Alert.alert('Couldn’t delete', 'Please try again.');
+                resolve(false);
+                return;
+              }
               if (!res.ok) {
                 haptic.error();
                 Alert.alert(

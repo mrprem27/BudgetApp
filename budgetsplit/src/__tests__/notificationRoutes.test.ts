@@ -38,8 +38,8 @@ describe('routeForReminder — the fixed reminders', () => {
     expect(routeForReminder('daily_log')).toBe('/add/quick');
   });
 
-  it('sends the backup nudge to Reports, where the export lives', () => {
-    expect(routeForReminder('backup_nudge')).toBe('/reports');
+  it('sends the backup nudge to Backup, where a restorable copy is made (P2-3)', () => {
+    expect(routeForReminder('backup_nudge')).toBe('/settings/backup');
   });
 });
 

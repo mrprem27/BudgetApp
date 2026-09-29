@@ -101,6 +101,31 @@ Today: 46 files in `app/`+`src/components/` import `src/db` directly; screens up
 | SV-1 | Low | server `/auth/request-link` | Rate limit was per email, not per caller: one client could request links for many addresses | FIXED — also 30 per caller per 15 min (`rateLimit.ts`, `magic_links.ip`). **The deployed D1 needs the column first** (see below) |
 | SV-2 | Low | server `PATCH /me` | `avatarUrl` accepted any https URL. Not live: other people's DTO sends `null` for it (`index.ts` link DTO), so it reached only its owner — but the server was storing an address it never vetted | FIXED — `PATCH` can only clear it; pictures come from `PUT /me/avatar` |
 
+## Pass 2 — flows, switches, rendering (2026-09-30)
+
+Read for: what each Feature Management switch really gates, whether every route can be reached, what a
+foreground or a failed write leaves on screen, and what a screen costs to load. Regressions in
+`bugscan.test.ts` (`P2-`), `remindersFlag.test.ts`, `deadRouteRef.test.ts` and `featureFlags.test.ts`,
+each proven by reverting its fix. Open items are rows in `TRACKER.md` (§10–§11).
+
+| id | Level | Where | Failure | Status |
+|---|---|---|---|---|
+| P2-1 | High | group + Personal Recurring tabs | Turning Recurring off hid Money's Recurring row only; both Recurring tabs stayed | FIXED — gated on `flags.recurring`, falling back to the first tab |
+| P2-2 | Medium | `/settings/voice` | No way in since its Settings row went (2026-09-30); still built | GUARDED — `deadRouteRef` now fails on any route nothing opens; this one waits on `U-03` |
+| P2-3 | High | backup reminder tap | The body says "Settings → Backup"; the tap opened Reports, whose CSV cannot be restored | FIXED — opens `/settings/backup` |
+| P2-4 | High | `rescheduleReminders` | The Reminders switch hid its Settings row only; the daily and backup nudges kept firing. Recurring off still sent renewal nudges that open a Recurring screen it hides | FIXED — Reminders off cancels all, Recurring off drops renewals; toggling either (or re-picking a setup) reschedules, and rebuilds run one at a time so an "on" cannot land after an "off" |
+| P2-5 | Medium | foreground | Rules that came due and goal maintenance ran in the root layout, above `DataRefreshProvider`: Home kept the old numbers (and yesterday's "Today") until you changed tab | FIXED — the root still runs it on its own connection (the tab layout's is shared with sync and the voice drain); the tab layout waits for it and refreshes if it wrote anything or the day turned |
+| P2-6 | Medium | 7 confirm buttons | Archive group ×2, leave group, remove friend, remove receipt, delete goal: a failed write was an unhandled rejection and a button that did nothing; delete asset also left its caller waiting forever | FIXED — each catches and says so; delete goal now refreshes. Guard: every `onPress: async` confirm has `try` |
+| P2-7 | High | Feature Management → re-pick setup | Wrote the new switches to storage but not to the provider: the screen and every tab kept the old setup until a cold start | FIXED — `reloadFlags()` after `applyPersona` |
+| P2-8 | Medium | Afford | Thin history read "Not enough data yet" / "Not enough data yet — …"; "how often" was a chip row (reads as multi-select); "Save toward it in a goal" shown with Goals off | FIXED |
+| P2-9 | Low | new-goal sheet | Frequency and target date were hand-rolled segment rows beside Priority's `TabPills` | FIXED — `TabPills` |
+| P2-10 | Low | UPI Pay long-press | Opened the raw-link debug sheet in every build | FIXED — only while `DEV_TOOLS_ENABLED` (closes with `B-01`) |
+| P2-11 | Medium | person screen | Trust, write-off and per-group trust: no error handling, no `refresh()` | FIXED — one `save()` that catches and refreshes |
+| P2-12 | Low | Friends search | The last filtered row kept a divider | FIXED |
+| P2-13 | High | Insights switch | Gates nothing since Insights became a tab; the Trip setup turns it off expecting no Insights | OPEN — `U-01`. The flag guard now reads for real uses of a key, not its name |
+| P2-14 | Medium | loaders | At ~3,100 entries: Home 84 ms, Insights 59 ms, Groups 10 ms (Node; a phone is slower), re-run on every focus | OPEN — `U-02`, measure on the phone first |
+| P2-15 | Low | Feature Management → streak | "Tracking Streak … (shows at 3+ days)" — but the ⚡ count beside your name shows from 2 days whatever the switch says; the switch governs only the calendar card | FIXED — named and captioned for what it controls |
+
 ## Coverage — what this pass did and did not read
 
 Read line by line: every write path in `src/db/queries` for transactions, recurring, savings, sync queue/apply, approvals, and the group/person delete-leave-remove functions; server auth, sync push/pull/guards/access, transactions entity, erase and delete-account; `money`, `splitMath`; and every screen whose data code moved (32 files).

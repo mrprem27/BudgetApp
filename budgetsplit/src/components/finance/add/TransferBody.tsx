@@ -13,6 +13,7 @@ import { oweView } from '../../../lib/owe';
 import type { Person } from '../../../db/queries/persons';
 import type { TransferScopes } from '../../../lib/settleScope';
 import { TRANSFER_SCOPE_ALL, type TransferScope } from '../../../constants/enums';
+import { DEV_TOOLS_ENABLED } from '../../../constants/devTools';
 import { alpha } from '../../../theme';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, ReduceMotion } from 'react-native-reanimated';
 import { PressableScale } from '../../ui/PressableScale';
@@ -204,7 +205,8 @@ export function TransferBody({
             // Long-press reveals the exact URIs, and lets a blocked app be handed a payment
             // deliberately — see UpiUriSheet. Settling up is where a P2P route actually gets
             // tested, so the sheet has to be reachable from here and not only from Scan & Pay.
-            onLongPress={onOpenUpiUri}
+            // A debugging tool, so it closes with the other dev tools (`B-01`).
+            onLongPress={DEV_TOOLS_ENABLED ? onOpenUpiUri : undefined}
           />
           {/* Opens their UPI app pre-filled; the money moves between their own
               accounts. The app still never records a settlement it did not

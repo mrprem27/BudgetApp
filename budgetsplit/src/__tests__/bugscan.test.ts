@@ -927,3 +927,149 @@ describe('R2 · a bill paid by hand near its date counts as that occurrence, not
     expect(count(b.db)).toBe(3);
   });
 });
+
+// ------------------------------------------------------------------ pass 2 (2026-09-30)
+
+const fs = jest.requireActual('fs') as typeof import('fs');
+
+describe('P2-1 · the Recurring switch hides every Recurring tab, not only Money\'s row', () => {
+  it('gates the group and Personal tabs on flags.recurring', () => {
+    for (const file of ['app/(people)/group/[id].tsx', 'app/(people)/personal.tsx']) {
+      expect({ file, gated: /flags\.recurring/.test(fs.readFileSync(file, 'utf8')) }).toEqual({ file, gated: true });
+    }
+  });
+});
+
+describe('P2-5 · coming back to the app refreshes what it caught up on', () => {
+  it('posts a rule that came due while the app was away', async () => {
+    const db = await openTestDb();
+    await seedGroupAndMe(db);
+    await seedRule(db);
+    expect(await liveOccurrences(db)).toEqual([]);
+    const { runForegroundMaintenance } = jest.requireActual('../lib/maintenanceWrites') as typeof import('../lib/maintenanceWrites');
+    await runForegroundMaintenance(db);
+    expect((await liveOccurrences(db)).length).toBeGreaterThan(0);
+  });
+
+  it('says whether it wrote anything', async () => {
+    const db = await openTestDb();
+    await seedGroupAndMe(db);
+    const { runForegroundMaintenance } = jest.requireActual('../lib/maintenanceWrites') as typeof import('../lib/maintenanceWrites');
+    expect(await runForegroundMaintenance(db)).toBe(false);
+    await seedRule(db);
+    expect(await runForegroundMaintenance(db)).toBe(true);
+  });
+
+  it('runs on the root connection, and the tab layout refreshes once it is done', () => {
+    // The writes stay on the root's own connection: the tab layout's shares one with sync and
+    // the voice drain, and two transactions on one connection collide.
+    const root = fs.readFileSync('app/_layout.tsx', 'utf8');
+    const foreground = root.slice(root.indexOf("AppState.addEventListener('change'"));
+    expect(foreground.slice(0, foreground.indexOf('});'))).toMatch(/startForegroundMaintenance\(dbRef\)/);
+    const tabs = fs.readFileSync('app/(tabs)/_layout.tsx', 'utf8');
+    expect(tabs).toMatch(/foregroundMaintenanceDone\)\.then\(wrote => \{\s*if \(wrote \|\| today !== loadedDay\.current\)[^}]*refresh\(\)/);
+  });
+});
+
+/**
+ * P2-6 — a confirm button whose async work can throw must say so. Six did not (archive group ×2,
+ * leave group, remove a friend, remove a receipt, delete a goal) and one more left its caller waiting
+ * forever (delete an asset): a failure was an unhandled rejection and a button that did nothing.
+ */
+describe('P2-6 · an async confirm button handles its own failure', () => {
+  function sources(dir: string): string[] {
+    return fs.readdirSync(dir, { withFileTypes: true }).flatMap(e => {
+      const full = `${dir}/${e.name}`;
+      if (e.isDirectory()) return e.name === '__tests__' ? [] : sources(full);
+      return /\.tsx?$/.test(e.name) ? [full] : [];
+    });
+  }
+  /**
+   * The `{ … }` body of each `onPress: async () => {` in a file. A heuristic, and it says so: a
+   * handler passed by name (`onPress: remove`), or a `try` that wraps only the first await, is not
+   * caught here — those are for review.
+   */
+  function handlers(src: string): string[] {
+    const out: string[] = [];
+    for (const m of src.matchAll(/onPress:\s*async\s*\(\)\s*=>\s*\{/g)) {
+      let depth = 0;
+      let i = m.index! + m[0].length - 1;
+      const start = i;
+      for (; i < src.length; i++) {
+        if (src[i] === '{') depth++;
+        else if (src[i] === '}' && --depth === 0) break;
+      }
+      out.push(src.slice(start, i + 1));
+    }
+    return out;
+  }
+
+  it('finds the handlers at all', () => {
+    const all = [...sources('app'), ...sources('src')].flatMap(f => handlers(fs.readFileSync(f, 'utf8')));
+    expect(all.length).toBeGreaterThan(10);
+  });
+
+  it('wraps each one in try, or in the hook\'s own run()', () => {
+    const bare = [...sources('app'), ...sources('src')].flatMap(f =>
+      handlers(fs.readFileSync(f, 'utf8'))
+        .filter(body => !/\btry\s*\{|\brun\(/.test(body))
+        .map(body => `${f}: ${body.slice(0, 60).replace(/\s+/g, ' ')}`));
+    expect(bare).toEqual([]);
+  });
+});
+
+describe('P2-7 · re-picking a setup updates the switches on screen', () => {
+  it('reloads the flags after applyPersona', () => {
+    const src = fs.readFileSync('app/(system)/features.tsx', 'utf8');
+    expect(src).toMatch(/await applyPersona\(next, FEATURE_KEYS\);[\s\S]{0,600}await reloadFlags\(\)/);
+  });
+});
+
+describe('P2-8 · Afford', () => {
+  const src = fs.readFileSync('app/(money)/afford.tsx', 'utf8');
+  it('does not say "Not enough data yet" twice', () => {
+    expect(src).not.toMatch(/`Not enough data yet —/);
+  });
+  it('asks "how often" with a segmented control, and offers a goal only when goals are on', () => {
+    expect(src).toMatch(/<TabPills tabs=\{FREQUENCY_OPTS\}/);
+    expect(src).toMatch(/flags\.savingsGoals && \(\s*<SecondaryButton label="Save toward it in a goal"/);
+  });
+});
+
+describe('P2-9 · pick-one choices in the new-goal sheet are TabPills, like Priority beside them', () => {
+  it('has no hand-rolled segment rows left', () => {
+    const src = fs.readFileSync('app/(tabs)/savings.tsx', 'utf8');
+    expect(src).not.toMatch(/styles\.segSm/);
+    expect((src.match(/<TabPills/g) ?? []).length).toBe(4); // sections, priority, frequency, target date
+  });
+});
+
+describe('P2-10 · the UPI link inspector is a dev tool', () => {
+  it('opens on long-press only while DEV_TOOLS_ENABLED', () => {
+    for (const file of ['src/components/finance/add/TransferBody.tsx', 'src/components/finance/ScanPaySheet.tsx']) {
+      expect({ file, gated: /onLongPress=\{DEV_TOOLS_ENABLED \?/.test(fs.readFileSync(file, 'utf8')) }).toEqual({ file, gated: true });
+    }
+  });
+});
+
+describe('P2-11 · a person\'s trust and write-off say so when they fail, and tell every screen when they land', () => {
+  it('routes all three writes through one save that catches and refreshes', () => {
+    const src = fs.readFileSync('src/hooks/usePersonScreen.ts', 'utf8');
+    const save = src.slice(src.indexOf('async function save('), src.indexOf('async function toggleTrusted'));
+    expect(save).toMatch(/try \{[\s\S]*catch[\s\S]*refresh\(\)/);
+    expect(save).not.toMatch(/reload\(\)/); // refresh() already reloads this screen
+    expect((src.match(/await save\(\(\) => set(TrustState|ReceivableState|GroupTrust)\(/g) ?? []).length).toBe(3);
+  });
+});
+
+describe('P2-12 · a filtered Friends list draws no divider under its last row', () => {
+  it('counts the rows it draws, not every contact', () => {
+    expect(fs.readFileSync('app/(people)/friends.tsx', 'utf8')).toMatch(/i < filtered\.length - 1 && styles\.rowBorder/);
+  });
+});
+
+describe('P2-15 · the streak switch says what it controls', () => {
+  it('names the calendar, and says the ⚡ count shows either way', () => {
+    expect(fs.readFileSync('app/(system)/features.tsx', 'utf8')).toMatch(/label: 'Streak Calendar', caption: '[^']*⚡ count shows either way'/);
+  });
+});

@@ -224,7 +224,7 @@ photos never sync (`SYNC-F4`); balances never travel (`E-50`).
 
 One SQLite database, `budgetsplit.db`, opened by `SQLiteProvider` at the root. It is the single
 source of truth — there is no Redux, no React Query, no in-memory mirror. Reads go through
-`src/db/queries/` (27 modules); pure logic lives in `src/lib/` (134 modules) and touches neither
+`src/db/queries/` (27 modules); pure logic lives in `src/lib/` (135 modules) and touches neither
 React nor the database.
 
 **Foreign keys are OFF** on every connection (`applyConnectionPragmas`). Every `REFERENCES` clause
@@ -1548,7 +1548,7 @@ Is not.        · Not in the database. The OS holds them, so they can be out of
                  entitlement is actively stripped at build time.
 Storage.       The OS. lib/reminders.ts, reminderPlan.ts, notifications.ts.
                Tap routing is lib/notificationRoutes.ts: `renew_{id}_d{n}` →
-               SC-41, `daily_log` → SC-07, `backup_nudge` → SC-20.
+               SC-41, `daily_log` → SC-07, `backup_nudge` → SC-34.
 Aliases.       reminder · notification · nudge · alert.
 Surfaces.      SC-31 · SC-30
 Open.          DQ-80 push is parked
@@ -2079,7 +2079,7 @@ open. The walkthrough shows these instead of the paths.
 | `SC-17` | **Plan** → tap a goal |
 | `SC-18` | **Settings → Import transactions** |
 | `SC-19` | **Home** → the inbox badge at the top right. Also where an import lands |
-| `SC-20` | **Plan** → the chart icon in the header, or **Settings → Reports & export** |
+| `SC-20` | **Insights** → the Reports icon in the header, or the Reports row |
 | `SC-21` | **Reports** → tap a slice of the donut |
 | `SC-22` | **Plan** → the insights icon in the header, or Home → tap the pace line |
 | `SC-23` | **Home** → the magnifier at the top right |
@@ -2135,7 +2135,7 @@ nowhere to go.
 | Siri `VOICE_DEEP_LINK` | `SC-07` | `?q=…` |
 | Notification `renew_{ruleId}_d{n}` | `SC-41` | `routeForReminder` |
 | Notification `daily_log` | `SC-07` | `routeForReminder` |
-| Notification `backup_nudge` | `SC-20` | `routeForReminder` |
+| Notification `backup_nudge` | `SC-34` | `routeForReminder` |
 | Tab-bar FAB long-press | ScanPaySheet | 350 ms, taught once by a coach mark |
 | Settings version ×7 | `SC-27` | Gated on `DEV_TOOLS_ENABLED` |
 
@@ -3722,7 +3722,7 @@ Numbers.     · nothing financial moves
                component, two surfaces. Home shows neither list, only a badge
                count on the bell that opens SC-30
 Exit.        Stays. A tapped notification routes: a renewal opens the rule, the
-             daily nudge opens Add, the backup nudge opens Reports.
+             daily nudge opens Add, the backup nudge opens Backup.
 Branches.    .B1 permission refused → the switches should say so, not fail quietly
 Failures.    .FM1 **jest cannot prove any of this.** It is device-only
              .FM2 the OS schedule drifting from the rules that made it

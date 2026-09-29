@@ -37,6 +37,7 @@ import { planRebalance, applyRebalance, type RebalancePlan } from '../../../src/
 import { MembersTab } from '../../../src/components/finance/group/MembersTab';
 import { RecurringTab } from '../../../src/components/finance/group/RecurringTab';
 import { buildGroupExportCsv } from '../../../src/lib/groupExport';
+import { useFeatureFlags } from '../../../src/components/system/FeatureFlagsProvider';
 import { shareCsv, csvFileSlug } from '../../../src/lib/shareCsv';
 import type { TxnWithSplits } from '../../../src/db/queries/transactions';
 
@@ -74,6 +75,9 @@ export default function GroupDetailScreen() {
   const isPersonal = group?.is_personal === 1;
 
   const { handleDelete, handleEditTxn } = useGroupTxnActions(reload);
+  // The Recurring switch hides this tab too, not only Money's Recurring row.
+  const { flags } = useFeatureFlags();
+  useEffect(() => { if (!flags.recurring && activeTab === 'recurring') setActiveTab('transactions'); }, [flags.recurring, activeTab]);
 
   // Seed the simplify toggle from the group's saved preference on each fresh row.
   useEffect(() => { if (data?.group) setSimplifyOn(data.group.simplify_debt === 1); }, [data?.group]);
@@ -184,7 +188,7 @@ export default function GroupDetailScreen() {
 
   const TABS: { key: TabKey; label: string }[] = [
     { key: 'transactions', label: 'Expenses' },
-    { key: 'recurring', label: 'Recurring' },
+    ...(flags.recurring ? [{ key: 'recurring' as const, label: 'Recurring' }] : []),
     { key: 'budget', label: 'Budget' },
     { key: 'members', label: 'Members' },
   ];
@@ -334,7 +338,14 @@ export default function GroupDetailScreen() {
             setShowMenu(false);
             Alert.alert('Archive group?', `${group.name} will be hidden. Its data is kept.`, [
               { text: 'Cancel', style: 'cancel' },
-              { text: 'Archive', style: 'destructive', onPress: async () => { const ok = await archiveGroup(db, id); if (ok) { haptic.warning(); refresh(); router.back(); } } },
+              { text: 'Archive', style: 'destructive', onPress: async () => {
+                try {
+                  if (await archiveGroup(db, id)) { haptic.warning(); refresh(); router.back(); }
+                } catch {
+                  haptic.error();
+                  Alert.alert('Couldn’t archive', 'Please try again.');
+                }
+              } },
             ]);
           }}
           accessibilityRole="button"

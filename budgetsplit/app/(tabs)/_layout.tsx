@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform, AppState, Alert } from 'react-native';
 import { Tabs, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -12,6 +12,7 @@ import { askAboutPendingSettlement } from '../../src/lib/confirmSettlement';
 import { settings } from '../../src/lib/settings';
 import { currencySymbol } from '../../src/lib/money';
 import { drainVoiceInbox } from '../../src/lib/voiceDrain';
+import { foregroundMaintenanceDone } from '../../src/lib/maintenanceWrites';
 import { runSync, scheduleSync, setQueueListener, type SyncOutcome, type Vanished } from '../../src/lib/sync';
 import { pendingRestoreOffer } from '../../src/lib/restoreOffer';
 import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
@@ -99,6 +100,8 @@ function AppTabBar({ state, navigation }: { state: any; navigation: any }) {
   const db = useSQLiteContext();
   const [scanPay, setScanPay] = useState(false);
   const [showHint, setShowHint] = useState(false);
+  // The calendar day the screens last loaded on — a foreground on a new day refreshes them.
+  const loadedDay = useRef(new Date().toDateString());
   const activeName = state.routes[state.index]?.name;
   // The Money tab shows the symbol of the currency you chose (₹ by default), not a dollar sign.
   const [currencyGlyph, setCurrencyGlyph] = useState(currencySymbol());
@@ -114,6 +117,13 @@ function AppTabBar({ state, navigation }: { state: any; navigation: any }) {
   useEffect(() => {
     const sub = AppState.addEventListener('change', state => {
       if (state !== 'active') return;
+      // The root layout's catch-up may have posted a rule, and the day may have turned since the
+      // screens loaded ("Today", Safe-to-Spend) — a foreground fires no screen's focus effect.
+      // A tick first: the root's listener was registered earlier and starts the run.
+      const today = new Date().toDateString();
+      Promise.resolve().then(foregroundMaintenanceDone).then(wrote => {
+        if (wrote || today !== loadedDay.current) { loadedDay.current = today; refresh(); }
+      });
       askAboutPendingPayment(db).then(filed => { if (filed) refresh(); }).catch(() => {});
       // Same question for a settle-up hand-off, which previously had no way back at
       // all: "come back and save to record it" put the whole burden on the user

@@ -1,4 +1,6 @@
 import { useMemo } from 'react';
+import { Alert } from 'react-native';
+import { useDataRefresh } from '../components/system/DataRefreshProvider';
 import { useStore } from '../store';
 import { useScreenData } from './useScreenData';
 import { getPersonById, setReceivableState, setTrustState, combinableWith } from '../db/queries/persons';
@@ -27,6 +29,7 @@ export function usePersonScreen(personId: string) {
   const db = useSQLiteContext();
   const me = useStore(s => s.me);
 
+  const { refresh } = useDataRefresh();
   const { data, loading, error, refreshing, onRefresh, reload } = useScreenData(
     async (db) => {
       if (!me) throw new Error('No current user');
@@ -99,6 +102,18 @@ export function usePersonScreen(personId: string) {
     : false;
   const trustApplies = data?.person ? appliesImmediately(data.person) : false;
 
+  /** One write from this screen: said out loud if it fails. `refresh()` reloads this screen too. */
+  async function save(write: () => Promise<unknown>, confirm = true): Promise<void> {
+    try {
+      await write();
+      if (confirm) haptic.success();
+    } catch {
+      haptic.error();
+      Alert.alert('Couldn’t save that', 'Please try again.');
+    }
+    refresh();
+  }
+
   async function toggleTrusted() {
     const next = trustState === 'trusted' ? 'review' : 'trusted';
     const name = data?.person?.name ?? 'this person';
@@ -111,9 +126,7 @@ export function usePersonScreen(personId: string) {
       trustConfirmCta(next),
     );
     if (!ok) return;
-    await setTrustState(db, personId, next);
-    haptic.success();
-    await reload();
+    await save(() => setTrustState(db, personId, next));
   }
 
   async function toggleWrittenOff() {
@@ -127,9 +140,7 @@ export function usePersonScreen(personId: string) {
       next === 'written_off' ? 'Write off' : 'Count it',
     );
     if (!ok) return;
-    await setReceivableState(db, personId, next);
-    haptic.success();
-    await reload();
+    await save(() => setReceivableState(db, personId, next));
   }
 
   /**
@@ -140,8 +151,7 @@ export function usePersonScreen(personId: string) {
    * and a switch cannot express that.
    */
   async function setGroupTrustFor(groupId: string, next: string | null) {
-    await setGroupTrust(db, personId, groupId, next);
-    reload();
+    await save(() => setGroupTrust(db, personId, groupId, next), false);
   }
 
   return {

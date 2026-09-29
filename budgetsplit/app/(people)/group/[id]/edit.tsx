@@ -108,11 +108,16 @@ export default function EditGroupScreen() {
     Alert.alert('Archive this group?', 'It’s hidden from your main view but all data is kept. You can restore it later.', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Archive', style: 'destructive', onPress: async () => {
-        const ok = await archiveGroup(db, id);
-        // `dismissTo`, like delete and leave below — `replace` swaps only THIS
-        // screen, leaving the group's detail screen underneath it, so Back from
-        // the groups list walked straight back into the group just archived.
-        if (ok) { haptic.warning(); refresh(); router.dismissTo('/groups'); }
+        try {
+          const ok = await archiveGroup(db, id);
+          // `dismissTo`, like delete and leave below — `replace` swaps only THIS
+          // screen, leaving the group's detail screen underneath it, so Back from
+          // the groups list walked straight back into the group just archived.
+          if (ok) { haptic.warning(); refresh(); router.dismissTo('/groups'); }
+        } catch {
+          haptic.error();
+          Alert.alert('Couldn’t archive', 'Please try again.');
+        }
       } },
     ]);
   }
@@ -169,7 +174,14 @@ export default function EditGroupScreen() {
           ? [{ text: 'Settle up first', onPress: () => router.dismissTo(`/group/${id}`) }]
           : []),
         { text: settleFirst ? 'Leave anyway' : 'Leave', style: 'destructive' as const, onPress: async () => {
-          const res = await leaveGroup(db, id, meId);
+          let res: Awaited<ReturnType<typeof leaveGroup>>;
+          try {
+            res = await leaveGroup(db, id, meId);
+          } catch {
+            haptic.error();
+            Alert.alert('Couldn’t leave', 'Please try again.');
+            return;
+          }
           if (!res.ok) {
             Alert.alert(
               'Can’t leave',

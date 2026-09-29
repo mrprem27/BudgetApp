@@ -135,12 +135,17 @@ export function useTxnDetail(id: string) {
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Remove', style: 'destructive', onPress: async () => {
-          const old = txn.attachment_uri;
-          await setTxnAttachment(db, id, null);
-          if (old && !(await attachmentInUse(db, old))) await deleteAttachment(old);
-          haptic.warning();
-          setShowAttachment(false);
-          await reload();
+          try {
+            const old = txn.attachment_uri;
+            await setTxnAttachment(db, id, null);
+            if (old && !(await attachmentInUse(db, old))) await deleteAttachment(old);
+            haptic.warning();
+            setShowAttachment(false);
+            await reload();
+          } catch {
+            haptic.error();
+            Alert.alert('Couldn’t remove the receipt', 'Please try again.');
+          }
         },
       },
     ]);

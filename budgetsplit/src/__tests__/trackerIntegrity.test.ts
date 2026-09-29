@@ -33,7 +33,7 @@ function liveDocs(): string[] {
     .map(f => path.join(DOCS, f));
 }
 const rel = (f: string) => path.relative(ROOT, f);
-const NS = String.raw`(?:OV|DQ|W1|B|D|A)-\d+[ab]?|SYNC-F\d+`;
+const NS = String.raw`(?:OV|DQ|W1|B|D|A|V|U)-\d+[ab]?|SYNC-F\d+`;
 
 function counted(ids: string[]): Map<string, number> {
   const m = new Map<string, number>();

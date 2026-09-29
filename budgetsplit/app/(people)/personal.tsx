@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, SectionList, Alert } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -36,6 +36,7 @@ import { shareCsv, csvFileSlug } from '../../src/lib/shareCsv';
 import { keyboardAwareScroll } from '../../src/components/ui/KeyboardForm';
 import { RecurringTab } from '../../src/components/finance/group/RecurringTab';
 import { computeRecurringMonthlyTotal, computeRecurNextLabel } from '../../src/lib/groupDetail';
+import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 
 /*
  * Three tabs, the same three a group has for its own money: Activity, Budget, Recurring.
@@ -62,6 +63,10 @@ export default function PersonalScreen() {
 
   const bottomPad = useContentInset({ fab: true });
   const [tab, setTab] = useState<TabKey>('activity');
+  // The Recurring switch hides this tab too, not only Money's Recurring row.
+  const { flags } = useFeatureFlags();
+  const tabs = flags.recurring ? TABS : TABS.filter(t => t.key !== 'recurring');
+  useEffect(() => { if (!flags.recurring && tab === 'recurring') setTab('activity'); }, [flags.recurring, tab]);
   const [filter, setFilter] = useState<string>('personal'); // personal | groups | all | <groupId>
   // The transaction filters, none of which this screen had: it offered scope only.
   const [query, setQuery] = useState('');
@@ -235,7 +240,7 @@ export default function PersonalScreen() {
               was itself a reimplementation of `TabPills`. One component now. */}
           <View style={styles.tabs}>
             <TabPills
-              tabs={TABS}
+              tabs={tabs}
               active={tab}
               onChange={(k) => { setTab(k as typeof tab); haptic.selection(); }}
             />

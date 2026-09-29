@@ -235,10 +235,18 @@ export function useSavingsGoalScreen(id: string) {
         onPress: async () => {
           // Capture the goal + its ledger so the delete can be undone.
           const snapshot = goal!;
-          // null = no limit: undo must restore every row, not just the page.
-          const ledger = await getGoalHistory(db, id, null);
-          await deleteGoal(db, id);
+          let ledger: Awaited<ReturnType<typeof getGoalHistory>>;
+          try {
+            // null = no limit: undo must restore every row, not just the page.
+            ledger = await getGoalHistory(db, id, null);
+            await deleteGoal(db, id);
+          } catch {
+            haptic.error();
+            Alert.alert('Couldn’t delete the goal', 'Please try again.');
+            return;
+          }
           haptic.warning();
+          refresh();
           router.back();
           showUndo({
             message: `Deleted “${snapshot.name}”`,
