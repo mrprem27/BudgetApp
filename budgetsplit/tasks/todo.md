@@ -232,15 +232,15 @@ Short and ordered: quick fixes first, the one design question last.
 - [x] **F2 · Afford: full engine working.** "How we got this" shows inputs, events, the sum, low points, each check and the verdict rule, all with numbers (`lib/engine/trace.ts`). *(done)*
 - [x] **F3 · Settings.** A colour per row, Notifications folded into Preferences, Data & Help split. *(done)*
 - [x] **F4 · Drop the engine comparison dev screen.** *(done)*
-- [ ] **F5 · Dropdown chevron at the far right.** A `Chip` with `chevron` that fills its row puts the ⌄ at the right edge, not after the text. Fix once in `ui/Chip` (label takes the free width), so category, date and every other dropdown chip follows.
-- [ ] **F6 · Edit shows no advice.** Budget nudge ("₹0 left this month"), afford hint and the "switch to Invest" banner only on Add, never on Edit (`app/add/quick.tsx`).
-- [ ] **F7 · Transfer = money moved, nothing else.** Remove `Rent` and `Investment` from the Transfer picker. `Investment` stays as the hidden category the Invest kind writes (`db/queries/assets.ts`); existing `Rent` transfer rows keep their label, the category just stops being offered. One-time fix for already-seeded groups.
-- [ ] **F8 · "Spent with X, Y" — not a group.** Decided: it is never shown as a group and never appears in the Groups list. Add's "Where does this go?" becomes two parts: **Group** (pick one) and **With people** (tick one or more). The header reads "With Aarav, Meera · equal", not a group name.
+- [x] **F5 · Dropdown chevron at the far right.** A `Chip` with `chevron` that fills its row puts the ⌄ at the right edge, not after the text. Fix once in `ui/Chip` (label takes the free width), so category, date and every other dropdown chip follows.
+- [x] **F6 · Edit shows no advice.** Budget nudge ("₹0 left this month"), afford hint and the "switch to Invest" banner only on Add, never on Edit (`app/add/quick.tsx`).
+- [x] **F7 · Transfer = money moved, nothing else.** Remove `Rent` and `Investment` from the Transfer picker. `Investment` stays as the hidden category the Invest kind writes (`db/queries/assets.ts`); existing `Rent` transfer rows keep their label, the category just stops being offered. One-time fix for already-seeded groups.
+- [x] **F8 · "Spent with X, Y" — not a group.** Decided: it is never shown as a group and never appears in the Groups list. Add's "Where does this go?" becomes two parts: **Group** (pick one) and **With people** (tick one or more). The header reads "With Aarav, Meera · equal", not a group name.
   - Under the hood it reuses the hidden pair group that one-person splits already use (`getOrCreatePairGroup`, kept out of the list by `listableGroups`): ticking people finds or creates the hidden group for exactly that set. That is what keeps splitting, balances and sync working, since `txn.group_id` is NOT NULL and only groups sync.
-  - Needs one new synced column on `budget_group` (`pair_key` = the sorted person ids) beside `pair_person_id`, plus the same column on the server. This is the one real risk; everything else is UI.
+  - **No schema or server change.** The server's `groups.kind` is a CHECK of `personal | shared | pair` (a pair is exactly two people), so a new kind would mean rebuilding that table. The hidden group is an ordinary `shared` group on the wire, marked by `icon = 'link-2'` (`PEOPLE_SET_ICON`), which already syncs, so every member's phone hides it the same way. Looked up by its exact member set, never by name.
   - Balances stay correct with no extra work: friend balances already sum across every group a person shares with you.
 
-Gates: `npx jest`, `npx tsc --noEmit`. DEVICE: F5 on Add (expense, income, transfer), F6 editing an expense, F7 the transfer picker, F8 splitting with 2 friends and no group.
+Done, with tests (`peopleSetGroup`, `transferCategories`). Gates: `npx jest`, `npx tsc --noEmit`. DEVICE: F5 on Add (expense, income, transfer), F6 editing an expense, F7 the transfer picker, F8 splitting with 2 friends and no group.
 
 ---
 

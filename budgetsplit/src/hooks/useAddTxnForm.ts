@@ -8,7 +8,7 @@ import { matchCategory } from '../lib/smartCategory';
 import { loadLearned, learnedMatch, recordCorrection, type LearnedMap } from '../lib/smartCategoryLearn';
 import { DEFAULT_CURRENCY, type CurrencyCode } from '../constants/currencies';
 import {
-  getAllGroups, getGroupById, getGroupsByRecentUse, getOrCreatePairGroup, listableGroups,
+  getAllGroups, getGroupById, getGroupsByRecentUse, getOrCreatePairGroup, getOrCreatePeopleSetGroup, isPeopleSet, listableGroups,
 } from '../db/queries/groups';
 import { getGroupMembers, getMe, getAllPersons } from '../db/queries/persons';
 import { getFriendBalances } from '../db/queries/balances';
@@ -540,6 +540,23 @@ export function useAddTxnForm(params: AddTxnParams) {
     await selectGroup(group.id);
   }
 
+  /**
+   * "Spent with these people" — one or more, no group the user sees.
+   *
+   * One person is the existing pair group; two or more is a hidden group for exactly
+   * that set (`getOrCreatePeopleSetGroup`). Either way the expense lands in a real
+   * shared group underneath, which is what lets it split, balance and sync.
+   */
+  async function selectPeople(personIds: string[]) {
+    if (!me || personIds.length === 0) return;
+    const group = personIds.length === 1
+      ? await getOrCreatePairGroup(db, me.id, personIds[0])
+      : await getOrCreatePeopleSetGroup(db, me.id, personIds);
+    // The picker's recency list was read before this group existed.
+    getGroupsByRecentUse(db).then(setPickerGroups).catch(() => {});
+    await selectGroup(group.id);
+  }
+
   async function selectGroup(gid: string) {
     if (gid === selectedGroupId) return;
     setSelectedGroupId(gid);
@@ -877,7 +894,7 @@ export function useAddTxnForm(params: AddTxnParams) {
     isEditing, isRecurEdit, flags, saving,
     // core
     kind, onSelectKind, amountText, setAmountText, total,
-    groups, selectedGroupId, setSelectedGroupId, selectGroup, selectPerson, loadGroup, me,
+    groups, selectedGroupId, setSelectedGroupId, selectGroup, selectPerson, selectPeople, loadGroup, me,
     /**
      * Recency-ordered, for the destination picker. Falls back to store order.
      *
@@ -887,6 +904,13 @@ export function useAddTxnForm(params: AddTxnParams) {
      */
     pickerGroups: listableGroups(pickerGroups.length ? pickerGroups : groups),
     selectedGroup: groups.find(g => g.id === selectedGroupId) ?? null,
+    /** Who the current destination is "with", when it is a person or a set of people rather than a group. */
+    selectedPersonIds: (() => {
+      const g = groups.find(x => x.id === selectedGroupId);
+      if (!g) return [] as string[];
+      if (g.pair_person_id) return [g.pair_person_id];
+      return isPeopleSet(g) ? members.filter(m => m.id !== me?.id).map(m => m.id) : [];
+    })(),
     categories, setCategories, createCategory, tagSuggestions, selectedCategory, setSelectedCategory, setCatManual, onTitleChange, recordCategoryChoice,
     /** Merchant→category corrections the user has made. Exposed so voice entry inherits
      *  them too — `parseVoice` has always accepted them, but nothing passed them in, so

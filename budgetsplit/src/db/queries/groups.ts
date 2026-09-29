@@ -174,7 +174,25 @@ export function sharedGroupsOf(groups: BudgetGroup[]): BudgetGroup[] {
  * money would go into a group that no figure counted.
  */
 export function listableGroups(groups: BudgetGroup[]): BudgetGroup[] {
-  return groups.filter(g => g.pair_person_id == null);
+  return groups.filter(g => g.pair_person_id == null && !isPeopleSet(g));
+}
+
+/**
+ * The marker for "spent with these people" — a hidden group for one exact set of 2+
+ * people, made when an expense is split with them and no group.
+ *
+ * It is carried in `icon` because that column already syncs and the server accepts
+ * any string there. A new group *kind* would have been cleaner and is not possible
+ * without rebuilding the server's `groups` table: its `kind` is a CHECK constraint of
+ * `personal | shared | pair`, and a pair is exactly two people. On the wire this is
+ * an ordinary `shared` group, so every member's phone sees the same marker and hides
+ * it the same way. Nobody can edit it away — a hidden group has no edit screen, and
+ * the icon picker never offers this glyph (`GROUP_ICONS`).
+ */
+export const PEOPLE_SET_ICON = 'link-2';
+
+export function isPeopleSet(g: Pick<BudgetGroup, 'icon'>): boolean {
+  return g.icon === PEOPLE_SET_ICON;
 }
 
 /** What a breakdown needs to name and colour one slice of spend. */
@@ -500,6 +518,52 @@ export async function getOrCreatePairGroup(
   await db.runAsync('UPDATE budget_group SET pair_person_id = ? WHERE id = ?', [personId, group.id]);
   await queueUpsert(db, 'budget_group', group.id);
   return { ...group, pair_person_id: personId };
+}
+
+/**
+ * "Spent with Aarav and Meera" — no group the user ever sees.
+ *
+ * Same idea as `getOrCreatePairGroup`, for two or more people: the expense needs a
+ * group (`txn.group_id` is NOT NULL, and only groups sync), so one is found or made
+ * for exactly this set of people, and kept out of every list by `listableGroups`.
+ * Adding a person later is a different set, hence a different hidden group — which is
+ * right: "lunch with Aarav and Meera" and "lunch with Aarav, Meera and Priya" are
+ * different splits and must not share a balance line.
+ *
+ * Lookup is by the set of active members, never by name (the name is frozen at
+ * creation and two different sets can share one).
+ */
+export async function getOrCreatePeopleSetGroup(
+  db: SQLite.SQLiteDatabase,
+  meId: string,
+  personIds: string[],
+): Promise<BudgetGroup> {
+  const others = [...new Set(personIds.filter(id => id !== meId))].sort();
+  if (others.length < 2) throw new Error('A people set needs at least two other people');
+  const want = [meId, ...others].sort().join('|');
+
+  const candidates = await db.getAllAsync<BudgetGroup>(
+    'SELECT * FROM budget_group WHERE icon = ? AND deleted_at IS NULL', [PEOPLE_SET_ICON],
+  );
+  for (const g of candidates) {
+    const rows = await db.getAllAsync<{ person_id: string }>(
+      'SELECT person_id FROM group_member WHERE group_id = ? AND deleted_at IS NULL', [g.id],
+    );
+    if (rows.map(r => r.person_id).sort().join('|') !== want) continue;
+    if (g.is_archived === 1) {
+      await db.runAsync('UPDATE budget_group SET is_archived = 0 WHERE id = ?', [g.id]);
+      await queueUpsert(db, 'budget_group', g.id);
+      return { ...g, is_archived: 0 };
+    }
+    return g;
+  }
+
+  const people = await db.getAllAsync<{ id: string; name: string; avatar_color: string }>(
+    `SELECT id, name, avatar_color FROM person WHERE id IN (${others.map(() => '?').join(',')})`, others,
+  );
+  if (people.length !== others.length) throw new Error('No such person');
+  people.sort((a, b) => a.name.localeCompare(b.name));
+  return insertGroup(db, people.map(p => p.name).join(', '), PEOPLE_SET_ICON, people[0].avatar_color, others, 'equal', meId);
 }
 
 export type LeaveGroupResult =

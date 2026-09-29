@@ -42,6 +42,13 @@ function destinationOf(f: Form): { label: string; sheet: QuickAddSheet; a11y: st
     };
   }
 
+  // Spent with people, not in a group: name the people, never the hidden group behind it.
+  if (f.selectedPersonIds.length > 0) {
+    const names = f.members.filter(m => f.selectedPersonIds.includes(m.id)).map(m => m.name.split(' ')[0]).join(', ');
+    const split = SPLIT_MODE_LABEL[f.selectedGroup?.default_split ?? 'equal'].toLowerCase();
+    return { label: `With ${names} · ${split}`, sheet: 'destination', a11y: `Spent with ${names}. Change` };
+  }
+
   const group = f.selectedGroup?.name ?? 'Personal';
   const who = f.members.length > 1
     ? `${f.members.length} people · ${SPLIT_MODE_LABEL[f.selectedGroup?.default_split ?? 'equal'].toLowerCase()}`
