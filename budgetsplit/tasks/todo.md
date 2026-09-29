@@ -224,6 +224,24 @@ Options tasks come first; each build task is sized once you've picked.
 
 When each Phase 5 item closes, its tracker row moves to `DONE` and its `FINDINGS.md` entry records the answer.
 
+## Phase 5b · Feedback, 2026-09-29
+
+Short and ordered: quick fixes first, the one design question last.
+
+- [x] **F1 · Pay-with app picker inline.** Collapsible app icons above the Pay button (Scan & Pay, settle-up); picking only selects. *(done, `206cc9f`)*
+- [x] **F2 · Afford: full engine working.** "How we got this" shows inputs, events, the sum, low points, each check and the verdict rule, all with numbers (`lib/engine/trace.ts`). *(done)*
+- [x] **F3 · Settings.** A colour per row, Notifications folded into Preferences, Data & Help split. *(done)*
+- [x] **F4 · Drop the engine comparison dev screen.** *(done)*
+- [ ] **F5 · Dropdown chevron at the far right.** A `Chip` with `chevron` that fills its row puts the ⌄ at the right edge, not after the text. Fix once in `ui/Chip` (label takes the free width), so category, date and every other dropdown chip follows.
+- [ ] **F6 · Edit shows no advice.** Budget nudge ("₹0 left this month"), afford hint and the "switch to Invest" banner only on Add, never on Edit (`app/add/quick.tsx`).
+- [ ] **F7 · Transfer = money moved, nothing else.** Remove `Rent` and `Investment` from the Transfer picker. `Investment` stays as the hidden category the Invest kind writes (`db/queries/assets.ts`); existing `Rent` transfer rows keep their label, the category just stops being offered. One-time fix for already-seeded groups.
+- [ ] **F8 · Split with several people, no group needed.** Today "Where does this go?" mixes groups and single people in one list, and a person only ever means a 2-person group. Plan: two clear sections, **Group** and **People** (multi-select). Picking 2+ people makes (or reuses) an unlisted group for exactly that set, the same way a single person already does (`getOrCreatePairGroup`), so it still splits and syncs. The header reads "You, Aarav, Meera · equal". *Needs your call on the open question below before building.*
+  - Open: should that people-set group ever show up in the Groups list, or stay hidden and only be reachable from its people?
+
+Gates: `npx jest`, `npx tsc --noEmit`. DEVICE: F5 on Add (expense, income, transfer), F6 editing an expense, F7 the transfer picker, F8 splitting with 2 friends and no group.
+
+---
+
 ## Phase 6 · AI context & narration — deferred, not yet broken into tasks
 
 Decided 2026-09-26; see `plan.md`'s Phase 6 for the three-stage design (guardrailed structured
