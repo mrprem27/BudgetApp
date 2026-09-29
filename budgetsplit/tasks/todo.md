@@ -51,12 +51,12 @@ or committed; `[ ]` is not.
 - [x] **B4** Long-press for the full name on `ListRow` / `Chip` rows (`fullTextOnHold` exists)
 
 **C. Backend**
-- [ ] **C1** Card due day: a field on the card sheet + `money_profiles.card_due_day` (schema, sync map, server column) + live D1 ALTER first, then deploy
+- [x] **C1** Card due day: a field on the card sheet + `money_profiles.card_due_day` (schema, sync map, server column) + live D1 ALTER first, then deploy
 
 **D. Close out**
-- [ ] **D1** SCREENS / SYSTEM docs for the new navigation, Money tabs, filters, headers
-- [ ] **D2** Independent code review of the whole branch, then fixes
-- [ ] **D3** Squash to a few commits, gates, push
+- [x] **D1** SCREENS / SYSTEM docs for the new navigation, Money tabs, filters, headers
+- [x] **D2** Independent code review of the whole branch, then fixes
+- [x] **D3** Squash to a few commits, gates, push
 - [ ] **D4** DEVICE (yours): headers on all four tabs, Money tabs, filters, group header, Scan & Pay with icons, Settings from Home avatar, time picker, demo personas
 
 ### Decisions taken (so they are not re-litigated)

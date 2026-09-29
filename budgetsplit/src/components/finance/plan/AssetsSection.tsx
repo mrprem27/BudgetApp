@@ -13,7 +13,7 @@ import { SkeletonCard } from '../../ui/Skeleton';
 import { SecondaryButton } from '../../ui/SecondaryButton';
 import { AssetSheet, type AssetSheetMode } from './AssetSheet';
 import { MoveMoneySheet } from './MoveMoneySheet';
-import { useAssets } from '../../../hooks/useAssets';
+import type { useAssets } from '../../../hooks/useAssets';
 import { formatRupees, formatCompact } from '../../../lib/money';
 import { ASSET_KIND_ICON, ASSET_KIND_LABEL } from '../../../constants/assets';
 import type { Asset, MoveEndpoint } from '../../../db/queries/assets';
@@ -22,16 +22,16 @@ const BANK: MoveEndpoint = { kind: 'bucket', bucket: 'bank' };
 
 /**
  * The asset register — what you own that isn't cash — as a section, so Money's Assets tab and the
- * standalone `/assets` screen are the same thing and cannot drift. Owns its data and sheets; renders
- * no scroll view of its own (the host scrolls).
+ * standalone `/assets` screen are the same thing and cannot drift. Owns its sheets; the host owns the
+ * scroll view and the data (`useAssets`), so pulling to refresh reloads the list.
  *
  * **What is out here is what you do often.** A row is its name and worth, tap to open it, plus one
  * shortcut — `Move`, which is Add, Take out and switching between assets in a single form. What you do
  * rarely — restate its worth, rename it, stop counting it — lives inside the asset's own page.
  */
-export function AssetsSection() {
+/** `assets` comes from the host, so the host's pull-to-refresh can reload it (`a.onRefresh`). */
+export function AssetsSection({ assets: a }: { assets: ReturnType<typeof useAssets> }) {
   const router = useRouter();
-  const a = useAssets();
   const [sheet, setSheet] = useState<{ mode: AssetSheetMode; asset?: Asset } | null>(null);
   const [move, setMove] = useState<{ from: MoveEndpoint; to: MoveEndpoint } | null>(null);
   // Money in is the common case, so a row's Move opens as bank → this asset (⇅ flips it).

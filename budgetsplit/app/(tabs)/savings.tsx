@@ -1,7 +1,7 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput } from 'react-native';
 
-import { useRouter, type Href } from 'expo-router';
+import { useRouter, type Href, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius, layout, alpha } from '../../src/theme';
@@ -25,6 +25,7 @@ import { MoneyEditorSheet } from '../../src/components/finance/plan/MoneyEditorS
 import { PayCardBillSheet } from '../../src/components/finance/plan/PayCardBillSheet';
 import { MoveMoneySheet } from '../../src/components/finance/plan/MoveMoneySheet';
 import { AmountRow } from '../../src/components/ui/AmountRow';
+import { useAssets } from '../../src/hooks/useAssets';
 import { AssetsSection } from '../../src/components/finance/plan/AssetsSection';
 import { HeaderIconButton } from '../../src/components/ui/HeaderIconButton';
 import { Card } from '../../src/components/ui/Card';
@@ -93,6 +94,14 @@ export default function SavingsScreen() {
   const contentInset = useContentInset({ fab: true, tabBar: true });
   const { flags } = useFeatureFlags();
   const [tab, setTab] = useState<MoneyTab>('overview');
+  const assetsData = useAssets();
+  // A link can open a section (`/savings?tab=goals`) — "Save toward it in a goal" must land on goals.
+  const { tab: tabParam } = useLocalSearchParams<{ tab?: string }>();
+  useEffect(() => {
+    if (tabParam === 'overview' || tabParam === 'assets' || tabParam === 'goals') setTab(tabParam);
+  }, [tabParam]);
+  // Turning goals off while on that section must not leave a blank screen.
+  useEffect(() => { if (!flags.savingsGoals && tab === 'goals') setTab('overview'); }, [flags.savingsGoals, tab]);
   // All state, reads and write-handlers live in the hook; this screen renders.
   const {
     goals, saved, money, profile, assets, byBucket, unattributed, upcoming,
@@ -138,7 +147,9 @@ export default function SavingsScreen() {
       {error ? (
         <ErrorState onRetry={() => reload()} />
       ) : (
-      <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: contentInset }]} refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
+      <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: contentInset }]} refreshControl={tab === 'assets'
+        ? <AppRefreshControl refreshing={assetsData.refreshing} onRefresh={assetsData.onRefresh} />
+        : <AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
         {tab === 'overview' && (
           <>
         <SectionHeader title="Now" first />
@@ -154,7 +165,7 @@ export default function SavingsScreen() {
             onEdit={() => setShowMoneyEditor(true)}
             onPayCardBill={() => setShowPayCardBill(true)}
             onMoveToInvestments={() => setShowMoveInvest(true)}
-            onManageAssets={() => router.push('/assets')}
+            onManageAssets={() => setTab('assets')}
           />
         )}
 
@@ -231,7 +242,7 @@ export default function SavingsScreen() {
           </>
         )}
 
-        {tab === 'assets' && <AssetsSection />}
+        {tab === 'assets' && <AssetsSection assets={assetsData} />}
 
         {tab === 'goals' && (
           <>
@@ -322,7 +333,7 @@ export default function SavingsScreen() {
         // the number above it is how you talk someone into saving a stale figure.
         initial={{ ...profile, creditUsed: money?.creditUsed ?? profile.creditUsed }}
         onSave={handleSaveMoney}
-        onManageAssets={() => { setShowMoneyEditor(false); router.push('/assets'); }}
+        onManageAssets={() => { setShowMoneyEditor(false); setTab('assets'); }}
       />
 
       {/* Opens as bank → your first asset (the common "I bought an investment" case); ⇅ flips it,

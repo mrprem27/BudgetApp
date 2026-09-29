@@ -1,16 +1,17 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Text, StyleSheet } from 'react-native';
-import { colors, type, space } from '../../tokens';
+import { View, Text, TextInput, StyleSheet } from 'react-native';
+import { colors, type, space, layout } from '../../tokens';
 import { SheetModal } from '../../ui/SheetModal';
 import { Card } from '../../ui/Card';
 import { Divider } from '../../ui/Divider';
 import { ListRow } from '../../ui/ListRow';
 import { AmountRow } from '../../ui/AmountRow';
+import { IconCircle } from '../../ui/IconCircle';
 import { InfoLabel } from '../../ui/InfoLabel';
 import { PrimaryButton } from '../../ui/PrimaryButton';
 import { SecondaryButton } from '../../ui/SecondaryButton';
 import { formatCompact, formatRupees, parseToPaise, sumInputsPaise } from '../../../lib/money';
-import type { MoneyProfile } from '../../../lib/cash';
+import { asDueDay, type MoneyProfile } from '../../../lib/cash';
 import type { MoneyProfileWrite } from '../../../db/queries/moneyProfile';
 
 /** Paise → an editable rupees string ('' for zero so the placeholder shows). */
@@ -30,7 +31,7 @@ export function MoneyEditorSheet({
 }: {
   visible: boolean;
   onClose: () => void;
-  initial: MoneyProfile;
+  initial: MoneyProfile & { cardDueDay?: number | null };
   onSave: (p: MoneyProfileWrite) => void;
   /** Opens the asset register — where investments live now. */
   onManageAssets?: () => void;
@@ -40,6 +41,7 @@ export function MoneyEditorSheet({
   const [wallet, setWallet] = useState('');
   const [limit, setLimit] = useState('');
   const [used, setUsed] = useState('');
+  const [dueDay, setDueDay] = useState('');
 
   /*
    * Keyed on `visible` ALONE, and read through a ref.
@@ -59,6 +61,7 @@ export function MoneyEditorSheet({
     setWallet(toInput(initial.openingWallet));
     setLimit(toInput(initial.creditLimit));
     setUsed(toInput(initial.creditUsed));
+    setDueDay(initial.cardDueDay ? String(initial.cardDueDay) : '');
   }, [visible]);
 
   const usedPaise = parseToPaise(used);
@@ -72,6 +75,7 @@ export function MoneyEditorSheet({
       openingWallet: parseToPaise(wallet),
       creditLimit: limitPaise,
       creditUsed: usedPaise,
+      cardDueDay: dueDay.trim() ? Number(dueDay) : null,
     });
   }
 
@@ -126,6 +130,23 @@ export function MoneyEditorSheet({
           <AmountRow icon="credit-card" label="Limit" value={limit} onChangeText={setLimit} />
           <Divider indent="text" />
           <AmountRow icon="arrow-up-right" label="Already used" value={used} onChangeText={setUsed} iconColor={colors.expense} />
+          <Divider indent="text" />
+          {/* When the bill is due, so the forecast dates the repayment instead of taking it all today. */}
+          <View style={styles.dueRow}>
+            <IconCircle icon="calendar" size={layout.iconCircle} color={colors.healthAmber} />
+            <Text style={styles.dueLabel}>Bill due on day</Text>
+            <TextInput
+              value={dueDay}
+              onChangeText={t => setDueDay(t.replace(/[^0-9]/g, '').slice(0, 2))}
+              keyboardType="number-pad"
+              placeholder="—"
+              placeholderTextColor={colors.textMuted}
+              style={styles.dueInput}
+              accessibilityLabel="Card bill due day of the month"
+              selectTextOnFocus
+            />
+          </View>
+          {!!dueDay && !asDueDay(dueDay) && <Text style={styles.bad}>Use a day from 1 to 31.</Text>}
           {limitPaise > 0 && (
             <>
               <Divider indent="text" />
@@ -140,7 +161,7 @@ export function MoneyEditorSheet({
           )}
         </Card>
 
-        <PrimaryButton label="Save" onPress={handleSave} style={{ marginTop: space.sm }} />
+        <PrimaryButton label="Save" onPress={handleSave} disabled={!!dueDay && !asDueDay(dueDay)} style={{ marginTop: space.sm }} />
       </>
     </SheetModal>
   );
@@ -149,4 +170,8 @@ export function MoneyEditorSheet({
 const styles = StyleSheet.create({
   label: { ...type.label, color: colors.textSecondary, marginTop: space.sm, marginBottom: space.xs },
   card: { marginBottom: space.md },
+  dueRow: { flexDirection: 'row', alignItems: 'center', gap: space.smd, minHeight: layout.rowMinHeight, paddingHorizontal: space.md },
+  dueLabel: { ...type.body, color: colors.textPrimary, flex: 1 },
+  dueInput: { fontFamily: 'SpaceMono_400Regular', fontSize: 16, color: colors.textPrimary, textAlign: 'right', minWidth: 48, paddingVertical: space.sm },
+  bad: { ...type.caption, color: colors.expense, paddingHorizontal: space.md, paddingBottom: space.sm },
 });

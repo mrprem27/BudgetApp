@@ -1961,7 +1961,8 @@ Only three routes declare options. Everything else inherits.
 **No `transparentModal` route exists.** Both `SheetModal.tsx` and `DraggableSheet.tsx` document a
 "sheet that IS a route" pattern that is never used anywhere — dead guidance in two files (`OV-25`).
 
-The tab bar renders **five slots over four routes**: Home · Groups|Personal · FAB · Plan · Settings.
+The tab bar renders **five slots over four routes**: Home · Groups|Personal · FAB · Money · Insights.
+Settings is a pushed route (`(system)/settings/index.tsx`), opened from the avatar on Home.
 Slot 2 is conditional on `splitting` (`AX-04`): with it off, the slot **pushes** `/personal`, a
 stack route that can never render as focused (`OV-15`). The FAB taps to `/add/quick?kind=expense`
 and **long-presses** (350 ms) to Scan & Pay — a hidden gesture taught by a one-time coach mark.

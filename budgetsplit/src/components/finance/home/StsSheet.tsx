@@ -53,7 +53,7 @@ export function StsSheet({ visible, onClose, sts }: Props) {
       : []),
     { label: 'Bills still due', hint: `Your share of recurring + logged bills until ${until}`, amount: sts.upcomingBills, sign: '−' as const, onPress: () => go('/upcoming') },
     { label: 'Card to repay', hint: 'Card spend never left your cash — the bill still will', amount: sts.cardRepayment, sign: '−' as const, onPress: () => go('/savings') },
-    { label: 'Goal contributions', hint: 'This month’s goal funding not yet set aside', amount: sts.goalRemaining, sign: '−' as const, onPress: () => go('/savings') },
+    { label: 'Goal contributions', hint: 'This month’s goal funding not yet set aside', amount: sts.goalRemaining, sign: '−' as const, onPress: () => go('/savings?tab=goals') },
     { label: 'You owe people', hint: 'Net of settlements — their money, not yours', amount: sts.netIOwe, sign: '−' as const, onPress: () => go('/friends') },
     { label: 'Everyday spending', hint: everydayHint, amount: sts.everydaySpend, sign: '−' as const },
   ];

@@ -219,7 +219,7 @@ export default function AffordScreen() {
 
           {showResult && (
             <View style={{ gap: space.sm, marginTop: space.sm }}>
-              <SecondaryButton label="Save toward it in a goal" onPress={() => router.replace('/savings')} />
+              <SecondaryButton label="Save toward it in a goal" onPress={() => router.replace('/savings?tab=goals')} />
               <View style={styles.actionRow}>
                 <TouchableOpacity
                   style={styles.ghostBtn}

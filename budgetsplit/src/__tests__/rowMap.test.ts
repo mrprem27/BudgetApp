@@ -173,7 +173,7 @@ describe('round trips through the real push and pull', () => {
     const settings = { 'money.opening_cash': '150000', 'money.opening_bank': '2500000', 'money.credit_used': '40000', 'money.updated_at': String(T0 - 60), 'money.card_baseline_at': String(T0 - 61) };
     await send(db, [moneyProfileToServer(settings, ctx)!]);
     expect(serverToMoneySettings(rowsOf(await pulled(db), 'money_profiles')[0]))
-      .toEqual({ ...settings, 'money.opening_wallet': '0', 'money.credit_limit': '0' });
+      .toEqual({ ...settings, 'money.opening_wallet': '0', 'money.credit_limit': '0', 'money.card_due_day': '0' });
     expect(moneyProfileToServer({ 'money.investments': '99' }, ctx)).toBeNull();   // derived from assets; never travels
   });
 

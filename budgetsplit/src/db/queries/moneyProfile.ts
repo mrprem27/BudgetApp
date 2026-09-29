@@ -1,5 +1,5 @@
 import * as SQLite from 'expo-sqlite';
-import type { MoneyProfile } from '../../lib/cash';
+import { asDueDay, type MoneyProfile } from '../../lib/cash';
 import { getAssetsTotal } from './assets';
 import { MONEY_PROFILE_ID, queueUpsert } from './syncQueue';
 
@@ -25,6 +25,9 @@ const KEYS = {
   creditUsed: 'money.credit_used',
   updatedAt: 'money.updated_at',
   cardBaselineAt: 'money.card_baseline_at',
+  // Day of the month the card bill is due, 1–31; 0 = not set (a number, not a missing key, so
+  // clearing it syncs too). The engine dates the card repayment on it.
+  cardDueDay: 'money.card_due_day',
 } as const;
 
 /**
@@ -44,6 +47,8 @@ const KEYS = {
 export type MoneyProfileWithMeta = MoneyProfile & {
   updatedAt: number | null;
   cardBaselineAt: number | null;
+  /** 1–31, or null when not set. */
+  cardDueDay: number | null;
 };
 
 export async function getMoneyProfile(db: SQLite.SQLiteDatabase): Promise<MoneyProfileWithMeta> {
@@ -107,6 +112,7 @@ export async function getMoneyProfile(db: SQLite.SQLiteDatabase): Promise<MoneyP
     // meant both. No migration needed: the fallback IS the old behaviour, and the first
     // credit edit after this ships writes the dedicated key.
     cardBaselineAt: num(KEYS.cardBaselineAt) ?? num(KEYS.updatedAt),
+    cardDueDay: asDueDay(map[KEYS.cardDueDay]),
   };
 }
 
@@ -126,7 +132,10 @@ export async function getMoneyProfile(db: SQLite.SQLiteDatabase): Promise<MoneyP
  * finding every old caller is the point of narrowing the type rather than
  * ignoring the field.
  */
-export type MoneyProfileWrite = Partial<Omit<MoneyProfile, 'investments'>>;
+export type MoneyProfileWrite = Partial<Omit<MoneyProfile, 'investments'>> & {
+  /** 1–31, or null to clear. */
+  cardDueDay?: number | null;
+};
 
 export async function setMoneyProfile(
   db: SQLite.SQLiteDatabase,
@@ -154,6 +163,7 @@ export async function setMoneyProfileRows(
   if (partial.openingWallet !== undefined) entries.push([KEYS.openingWallet, Math.round(partial.openingWallet)]);
   if (partial.creditLimit !== undefined) entries.push([KEYS.creditLimit, Math.round(partial.creditLimit)]);
   if (partial.creditUsed !== undefined) entries.push([KEYS.creditUsed, Math.round(partial.creditUsed)]);
+  if (partial.cardDueDay !== undefined) entries.push([KEYS.cardDueDay, asDueDay(partial.cardDueDay) ?? 0]);
   if (entries.length === 0) return;
   entries.push([KEYS.updatedAt, Date.now()]);
   // Only a write that restates the card balance may move the window that balance is

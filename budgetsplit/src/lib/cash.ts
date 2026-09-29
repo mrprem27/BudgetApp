@@ -118,6 +118,13 @@ export function computeCash(
 // investments) plus available credit (limit − used). Credit is shown for
 // spending-power context but is never spent from automatically.
 
+/** A card due day as the engine reads it: 1–31; anything else (0, blank, 45) is "not set". */
+export function asDueDay(v: unknown): number | null {
+  if (v === null || v === undefined || v === '') return null;
+  const n = Math.round(Number(v));
+  return Number.isFinite(n) && n >= 1 && n <= 31 ? n : null;
+}
+
 export type MoneyProfile = {
   /**
    * Starting balances per bucket (paise).

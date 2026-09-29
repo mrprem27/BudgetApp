@@ -12,7 +12,7 @@ import { shortDate } from '../../lib/dateFormat';
 import { TXN_KIND, TXN_KIND_LABEL_PLURAL } from '../../constants/enums';
 import { tagKey } from '../../lib/tags';
 import {
-  KIND_ANY, RANGE_LABEL, resolveRange,
+  KIND_ANY, RANGE_LABEL, resolveRange, extraFilterCount,
   type KindFilter, type RangePreset,
 } from '../../lib/txnFilter';
 
@@ -94,7 +94,8 @@ export function FilterBar({
   const hasWho = !!onPerson && people.length > 0;
   const hasTags = !!onTags && tagOptions.length > 0;
   const hasMore = hasWhen || hasWho || hasTags;
-  const activeCount = (range !== 'any' ? 1 : 0) + (person ? 1 : 0) + selectedTags.length;
+  // A set range counts once, whichever preset; the badge rule lives in `extraFilterCount`.
+  const activeCount = extraFilterCount({ from: range === 'any' ? null : 0, to: null, personId: person?.id ?? null, tags: selectedTags });
 
   const toggleTag = (t: string) => {
     const has = selectedTags.some(x => tagKey(x) === tagKey(t));

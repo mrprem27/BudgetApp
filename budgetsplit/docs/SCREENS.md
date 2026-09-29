@@ -43,7 +43,7 @@
 5. [Groups](#5-groups)
 6. [Group detail & sub-screens](#6-group-detail--sub-screens)
 7. [Add flows](#7-add-flows)
-8. [Plan tab & savings](#8-plan-tab--savings)
+8. [Money tab & savings](#8-money-tab--savings)
 9. [Settle up](#9-settle-up)
 10. [Import → Review](#10-import--review)
 11. [Transaction & category detail](#11-transaction--category-detail)
@@ -154,7 +154,11 @@ preservation case asserting that a skipped answer removes only its own artifact)
 
 ## 2. The navigation shell + graph
 
-Custom bottom tab bar: **Home · Groups · [FAB] · Plan · Settings**.
+Custom bottom tab bar: **Home · Groups · [FAB] · Money · Insights**.
+- **Settings is not a tab** — it opens from your avatar at the top right of Home.
+- **One header on every tab:** `ScreenHeader large` + `HeaderIconButton`s (36pt circle, `layout.headerIcon`);
+  a conditional icon (approvals, review, archive) sits first so the fixed ones keep their place.
+- The Money tab's icon is the **chosen currency's symbol** (₹ by default), not a dollar sign.
 - **FAB** (coral→teal gradient `+`) sits *inside* the bar so it always paints above content:
   one tap → `/add/quick?kind=expense` (light haptic — the one sanctioned nav haptic).
 - Active tab tint = teal; inactive = muted. iOS gets a live `BlurView`; Android uses a
@@ -165,7 +169,7 @@ Custom bottom tab bar: **Home · Groups · [FAB] · Plan · Settings**.
   last row.
 
 ```
-Tab bar:  Home · Groups · (＋FAB) · Plan · Settings
+Tab bar:  Home · Groups · (＋FAB) · Money · Insights      (Settings: Home's avatar)
 
 Home ──► Search, History, Review, Reminders, Settings, Insights, Category,
          Group budget, Groups, Friends, Add(expense/transfer)
@@ -197,7 +201,7 @@ Absorbed from `AUDIT.md` §2 so the IDs cited elsewhere resolve here. 45 route f
 | ID | File | Role |
 |---|---|---|
 | S-01 | `app/_layout.tsx` | Root. Fonts → `openDB()` → `seedIfNeeded` → `materializeDueOccurrences` → `runSavingsMaintenance` → `rescheduleReminders`; re-runs the last three on `AppState → active`. Provider stack: `SafeAreaProvider → GestureHandlerRootView → SQLiteProvider → FeatureFlagsProvider → FlagsGate → DataRefreshProvider → StoreHydrator → UndoProvider → LockGate → OnboardingGate → Stack`, with `PrivacyScreen` as a sibling overlay. DB-open failure renders a retryable `ErrorState`. |
-| S-02 | `app/(tabs)/_layout.tsx` | Custom 5-slot tab bar (see §2). Route name `savings` renders the label **"Plan"**. |
+| S-02 | `app/(tabs)/_layout.tsx` | Custom 5-slot tab bar (see §2). Route `savings` is labelled **"Money"**; `insights` is a tab. |
 
 ### 3.2 Tab screens
 
@@ -206,7 +210,7 @@ Absorbed from `AUDIT.md` §2 so the IDs cited elsewhere resolve here. 45 route f
 | S-03 | **Home / Dashboard** | `app/(tabs)/index.tsx` | Period-scoped spend hero + category ranks + owe/owed + forecast + streak. Dedicated first-run empty state. | `/review` `/search` `/upcoming` `/settings` `/history` `/add/quick` `/group/{personal}/budget` `/groups` `/friends` `/category/{name}` `/insights` |
 | S-04 | **Groups** | `app/(tabs)/groups.tsx` | Groups list (Personal pinned first) with budget health + my net; swipe-left archive/restore; People balance chips. | `/group/{id}` (or `/personal`) · `/add/quick?kind=transfer&to=` |
 | S-05 | **Plan** | `app/(tabs)/savings.tsx` | Available-Money card (+ net worth, credit headroom), overspend **consent** prompt, drag-rankable goals, upcoming bills, forecast. | `/insights` `/plan/recurring` `/afford` · `/savings/{id}` |
-| S-06 | **Settings** | `app/(system)/settings/index.tsx` | Profile + **Account** (only with a server configured) / **Getting paid** (Your UPI ID · Show my UPI QR, behind `upiSettle`) / Manage / Preferences / Security / Notifications / Data & Help / About. Version ×7 unlocks S-27. | `/settings/account` `/friends` `/categories` `/group/{personal}/budget` `/groups` `/features` `/settings/notifications` `/settings/backup` `/import` `/reports` `/help` `/history` `/storage` |
+| S-06 | **Settings** | `app/(system)/settings/index.tsx` | Profile + **Account** (only with a server configured) / **Getting paid** (Your UPI ID · Show my UPI QR, behind `upiSettle`) / Manage / Preferences / Security / Your data / Help / About — one colour per section. Opened from Home's avatar (not a tab). Reports and Export all moved to Insights. Version ×7 unlocks S-27. | `/settings/account` `/friends` `/categories` `/group/{personal}/budget` `/groups` `/features` `/settings/notifications` `/settings/backup` `/import` `/help` `/history` `/storage` |
 
 ### 3.3 Add / edit flows (full-screen modals)
 
@@ -501,10 +505,18 @@ off** (`dimWhenOff: false`): dimming would read as "scanning is disabled", which
 
 ---
 
-## 8. Plan tab & savings
+## 8. Money tab & savings
 
-### Plan — `app/(tabs)/savings.tsx` (route name stays `savings`)
-**Question:** "What am I saving toward, and what will my month look like?"
+### Money — `app/(tabs)/savings.tsx` (route name stays `savings`)
+**Question:** "What can I spend, what do I own, and what am I saving for?"
+
+Three sections as `TabPills` under the header — one thing each:
+- **Overview** — *Now*: Available money (Bank / Cash / Wallet, credit); rows for *Can I afford this?* and
+  *Recurring*. *This month*: the overspend consent prompt and Coming up. The month-end forecast is **not**
+  here — it lives in Insights.
+- **Assets** — `AssetsSection`, the same component `/assets` renders: worth across assets, Move money,
+  Add asset, each asset with Move, archived ones below.
+- **Goals** — drag-rankable goals by priority, fund / new goal (every amount in `AmountRow`).
 
 ### States
 - **Loading:** none.
@@ -1560,7 +1572,7 @@ being listed in the screen, so this table can't drift back.
 | Group splitting | `splitting` | Groups tab (→ Personal when off), Home owe/owed strip, Add **Transfer** kind | ✅ wired |
 | Itemized bills | `itemized` | Quick-add **Split by items** → `add/itemized.tsx` | ✅ wired |
 | Settle via UPI | `upiSettle` | Transfer sheet **Pay ₹X via UPI** (needs the payee's `upi_vpa`) *and* **Show QR to get ₹X** (needs your own), plus Settings › **Getting paid** | ✅ wired |
-| Savings goals | `savingsGoals` | Plan tab, `savings/[id]` | ✅ wired |
+| Savings goals | `savingsGoals` | Money tab → Goals, `savings/[id]` | ✅ wired |
 | Financial health | `healthScore` | Home ring → `HealthSheet` (`index.tsx:80` nulls the score when off) | ✅ wired |
 | Afford check | `affordCheck` | Plan header icon → `afford.tsx`, plus the inline verdict in Add | ✅ wired — **on** by default since the engine grew past a cash check |
 | Insights | `insights` | Plan header icon → `insights.tsx` | ✅ wired |
@@ -2202,8 +2214,8 @@ widgets; `system/` = onboarding, gates, privacy. `ui/` never imports from `finan
 | `StoreHydrator` | Hydrates the zustand store (`me`, `groups`) at the root. |
 | `UndoToast` (+ `UndoProvider`, `useUndo`) | 5-second undo toast above nav. |
 
-> **Two `ForecastCard`s exist:** `home/ForecastCard` (Dashboard, with the shift teaser) and
-> `plan/ForecastCard` (Plan tab). Different props, different screens.
+> **One `ForecastCard`:** `home/ForecastCard` (Dashboard teaser). The full month-end forecast chart is an
+> Insights section; Money no longer carries one.
 
 ---
 

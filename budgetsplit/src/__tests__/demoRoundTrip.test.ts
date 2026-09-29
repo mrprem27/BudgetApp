@@ -38,7 +38,8 @@ const COUNTS: Record<string, string> = {
   categories: 'SELECT COUNT(*) AS n FROM category',
   imports: 'SELECT COUNT(*) AS n FROM pending_txn',
   trust: 'SELECT COUNT(*) AS n FROM person_group_trust',
-  money: "SELECT COUNT(*) AS n FROM settings WHERE key LIKE 'money.%'",
+  // An unset card due day comes back as '0' (the server column's default) — the same meaning as no key.
+  money: "SELECT COUNT(*) AS n FROM settings WHERE key LIKE 'money.%' AND NOT (key = 'money.card_due_day' AND value = '0')",
 };
 
 async function counts(db: Db) {

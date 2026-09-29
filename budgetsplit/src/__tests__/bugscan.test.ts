@@ -771,3 +771,56 @@ describe('B4 · the shared rows and chips give the full text on long-press', () 
     expect(fs.readFileSync('src/components/ui/Chip.tsx', 'utf8')).toMatch(/fullTextOnHold\(label\)/);
   });
 });
+
+describe('C1 · the card due day is asked, stored, read by the engine and synced', () => {
+  const { createTestDb, addPerson, addGroup, addMember } = jest.requireActual('./helpers/testDb') as typeof import('./helpers/testDb');
+  const { setMoneyProfile, getMoneyProfile } = jest.requireActual('../db/queries/moneyProfile') as typeof import('../db/queries/moneyProfile');
+  const { getFinanceSnapshot } = jest.requireActual('../db/queries/engineSnapshot') as typeof import('../db/queries/engineSnapshot');
+  const { asDueDay } = jest.requireActual('../lib/cash') as typeof import('../lib/cash');
+  const { MONEY_KEYS, moneyProfileToServer, serverToMoneySettings } = jest.requireActual('../lib/sync/rowMap') as typeof import('../lib/sync/rowMap');
+
+  const setup = () => {
+    const db = createTestDb();
+    const me = addPerson(db, 'Me', true);
+    const g = addGroup(db, 'Personal', true); addMember(db, g, me);
+    return db;
+  };
+
+  it('only 1–31 is a due day', () => {
+    expect([asDueDay(20), asDueDay('5'), asDueDay(0), asDueDay(45), asDueDay(''), asDueDay(null)]).toEqual([20, 5, null, null, null, null]);
+  });
+
+  it('a saved day reaches the engine, and clearing it stores 0 (not set)', async () => {
+    const db = setup();
+    await setMoneyProfile(db as never, { creditLimit: 5_000_000, creditUsed: 100_000, cardDueDay: 20 });
+    expect((await getMoneyProfile(db as never)).cardDueDay).toBe(20);
+    expect((await getFinanceSnapshot(db as never)).cash.cardDueDay).toBe(20);
+    await setMoneyProfile(db as never, { cardDueDay: null });
+    expect((await getMoneyProfile(db as never)).cardDueDay).toBeNull();
+    expect(db.raw.prepare("SELECT value FROM settings WHERE key = 'money.card_due_day'").get()).toEqual({ value: '0' });
+  });
+
+  it('travels in the money profile row, both ways', () => {
+    expect(MONEY_KEYS['money.card_due_day']).toBe('card_due_day');
+    const out = moneyProfileToServer({ 'money.card_due_day': '20', 'money.credit_limit': '5000000' }, { userId: 'u1' } as never);
+    expect(out?.data).toMatchObject({ card_due_day: 20 });
+    expect(serverToMoneySettings({ card_due_day: 20 })['money.card_due_day']).toBe('20');
+  });
+});
+
+describe('RV · review fixes: links land on the right Money section; Clear filters clears tags', () => {
+  const fs = jest.requireActual('fs') as typeof import('fs');
+  it('Money honours ?tab=, and every goal-bound link asks for it', () => {
+    expect(fs.readFileSync('app/(tabs)/savings.tsx', 'utf8')).toMatch(/useLocalSearchParams<\{ tab\?: string \}>/);
+    expect(fs.readFileSync('app/(money)/afford.tsx', 'utf8')).toMatch(/\/savings\?tab=goals/);
+    expect(fs.readFileSync('src/components/finance/home/StsSheet.tsx', 'utf8')).toMatch(/\/savings\?tab=goals/);
+    expect(fs.readFileSync('app/(money)/savings/[id].tsx', 'utf8')).toMatch(/dismissTo\('\/savings\?tab=goals'\)/);
+  });
+  it("the group ledger's Clear filters also clears tags", () => {
+    expect(fs.readFileSync('src/components/finance/group/TransactionsTab.tsx', 'utf8')).toMatch(/setPersonId\(null\); setTags\(\[\]\);/);
+  });
+  it('the asset list can be pulled to refresh on both screens', () => {
+    expect(fs.readFileSync('app/(money)/assets.tsx', 'utf8')).toMatch(/AppRefreshControl refreshing=\{assets\.refreshing\}/);
+    expect(fs.readFileSync('app/(tabs)/savings.tsx', 'utf8')).toMatch(/assetsData\.onRefresh/);
+  });
+});

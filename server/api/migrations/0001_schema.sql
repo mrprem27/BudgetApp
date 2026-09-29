@@ -508,6 +508,8 @@ CREATE TABLE money_profiles (
   credit_limit      INTEGER NOT NULL DEFAULT 0,
   credit_used       INTEGER NOT NULL DEFAULT 0,
   card_baseline_at  INTEGER,
+  -- Day of the month the card bill is due; 0 = not set. The phone's forecast dates the repayment on it.
+  card_due_day      INTEGER NOT NULL DEFAULT 0 CHECK (card_due_day BETWEEN 0 AND 31),
   -- When the user last stated these figures ("updated 3 days ago" on the card).
   -- The phone's own time, not the upload's: an offline edit is not newer for
   -- having reached the server later.

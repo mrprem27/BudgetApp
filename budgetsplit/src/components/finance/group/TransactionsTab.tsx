@@ -148,7 +148,7 @@ export function TransactionsTab({ txns, members, meId, groupName, onDeleteTxn, o
             // dead end it exists to escape.
             onAction={() => {
               setKind(KIND_ANY); setSearch('');
-              setRange('any'); setFrom(null); setTo(null); setPersonId(null);
+              setRange('any'); setFrom(null); setTo(null); setPersonId(null); setTags([]);
             }}
           />
         )

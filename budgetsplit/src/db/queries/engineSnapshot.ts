@@ -41,20 +41,6 @@ function myAmount(t: { kind: string; payments: Array<{ personId: string; amount:
 }
 
 /**
- * `money.card_due_day` — new, optional, asked once (`SPEC-ENGINE.md` §4 E1,
- * §12 open question 1). Not yet part of `MoneyProfile`'s typed contract (nothing
- * writes it), so read directly rather than widening that type before there is a
- * Settings row to write it from.
- */
-async function getCardDueDay(db: SQLite.SQLiteDatabase): Promise<number | null> {
-  const row = await db.getFirstAsync<{ value: string }>(
-    "SELECT value FROM settings WHERE key = 'money.card_due_day'",
-  );
-  const n = row ? Number(row.value) : NaN;
-  return Number.isFinite(n) ? n : null;
-}
-
-/**
  * E1 — every input the money engine reads, from one place (`SPEC-ENGINE.md` §4).
  * A plain, pure object; everything built on it (`lib/engine/*`) is pure too.
  *
@@ -67,12 +53,12 @@ export async function getFinanceSnapshot(db: SQLite.SQLiteDatabase, nowMs: numbe
   if (!me) return { ...EMPTY, asOf: nowMs };
 
   const profile = await getMoneyProfile(db);
-  const [pos, exposure, budgets, cardDueDay] = await Promise.all([
+  const [pos, exposure, budgets] = await Promise.all([
     getCashPosition(db, profile, nowMs),
     getMyExposure(db, me.id),
     getMyGlobalBudgetRows(db, me.id),
-    getCardDueDay(db),
   ]);
+  const cardDueDay = profile.cardDueDay;
   const money = computeTotalMoney(pos, profile);
 
   const [recurRulesByGroup, goals, savedByGoal, funding, history, future] = await Promise.all([

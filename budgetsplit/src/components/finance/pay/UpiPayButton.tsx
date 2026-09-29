@@ -67,7 +67,8 @@ export function UpiPayButton({
               <Text style={styles.appName}>{dest!.label}</Text>
             </View>
           )}
-          {hint && <Text style={styles.hint}>{`${dest!.label} · ${hint}`}</Text>}
+          {/* The grid already captions each such app; the single-app row has no caption of its own. */}
+          {hint && !handoff.canChoose && <Text style={styles.hint}>{`${dest!.label} · ${hint}`}</Text>}
         </View>
       )}
       <PrimaryButton
