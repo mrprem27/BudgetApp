@@ -9,7 +9,8 @@ import { SheetModal } from '../ui/SheetModal';
 import { PrimaryButton } from '../ui/PrimaryButton';
 import { Input } from '../ui/Input';
 import { parseAnyUpiQr, buildUpiUri, type ScanTarget } from '../../lib/upiIntent';
-import { useUpiHandoff, handoffVerb } from '../../hooks/useUpiHandoff';
+import { useUpiHandoff } from '../../hooks/useUpiHandoff';
+import { UpiPayButton } from './pay/UpiPayButton';
 import { UpiUriSheet } from './UpiUriSheet';
 import { formatRupees, parseToPaise } from '../../lib/money';
 import { haptic } from '../../lib/haptics';
@@ -93,6 +94,7 @@ export function ScanPaySheet({
   const [amount, setAmount] = useState('');
   const [badCode, setBadCode] = useState(false);
   const [showUris, setShowUris] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [place, setPlace] = useState<CapturedPlace | null>(null);
   const handoff = useUpiHandoff('Install a UPI app like PhonePe, Google Pay, Paytm or BHIM to pay from here.');
 
@@ -127,9 +129,6 @@ export function ScanPaySheet({
     onClose();
   }
 
-  // When we're not going to ask, the button has to say where it's about to go, or the
-  // app that opens looks like something the sheet picked at random.
-  const soleApp = handoff.target;
   const amountPaise = target?.amountPaise ?? parseToPaise(amount);
   // A code that fixes its own amount is not editable — changing it would send a
   // figure the merchant did not ask for.
@@ -189,14 +188,10 @@ export function ScanPaySheet({
    */
   const opts = { bare, hasCode: true };
 
-  /** Closes only once an app actually opened — a cancelled picker leaves you here. */
-  async function run(go: (req: typeof payee & object, h: typeof hooks, o: typeof opts) => Promise<boolean>) {
-    if (!payee || amountPaise <= 0 || (!bare && !canPay)) return;
-    if (await go(payee, hooks, opts)) { haptic.success(); close(); }
+  /** Closes only once an app actually opened — a cancelled grid leaves you here. */
+  function onPaid(opened: boolean) {
+    if (opened) { haptic.success(); close(); }
   }
-
-  const pay = () => run(handoff.pay);
-  const changeApp = () => run(handoff.choose);
 
   /** The whole flow with the app switch removed, for a phone with no UPI app on it. */
   async function recordIt() {
@@ -213,8 +208,16 @@ export function ScanPaySheet({
 
   if (!visible) return null;
 
+  // `pickerOpen`/`showUris` each host their own `SheetModal`, and this one wraps
+  // the whole screen around them — a nested `SheetModal` claims the global
+  // stage (`lib/sheetStage.ts`) the instant it opens, which unmounts THIS one
+  // immediately with nothing to bring it back. Folding both into this sheet's
+  // own `visible` is the "swap, don't stack" pattern `QuickAddSheets` already
+  // uses: opening either flips this one's effective `visible` to false in the
+  // same render, and closing it flips this one back to true, re-claiming the
+  // stage (`SheetModal`'s own effect only re-fires on a `visible` change).
   return (
-    <SheetModal visible={visible} onClose={close} title={target ? 'Pay' : 'Scan to pay'}>
+    <SheetModal visible={visible && !pickerOpen && !showUris} onClose={close} title={target ? 'Pay' : 'Scan to pay'}>
       {!target ? (
         !permission?.granted ? (
           <View style={styles.pad}>
@@ -304,40 +307,29 @@ export function ScanPaySheet({
             which apps misbehave into the user's decision, where it does not belong.
 
             The only case with no app to open is a phone with no UPI app at all, and there
-            the same button simply records.
+            a plain `PrimaryButton` simply records — `UpiPayButton` assumes there's an app to
+            reach and has nothing to say about that case.
           */}
-          <PrimaryButton
-            label={noApps
-              ? (amountPaise > 0 ? `Record ${formatRupees(amountPaise)}` : 'Record it')
-              : (amountPaise > 0 ? `Pay ${formatRupees(amountPaise)}` : 'Pay')}
-            onPress={noApps ? recordIt : pay}
-            // Long-press reveals the exact URIs — see UpiUriSheet for why that exists.
-            onLongPress={() => canPay && setShowUris(true)}
-            disabled={amountPaise <= 0 || (!noApps && !bare && !canPay)}
-          />
-
-          {/*
-            Destination and the way to change it on one line, rather than a long button
-            label plus a separate link plus a footnote — three stacked blocks saying what one
-            row can. Absent when nothing is remembered, because the picker is about to ask.
-
-            A remembered app that won't take a pre-filled payment says so here, in the same
-            words the picker uses — literally the same, via `handoffVerb`, because these two
-            drifted apart once already. Not a warning: it opens, and the payment still works.
-          */}
-          {soleApp && !noApps && (
-            <View style={styles.destRow}>
-              <Text style={styles.destText} numberOfLines={1}>
-                {bare || soleApp.blocked
-                  ? `Opens ${soleApp.label} — ${handoffVerb(opts)}`
-                  : `Opens ${soleApp.label}`}
-              </Text>
-              {handoff.canChoose && (
-                <TouchableOpacity onPress={changeApp} hitSlop={12} accessibilityRole="button">
-                  <Text style={styles.destChange}>Change</Text>
-                </TouchableOpacity>
-              )}
-            </View>
+          {noApps ? (
+            <PrimaryButton
+              label={amountPaise > 0 ? `Record ${formatRupees(amountPaise)}` : 'Record it'}
+              onPress={recordIt}
+              disabled={amountPaise <= 0}
+            />
+          ) : (
+            <UpiPayButton
+              handoff={handoff}
+              request={payee}
+              hooks={hooks}
+              opts={opts}
+              label={amountPaise > 0 ? `Pay ${formatRupees(amountPaise)}` : 'Pay'}
+              disabled={amountPaise <= 0 || (!bare && !canPay)}
+              // Long-press reveals the exact URIs — see UpiUriSheet for why that exists.
+              onLongPress={() => canPay && setShowUris(true)}
+              onDone={onPaid}
+              pickerOpen={pickerOpen}
+              onPickerOpenChange={setPickerOpen}
+            />
           )}
 
           {/* The app never learns the outcome, so it must not claim to. */}
@@ -377,8 +369,5 @@ const styles = StyleSheet.create({
   fixedRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: space.md },
   fixedLabel: { ...type.caption, color: colors.textMuted },
   fixedValue: { fontFamily: 'SpaceMono_400Regular', fontSize: 18, color: colors.textPrimary },
-  destRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, marginTop: space.md, minHeight: 24 },
-  destText: { ...type.caption, color: colors.textSecondary, flexShrink: 1 },
-  destChange: { ...type.caption, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   footnote: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginTop: space.sm, lineHeight: 16 },
 });

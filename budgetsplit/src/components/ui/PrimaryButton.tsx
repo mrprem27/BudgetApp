@@ -18,9 +18,13 @@ type Props = {
    * the CTA agrees with the rest of the form.
    */
   gradient?: readonly [string, string, ...string[]];
+  /** Overrides the visible `label` for screen readers — for a button whose
+   *  short on-screen text drops something a sighted user infers from context
+   *  (who a payment goes to, what a date picker is for). Defaults to `label`. */
+  accessibilityLabel?: string;
 };
 
-export function PrimaryButton({ label, onPress, onLongPress, disabled, loading, style, gradient }: Props) {
+export function PrimaryButton({ label, onPress, onLongPress, disabled, loading, style, gradient, accessibilityLabel }: Props) {
   const scale = useRef(new Animated.Value(1)).current;
   const inactive = disabled || loading;
 
@@ -35,7 +39,7 @@ export function PrimaryButton({ label, onPress, onLongPress, disabled, loading, 
       onLongPress={inactive ? undefined : onLongPress}
       disabled={inactive}
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={accessibilityLabel ?? label}
       accessibilityState={{ disabled: inactive }}
       style={style}
     >

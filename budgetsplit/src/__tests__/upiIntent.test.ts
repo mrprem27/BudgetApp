@@ -1,4 +1,4 @@
-import { buildUpiUri, buildUpiRequestUri, upiLaunchUrl, isValidVpa, parseUpiQr, parseAnyUpiQr, newUpiRef, UpiApp, UPI_APPS, GENERIC_UPI_APP } from '../lib/upiIntent';
+import { buildUpiUri, buildUpiRequestUri, upiLaunchUrl, isValidVpa, parseUpiQr, parseAnyUpiQr, newUpiRef, pickDefaultApp, monogramFor, UpiApp, UPI_APPS, GENERIC_UPI_APP } from '../lib/upiIntent';
 
 describe('isValidVpa', () => {
   it('accepts ordinary handles', () => {
@@ -739,5 +739,49 @@ describe('upiLaunchUrl', () => {
         expect(a).toEqual(b);
       }
     }
+  });
+});
+
+describe('pickDefaultApp', () => {
+  const spec = (k: UpiApp) => UPI_APPS.find(a => a.key === k)!;
+
+  it('nobody installed, nobody picked', () => {
+    expect(pickDefaultApp(null, null)).toBeNull();
+    expect(pickDefaultApp([], UpiApp.Cred)).toBeNull();
+  });
+
+  it('picks the last-used app when it is still installed', () => {
+    const installed = [spec(UpiApp.Bhim), spec(UpiApp.Cred), spec(UpiApp.Airtel)];
+    expect(pickDefaultApp(installed, UpiApp.Cred)).toBe(installed[1]);
+  });
+
+  it('falls back to popularity order — the installed list\'s own order — when nothing is remembered', () => {
+    const installed = [spec(UpiApp.Bhim), spec(UpiApp.Cred), spec(UpiApp.Airtel)];
+    expect(pickDefaultApp(installed, null)).toBe(installed[0]);
+  });
+
+  it('an uninstalled last-used app falls back to popularity order rather than nothing', () => {
+    const installed = [spec(UpiApp.Bhim), spec(UpiApp.Airtel)];
+    // CRED was remembered but has since been deleted.
+    expect(pickDefaultApp(installed, UpiApp.Cred)).toBe(installed[0]);
+  });
+});
+
+describe('monogramFor', () => {
+  it('takes the first two letters, uppercased, ignoring spaces and punctuation', () => {
+    expect(monogramFor('PhonePe')).toBe('PH');
+    expect(monogramFor('Google Pay')).toBe('GO');
+    expect(monogramFor('super.money')).toBe('SU');
+  });
+
+  it('falls back to a placeholder for a label with no letters', () => {
+    expect(monogramFor('123')).toBe('?');
+    expect(monogramFor('')).toBe('?');
+  });
+
+  it('is unique across every real UPI app, so the picker never shows two identical badges', () => {
+    const labels = [GENERIC_UPI_APP, ...UPI_APPS].map(a => a.label);
+    const monograms = labels.map(monogramFor);
+    expect(new Set(monograms).size).toBe(monograms.length);
   });
 });

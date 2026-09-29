@@ -4,7 +4,9 @@ import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius, layout } from '../../tokens';
 import { MemberAvatar } from '../MemberAvatar';
 import { formatRupees } from '../../../lib/money';
-import { handoffVerb, type UpiHandoff } from '../../../hooks/useUpiHandoff';
+import type { UpiHandoff } from '../../../hooks/useUpiHandoff';
+import { UpiPayButton } from '../pay/UpiPayButton';
+import type { PayHooks } from '../../../hooks/useUpiHandoff';
 import type { UpiRequest } from '../../../lib/upiIntent';
 import { haptic } from '../../../lib/haptics';
 import { oweView } from '../../../lib/owe';
@@ -39,8 +41,10 @@ type Props = {
   onOpenRequestQr: () => void;
   /** `before` stores the resolved settlement so the app can ask "did that go
    *  through?" on return; `onCancel` drops it again when no app ever opened.
-   *  Both come from `useAddTxnForm` — see `transferHandoffHooks`. */
-  handoffHooks: { before: () => Promise<void>; onCancel: () => Promise<void> };
+   *  Both come from `useAddTxnForm` — see `transferHandoffHooks`. Typed via
+   *  the source type rather than restated, so a change to `PayHooks` can't
+   *  silently drift out of sync with this prop. */
+  handoffHooks: PayHooks;
 };
 
 /** Transfer body for the Add modal's "Transfer" pill — any payer → any recipient.
@@ -61,6 +65,7 @@ export function TransferBody({
    * cancel: the same person stays on the same side, and only the arrow turns.
    */
   const [reversed, setReversed] = React.useState(false);
+  const [pickerOpen, setPickerOpen] = React.useState(false);
   const leftRole: 'from' | 'to' = reversed ? 'to' : 'from';
   const rightRole: 'from' | 'to' = reversed ? 'from' : 'to';
   const leftPerson = reversed ? to : from;
@@ -113,13 +118,6 @@ export function TransferBody({
     } else {
       noBalance = true;
     }
-  }
-
-  function payViaUpi() {
-    // `before` is awaited ahead of the app switch by `useUpiHandoff` — after
-    // `openURL` we would be racing our own suspension, and losing that race loses
-    // the record of what we just handed off.
-    if (payee) handoff.pay(payee, handoffHooks);
   }
 
   return (
@@ -191,38 +189,26 @@ export function TransferBody({
       {canPay && (
         <>
           <Text style={styles.label}>PAY NOW</Text>
-          <TouchableOpacity
-            style={styles.upiBtn}
-            onPress={payViaUpi}
+          {/* `UpiPayButton` owns the destination line, the "Change" affordance and the app
+              grid — settling up used to hand-roll its own copy of all three (down to a
+              comment reading "mirrors ScanPaySheet's destination row"), which is exactly
+              the duplication a shared component removes. */}
+          <UpiPayButton
+            handoff={handoff}
+            request={payee}
+            hooks={handoffHooks}
+            label={`Pay ${formatRupees(amountPaise)} via UPI`}
+            // The visible label stays short; screen readers get who it's going to,
+            // which the sighted layout otherwise carries via the avatar row above.
+            accessibilityLabel={`Pay ${formatRupees(amountPaise)} to ${nameOf(to, 'them')} via UPI`}
+            disabled={!payee}
             // Long-press reveals the exact URIs, and lets a blocked app be handed a payment
             // deliberately — see UpiUriSheet. Settling up is where a P2P route actually gets
             // tested, so the sheet has to be reachable from here and not only from Scan & Pay.
             onLongPress={onOpenUpiUri}
-            accessibilityRole="button"
-            accessibilityLabel={`Pay ${formatRupees(amountPaise)} to ${nameOf(to, 'them')} via UPI`}
-          >
-            <Feather name="smartphone" size={16} color={colors.settle} />
-            <Text style={styles.upiBtnText}>Pay {formatRupees(amountPaise)} via UPI</Text>
-          </TouchableOpacity>
-          {/* Which app this goes to, and how to change it.
-              Scan & Pay had this and settling up did not, which left a trap with no way
-              out: pick a blocked app once and it is remembered, so every later settle-up
-              opens it bare with no picker and nothing pre-filled — indistinguishable from
-              the feature breaking. The remembered app has to be visible where it is used. */}
-          {handoff.target && (
-            <View style={styles.destRow}>
-              <Text style={styles.destText} numberOfLines={1}>
-                {handoff.target.blocked
-                  ? `Opens ${handoff.target.label} — ${handoffVerb()}`
-                  : `Opens ${handoff.target.label}`}
-              </Text>
-              {handoff.canChoose && (
-                <TouchableOpacity onPress={() => payee && handoff.choose(payee)} hitSlop={12} accessibilityRole="button">
-                  <Text style={styles.destChange}>Change</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          )}
+            pickerOpen={pickerOpen}
+            onPickerOpenChange={setPickerOpen}
+          />
           {/* Opens their UPI app pre-filled; the money moves between their own
               accounts. The app still never records a settlement it did not
               observe — it cannot observe one — but it no longer leaves the whole
@@ -345,9 +331,4 @@ const styles = StyleSheet.create({
   upiBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, height: 48, borderRadius: radius.md, borderWidth: 1, borderColor: colors.settle, backgroundColor: alpha(colors.settle, 8) },
   upiBtnText: { ...type.body, color: colors.settle, fontFamily: 'Inter_600SemiBold' },
   upiHint: { ...type.caption, color: colors.textMuted, marginTop: space.sm },
-  // Mirrors ScanPaySheet's destination row — same information, same shape, so the two
-  // hand-off surfaces read identically.
-  destRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.sm, minHeight: 24 },
-  destText: { ...type.caption, color: colors.textSecondary, flexShrink: 1 },
-  destChange: { ...type.caption, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
 });

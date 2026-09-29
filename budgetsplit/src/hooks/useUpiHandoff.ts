@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Linking, Alert, ActionSheetIOS } from 'react-native';
-import { upiLaunchUrl, newUpiRef, type UpiApp, type UpiAppSpec, type UpiRequest, type UpiLaunchOpts } from '../lib/upiIntent';
+import { Linking, Alert } from 'react-native';
+import { upiLaunchUrl, newUpiRef, pickDefaultApp, type UpiAppSpec, type UpiRequest, type UpiLaunchOpts } from '../lib/upiIntent';
 import { useUpiApps } from './useUpiApps';
 import { settings } from '../lib/settings';
-import { formatRupees } from '../lib/money';
 
 /**
  * Handing a payment to a UPI app — the whole decision, in one place.
@@ -67,24 +66,22 @@ export type UpiHandoff = {
    * clipboard package is installed.
    */
   blocked: UpiAppSpec[];
-  /** The remembered app — only when it is set *and* still installed. */
-  preferred: UpiAppSpec | null;
   /** Where the next payment goes without asking: the preference, or a lone installed app. */
   target: UpiAppSpec | null;
   /** True when there is a real choice to offer, so a "change app" affordance is worth drawing. */
   canChoose: boolean;
   /**
-   * Record and go, asking which app only when there is a choice and nothing is remembered.
+   * Record and go, to a specific app or (on Android) to the OS chooser.
    *
-   * One action for both kinds of app. Whether the destination arrives pre-filled is the
+   * One action for both kinds of app — whether the destination arrives pre-filled is the
    * app's decision, not a different feature: apps that accept our intent get the full URI,
-   * apps that reject it get opened — on their scanner where we have a guess at one and the
-   * user has a code to point it at. See `PayOpts`.
+   * apps that reject it get opened, on their scanner where we have a guess at one and the
+   * user has a code to point it at (see `PayOpts`). Passing an app other than `target`
+   * remembers it as the new default, same as picking one used to through the old picker —
+   * so `UpiPayButton`'s grid IS the picker, not a caller of one.
    */
-  pay: (req: UpiRequest, hooks?: PayHooks, opts?: PayOpts) => Promise<boolean>;
-  /** Ask again even when one is remembered, and remember the new answer. */
-  choose: (req: UpiRequest, hooks?: PayHooks, opts?: PayOpts) => Promise<boolean>;
-  /** Forget the remembered app, so the next payment asks again. */
+  payWith: (app: UpiAppSpec | null, req: UpiRequest, hooks?: PayHooks, opts?: PayOpts) => Promise<boolean>;
+  /** Forget the remembered app, so the next payment defaults to popularity order again. */
   forget: () => void;
 };
 
@@ -119,9 +116,11 @@ export function useUpiHandoff(noAppMessage: string): UpiHandoff {
   const apps = installed;
   const blocked = installed?.filter(a => !!a.blocked) ?? [];
 
-  // Resolved against `apps` rather than trusted alone — this is the uninstall case.
-  const preferred = apps?.find(a => a.key === preferredKey) ?? null;
-  const target = preferred ?? (apps?.length === 1 ? apps[0] : null);
+  // Last-used, else the most popular installed app, else nobody — see `pickDefaultApp`.
+  // A single installed app was already this by construction; multiple installed apps
+  // used to force a picker on every payment even with none remembered, which is the toll
+  // U2 removes.
+  const target = pickDefaultApp(apps, preferredKey);
   const canChoose = (apps?.length ?? 0) > 1;
 
   /**
@@ -169,56 +168,32 @@ export function useUpiHandoff(noAppMessage: string): UpiHandoff {
     }
   }, []);
 
-  /** The picker, as a promise — so callers can close their own UI only once it resolves. */
-  const ask = useCallback((
+  /**
+   * `UpiPayButton` calls this both for the one-tap default and for a row tapped in its
+   * app grid — the grid replaced `ActionSheetIOS`, which drew its own list from the same
+   * `apps`/`blocked` this hook already exposes and could never show a real icon anyway.
+   *
+   * Android has no `app` to pass (`apps` is `null` there) — `open` already handles that,
+   * landing on the OS chooser.
+   */
+  const payWith = useCallback(async (
+    app: UpiAppSpec | null,
     req: UpiRequest,
-    list: UpiAppSpec[],
     hooks?: PayHooks,
     opts?: PayOpts,
-  ): Promise<boolean> => new Promise(resolve => {
-    ActionSheetIOS.showActionSheetWithOptions(
-      {
-        // Every installed app, with a word on the ones that won't arrive pre-filled.
-        // Not a warning — it opens and the payment still works — so it reads as a
-        // description rather than a reason to avoid the row.
-        //
-        // *What* you do there depends on why we sent no payment. With a code in front of
-        // you the app opens on its camera and you scan; saying "enter it" there was simply
-        // wrong, and it described the harder of the two jobs.
-        options: ['Cancel', ...list.map(a => (opts?.bare || a.blocked ? `${a.label} — ${handoffVerb(opts)}` : a.label))],
-        cancelButtonIndex: 0,
-        title: `Pay ${formatRupees(req.amountPaise)}`,
-        message: 'We’ll save the expense either way, and use this app next time.',
-      },
-      i => {
-        if (i <= 0) { hooks?.onCancel?.().catch(() => {}); resolve(false); return; }
-        const app = list[i - 1];
-        setPreferredKey(app.key);
-        settings.setPreferredUpiApp(app.key).catch(() => {});
-        open(req, app, hooks, opts).then(resolve);
-      },
-    );
-  }), [open]);
-
-  const pay = useCallback(async (req: UpiRequest, hooks?: PayHooks, opts?: PayOpts): Promise<boolean> => {
-    // Android: `upi://` reaches the OS chooser, which is complete and keeps its own
-    // default. Ours would be a worse copy of something already better.
-    if (apps === null) return open(req, null, hooks, opts);
-    if (apps.length === 0) { Alert.alert('No UPI app found', noAppMessage); return false; }
-    if (target) return open(req, target, hooks, opts);
-    return ask(req, apps, hooks, opts);
-  }, [apps, target, noAppMessage, open, ask]);
-
-  const choose = useCallback(async (req: UpiRequest, hooks?: PayHooks, opts?: PayOpts): Promise<boolean> => {
-    if (apps === null) return open(req, null, hooks, opts);
-    if (apps.length === 0) { Alert.alert('No UPI app found', noAppMessage); return false; }
-    return ask(req, apps, hooks, opts);
-  }, [apps, noAppMessage, open, ask]);
+  ): Promise<boolean> => {
+    if (apps !== null && apps.length === 0) { Alert.alert('No UPI app found', noAppMessage); return false; }
+    if (app && app.key !== preferredKey) {
+      setPreferredKey(app.key);
+      settings.setPreferredUpiApp(app.key).catch(() => {});
+    }
+    return open(req, app, hooks, opts);
+  }, [apps, preferredKey, noAppMessage, open]);
 
   const forget = useCallback(() => {
     setPreferredKey(null);
     settings.setPreferredUpiApp(null).catch(() => {});
   }, []);
 
-  return { apps, blocked, preferred, target, canChoose, pay, choose, forget };
+  return { apps, blocked, target, canChoose, payWith, forget };
 }

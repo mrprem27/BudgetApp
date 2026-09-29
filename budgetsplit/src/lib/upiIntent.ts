@@ -157,6 +157,19 @@ export type UpiAppSpec = {
    */
   blocked?: string;
   /**
+   * The app's own artwork (a `require('../../assets/upi/<app>.png')` result), so the
+   * picker can show its real icon instead of a monogram.
+   *
+   * **Unset for every app today, deliberately.** Each one is a trademarked asset, and
+   * this file already treats an unverified guess as worse than an honest gap (see
+   * `scanPath`, `blocked`'s provenance bar) — downloading logos from an unverified
+   * source, or fabricating brand colors to stand in for them, is the same mistake
+   * applied to artwork instead of a deep link. `UpiAppIcon` reads this field and falls
+   * back to a neutral two-letter monogram when it's absent, so adding real artwork
+   * later is one line per app here, not a component change.
+   */
+  logo?: number;
+  /**
    * How much we actually know about this row.
    *
    * In the type rather than a comment because the distinction kept collapsing: I called
@@ -327,6 +340,32 @@ export const UPI_APPS: UpiAppSpec[] = [
  * Removed as invented, not merely unverified: `slice`, `groww`, `jupiter`, `imobileapp`,
  * `payzapp`, `axispay` — none appear in any maintained UPI-intent list.
  */
+
+/**
+ * Where the next payment goes without asking — last-used, then the most popular
+ * installed app, then nobody.
+ *
+ * Pure so `useUpiHandoff` and any test can agree on the answer without a device. Popularity
+ * is `installed`'s own order: `useUpiApps` filters `UPI_APPS` in place, and that array's
+ * order is already documented as "roughly by Indian UPI market share" (see its header) —
+ * restating it as a second ranking here would be the derived-data mistake `AGENTS.md` warns
+ * about for `money_profile.investments`. An uninstalled last-used app simply isn't found in
+ * `installed`, so it falls through to popularity on its own.
+ */
+export function pickDefaultApp(installed: UpiAppSpec[] | null, lastUsedKey: string | null): UpiAppSpec | null {
+  if (!installed || installed.length === 0) return null;
+  return installed.find(a => a.key === lastUsedKey) ?? installed[0];
+}
+
+/**
+ * First two letters of an app's label, ignoring spaces and punctuation — `"super.money"` →
+ * `"SU"`. Pure (no RN import) so it can be unit-tested directly; `UpiAppIcon` is the only
+ * caller and owns rendering it.
+ */
+export function monogramFor(label: string): string {
+  const letters = label.replace(/[^a-zA-Z]/g, '');
+  return (letters.slice(0, 2) || '?').toUpperCase();
+}
 
 /**
  * iOS caps `LSApplicationQueriesSchemes` at 50 entries and silently answers `false`
