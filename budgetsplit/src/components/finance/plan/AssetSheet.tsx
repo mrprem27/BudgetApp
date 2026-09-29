@@ -1,6 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { colors, type, space } from '../../tokens';
+import { Card } from '../../ui/Card';
+import { AmountRow } from '../../ui/AmountRow';
+import { InfoLabel } from '../../ui/InfoLabel';
 import { SheetModal } from '../../ui/SheetModal';
 import { Input } from '../../ui/Input';
 import { Chip } from '../../ui/Chip';
@@ -98,7 +101,7 @@ export function AssetSheet({
               style={styles.gap}
             />
 
-            <Text style={styles.label}>Kind</Text>
+            <InfoLabel label="Kind" labelStyle={styles.label} info="Only changes the icon and the label — every asset counts the same way." />
             <View style={styles.chips}>
               {ASSET_KIND.map(k => (
                 <Chip
@@ -110,31 +113,24 @@ export function AssetSheet({
                 />
               ))}
             </View>
-            <Text style={styles.hint}>
-              Only changes the icon and the label — every asset counts the same way.
-            </Text>
           </>
         )}
 
         {mode === 'create' && (
           <>
-            <Text style={styles.label}>What is it worth today?</Text>
-            <Input value={amount} onChangeText={setAmount} keyboardType="decimal-pad" placeholder="₹0" style={styles.gap} />
-            <Text style={styles.hint}>
-              Its current value. This does NOT take money out of your cash — it records
-              something you already own. Use “Move money” afterwards for money you put in from now on.
-            </Text>
+            <Card clip style={styles.amountCard}>
+              <AmountRow icon="tag" label="Worth today" value={amount} onChangeText={setAmount} />
+            </Card>
+            <Text style={styles.hint}>Records what you already own — no cash moves. Use Move money for new money in.</Text>
           </>
         )}
 
         {mode === 'restate' && (
           <>
-            <Text style={styles.label}>Worth now</Text>
-            <Input value={amount} onChangeText={setAmount} keyboardType="decimal-pad" placeholder="₹0" style={styles.gap} autoFocus />
-            <Text style={styles.hint}>
-              A price change, not a transfer — your net worth moves and no cash does, so
-              nothing is added to your ledger.
-            </Text>
+            <Card clip style={styles.amountCard}>
+              <AmountRow icon="tag" label="Worth now" value={amount} onChangeText={setAmount} autoFocus />
+            </Card>
+            <Text style={styles.hint}>A price change: net worth moves, no cash does, nothing is added to your ledger.</Text>
           </>
         )}
 
@@ -161,6 +157,7 @@ const styles = StyleSheet.create({
   label: { ...type.label, color: colors.textSecondary, marginBottom: space.xs, marginTop: space.md },
   gap: { marginBottom: space.xs },
   hint: { ...type.caption, color: colors.textMuted, lineHeight: 18 },
+  amountCard: { marginTop: space.md, marginBottom: space.xs },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginBottom: space.sm },
   submit: { marginTop: space.lg },
   dangerRow: { flexDirection: 'row', gap: space.sm, marginTop: space.sm },

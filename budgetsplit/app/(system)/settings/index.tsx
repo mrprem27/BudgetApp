@@ -11,13 +11,12 @@ import { Feather } from '@expo/vector-icons';
 import { settings } from '../../../src/lib/settings';
 import { colors, type, space, radius, layout, shadow } from '../../../src/theme';
 import { haptic } from '../../../src/lib/haptics';
-import { loadSettingsTab, exportAllGroups, saveMyName, saveMyVpa } from '../../../src/lib/settingsData';
+import { loadSettingsTab, saveMyName, saveMyVpa } from '../../../src/lib/settingsData';
 import { replacePersonPhoto } from '../../../src/lib/personWrites';
 import { useDataRefresh } from '../../../src/components/system/DataRefreshProvider';
 import { isValidVpa } from '../../../src/lib/upiIntent';
 import { RequestQrSheet } from '../../../src/components/finance/RequestQrSheet';
 import { formatCompact } from '../../../src/lib/money';
-import { shareCsv } from '../../../src/lib/shareCsv';
 import { MemberAvatar } from '../../../src/components/finance/MemberAvatar';
 import { SheetModal } from '../../../src/components/ui/SheetModal';
 import { PayMethodSelector } from '../../../src/components/finance/PayMethodSelector';
@@ -42,33 +41,41 @@ const CADENCE_LABELS: Record<BudgetCadence, string> = { daily: 'Daily', monthly:
 const CADENCE_KEYS: BudgetCadence[] = ['daily', 'monthly', 'yearly'];
 
 /**
- * One hue per row, the way iOS Settings does it: every icon in teal made the
- * list one undifferentiated block, and the eye had nothing to land on. Colour
- * here is identity, not meaning — a row keeps its hue whatever its state; a
- * state tint (`storageTint`, pending imports) still overrides it.
+ * One hue per SECTION: every row in a section shares it, so the section reads as one group and the
+ * colour tells you where you are, not which row is which. (One hue per row made the list a
+ * rainbow with nothing to hold a section together.) A state tint (`storageTint`, pending imports)
+ * still overrides it.
  */
-const TINT = {
+const SECTION = {
   account: decor.blue,
-  upiId: colors.income,
-  upiQr: colors.accent,
-  friends: decor.blue,
-  categories: decor.orange,
-  budget: colors.income,
-  payMethod: colors.settle,
-  cadence: decor.orange,
-  features: colors.accent,
-  notifications: colors.healthAmber,
-  trust: colors.income,
-  lock: decor.blue,
-  privacy: decor.violet,
-  hideAmounts: decor.orange,
-  import: decor.blue,
-  reports: colors.income,
-  export: decor.violet,
-  storage: colors.textSecondary,
-  audit: decor.orange,
+  paid: colors.income,
+  manage: decor.orange,
+  preferences: decor.violet,
+  security: colors.accent,
+  data: colors.settle,
   help: decor.pink,
-  tour: colors.accent,
+} as const;
+
+const TINT = {
+  account: SECTION.account,
+  upiId: SECTION.paid,
+  upiQr: SECTION.paid,
+  friends: SECTION.manage,
+  categories: SECTION.manage,
+  budget: SECTION.manage,
+  payMethod: SECTION.preferences,
+  cadence: SECTION.preferences,
+  features: SECTION.preferences,
+  notifications: SECTION.preferences,
+  trust: SECTION.security,
+  lock: SECTION.security,
+  privacy: SECTION.security,
+  hideAmounts: SECTION.security,
+  import: SECTION.data,
+  storage: SECTION.data,
+  audit: SECTION.data,
+  help: SECTION.help,
+  tour: SECTION.help,
 } as const;
 
 export default function SettingsScreen() {
@@ -106,23 +113,6 @@ export default function SettingsScreen() {
   const storageTint = storageVerdictNow === StorageVerdict.Full ? colors.expense
     : storageVerdictNow === StorageVerdict.Critical ? colors.healthAmber
     : undefined;
-  const [exportingAll, setExportingAll] = useState(false);
-
-  async function handleExportAll() {
-    if (exportingAll) return;
-    setExportingAll(true);
-    haptic.light();
-    try {
-      const { csv, rowCount } = await exportAllGroups(db);
-      if (rowCount === 0) { Alert.alert('Nothing to export', 'There are no transactions yet.'); return; }
-      const { uri, shared } = await shareCsv(csv, 'budgetsplit_all.csv', 'Export all data');
-      if (!shared) Alert.alert('Saved', `Sharing isn't available here. The CSV was saved to:\n${uri}`);
-    } catch (e) {
-      Alert.alert('Export failed', e instanceof Error ? e.message : String(e));
-    } finally {
-      setExportingAll(false);
-    }
-  }
   const [hideAmounts, setHideAmounts] = useState(false);
 
   const [defaultCadence, setDefaultCadence] = useState<BudgetCadence>('monthly');
@@ -426,19 +416,6 @@ export default function SettingsScreen() {
           />
           <View style={settingsRowDivider} />
         </>)}
-        {flags.reports && (<>
-          <SettingsRow icon="download" label="Reports & export" tint={TINT.reports} value="CSV / PDF" onPress={() => { router.push('/reports'); }} />
-          <View style={settingsRowDivider} />
-        </>)}
-        <SettingsRow
-          icon="database"
-          label="Export all data"
-          tint={TINT.export}
-          value={exportingAll ? undefined : 'CSV'}
-          onPress={exportingAll ? undefined : handleExportAll}
-          right={exportingAll ? <ActivityIndicator size="small" color={colors.accent} /> : undefined}
-        />
-        <View style={settingsRowDivider} />
         {/* `B-101`: Sync and Backup & restore dropped as their own rows —
             `/settings/account` already surfaces both (`SyncStatus` and a link
             to Backup), so this stopped being a second, repeated path to the

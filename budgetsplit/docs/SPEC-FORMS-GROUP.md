@@ -34,7 +34,7 @@ changes — update `SYSTEM.md`/`SCREENS.md` in the same commit.
 
 - Primitives in `components/ui/` (no domain imports); widgets in `components/finance/`; logic in `src/lib`; hooks in `src/hooks`. `app/` and components import only types from `src/db`.
 - Tokens only (`space`, `layout`, `colors`, `type`); `StyleSheet.create`; money as integer paise via `parseToPaise` / `formatRupees`.
-- A replaced component is deleted (`deadComponents.test.ts`). `spendPower.moveToInvestments` + its test are deleted with module 1.
+- A replaced component is deleted (`deadComponents.test.ts`). `spendPower.moveToInvestments` + its test deleted (done).
 
 ## Testing
 

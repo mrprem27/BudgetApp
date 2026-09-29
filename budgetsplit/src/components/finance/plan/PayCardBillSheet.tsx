@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { Text, StyleSheet } from 'react-native';
 import { colors, type, space } from '../../tokens';
 import { SheetModal } from '../../ui/SheetModal';
-import { Input } from '../../ui/Input';
+import { Card } from '../../ui/Card';
+import { AmountRow } from '../../ui/AmountRow';
 import { PrimaryButton } from '../../ui/PrimaryButton';
 import { formatCompact, parseToPaise, paiseToInput } from '../../../lib/money';
 
@@ -33,17 +34,10 @@ export function PayCardBillSheet({
 
   return (
     <SheetModal visible={visible} onClose={onClose} title="Pay card bill">
-      <Text style={styles.hint}>
-        Money leaves your cash and comes off the {formatCompact(creditUsed)} card balance — one entry, both sides.
-      </Text>
-      <Input
-        label="Amount paid"
-        value={amount}
-        onChangeText={setAmount}
-        keyboardType="decimal-pad"
-        placeholder="₹0"
-        autoFocus
-      />
+      <Card clip>
+        <AmountRow icon="credit-card" label="Amount paid" value={amount} onChangeText={setAmount} autoFocus />
+      </Card>
+      <Text style={styles.hint}>Leaves your cash and comes off the {formatCompact(creditUsed)} card balance.</Text>
       {overpay && (
         <Text style={styles.warn}>That&apos;s more than the current balance — the balance stops at ₹0.</Text>
       )}
@@ -58,7 +52,7 @@ export function PayCardBillSheet({
 }
 
 const styles = StyleSheet.create({
-  hint: { ...type.body, color: colors.textSecondary, marginBottom: space.md },
+  hint: { ...type.caption, color: colors.textMuted, marginTop: space.sm },
   warn: { ...type.caption, color: colors.healthAmber, marginTop: space.xs },
   cta: { marginTop: space.md },
 });

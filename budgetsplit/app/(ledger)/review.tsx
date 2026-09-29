@@ -27,6 +27,7 @@ import {
   effectiveRow, effectiveSplit, snapshotRow, planCommit as planCommitPure, txnInputFromPlan,
   type RowEdit, type SplitState, type CommitPlan, type ReviewContext,
 } from '../../src/lib/reviewCommit';
+import { FiltersButton } from '../../src/components/ui/FiltersButton';
 import { ReviewFilterSheet } from '../../src/components/finance/review/ReviewFilterSheet';
 import { SaveViewForm } from '../../src/components/finance/review/SaveViewForm';
 import { ReviewRowCard } from '../../src/components/finance/review/ReviewRowCard';
@@ -47,7 +48,7 @@ import { RecurringSuggestionsSheet } from '../../src/components/finance/review/R
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 import {
   type ReviewFilters, DEFAULT_FILTERS,
-  filtersActive, deriveWorkingSet, isSimilarMerchant,
+  filtersActive, reviewFilterCount, deriveWorkingSet, isSimilarMerchant,
   groupBySource, presentSourcesOf, sourceSections,
 } from '../../src/lib/reviewFilter';
 import { type SavedView, loadViews, upsertView, deleteView, makeViewId } from '../../src/lib/reviewViews';
@@ -390,6 +391,12 @@ export default function ReviewScreen() {
           actionLabel="Show all"
           onAction={exitFocus}
         />
+      )}
+
+      {!loading && !error && pending.length > 0 && (
+        <View style={{ flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: layout.screenPaddingH, paddingBottom: space.xs }}>
+          <FiltersButton count={reviewFilterCount(filters)} onPress={() => setFilterSheet(true)} />
+        </View>
       )}
 
       {!loading && !error && (

@@ -52,6 +52,6 @@ describe('the /friends screen is called Friends everywhere', () => {
   it('the Groups tab header opens Friends', () => {
     const src = readFileSync(join(ROOT, 'app', '(tabs)', 'groups.tsx'), 'utf8');
     expect(src).toMatch(/router\.push\('\/friends'\)/);
-    expect(src).toMatch(/accessibilityLabel="Friends"/);
+    expect(src).toMatch(/label="Friends"/);
   });
 });

@@ -1738,7 +1738,7 @@ the four surfaces already agreed. See `SYNC-MODEL.md` §6.
 | `IV-11` | A person with no `remote_uid` has no write path, so their trust value is inert. That check runs first. | `trust.test.ts` | `E-01` `E-65` `E-87` |
 | `IV-12` | Approval state never lives on `txn_share` / `txn_payment` — both are deleted and re-inserted wholesale on every edit, so a decision stored there would be silently erased. | unenforced — structural | `E-06` `E-07` `E-20` |
 | `IV-13` | Enforce the pending exclusion at the loader, not inside `myShareOf`. That function has no row id, and threading a pending set through its thirteen callers recreates the problem the rule exists to prevent. | unenforced | `E-60` |
-| `IV-14` | `money.investments` is derived from live assets and never written. | `moveToInvestments.test.ts` | `E-11` `E-14` `E-54` |
+| `IV-14` | `money.investments` is derived from live assets and never written. | `assetRegister.test.ts` | `E-11` `E-14` `E-54` |
 | `IV-15` | An archived asset stops counting, because archiving is how you say you no longer own it. | `assetRegister.test.ts` | `E-14` `E-54` |
 | `IV-16` | Income is never grouped. It writes `[{me, total}]` and zero shares, because grouping it carries no meaning. | `splitMath.test.ts` | `E-04` `E-06` `E-07` |
 | `IV-17` | **Never one total across kinds.** Money in, money out and money moved do not belong in a single figure. Sum per kind and label it, or show a two-sided figure. Shipped as a bug twice. | unenforced | every summary surface |

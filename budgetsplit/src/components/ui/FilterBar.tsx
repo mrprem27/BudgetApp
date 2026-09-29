@@ -1,15 +1,16 @@
-import React, { useMemo, useRef, useState } from 'react';
-import { View, StyleSheet, TextInput, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { View, Text, StyleSheet, TextInput, ScrollView, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { Chip } from './Chip';
-import { Card } from './Card';
-import { Divider } from './Divider';
-import { ListRow } from './ListRow';
 import { SheetModal } from './SheetModal';
+import { PrimaryButton } from './PrimaryButton';
+import { SecondaryButton } from './SecondaryButton';
 import { DateRangeSheet } from './DateRangeSheet';
-import { colors, type, space, radius } from '../tokens';
+import { FiltersButton } from './FiltersButton';
+import { colors, type, space, radius, layout } from '../tokens';
 import { shortDate } from '../../lib/dateFormat';
 import { TXN_KIND, TXN_KIND_LABEL_PLURAL } from '../../constants/enums';
+import { tagKey } from '../../lib/tags';
 import {
   KIND_ANY, RANGE_LABEL, resolveRange,
   type KindFilter, type RangePreset,
@@ -30,243 +31,108 @@ type Props = {
   onSearch?: (s: string) => void;
   searchPlaceholder?: string;
   /**
-   * When true: chips + a compact search icon are shown inline on one row.
-   * Tapping the search icon replaces the chip row with a full-width input.
-   * Clearing/blurring collapses back.
-   */
-  collapsible?: boolean;
-  /**
-   * Screen-specific exclusive choices that are **not** transaction filters —
-   * Personal's group scope, Search's source. Everything a *transaction* can be
-   * filtered by has a named prop below, because those must behave identically
-   * everywhere (`lib/txnFilter.ts`).
+   * Screen-specific exclusive choices that are **not** transaction filters — Personal's group
+   * scope, Search's source. Everything a *transaction* can be filtered by has a named prop below,
+   * because those must behave identically everywhere (`lib/txnFilter.ts`).
    */
   groups?: ChipGroup[];
   /** Selected value per group key. Missing key = first option. */
   selected: Record<string, string>;
   onSelect: (key: string, value: string) => void;
 
-  /** Kind. Omit the handler to hide the chip. */
+  /** Kind. Omit the handler to hide the chips. */
   kind?: KindFilter;
   onKind?: (k: KindFilter) => void;
 
-  /** Date range. `custom` opens two date pickers. */
+  /** Date range. `custom` opens the calendar. */
   range?: RangePreset;
   customFrom?: number | null;
   customTo?: number | null;
   onRange?: (preset: RangePreset, from: number | null, to: number | null) => void;
 
-  /** Who is on the entry. Pass an empty list to hide the chip. */
+  /** Who is on the entry. Pass an empty list to hide the section. */
   people?: FilterPerson[];
   personId?: string | null;
   onPerson?: (id: string | null) => void;
+
+  /** Tags found on the rows, most used first. Empty list hides the section. */
+  tagOptions?: string[];
+  selectedTags?: string[];
+  onTags?: (tags: string[]) => void;
 };
 
+const RANGE_PRESETS: RangePreset[] = ['any', '7d', '30d', 'thisMonth', 'lastMonth'];
+
 /**
- * The one filter bar. Chip filters + optional collapsible search.
+ * The one filter structure, on every ledger (Search, Personal, a group).
  *
- * ## It used to be one of the four variants it exists to prevent
+ * Two tiers, by how often you reach for them:
+ *   - **inline** — the search field, the screen's own scope, and the entry type. Always visible.
+ *   - **behind `Filters`** — when, who, tags. One button with a count badge; whatever is set shows
+ *     below as removable chips, and only then, so an unfiltered list carries no extra row.
  *
- * `AGENTS.md` §9 says the pill shape is `ui/Chip` and forbids hand-rolling one —
- * and this component, the *shared* one, built its chips out of `TouchableOpacity`
- * with a private 30pt stylesheet. So the app had four filter chip implementations
- * and the common component was one of them (`OV-34`).
- *
- * ## And the surfaces disagreed about what filtering means
- *
- * Personal offered group scope and **no text search at all**; the group ledger
- * offered kind and free text; Search offered source, kind and a much wider text
- * match. Date range existed only in Review, and **person existed nowhere** — on an
- * app whose whole premise is shared spending. The matching now lives in
- * `lib/txnFilter.ts` so it cannot drift again; this file is only the controls.
- *
- * Non-collapsible: search box on top, chip rows below.
- * Collapsible: chips + a search icon on one row; tapping it expands the input.
- * Chips always live in exactly ONE position — no dual-rendering.
+ * What a filter *means* lives in `lib/txnFilter.ts`, so every screen matches the same way; this
+ * file is only the controls. Chips are `ui/Chip` (AGENTS §9) — never hand-rolled.
  */
 export function FilterBar({
-  search, onSearch, searchPlaceholder = 'Search…', collapsible = false,
+  search, onSearch, searchPlaceholder = 'Search…',
   groups = [], selected, onSelect,
   kind, onKind,
   range = 'any', customFrom = null, customTo = null, onRange,
   people = [], personId = null, onPerson,
+  tagOptions = [], selectedTags = [], onTags,
 }: Props) {
-  const [searchOpen, setSearchOpen] = useState(!!search);
-  const [sheet, setSheet] = useState<'range' | 'person' | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [rangeOpen, setRangeOpen] = useState(false);
-  const inputRef = useRef<TextInput>(null);
-
-  function openSearch() {
-    setSearchOpen(true);
-    // Small delay so the input mounts before we try to focus it.
-    setTimeout(() => inputRef.current?.focus(), 30);
-  }
-
-  function closeSearch() {
-    onSearch?.('');
-    setSearchOpen(false);
-  }
 
   const person = people.find(p => p.id === personId) ?? null;
   const rangeLabel = range === 'custom'
     ? `${customFrom ? shortDate(new Date(customFrom)) : 'Start'} – ${customTo ? shortDate(new Date(customTo)) : 'Now'}`
     : RANGE_LABEL[range];
 
-  /*
-   * Memoised because this rebuilds every chip element, and a search field sits
-   * directly above it: without this, each keystroke re-created the whole chip row
-   * on top of the consumer's own re-filter, and `personal.tsx` froze on a large
-   * ledger. Consumers must pass a stable `groups` array for it to hold — see the
-   * note there.
-   */
+  const hasWhen = !!onRange;
+  const hasWho = !!onPerson && people.length > 0;
+  const hasTags = !!onTags && tagOptions.length > 0;
+  const hasMore = hasWhen || hasWho || hasTags;
+  const activeCount = (range !== 'any' ? 1 : 0) + (person ? 1 : 0) + selectedTags.length;
+
+  const toggleTag = (t: string) => {
+    const has = selectedTags.some(x => tagKey(x) === tagKey(t));
+    onTags?.(has ? selectedTags.filter(x => tagKey(x) !== tagKey(t)) : [...selectedTags, t]);
+  };
+  const clearAll = () => { onRange?.('any', null, null); onPerson?.(null); onTags?.([]); };
+
+  /* Memoised: a search field sits directly above, and without this each keystroke rebuilt every
+     chip on top of the consumer's own re-filter (`personal.tsx` froze on a large ledger).
+     Consumers must pass a stable `groups` array for it to hold. */
   const scopeChips = useMemo(() => groups.flatMap(g => {
     const active = selected[g.key] ?? g.options[0]?.value;
     return g.options.map(o => (
-      <Chip
-        key={`${g.key}:${o.value}`}
-        label={o.label}
-        selected={active === o.value}
-        onPress={() => onSelect(g.key, o.value)}
-      />
+      <Chip key={`${g.key}:${o.value}`} label={o.label} selected={active === o.value} onPress={() => onSelect(g.key, o.value)} />
     ));
   }), [groups, selected, onSelect]);
 
-  /**
-   * The transaction filters, in the order you reach for them.
-   *
-   * Kind is a set of toggles (tap the active one to clear); range and person hold
-   * a value and open a picker, so they carry a chevron — §9's one-affordance rule
-   * doing the explaining.
-   */
-  const txnChips = (
-    <>
-      {/* `settlement` is labelled "Transfers", not "Settlements" — one word for
-          person-to-person movement, matching the Reports drill-down's tab and the
-          Transfer pill you entered it with. An investment is a settlement too, and
-          it is found by its own text ("gold", "Invested") rather than by a fifth
-          chip: this row already carries kind, date and person, and `SC-23`'s whole
-          point is the text field above it. */}
-      {onKind && TXN_KIND.map(k => (
-        <Chip
-          key={k}
-          label={TXN_KIND_LABEL_PLURAL[k]}
-          selected={kind === k}
-          onPress={() => onKind(kind === k ? KIND_ANY : k)}
-        />
-      ))}
-      {onRange && (
-        <Chip
-          icon="calendar"
-          label={rangeLabel}
-          selected={range !== 'any'}
-          chevron
-          maxWidth={180}
-          onPress={() => setSheet('range')}
-          accessibilityLabel={`Date range: ${rangeLabel}. Change`}
-        />
-      )}
-      {onPerson && people.length > 0 && (
-        <Chip
-          icon="user"
-          label={person?.name ?? 'Anyone'}
-          selected={!!person}
-          chevron
-          maxWidth={160}
-          onPress={() => setSheet('person')}
-          accessibilityLabel={person ? `Only ${person.name}. Change` : 'Filter by person'}
-        />
-      )}
-    </>
-  );
+  const kindChips = onKind && TXN_KIND.map(k => (
+    <Chip key={k} label={TXN_KIND_LABEL_PLURAL[k]} selected={kind === k} onPress={() => onKind(kind === k ? KIND_ANY : k)} />
+  ));
 
-  const sheets = (
-    <>
-      <SheetModal visible={sheet === 'range'} onClose={() => setSheet(null)} title="When">
-        <Card clip>
-          {(['any', '7d', '30d', 'thisMonth', 'lastMonth', 'custom'] as RangePreset[]).map((r, i) => (
-            <React.Fragment key={r}>
-              {i > 0 && <Divider indent="text" />}
-              <ListRow
-                icon={r === 'custom' ? 'sliders' : 'calendar'}
-                iconColor={range === r ? colors.accent : colors.textSecondary}
-                title={RANGE_LABEL[r]}
-                chevron={r === 'custom'}
-                selected={range === r}
-                value={range === r && r !== 'custom' ? <Feather name="check" size={18} color={colors.accent} /> : undefined}
-                onPress={() => {
-                  if (r === 'custom') { setSheet(null); setRangeOpen(true); return; }
-                  const { from, to } = resolveRange(r);
-                  onRange?.(r, from, to);
-                  setSheet(null);
-                }}
-              />
-            </React.Fragment>
-          ))}
-        </Card>
-      </SheetModal>
+  const filtersButton = hasMore ? <FiltersButton count={activeCount} onPress={() => setSheetOpen(true)} /> : null;
 
-      {/* Custom bounds: one calendar, tap the first day then the last. It was two passes
-          through a single-date picker, and the hand-off between them was lost (the
-          picker's own `onClose` cleared the state `onChange` had just set), so choosing
-          "from" left the range half-set. No time step: a ledger row is found by day. */}
-      <DateRangeSheet
-        visible={rangeOpen}
-        from={customFrom}
-        to={customTo}
-        onClose={() => setRangeOpen(false)}
-        onApply={(f, t) => onRange?.('custom', f, t)}
-      />
+  const inlineChips = (scopeChips.length > 0 || kindChips) ? (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow} keyboardShouldPersistTaps="handled" style={styles.flex}>
+      {scopeChips}
+      {kindChips}
+    </ScrollView>
+  ) : <View style={styles.flex} />;
 
-      <SheetModal visible={sheet === 'person'} onClose={() => setSheet(null)} title="Who's on it">
-        <Card clip>
-          <ListRow
-            icon="users"
-            iconColor={!person ? colors.accent : colors.textSecondary}
-            title="Anyone"
-            chevron={false}
-            selected={!person}
-            value={!person ? <Feather name="check" size={18} color={colors.accent} /> : undefined}
-            onPress={() => { onPerson?.(null); setSheet(null); }}
-          />
-          {people.map(p => (
-            <React.Fragment key={p.id}>
-              <Divider indent="text" />
-              <ListRow
-                icon="user"
-                iconColor={personId === p.id ? colors.accent : colors.textSecondary}
-                title={p.name}
-                chevron={false}
-                selected={personId === p.id}
-                value={personId === p.id ? <Feather name="check" size={18} color={colors.accent} /> : undefined}
-                onPress={() => { onPerson?.(p.id); setSheet(null); }}
-              />
-            </React.Fragment>
-          ))}
-        </Card>
-      </SheetModal>
-    </>
-  );
-
-  if (collapsible) {
-    // One row: either chips + search icon, OR full-width search input.
-    return (
-      <View style={styles.collapsibleRow}>
-        {searchOpen ? (
-          // Full-width search — chips are fully hidden to free up space.
-          <>
-            <TouchableOpacity
-              onPress={closeSearch}
-              hitSlop={8}
-              style={styles.collapseBtn}
-              accessibilityRole="button"
-              accessibilityLabel="Close search"
-            >
-              <Feather name="chevron-left" size={20} color={colors.textSecondary} />
-            </TouchableOpacity>
+  return (
+    <View style={styles.wrap}>
+      {onSearch ? (
+        <>
+          <View style={styles.topRow}>
             <View style={styles.searchBox}>
               <Feather name="search" size={15} color={colors.textMuted} />
               <TextInput
-                ref={inputRef}
                 style={styles.searchInput}
                 placeholder={searchPlaceholder}
                 placeholderTextColor={colors.textMuted}
@@ -274,150 +140,112 @@ export function FilterBar({
                 onChangeText={onSearch}
                 autoCorrect={false}
                 returnKeyType="search"
-                onBlur={() => { if (!search) closeSearch(); }}
               />
               {!!search && (
-                <TouchableOpacity onPress={() => onSearch?.('')} hitSlop={8} accessibilityRole="button" accessibilityLabel="Clear search">
+                <TouchableOpacity onPress={() => onSearch('')} hitSlop={8} accessibilityRole="button" accessibilityLabel="Clear search">
                   <Feather name="x" size={15} color={colors.textMuted} />
                 </TouchableOpacity>
               )}
             </View>
-          </>
-        ) : (
-          // Chip row + search icon at the end.
-          <>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.chipRowContent}
-              keyboardShouldPersistTaps="handled"
-              style={styles.chipScroll}
-            >
-              {scopeChips}
-              {txnChips}
-            </ScrollView>
-            {onSearch && (
-              <TouchableOpacity
-                onPress={openSearch}
-                hitSlop={8}
-                style={styles.searchIconBtn}
-                accessibilityRole="button"
-                accessibilityLabel="Search"
-              >
-                <Feather name="search" size={16} color={colors.textSecondary} />
-              </TouchableOpacity>
-            )}
-          </>
-        )}
-        {sheets}
-      </View>
-    );
-  }
-
-  // Non-collapsible: search box above, chip rows below.
-  return (
-    <View style={styles.wrap}>
-      {onSearch && (
-        <View style={styles.searchBox}>
-          <Feather name="search" size={15} color={colors.textMuted} />
-          <TextInput
-            ref={inputRef}
-            style={styles.searchInput}
-            placeholder={searchPlaceholder}
-            placeholderTextColor={colors.textMuted}
-            value={search}
-            onChangeText={onSearch}
-            autoCorrect={false}
-            returnKeyType="search"
-          />
-          {!!search && (
-            <TouchableOpacity onPress={() => onSearch('')} hitSlop={8} accessibilityRole="button" accessibilityLabel="Clear search">
-              <Feather name="x" size={15} color={colors.textMuted} />
-            </TouchableOpacity>
-          )}
+            {filtersButton}
+          </View>
+          {(scopeChips.length > 0 || kindChips) && inlineChips}
+        </>
+      ) : (
+        <View style={styles.topRow}>
+          {inlineChips}
+          {filtersButton}
         </View>
       )}
-      {groups.map(g => {
-        const active = selected[g.key] ?? g.options[0]?.value;
-        return (
-          <ScrollView
-            key={g.key}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.chipRowContent}
-            keyboardShouldPersistTaps="handled"
-          >
-            {g.options.map(o => (
-              <Chip
-                key={o.value}
-                label={o.label}
-                selected={active === o.value}
-                onPress={() => onSelect(g.key, o.value)}
-              />
-            ))}
-          </ScrollView>
-        );
-      })}
-      {(onKind || onRange || onPerson) && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.chipRowContent}
-          keyboardShouldPersistTaps="handled"
-        >
-          {txnChips}
+
+      {activeCount > 0 && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow} keyboardShouldPersistTaps="handled">
+          {range !== 'any' && <Chip icon="calendar" label={rangeLabel} selected maxWidth={180} onRemove={() => onRange?.('any', null, null)} />}
+          {person && <Chip icon="user" label={person.name} selected maxWidth={160} onRemove={() => onPerson?.(null)} />}
+          {selectedTags.map(t => <Chip key={t} icon="tag" label={t} selected maxWidth={140} onRemove={() => toggleTag(t)} />)}
         </ScrollView>
       )}
-      {sheets}
+
+      <SheetModal visible={sheetOpen} onClose={() => setSheetOpen(false)} title="Filters">
+        <>
+          {hasWhen && (
+            <>
+              <Text style={styles.section}>When</Text>
+              <View style={styles.wrapChips}>
+                {RANGE_PRESETS.map(r => (
+                  <Chip
+                    key={r}
+                    label={RANGE_LABEL[r]}
+                    selected={range === r}
+                    onPress={() => { const { from, to } = resolveRange(r); onRange?.(r, from, to); }}
+                  />
+                ))}
+                <Chip
+                  icon="calendar"
+                  label={range === 'custom' ? rangeLabel : 'Pick dates'}
+                  selected={range === 'custom'}
+                  chevron
+                  onPress={() => { setSheetOpen(false); setRangeOpen(true); }}
+                />
+              </View>
+            </>
+          )}
+          {hasWho && (
+            <>
+              <Text style={styles.section}>Who</Text>
+              <View style={styles.wrapChips}>
+                <Chip label="Anyone" selected={!person} onPress={() => onPerson?.(null)} />
+                {people.map(p => (
+                  <Chip key={p.id} label={p.name} maxWidth={160} selected={personId === p.id} onPress={() => onPerson?.(personId === p.id ? null : p.id)} />
+                ))}
+              </View>
+            </>
+          )}
+          {hasTags && (
+            <>
+              <Text style={styles.section}>Tags</Text>
+              <View style={styles.wrapChips}>
+                {tagOptions.map(t => (
+                  <Chip key={t} icon="tag" label={t} maxWidth={160} selected={selectedTags.some(x => tagKey(x) === tagKey(t))} onPress={() => toggleTag(t)} />
+                ))}
+              </View>
+            </>
+          )}
+          <View style={styles.footer}>
+            {activeCount > 0 && <SecondaryButton label="Clear" onPress={clearAll} style={styles.footerBtn} />}
+            <PrimaryButton label="Done" onPress={() => setSheetOpen(false)} style={styles.footerBtn} />
+          </View>
+        </>
+      </SheetModal>
+
+      {/* Custom bounds: one calendar, tap the first day then the last. */}
+      <DateRangeSheet
+        visible={rangeOpen}
+        from={customFrom}
+        to={customTo}
+        onClose={() => setRangeOpen(false)}
+        onApply={(f, t) => onRange?.('custom', f, t)}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { gap: space.xs },
+  wrap: { gap: space.sm },
+  flex: { flex: 1 },
+  topRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  chipRow: { gap: space.sm, alignItems: 'center', flexDirection: 'row' },
 
-  // Collapsible: single row containing chips OR search.
-  collapsibleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.xs,
-    minHeight: 40,
-  },
-  chipScroll: { flex: 1 },
-  chipRowContent: { gap: space.sm, alignItems: 'center', flexDirection: 'row' },
-
-  searchIconBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: colors.bgCard,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  collapseBtn: {
-    width: 36,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-
-  // Shared search box (used by both collapsible-open and non-collapsible).
   searchBox: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.sm,
-    backgroundColor: colors.bgInput,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: space.md,
-    height: 40,
+    flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.sm,
+    backgroundColor: colors.bgInput, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border,
+    paddingHorizontal: space.md, height: 40,
   },
   // No lineHeight — it misaligns the placeholder/text in a single-line input.
   searchInput: { flex: 1, fontFamily: 'Inter_400Regular', fontSize: 15, color: colors.textPrimary, padding: 0 },
+
+  section: { ...type.label, color: colors.textSecondary, marginTop: space.md, marginBottom: space.sm },
+  wrapChips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
+  footer: { flexDirection: 'row', gap: space.sm, marginTop: space.lg },
+  footerBtn: { flex: 1, minHeight: layout.touchMin },
 });

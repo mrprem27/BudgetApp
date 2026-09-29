@@ -29,8 +29,7 @@ import { ScreenHeader } from '../../../src/components/ui/ScreenHeader';
 import { SheetModal } from '../../../src/components/ui/SheetModal';
 import { FAB } from '../../../src/components/ui/FAB';
 import { SettingsRow, settingsRowDivider } from '../../../src/components/ui/SettingsRow';
-import { GroupHero } from '../../../src/components/finance/group/GroupHero';
-import { GroupBalanceCard } from '../../../src/components/finance/group/GroupBalanceCard';
+import { GroupHeaderCard } from '../../../src/components/finance/group/GroupHeaderCard';
 import { TransactionsTab } from '../../../src/components/finance/group/TransactionsTab';
 import { BudgetTab } from '../../../src/components/finance/group/BudgetTab';
 import { RebalanceSheet } from '../../../src/components/finance/group/RebalanceSheet';
@@ -217,8 +216,8 @@ export default function GroupDetailScreen() {
           `+ space.sm`, so the header jumped 4px on each push. It also rendered
           `ScreenHeader` in its error/not-found branches and a breadcrumb here, so
           the header changed shape depending on load state.
-          The title names where Back goes — `GroupHero` right below already carries
-          the group's name at 26px, so repeating it here would just be redundant. */}
+          The title names where Back goes — `GroupHeaderCard` right below already carries
+          the group's name, so repeating it here would just be redundant. */}
       <ScreenHeader
         title="Groups"
         onBack={() => router.back()}
@@ -229,13 +228,15 @@ export default function GroupDetailScreen() {
         }
       />
 
-      <GroupHero group={group} members={members} />
-
-      <GroupBalanceCard
-        net={net}
-        meId={meId}
-        simplifiedSettles={simplifiedSettles}
-        personMap={personMap}
+      <GroupHeaderCard
+        group={group}
+        members={members}
+        myNet={net[meId] ?? 0}
+        settleWith={(() => {
+          const owe = (net[meId] ?? 0) < 0;
+          const leg = owe ? simplifiedSettles.find(s => s.from === meId) : simplifiedSettles.find(s => s.to === meId);
+          return leg ? personMap.get(owe ? leg.to : leg.from) ?? null : null;
+        })()}
         onSettle={(personId) => router.push(`/add/quick?kind=transfer&to=${personId}`)}
       />
 

@@ -515,3 +515,196 @@ describe('GR-1 · the group picker puts the groups you use most first', () => {
     expect((await getGroupsByRecentUse(db as never, now)).map(g => g.name)).toEqual(['Personal', 'Fresh', 'Old']);
   });
 });
+
+describe('F-1 · money forms use AmountRow, and the Your-money total is the three buckets', () => {
+  const fs = jest.requireActual('fs') as typeof import('fs');
+  const { sumInputsPaise } = jest.requireActual('../lib/money') as typeof import('../lib/money');
+  it('totals the fields, empty ones as zero', () => {
+    expect(sumInputsPaise('1200', '', '0')).toBe(120000);
+    expect(sumInputsPaise('10.5', '2,000', 'abc')).toBe(201050);
+    expect(sumInputsPaise()).toBe(0);
+  });
+  it.each([
+    'src/components/finance/plan/MoneyEditorSheet.tsx',
+    'src/components/finance/plan/PayCardBillSheet.tsx',
+    'src/components/finance/plan/AssetSheet.tsx',
+  ])('%s takes amounts only through AmountRow', file => {
+    const src = fs.readFileSync(file, 'utf8');
+    expect(src).toMatch(/<AmountRow/);
+    expect(src).not.toMatch(/keyboardType="decimal-pad"/);
+  });
+});
+
+describe('UI-1 · every tab has the same header and the same action buttons', () => {
+  const fs = jest.requireActual('fs') as typeof import('fs');
+  it.each(['index', 'groups', 'savings', 'insights'])('(tabs)/%s.tsx uses the shared large header and HeaderIconButton', tab => {
+    const src = fs.readFileSync(`app/(tabs)/${tab}.tsx`, 'utf8');
+    expect(src).toMatch(/<ScreenHeader\s+large|<ScreenHeader[^>]*\blarge\b/);
+    expect(src).toMatch(/<HeaderIconButton/);
+    // No hand-rolled header buttons left beside it.
+    expect(src).not.toMatch(/styles\.headerAdd|styles\.headerIconBtn|styles\.headerBtn/);
+  });
+  it('the button holds the one icon size', () => {
+    expect(fs.readFileSync('src/components/ui/HeaderIconButton.tsx', 'utf8')).toMatch(/layout\.headerIcon/);
+  });
+  it('only Home carries the profile avatar', () => {
+    for (const tab of ['groups', 'savings', 'insights']) {
+      expect(fs.readFileSync(`app/(tabs)/${tab}.tsx`, 'utf8')).not.toMatch(/ProfileButton|router\.push\('\/settings'\)/);
+    }
+  });
+  it('Reports and export are on Insights, not in Settings', () => {
+    expect(fs.readFileSync('app/(tabs)/insights.tsx', 'utf8')).toMatch(/Export all data/);
+    const settings = fs.readFileSync('app/(system)/settings/index.tsx', 'utf8');
+    expect(settings).not.toMatch(/Reports & export|Export all data/);
+  });
+});
+
+describe('G1 · the group header states where I stand', () => {
+  const { headerBalance } = jest.requireActual('../lib/owe') as typeof import('../lib/owe');
+  const fs = jest.requireActual('fs') as typeof import('fs');
+  it('owed, owe and settled up', () => {
+    expect(headerBalance(120000)).toEqual({ direction: 'owed', headline: "You're owed", amount: 120000 });
+    expect(headerBalance(-30000)).toEqual({ direction: 'owe', headline: 'You owe', amount: 30000 });
+    expect(headerBalance(0)).toEqual({ direction: 'settled', headline: 'Settled up', amount: 0 });
+  });
+  it('the screen uses the one header card, not the two old boxes', () => {
+    const src = fs.readFileSync('app/(people)/group/[id].tsx', 'utf8');
+    expect(src).toMatch(/<GroupHeaderCard/);
+    expect(src).not.toMatch(/GroupHero|GroupBalanceCard/);
+  });
+});
+
+describe('T1 · long-press shows a whole name', () => {
+  jest.mock('react-native', () => ({ Alert: { alert: jest.fn() } }), { virtual: true });
+  const { fullTextOnHold } = jest.requireActual('../hooks/useFullTextOnHold') as typeof import('../hooks/useFullTextOnHold');
+  it('gives a handler for real text and nothing for empty', () => {
+    expect(typeof fullTextOnHold('A very long group name').onLongPress).toBe('function');
+    expect(fullTextOnHold('   ')).toEqual({});
+    expect(fullTextOnHold(null)).toEqual({});
+  });
+});
+
+describe('ST-1 · Settings rows share one colour per section', () => {
+  const fs = jest.requireActual('fs') as typeof import('fs');
+  it('the tint map is built from section colours, not per-row hues', () => {
+    const src = fs.readFileSync('app/(system)/settings/index.tsx', 'utf8');
+    expect(src).toMatch(/const SECTION = \{/);
+    expect(src).toMatch(/upiId: SECTION\.paid,\s*upiQr: SECTION\.paid/);
+  });
+});
+
+describe('G2 · one filter structure: tags match any-of, and the badge counts what sits behind the button', () => {
+  const { matchesFilters, applyFilters, filtersActive, extraFilterCount, NO_FILTERS } = jest.requireActual('../lib/txnFilter') as typeof import('../lib/txnFilter');
+  const fs = jest.requireActual('fs') as typeof import('fs');
+  const row = (tags: string | null) => ({ kind: 'expense', date: 1, category: 'Food', note: null, tags, payments: [], shares: [] });
+
+  it('a row matches when it carries ANY chosen tag, ignoring case', () => {
+    const f = { ...NO_FILTERS, tags: ['Goa'] };
+    expect(matchesFilters(row(JSON.stringify(['goa', 'work'])), f)).toBe(true);
+    expect(matchesFilters(row(JSON.stringify(['work'])), f)).toBe(false);
+    expect(matchesFilters(row(null), f)).toBe(false);
+    expect(matchesFilters(row(JSON.stringify(['work'])), { ...NO_FILTERS, tags: ['Goa', 'work'] })).toBe(true);
+  });
+
+  it('no tags chosen means no tag filter', () => {
+    const rows = [row(null), row(JSON.stringify(['x']))];
+    expect(applyFilters(rows, { ...NO_FILTERS, tags: [] })).toHaveLength(2);
+    expect(filtersActive({ ...NO_FILTERS, tags: [] })).toBe(false);
+    expect(filtersActive({ ...NO_FILTERS, tags: ['x'] })).toBe(true);
+  });
+
+  it('the badge counts date, person and each tag — not the inline kind', () => {
+    expect(extraFilterCount(NO_FILTERS)).toBe(0);
+    expect(extraFilterCount({ from: 1, to: 2, personId: 'p', tags: ['a', 'b'] })).toBe(4);
+    expect(extraFilterCount({ from: null, to: 5, personId: null, tags: [] })).toBe(1);
+  });
+
+  it('every screen with a filter bar passes tags through', () => {
+    for (const f of ['app/(ledger)/search.tsx', 'app/(people)/personal.tsx', 'src/components/finance/group/TransactionsTab.tsx']) {
+      const src = fs.readFileSync(f, 'utf8');
+      expect(src).toMatch(/onTags=\{setTags\}/);
+      expect(src).not.toMatch(/\bcollapsible\b/);
+    }
+  });
+});
+
+describe('G2b · Review carries the same Filters button, with a count', () => {
+  const { reviewFilterCount, DEFAULT_FILTERS } = jest.requireActual('../lib/reviewFilter') as typeof import('../lib/reviewFilter');
+  const fs = jest.requireActual('fs') as typeof import('fs');
+  it('counts text, each category, amount and dates', () => {
+    expect(reviewFilterCount(DEFAULT_FILTERS)).toBe(0);
+    expect(reviewFilterCount({ ...DEFAULT_FILTERS, query: 'swiggy', categories: ['Food', 'Fuel'], amountMin: '100', dateFrom: '2026-09-01' })).toBe(5);
+  });
+  it('Review and the shared bar use the one FiltersButton', () => {
+    expect(fs.readFileSync('app/(ledger)/review.tsx', 'utf8')).toMatch(/<FiltersButton/);
+    expect(fs.readFileSync('src/components/ui/FilterBar.tsx', 'utf8')).toMatch(/<FiltersButton/);
+  });
+});
+
+describe('N3 · adding a member is the first thing on the member screens', () => {
+  const fs = jest.requireActual('fs') as typeof import('fs');
+  it('MembersTab: the Add member row comes before the list header', () => {
+    const src = fs.readFileSync('src/components/finance/group/MembersTab.tsx', 'utf8');
+    expect(src.indexOf('accessibilityLabel="Add member"')).toBeGreaterThan(0);
+    expect(src.indexOf('accessibilityLabel="Add member"')).toBeLessThan(src.indexOf('members.map('));
+    expect(src).not.toMatch(/Invite someone/);
+  });
+  it('members.tsx: the add control comes before the members card', () => {
+    const src = fs.readFileSync('app/(people)/group/[id]/members.tsx', 'utf8');
+    expect(src.indexOf('Add or create person')).toBeLessThan(src.indexOf('styles.membersCard'));
+  });
+});
+
+describe('CU-1 · the Money tab shows the chosen currency, not a dollar sign', () => {
+  const { currencySymbol } = jest.requireActual('../lib/money') as typeof import('../lib/money');
+  const fs = jest.requireActual('fs') as typeof import('fs');
+  it('follows the currency setting, and defaults to the rupee', () => {
+    expect(currencySymbol('INR')).toBe('₹');
+    expect(currencySymbol('USD')).toBe('$');
+    expect(currencySymbol(undefined)).toBe('₹');
+    expect(currencySymbol(null)).toBe('₹');
+    expect(currencySymbol('XXX')).toBe('₹');
+  });
+  it('the tab bar renders that symbol for the Money tab', () => {
+    const src = fs.readFileSync('app/(tabs)/_layout.tsx', 'utf8');
+    expect(src).toMatch(/currencyGlyph/);
+    expect(src).toMatch(/settings\.defaultCurrency\(\)/);
+  });
+});
+
+describe('UP-3 · the pay picker: CRED and Airtel first, real icons, choices always visible', () => {
+  const { UPI_APPS, UpiApp, pickDefaultApp } = jest.requireActual('../lib/upiIntent') as typeof import('../lib/upiIntent');
+  const fs = jest.requireActual('fs') as typeof import('fs');
+
+  it('CRED then Airtel lead, and PhonePe (which refuses third parties) is last', () => {
+    const keys = UPI_APPS.map(a => a.key);
+    expect(keys.slice(0, 2)).toEqual([UpiApp.Cred, UpiApp.Airtel]);
+    expect(keys[keys.length - 1]).toBe(UpiApp.PhonePe);
+  });
+
+  it('with nothing chosen before, the default is the first installed app in that order', () => {
+    const installed = UPI_APPS.filter(a => [UpiApp.PhonePe, UpiApp.Cred, UpiApp.Paytm].includes(a.key));
+    expect(pickDefaultApp(installed, null)?.key).toBe(UpiApp.Cred);
+    expect(pickDefaultApp(installed, UpiApp.Paytm)?.key).toBe(UpiApp.Paytm);
+  });
+
+  it('every listed app has a bundled icon file that exists', () => {
+    const src = fs.readFileSync('src/components/finance/pay/upiAppLogos.ts', 'utf8');
+    for (const a of UPI_APPS) {
+      expect(src).toMatch(new RegExp(`UpiApp\\.\\w+\\]: require\\('../../../assets/upi/${a.key === 'gpay' ? 'googlepay' : a.key}\\.png'\\)`));
+    }
+    const files = (src.match(/assets\/upi\/(\w+)\.png/g) ?? []).map(m => m.replace('assets/upi/', ''));
+    expect(files).toHaveLength(UPI_APPS.length);
+    for (const f of files) expect(fs.existsSync(`src/assets/upi/${f}`)).toBe(true);
+  });
+
+  it('choosing an app only selects it — the grid has no collapse and does not close the sheet', () => {
+    const src = fs.readFileSync('src/components/finance/pay/UpiPayButton.tsx', 'utf8');
+    expect(src).toMatch(/onSelect=\{handoff\.choose\}/);
+    expect(src).not.toMatch(/Collapse|setExpanded/);
+  });
+
+  it('Scan & Pay types the amount in the same hero field as Add', () => {
+    expect(fs.readFileSync('src/components/finance/ScanPaySheet.tsx', 'utf8')).toMatch(/<AmountField/);
+  });
+});

@@ -13,8 +13,7 @@ import type { UpiAppSpec } from '../../../lib/upiIntent';
  * The text list could never show a real icon and read identically whether an app
  * would arrive pre-filled or not (a `— scan it there` suffix buried in a row of
  * text). A grid puts the same information where it's easier to scan at a glance,
- * and gives `UpiAppSpec.logo` somewhere to actually appear once real artwork
- * exists (see `UpiAppIcon`).
+ * and shows each app's own icon (see `UpiAppIcon`).
  */
 export function UpiAppGrid({
   apps,
@@ -42,7 +41,7 @@ export function UpiAppGrid({
           accessibilityState={{ selected }}
         >
           <View style={[styles.ring, selected && styles.ringOn]}>
-            <UpiAppIcon app={app} size={44} />
+            <UpiAppIcon app={app} size={52} />
           </View>
           <Text style={[styles.label, selected && styles.labelOn]} numberOfLines={1}>{app.label}</Text>
           {(opts?.bare || app.blocked) && (
@@ -56,10 +55,10 @@ export function UpiAppGrid({
 }
 
 const styles = StyleSheet.create({
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.md, paddingBottom: space.sm },
-  cell: { width: 72, alignItems: 'center', gap: space.xs },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', rowGap: space.md, paddingBottom: space.xs },
+  cell: { width: '25%', alignItems: 'center', gap: space.xs },
   // Always 2pt, transparent when unselected, so selecting doesn't shift the grid.
-  ring: { padding: 2, borderRadius: radius.pill, borderWidth: 2, borderColor: 'transparent' },
+  ring: { padding: 3, borderRadius: radius.lg, borderWidth: 2, borderColor: 'transparent' },
   ringOn: { borderColor: colors.accent },
   label: { ...type.caption, color: colors.textPrimary, textAlign: 'center' },
   labelOn: { color: colors.accent, fontFamily: 'Inter_600SemiBold' },

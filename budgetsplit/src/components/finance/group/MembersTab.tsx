@@ -6,6 +6,7 @@ import { colors, type, space, radius, shadow, layout } from '../../tokens';
 import { useContentInset } from '../../../hooks/useContentInset';
 import { formatCompact } from '../../../lib/money';
 import { oweView } from '../../../lib/owe';
+import { IconCircle } from '../../ui/IconCircle';
 import { MemberAvatar } from '../MemberAvatar';
 import { AvatarStack } from '../AvatarStack';
 import { BalanceRow } from '../BalanceRow';
@@ -83,6 +84,14 @@ export function MembersTab({ members, net, meId, totalSpent, settlements, person
         </View>
       </View>
 
+      {/* First, and always visible (the list below is collapsed by default): adding someone is what
+          you open this tab to do. */}
+      <TouchableOpacity style={[styles.card, styles.addMemberRow]} onPress={onInvite} accessibilityRole="button" accessibilityLabel="Add member">
+        <IconCircle icon="user-plus" size={layout.iconCircle} color={colors.accent} />
+        <Text style={[styles.memberName, { color: colors.accent, flex: 1 }]}>Add member</Text>
+        <Feather name="plus" size={layout.headerIcon} color={colors.accent} />
+      </TouchableOpacity>
+
       {/* Member list — collapsed by default */}
       <TouchableOpacity
         style={styles.membersHeader}
@@ -150,11 +159,6 @@ export function MembersTab({ members, net, meId, totalSpent, settlements, person
         </>
       )}
 
-      <TouchableOpacity style={styles.inviteBtn} onPress={onInvite} accessibilityRole="button">
-        <Feather name="user-plus" size={16} color={colors.accent} />
-        <Text style={styles.inviteBtnText}>Invite someone</Text>
-      </TouchableOpacity>
-
       {onTrustAll && trustAllCount > 0 && (
         <TouchableOpacity style={styles.inviteBtn} onPress={onTrustAll} accessibilityRole="button">
           <Feather name="shield" size={16} color={colors.accent} />
@@ -212,6 +216,7 @@ const styles = StyleSheet.create({
   membersHeaderText: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold', flex: 1 },
   card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden', ...shadow.sm, marginBottom: space.md },
   rowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
+  addMemberRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.smd, paddingHorizontal: space.md, minHeight: layout.rowMinHeight },
   memberRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md, paddingHorizontal: space.md },
   memberName: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   youTag: { ...type.caption, color: colors.accent, fontFamily: 'Inter_600SemiBold' },

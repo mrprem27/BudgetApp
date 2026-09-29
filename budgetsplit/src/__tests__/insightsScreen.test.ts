@@ -97,7 +97,8 @@ describe('no dead wiring', () => {
   it('does not read a feature flag it never uses', () => {
     // `savingsInsights` stopped being a flag key (featureFlags.ts records the
     // removal); the destructure was left behind, reading a value and discarding it.
-    expect(code).not.toContain('useFeatureFlags');
+    // Reading flags is fine when the value is used (the Reports row is gated on `flags.reports`).
+    if (code.includes('useFeatureFlags')) expect(code).toMatch(/flags\.\w+/);
   });
 
   it('does not send "what to cut" to the ledger', () => {

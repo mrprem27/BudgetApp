@@ -25,7 +25,10 @@ import { MoneyEditorSheet } from '../../src/components/finance/plan/MoneyEditorS
 import { PayCardBillSheet } from '../../src/components/finance/plan/PayCardBillSheet';
 import { MoveMoneySheet } from '../../src/components/finance/plan/MoveMoneySheet';
 import { ForecastCard } from '../../src/components/finance/plan/ForecastCard';
-import { ProfileButton } from '../../src/components/finance/ProfileButton';
+import { HeaderIconButton } from '../../src/components/ui/HeaderIconButton';
+import { Card } from '../../src/components/ui/Card';
+import { ListRow } from '../../src/components/ui/ListRow';
+import { Divider } from '../../src/components/ui/Divider';
 import { SectionHeader } from '../../src/components/ui/SectionHeader';
 import { formatCompact, parseToPaise } from '../../src/lib/money';
 
@@ -106,40 +109,15 @@ export default function SavingsScreen() {
       <ScreenHeader
         title="Money"
         large
-        right={
-          /*
-           * OV-16 — the labels are the fix, and where they sit is why there are any.
-           *
-           * This was four bare glyphs. A rail of icons is only readable when each one
-           * is a convention (✕, ⋯, ＋); `bar-chart-2` against `pie-chart` is not, and
-           * two of these four are the ONLY door to their screen — `/plan/recurring`
-           * and `/afford` are linked from nowhere else in the app. Onboarding's
-           * summary closes by telling the user their salary now lives in
-           * "Recurring · Plan", and the thing it names was an unlabelled squiggle.
-           *
-           * The label goes UNDER the glyph, not beside it: beside it, four labels
-           * plus a 28pt "Plan" overflow the row on a small phone. Under it, the
-           * header grows by one caption line — about 16pt, once — and no content
-           * moves. A chip row below the header would have cost a whole band above
-           * the Total Money hero, which is the one number this screen exists for.
-           *
-           * `caption`-short, so the widest label is `Recurring` rather than
-           * `Can I afford?` — the accessibility label keeps the full question.
-           */
-          <View style={styles.headerRight}>
-            {[
-              { key: 'subs', icon: 'refresh-cw' as const, label: 'Recurring', a11y: 'Recurring', show: flags.recurring, to: '/plan/recurring' as Href },
-              // Reminders is notification config — lives in Settings › Notifications & Reminders, not here.
-              { key: 'afford', icon: 'help-circle' as const, label: 'Afford', a11y: 'Can I afford?', show: flags.affordCheck, to: '/afford' as Href },
-            ].filter(m => m.show).map(m => (
-              <TouchableOpacity hitSlop={8} key={m.key} style={styles.headerIconBtn} onPress={() => router.push(m.to)} accessibilityRole="button" accessibilityLabel={m.a11y}>
-                <Feather name={m.icon} size={18} color={colors.accent} />
-                <Text style={styles.headerIconLabel} numberOfLines={1}>{m.label}</Text>
-              </TouchableOpacity>
-            ))}
-            <ProfileButton />
-          </View>
-        }
+        right={(
+          <>
+            {/* "Can I afford this?" first, the way a state icon leads on every tab, so the fixed action
+                keeps its place. Both destinations also have labelled rows in the body (OV-16: they are
+                linked from nowhere else, and a bare glyph is not a door anyone finds). */}
+            {flags.affordCheck && <HeaderIconButton icon="help-circle" color={colors.accent} label="Can I afford this?" onPress={() => router.push('/afford')} />}
+            {flags.recurring && <HeaderIconButton icon="refresh-cw" color={colors.accent} label="Recurring" onPress={() => router.push('/plan/recurring')} />}
+          </>
+        )}
       />
       {error ? (
         <ErrorState onRetry={() => reload()} />
@@ -160,6 +138,14 @@ export default function SavingsScreen() {
             onMoveToInvestments={() => setShowMoveInvest(true)}
             onManageAssets={() => router.push('/assets')}
           />
+        )}
+
+        {(flags.affordCheck || flags.recurring) && (
+          <Card clip style={{ marginBottom: space.md }}>
+            {flags.affordCheck && <ListRow icon="help-circle" title="Can I afford this?" subtitle="Check a purchase against your money" onPress={() => router.push('/afford')} />}
+            {flags.affordCheck && flags.recurring && <Divider indent="text" />}
+            {flags.recurring && <ListRow icon="refresh-cw" title="Recurring" subtitle="Bills, subscriptions and income that repeat" onPress={() => router.push('/plan/recurring')} />}
+          </Card>
         )}
 
         {(forecastMonthEnd !== null || (overspend?.total ?? 0) > 0 || upcoming.length > 0) && <SectionHeader title="This month" />}

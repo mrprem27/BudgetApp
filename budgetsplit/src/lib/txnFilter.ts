@@ -1,4 +1,4 @@
-import { parseTags } from './tags';
+import { parseTags, tagKey } from './tags';
 import { txnTotal } from './splitMath';
 import { formatRupees } from './money';
 import type { TxnKind } from '../constants/enums';
@@ -32,9 +32,11 @@ export type TxnFilters = {
   to: number | null;
   /** Someone who paid for or consumed part of the entry. `null` = anyone. */
   personId: string | null;
+  /** Any-of: a row matches when it carries at least one of these. Empty/absent = don't filter. */
+  tags?: readonly string[];
 };
 
-export const NO_FILTERS: TxnFilters = { query: '', kind: KIND_ANY, from: null, to: null, personId: null };
+export const NO_FILTERS: TxnFilters = { query: '', kind: KIND_ANY, from: null, to: null, personId: null, tags: [] };
 
 /** The shape a row must expose to be filtered. A superset of what each screen has. */
 export type FilterableTxn = {
@@ -49,7 +51,15 @@ export type FilterableTxn = {
 
 /** True when anything is narrowing the list — drives "clear filters" affordances. */
 export function filtersActive(f: TxnFilters): boolean {
-  return !!(f.query.trim() || f.kind !== KIND_ANY || f.from !== null || f.to !== null || f.personId);
+  return !!(f.query.trim() || f.kind !== KIND_ANY || f.from !== null || f.to !== null || f.personId || f.tags?.length);
+}
+
+/**
+ * How many of the filters that live behind the "Filters" button are set — date, person, tags. The
+ * badge on that button. Kind and the screen's own scope sit inline, so they are not counted twice.
+ */
+export function extraFilterCount(f: Pick<TxnFilters, 'from' | 'to' | 'personId' | 'tags'>): number {
+  return (f.from !== null || f.to !== null ? 1 : 0) + (f.personId ? 1 : 0) + (f.tags?.length ?? 0);
 }
 
 /**
@@ -92,6 +102,10 @@ export function matchesFilters(t: FilterableTxn, f: TxnFilters): boolean {
   if (f.from !== null && t.date < f.from) return false;
   if (f.to !== null && t.date > f.to) return false;
   if (f.personId && !involves(t, f.personId)) return false;
+  if (f.tags?.length) {
+    const wanted = new Set(f.tags.map(tagKey));
+    if (!parseTags(t.tags).some(x => wanted.has(tagKey(x)))) return false;
+  }
 
   const q = f.query.trim().toLowerCase().replace(/,/g, '');
   if (!q) return true;

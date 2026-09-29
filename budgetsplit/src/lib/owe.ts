@@ -86,3 +86,17 @@ export function paymentSentence(
   if (to.is_me) return { lead: '', name: from.name, tail: ' owes you' };
   return { lead: '', name: from.name, tail: ` owes ${to.name}` };
 }
+
+/**
+ * The balance a group header states for the viewer: who owes whom in one line, coloured by direction.
+ * "Settled up" when square — absence alone is not feedback (AGENTS §2).
+ */
+export function headerBalance(myNet: number): { direction: 'owe' | 'owed' | 'settled'; headline: string; amount: number } {
+  const ov = oweView(myNet);
+  if (ov.direction === 'settled') return { direction: 'settled', headline: 'Settled up', amount: 0 };
+  return {
+    direction: ov.direction,
+    headline: ov.direction === 'owe' ? 'You owe' : "You're owed",
+    amount: ov.amount,
+  };
+}

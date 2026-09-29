@@ -32,6 +32,8 @@ import { CategoryRankList } from '../../src/components/finance/home/CategoryRank
 import { ForecastCard } from '../../src/components/finance/home/ForecastCard';
 import { StreakCard } from '../../src/components/finance/home/StreakCard';
 import { HealthSheet } from '../../src/components/finance/HealthSheet';
+import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
+import { HeaderIconButton } from '../../src/components/ui/HeaderIconButton';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { greeting, healthBandColor } from '../../src/components/finance/home/helpers';
 import { loadHomeData, loadCatchUp, PREV_LABEL, PERIOD_LABEL, TXN_COUNT_PERIOD_LABEL, TARGET_FOR_TAB, type TabKey } from '../../src/lib/homeData';
@@ -136,45 +138,17 @@ export default function DashboardScreen() {
 
   return (
     <View style={styles.container}>
-      <ScrollView
-        contentContainerStyle={[styles.scroll, { paddingTop: insets.top + space.sm, paddingBottom: bottomPad }]}
-        refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-      >
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.greeting}>{greeting()}</Text>
-            <Text style={styles.appName}>{meInfo?.name?.split(' ')[0] ?? 'BudgetSplit'}</Text>
-          </View>
-          <View style={styles.headerRight}>
-            {/* Distinct icon and an amber tint: this is someone else asking for a
-                decision, not a queue of your own imports. */}
-            {approvalCount > 0 && (
-              <TouchableOpacity onPress={() => router.push('/approvals')} hitSlop={8} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel={`${approvalCount} entries waiting for your approval`}>
-                <Feather name="user-check" size={18} color={colors.healthAmber} />
-                <View style={styles.notifBadge}>
-                  <Text style={styles.notifBadgeText}>{approvalCount > 9 ? '9+' : approvalCount}</Text>
-                </View>
-              </TouchableOpacity>
-            )}
-            {reviewCount > 0 && (
-              <TouchableOpacity onPress={() => router.push('/review')} hitSlop={8} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel={`Review ${reviewCount} imported transactions`}>
-                <Feather name="inbox" size={18} color={colors.textSecondary} />
-                <View style={styles.notifBadge}>
-                  <Text style={styles.notifBadgeText}>{reviewCount > 9 ? '9+' : reviewCount}</Text>
-                </View>
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity onPress={() => router.push('/search')} hitSlop={8} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel="Search">
-              <Feather name="search" size={18} color={colors.textSecondary} />
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => router.push('/upcoming')} hitSlop={8} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel={`Upcoming${upcoming.length > 0 ? `, ${upcoming.length}` : ''}`}>
-              <Feather name="bell" size={18} color={colors.textSecondary} />
-              {upcoming.length > 0 && (
-                <View style={styles.notifBadge}>
-                  <Text style={styles.notifBadgeText}>{upcoming.length > 9 ? '9+' : upcoming.length}</Text>
-                </View>
-              )}
-            </TouchableOpacity>
+      <ScreenHeader
+        large
+        title={meInfo?.name?.split(' ')[0] ?? 'BudgetSplit'}
+        right={(
+          <>
+            {/* Distinct icon and an amber tint: this is someone else asking for a decision, not a
+                queue of your own imports. */}
+            {approvalCount > 0 && <HeaderIconButton icon="user-check" color={colors.healthAmber} badge={approvalCount} label="Approvals waiting for you" onPress={() => router.push('/approvals')} />}
+            {reviewCount > 0 && <HeaderIconButton icon="inbox" badge={reviewCount} label="Review inbox" onPress={() => router.push('/review')} />}
+            <HeaderIconButton icon="search" label="Search" onPress={() => router.push('/search')} />
+            <HeaderIconButton icon="bell" badge={upcoming.length} label="Upcoming" onPress={() => router.push('/upcoming')} />
             <MemberAvatar
               name={meInfo?.name ?? ''}
               color={meInfo?.color ?? colors.accent}
@@ -182,9 +156,13 @@ export default function DashboardScreen() {
               size={36}
               onPress={() => router.push('/settings')}
             />
-          </View>
-        </View>
-
+          </>
+        )}
+      />
+      <ScrollView
+        contentContainerStyle={[styles.scroll, { paddingTop: space.sm, paddingBottom: bottomPad }]}
+        refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      >
         {/* Device storage. Deliberately ABOVE the loading/error ternary: nothing renders
             while `loading`, and a full disk is precisely the condition in which the
             dashboard may be the thing that fails to load. `inset={false}` because this

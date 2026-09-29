@@ -25,7 +25,6 @@ import { oweView } from '../../src/lib/owe';
 import { utilLabel } from '../../src/lib/budget';
 import { BudgetBar } from '../../src/components/finance/BudgetBar';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
-import { ProfileButton } from '../../src/components/finance/ProfileButton';
 import { AvatarStack } from '../../src/components/finance/AvatarStack';
 import { BalanceChip } from '../../src/components/ui/BalanceChip';
 import { AmountText } from '../../src/components/ui/AmountText';
@@ -37,6 +36,7 @@ import { haptic } from '../../src/lib/haptics';
 import { GROUP_ICONS, GROUP_COLORS, asFeather } from '../../src/constants/palette';
 import { GroupForm, GROUP_TYPES } from '../../src/components/finance/GroupForm';
 import type { BudgetGroup } from '../../src/db/queries/groups';
+import { HeaderIconButton } from '../../src/components/ui/HeaderIconButton';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 
 
@@ -296,33 +296,24 @@ export default function GroupsScreen() {
       <ScreenHeader
         large
         title={viewMode === 'archived' ? 'Archived' : 'Groups'}
-        right={
+        right={(
           <>
-            {/* Friends, always visible regardless of active/archived — the
-                same door as Settings → Friends, so "who do I split with" has
-                one consistent entry point next to where groups live. */}
-            <TouchableOpacity style={styles.headerAdd} hitSlop={10} onPress={() => router.push('/friends')} accessibilityRole="button" accessibilityLabel="Friends">
-              <Feather name="users" size={18} color={colors.textSecondary} />
-            </TouchableOpacity>
+            {/* Archive toggle first: it appears only when there is something archived, and a
+                conditional action goes at the START so the fixed ones keep their place. */}
             {(archived.length > 0 || viewMode === 'archived') && (
-              <TouchableOpacity
-                style={styles.headerAdd}
-                hitSlop={10}
+              <HeaderIconButton
+                icon={viewMode === 'archived' ? 'arrow-left' : 'archive'}
+                color={viewMode === 'archived' ? colors.accent : colors.textSecondary}
+                label={viewMode === 'archived' ? 'Back to active groups' : 'View archived groups'}
                 onPress={() => setViewMode(v => (v === 'active' ? 'archived' : 'active'))}
-                accessibilityRole="button"
-                accessibilityLabel={viewMode === 'archived' ? 'Back to active groups' : 'View archived groups'}
-              >
-                <Feather name={viewMode === 'archived' ? 'arrow-left' : 'archive'} size={18} color={viewMode === 'archived' ? colors.accent : colors.textSecondary} />
-              </TouchableOpacity>
+              />
             )}
-            {viewMode === 'active' && (
-              <TouchableOpacity style={styles.headerAdd} hitSlop={10} onPress={openCreate} accessibilityRole="button" accessibilityLabel="New group">
-                <Feather name="plus" size={20} color={colors.textSecondary} />
-              </TouchableOpacity>
-            )}
-            <ProfileButton />
+            {/* Friends, always visible: the same door as Settings → Friends, so "who do I split with"
+                has one entry point next to where groups live. */}
+            <HeaderIconButton icon="users" label="Friends" onPress={() => router.push('/friends')} />
+            {viewMode === 'active' && <HeaderIconButton icon="plus" label="New group" onPress={openCreate} />}
           </>
-        }
+        )}
       />
 
       {error ? (

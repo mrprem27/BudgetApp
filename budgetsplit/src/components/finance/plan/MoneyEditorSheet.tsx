@@ -1,11 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { Text, StyleSheet } from 'react-native';
 import { colors, type, space } from '../../tokens';
 import { SheetModal } from '../../ui/SheetModal';
-import { Input } from '../../ui/Input';
+import { Card } from '../../ui/Card';
+import { Divider } from '../../ui/Divider';
+import { ListRow } from '../../ui/ListRow';
+import { AmountRow } from '../../ui/AmountRow';
+import { InfoLabel } from '../../ui/InfoLabel';
 import { PrimaryButton } from '../../ui/PrimaryButton';
 import { SecondaryButton } from '../../ui/SecondaryButton';
-import { formatCompact, parseToPaise } from '../../../lib/money';
+import { formatCompact, formatRupees, parseToPaise, sumInputsPaise } from '../../../lib/money';
 import type { MoneyProfile } from '../../../lib/cash';
 import type { MoneyProfileWrite } from '../../../db/queries/moneyProfile';
 
@@ -78,34 +82,22 @@ export function MoneyEditorSheet({
     // sheet with four fields that pushed Save out of reach.
     <SheetModal visible={visible} onClose={onClose} title="Your money">
       <>
-        {/*
-          Three fields where there was one, and the sheet has already failed this
-          way once — see the note above about Save going out of reach. So they sit
-          as one labelled group with a single shared hint, not three full-weight
-          fields each with their own label and explanation.
-
-          Bank leads because it is where most money is, and because
-          `INCOME_LANDING_DEFAULT` is Bank for the same reason.
-        */}
-        <Text style={styles.label}>Where your money is</Text>
-        <View style={styles.bucketRow}>
-          <View style={styles.bucket}>
-            <Text style={styles.bucketLabel}>Bank</Text>
-            <Input value={bank} onChangeText={setBank} keyboardType="decimal-pad" placeholder="₹0" />
-          </View>
-          <View style={styles.bucket}>
-            <Text style={styles.bucketLabel}>Cash</Text>
-            <Input value={cash} onChangeText={setCash} keyboardType="decimal-pad" placeholder="₹0" />
-          </View>
-          <View style={styles.bucket}>
-            <Text style={styles.bucketLabel}>Wallet</Text>
-            <Input value={wallet} onChangeText={setWallet} keyboardType="decimal-pad" placeholder="₹0" />
-          </View>
-        </View>
-        <Text style={styles.hint}>
-          What you have right now, in each place. Transactions adjust these as you spend,
-          using the pay method on each one.
-        </Text>
+        {/* One row per place, in a card — the three side-by-side boxes were too narrow to read a
+            lakh in. Bank leads: most money is there, and income lands there by default. */}
+        <InfoLabel
+          label="Where your money is"
+          labelStyle={styles.label}
+          info="What you have right now in each place. Transactions adjust these as you spend, using each one's pay method."
+        />
+        <Card clip style={styles.card}>
+          <AmountRow icon="briefcase" label="Bank" value={bank} onChangeText={setBank} />
+          <Divider indent="text" />
+          <AmountRow icon="dollar-sign" label="Cash" value={cash} onChangeText={setCash} iconColor={colors.income} />
+          <Divider indent="text" />
+          <AmountRow icon="smartphone" label="Wallet" value={wallet} onChangeText={setWallet} iconColor={colors.settle} />
+          <Divider indent="text" />
+          <ListRow icon="layers" title="Total" value={formatRupees(sumInputsPaise(bank, cash, wallet))} chevron={false} />
+        </Card>
 
         {/*
           * Investments are not a field here any more — they are the asset
@@ -116,29 +108,39 @@ export function MoneyEditorSheet({
           */}
         {onManageAssets && (
           <>
-            <Text style={styles.label}>Investments and assets</Text>
+            <InfoLabel
+              label="Investments and assets"
+              labelStyle={styles.label}
+              info="Gold, a flat, an FD, a fund — named, so moving money in or out is a transfer and your net worth stays put."
+            />
             <SecondaryButton
               label={`${formatCompact(initial.investments)} across your assets`}
               onPress={onManageAssets}
-              style={styles.gap}
+              style={styles.card}
             />
-            <Text style={styles.hint}>
-              Gold, a flat, an FD, a fund — named, so moving money in or out is a transfer
-              and your net worth stays put.
-            </Text>
           </>
         )}
 
-        <Text style={styles.label}>Credit card limit</Text>
-        <Input value={limit} onChangeText={setLimit} keyboardType="decimal-pad" placeholder="₹0" style={styles.gap} />
+        <Text style={styles.label}>Credit card</Text>
+        <Card clip style={styles.card}>
+          <AmountRow icon="credit-card" label="Limit" value={limit} onChangeText={setLimit} />
+          <Divider indent="text" />
+          <AmountRow icon="arrow-up-right" label="Already used" value={used} onChangeText={setUsed} iconColor={colors.expense} />
+          {limitPaise > 0 && (
+            <>
+              <Divider indent="text" />
+              <ListRow
+                icon="check-circle"
+                iconColor={usedExceeds ? colors.expense : colors.income}
+                title="Available"
+                value={usedExceeds ? 'Used is over the limit' : formatRupees(Math.max(0, limitPaise - usedPaise))}
+                chevron={false}
+              />
+            </>
+          )}
+        </Card>
 
-        <Text style={styles.label}>Credit already used</Text>
-        <Input value={used} onChangeText={setUsed} keyboardType="decimal-pad" placeholder="₹0" style={styles.gap} />
-        {usedExceeds
-          ? <Text style={[styles.hint, { color: colors.expense }]}>Used is more than the limit — available credit will show ₹0.</Text>
-          : limitPaise > 0 ? <Text style={styles.hint}>{formatCompact(Math.max(0, limitPaise - usedPaise))} available credit.</Text> : null}
-
-        <PrimaryButton label="Save" onPress={handleSave} style={{ marginTop: space.md }} />
+        <PrimaryButton label="Save" onPress={handleSave} style={{ marginTop: space.sm }} />
       </>
     </SheetModal>
   );
@@ -146,9 +148,5 @@ export function MoneyEditorSheet({
 
 const styles = StyleSheet.create({
   label: { ...type.label, color: colors.textSecondary, marginTop: space.sm, marginBottom: space.xs },
-  bucketRow: { flexDirection: 'row', gap: space.sm },
-  bucket: { flex: 1 },
-  bucketLabel: { ...type.caption, color: colors.textSecondary, marginBottom: space.xs },
-  gap: { marginBottom: space.xs },
-  hint: { ...type.caption, color: colors.textMuted, marginBottom: space.sm },
+  card: { marginBottom: space.md },
 });

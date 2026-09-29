@@ -465,11 +465,8 @@ export async function restateAssetBalance(
 export const MIGRATED_INVESTMENTS_NAME = 'Investments';
 
 /**
- * The asset that `moveToInvestments` targets — the migrated one if it exists,
- * else the first investment-kind asset, else a freshly created one.
- *
- * Exists so the Savings tab's long-standing "Moved to investments" action keeps
- * working unchanged while the register underneath it becomes real.
+ * Where an investment goes when the user hasn't picked an asset (Add's Invest kind) — the
+ * migrated one if it exists, else the first investment-kind asset, else a freshly created one.
  */
 export async function defaultInvestmentAsset(db: SQLite.SQLiteDatabase): Promise<Asset> {
   const existing = await db.getFirstAsync<Asset>(

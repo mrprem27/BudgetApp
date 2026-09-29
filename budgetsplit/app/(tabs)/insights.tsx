@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, type LayoutChangeEvent } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, type LayoutChangeEvent } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSQLiteContext } from 'expo-sqlite';
+import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 import { useScreenData } from '../../src/hooks/useScreenData';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LineChart } from 'react-native-gifted-charts';
@@ -10,14 +11,15 @@ import { monthLabel } from '../../src/lib/dateFormat';
 import { colors, type, space, layout, alpha } from '../../src/theme';
 import { categoryVisual } from '../../src/constants/categories';
 import { asFeather } from '../../src/constants/palette';
-import { ProfileButton } from '../../src/components/finance/ProfileButton';
+import { HeaderIconButton } from '../../src/components/ui/HeaderIconButton';
+import { useExportAll } from '../../src/hooks/useExportAll';
+import { Card } from '../../src/components/ui/Card';
+import { ListRow } from '../../src/components/ui/ListRow';
+import { Divider } from '../../src/components/ui/Divider';
 import { useContentInset } from '../../src/hooks/useContentInset';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { Badge } from '../../src/components/ui/Badge';
-import { Card } from '../../src/components/ui/Card';
 import { Chip } from '../../src/components/ui/Chip';
-import { Divider } from '../../src/components/ui/Divider';
-import { ListRow } from '../../src/components/ui/ListRow';
 import { IconCircle } from '../../src/components/ui/IconCircle';
 import { SectionCard } from '../../src/components/ui/SectionCard';
 import { EmptyState } from '../../src/components/ui/EmptyState';
@@ -63,6 +65,9 @@ const DEFAULT_OPEN = 'attention';
 
 export default function InsightsScreen() {
   const router = useRouter();
+  const db = useSQLiteContext();
+  const { flags } = useFeatureFlags();
+  const { exporting, exportAll } = useExportAll(db);
   const insets = useSafeAreaInsets();
   const [cutPct, setCutPct] = useState(20);
   const [open, setOpen] = useState<Set<string>>(new Set([DEFAULT_OPEN]));
@@ -127,15 +132,9 @@ export default function InsightsScreen() {
           a month that already finished. Month history is Reports' job, and it has a
           selector capped at the current month. */}
       <ScreenHeader
+        large
         title="Insights"
-        right={(
-          <>
-            <TouchableOpacity hitSlop={8} onPress={() => router.push('/reports')} accessibilityRole="button" accessibilityLabel="Reports">
-              <Feather name="pie-chart" size={20} color={colors.accent} />
-            </TouchableOpacity>
-            <ProfileButton />
-          </>
-        )}
+        right={<HeaderIconButton icon="pie-chart" color={colors.accent} label="Reports" onPress={() => router.push('/reports')} />}
       />
       {loadError ? (
         <ErrorState onRetry={reload} />
@@ -453,6 +452,24 @@ export default function InsightsScreen() {
             )}
           </>
         )}
+
+        {/* Reports and export live here — with the numbers they are built from — not in Settings. */}
+        <Card clip style={{ marginTop: space.md }}>
+          {flags.reports && (
+            <>
+              <ListRow icon="pie-chart" title="Reports" subtitle="Month by month, drill down, CSV / PDF" onPress={() => router.push('/reports')} />
+              <Divider indent="text" />
+            </>
+          )}
+          <ListRow
+            icon="database"
+            title="Export all data"
+            subtitle="Every transaction as one CSV"
+            chevron={false}
+            value={exporting ? <ActivityIndicator size="small" color={colors.accent} /> : undefined}
+            onPress={exporting ? undefined : exportAll}
+          />
+        </Card>
       </ScrollView>
       )}
     </View>

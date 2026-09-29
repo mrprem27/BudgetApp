@@ -143,6 +143,11 @@ export function parseToPaise(input: string): number {
   return Math.min(Math.round(n * 100), MAX_PAISE);
 }
 
+/** The paise total of several amount fields, empty ones counting as zero — a form's live total. */
+export function sumInputsPaise(...inputs: string[]): number {
+  return inputs.reduce((sum, v) => sum + parseToPaise(v), 0);
+}
+
 /**
  * Exact inverse of {@link parseToPaise} for pre-filling an amount input:
  * paise → the raw string an amount field holds ("1500.5", not "₹1,500.50").
@@ -275,4 +280,13 @@ export function splitByMode(
     ids.forEach((id, i) => { out[id] = amts[i]; });
   }
   return out;
+}
+
+/**
+ * The symbol of the currency the user chose (Settings → default currency), for places that show it as
+ * a glyph rather than inside an amount — the Money tab's icon. Falls back to the default (₹) for an
+ * unset or unknown code.
+ */
+export function currencySymbol(code?: string | null): string {
+  return (CURRENCY_MAP[(code ?? DEFAULT_CURRENCY) as CurrencyCode] ?? CURRENCY_MAP[DEFAULT_CURRENCY]).symbol;
 }

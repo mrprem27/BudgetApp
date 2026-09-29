@@ -188,7 +188,7 @@ export function TransferBody({
       {canPay && (
         <>
           <Text style={styles.label}>PAY NOW</Text>
-          {/* `UpiPayButton` owns the app choice (an inline disclosure) and the button —
+          {/* `UpiPayButton` owns the app choice (an always-visible grid) and the button —
               settling up used to hand-roll its own copy (down to a comment reading
               "mirrors ScanPaySheet's destination row"), which is exactly the
               duplication a shared component removes. */}

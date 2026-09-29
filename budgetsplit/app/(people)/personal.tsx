@@ -8,6 +8,7 @@ import { colors, type, space, radius, layout, shadow, alpha } from '../../src/th
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { TabPills } from '../../src/components/ui/TabPills';
 import { FilterBar } from '../../src/components/ui/FilterBar';
+import { rankTagsByFrequency } from '../../src/lib/tags';
 import { applyFilters, KIND_ANY, type KindFilter, type RangePreset } from '../../src/lib/txnFilter';
 import { TransactionRow } from '../../src/components/finance/TransactionRow';
 import { TxnCell } from '../../src/components/finance/TxnCell';
@@ -69,6 +70,7 @@ export default function PersonalScreen() {
   const [from, setFrom] = useState<number | null>(null);
   const [to, setTo] = useState<number | null>(null);
   const [personId, setPersonId] = useState<string | null>(null);
+  const [tags, setTags] = useState<string[]>([]);
   const [showMenu, setShowMenu] = useState(false);
 
   const { data, loading, error: loadError, refreshing, onRefresh, reload } = useScreenData(async (db) => {
@@ -108,9 +110,10 @@ export default function PersonalScreen() {
    * one of the three now finds it on all of them.
    */
   const scoped = useMemo(() => scopeActivity(activity, filter), [activity, filter]);
+  const tagOptions = useMemo(() => rankTagsByFrequency(scoped.map(t => t.tags)), [scoped]);
   const filtered = useMemo(
-    () => applyFilters(scoped, { query, kind, from, to, personId }),
-    [scoped, query, kind, from, to, personId],
+    () => applyFilters(scoped, { query, kind, from, to, personId, tags }),
+    [scoped, query, kind, from, to, personId, tags],
   );
   const sections = useMemo(() => groupByDate(filtered), [filtered]);
 
@@ -252,7 +255,6 @@ export default function PersonalScreen() {
                       search={query}
                       onSearch={setQuery}
                       searchPlaceholder="Search your activity…"
-                      collapsible
                       kind={kind}
                       onKind={setKind}
                       range={range}
@@ -262,6 +264,9 @@ export default function PersonalScreen() {
                       people={people}
                       personId={personId}
                       onPerson={setPersonId}
+                      tagOptions={tagOptions}
+                      selectedTags={tags}
+                      onTags={setTags}
                     />
                   </View>
                 ) : null

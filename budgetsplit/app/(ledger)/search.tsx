@@ -11,6 +11,7 @@ import { TxnCell } from '../../src/components/finance/TxnCell';
 import { SectionHeader } from '../../src/components/ui/SectionHeader';
 import { formatCompact } from '../../src/lib/money';
 import { FilterBar } from '../../src/components/ui/FilterBar';
+import { rankTagsByFrequency } from '../../src/lib/tags';
 import { resolveRange, KIND_ANY, type KindFilter, type RangePreset } from '../../src/lib/txnFilter';
 import { loadSearchData, searchResults, isMore, type SearchRow as Row } from '../../src/lib/searchData';
 import { useScreenData } from '../../src/hooks/useScreenData';
@@ -46,9 +47,11 @@ export default function SearchScreen() {
   const [from, setFrom] = useState<number | null>(null);
   const [to, setTo] = useState<number | null>(null);
   const [personId, setPersonId] = useState<string | null>(null);
+  const [tags, setTags] = useState<string[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const { data, loading, error, reload } = useScreenData(loadSearchData, []);
+  const tagOptions = useMemo(() => rankTagsByFrequency((data?.all ?? []).map(t => t.tags)), [data]);
 
   const all = data?.all ?? [];
   const myId = data?.myId ?? '';
@@ -56,8 +59,8 @@ export default function SearchScreen() {
   const groupNames = data?.groupNames ?? {};
 
   const { sections, totalCount, totalAmount } = useMemo(
-    () => searchResults(all, { query: debouncedQuery, kind, from, to, personId, source, personalGroupId, expanded }),
-    [all, debouncedQuery, kind, from, to, personId, source, personalGroupId, expanded],
+    () => searchResults(all, { query: debouncedQuery, kind, from, to, personId, tags, source, personalGroupId, expanded }),
+    [all, debouncedQuery, kind, from, to, personId, tags, source, personalGroupId, expanded],
   );
 
   const hasQuery = query.trim().length > 0;
@@ -112,6 +115,9 @@ export default function SearchScreen() {
             people={data?.people ?? []}
             personId={personId}
             onPerson={setPersonId}
+            tagOptions={tagOptions}
+            selectedTags={tags}
+            onTags={setTags}
           />
 
           {/* Results fill the remaining space so the list scrolls and the empty

@@ -23,7 +23,6 @@ import { getTransactionsInRange, insertTxn } from './transactions';
 import { getMyExposure } from './balances';
 import { getMe } from './persons';
 import { PayMethod } from '../../constants/enums';
-import { defaultInvestmentAsset, transferToAsset } from './assets';
 
 export type GoalFundingStatus = {
   /** Monthly goal-funding commitment across active, uncompleted goals (paise). */
@@ -192,47 +191,6 @@ export async function getSafeToSpendV2(db: SQLite.SQLiteDatabase, nowMs: number 
  * way down between Plan edits. The full accounts model stays future work; this
  * row is designed to survive it (it is just a settlement with a pay method).
  */
-/**
- * Move money into investments — a transfer, not an expense.
- *
- * Buying an SIP used to be logged as an **expense** (`smartCategory` still maps
- * "sip", "mutual fund" and "zerodha" to the `Investments / SIP` expense
- * category). That is wrong three ways at once: it is not consumption, so it
- * violates the money boundary; it eats a budget and skews the Reports donut; and
- * net worth *falls* by the amount when it should be flat.
- *
- * The Savings tab's one-tap version of {@link transferToAsset}. It exists so the
- * common case — "I moved money into investments" — does not force the user to
- * name an asset first; `defaultInvestmentAsset` resolves the one the migration
- * created from their old `money.investments` figure. Anyone who wants gold and an
- * FD kept apart names them on the Assets screen and moves money per asset there.
- */
-export async function moveToInvestments(
-  db: SQLite.SQLiteDatabase,
-  amountPaise: number,
-  /** Which bucket the money leaves. Recorded so cash lands in the right place. */
-  fromAsset: PayMethod = PayMethod.Bank,
-  note?: string,
-): Promise<string> {
-  /*
-   * One line now, because the asset register owns both halves.
-   *
-   * This used to write the transaction and then bump `money.investments` — two
-   * figures, two transactions, and a kill between them booked the cash out and
-   * never raised investments, so net worth fell by the amount invested and stayed
-   * there under a ledger row that looked entirely correct.
-   *
-   * `transferToAsset` does both inside one transaction and against a NAMED asset,
-   * so "investments" is no longer a single opaque number that cannot tell gold
-   * from an FD. Kept as its own function because the Savings tab's "Moved to
-   * investments" action is a real, separate thing a user does, and it should not
-   * have to pick an asset to do it — `defaultInvestmentAsset` picks the one the
-   * migration created.
-   */
-  const asset = await defaultInvestmentAsset(db);
-  return transferToAsset(db, asset.id, amountPaise, fromAsset, note ?? 'Moved to investments');
-}
-
 export async function payCardBill(db: SQLite.SQLiteDatabase, amountPaise: number, note?: string): Promise<string> {
   if (!Number.isFinite(amountPaise) || amountPaise <= 0) throw new Error('Card payment needs a positive amount');
   const me = await getMe(db);

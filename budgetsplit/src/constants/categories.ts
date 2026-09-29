@@ -112,7 +112,7 @@ export const INCOME_SECTIONS: { title: string; names: string[] }[] = [
 /**
  * Moving money into investments is a TRANSFER, not spending.
  *
- * Named here so `moveToInvestments` and the picker agree on one string — it is the
+ * Named here so every writer and the picker agree on one string — it is the
  * marker that tells an investment settlement apart from a card-bill repayment, and
  * a typo would silently make one look like the other.
  */

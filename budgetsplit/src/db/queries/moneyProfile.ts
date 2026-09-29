@@ -140,10 +140,7 @@ export async function setMoneyProfile(
  * `withTransactionAsync` (expo-sqlite can't nest), the same arrangement
  * `insertTxnRows` has under `insertTxn`.
  *
- * It exists for `moveToInvestments`, which writes a transaction row AND this
- * figure and must not be able to write one without the other: a kill between the
- * two booked the cash out and never raised investments, so net worth fell by the
- * amount invested, permanently, with no row on any screen explaining it.
+ * For a caller that must write the profile together with other rows, all or nothing.
  *
  * @internal shared with queries/spendPower.ts
  */

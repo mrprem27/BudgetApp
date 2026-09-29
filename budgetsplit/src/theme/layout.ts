@@ -30,6 +30,8 @@ export const layout = {
   /** Minimum interactive size — iOS HIG (AGENTS.md §6). Anything tappable that
    *  measures less than this needs a `hitSlop` to make up the difference. */
   touchMin:       44,
+  /** Glyph size for every action icon in a screen header — one size, so the four tabs match. */
+  headerIcon:     20,
   /** Settings-style / list row floor (AGENTS.md §4). */
   rowMinHeight:   52,
   /** Transaction rows sit taller than list rows — AGENTS.md §12 sets the floor at

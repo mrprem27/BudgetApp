@@ -49,13 +49,14 @@ export async function loadSearchData(db: SQLite.SQLiteDatabase) {
 
 export type SearchFilters = {
   query: string; kind: KindFilter; from: number | null; to: number | null; personId: string | null;
+  tags?: readonly string[];
   source: SearchSource; personalGroupId: string; expanded: Set<string>;
 };
 
 /** The filtered results, in month sections, with a total for a single selected kind. */
 export function searchResults(
   all: TxnWithSplits[],
-  { query, kind, from, to, personId, source, personalGroupId, expanded }: SearchFilters,
+  { query, kind, from, to, personId, tags, source, personalGroupId, expanded }: SearchFilters,
 ): { sections: MonthSection[]; totalCount: number; totalAmount: number } {
   /*
    * Kind, text, date range and person come from `lib/txnFilter.ts` — the same
@@ -68,7 +69,7 @@ export function searchResults(
    * `source` stays local: it is not a property of a transaction, it is which
    * ledger you are looking at.
    */
-  const filtered = applyFilters(all, { query, kind, from, to, personId })
+  const filtered = applyFilters(all, { query, kind, from, to, personId, tags })
     .filter(t => {
       if (source === 'personal' && personalGroupId && t.group_id !== personalGroupId) return false;
       if (source === 'groups' && personalGroupId && t.group_id === personalGroupId) return false;

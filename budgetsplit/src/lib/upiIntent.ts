@@ -184,10 +184,9 @@ export type UpiAppSpec = {
 };
 
 /**
- * Order is deliberate — it is the order the picker shows, roughly by Indian UPI
- * market share, so the most likely choice needs the least thought.
+ * Declaration order is not display order — `PICKER_ORDER` below sets that.
  */
-export const UPI_APPS: UpiAppSpec[] = [
+const APP_SPECS: UpiAppSpec[] = [
   // `pn` off because PhonePe was watched resolving and displaying the payee's registered
   // name from the handle, ignoring ours (NPCI now requires exactly that). Tidiness only —
   // it will not make PhonePe accept us.
@@ -294,6 +293,21 @@ export const UPI_APPS: UpiAppSpec[] = [
   { key: UpiApp.SuperMoney, label: 'super.money', prefix: 'super://upi/pay', probe: 'super://', provenance: 'unverified' },
   { key: UpiApp.Kiwi, label: 'Kiwi', prefix: 'kiwi://upi/pay', probe: 'kiwi://', provenance: 'unverified' },
 ];
+
+/**
+ * The order the picker shows. CRED and Airtel lead — they are the two verified on a real phone with the
+ * full payload — then the documented apps by rough UPI market share, then the unverified ones, and
+ * PhonePe LAST: it refuses any payment a registered merchant did not start (see its entry), so it
+ * must never be the first thing a user reaches for. `pickDefaultApp` falls back to the first
+ * installed app in this order, so this is also who gets the one-tap default.
+ */
+const PICKER_ORDER: UpiApp[] = [
+  UpiApp.Cred, UpiApp.Airtel, UpiApp.GooglePay, UpiApp.Paytm, UpiApp.AmazonPay, UpiApp.Bhim,
+  UpiApp.WhatsApp, UpiApp.Navi, UpiApp.Mobikwik, UpiApp.SuperMoney, UpiApp.Kiwi, UpiApp.PhonePe,
+];
+export const UPI_APPS: UpiAppSpec[] = [...APP_SPECS].sort(
+  (a, b) => PICKER_ORDER.indexOf(a.key) - PICKER_ORDER.indexOf(b.key),
+);
 
 /**
  * **Schemes are sourced. Paths come from device results, and only CRED is proven.**

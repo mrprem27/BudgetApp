@@ -199,6 +199,19 @@ export default function MembersScreen() {
         keyboardShouldPersistTaps="handled"
         refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
+        {/* Admins only, matching `canAddMember`, and FIRST: the way in should not be at the bottom of a long list. A member tapping this picked
+            people, tapped "Add 2 people", and got a generic retry prompt that
+            could never succeed. */}
+        {mayManage && (
+          <View style={styles.addButtons}>
+            <TouchableOpacity style={styles.addBtn} onPress={() => { setPendingIds([]); setShowAdd(true); }} accessibilityRole="button">
+              <IconCircle icon="user-plus" size={36} iconSize={16} color={colors.accent} bg={colors.accentMuted} />
+              <Text style={styles.addBtnText}>Add or create person</Text>
+              <Feather name="chevron-right" size={16} color={colors.textMuted} />
+            </TouchableOpacity>
+          </View>
+        )}
+
         {members.length > 0 && (
           <View style={styles.membersCard}>
             {members.map((item, index) => {
@@ -285,19 +298,6 @@ export default function MembersScreen() {
                 </Swipeable>
               );
             })}
-          </View>
-        )}
-
-        {/* Admins only, matching `canAddMember`. A member tapping this picked
-            people, tapped "Add 2 people", and got a generic retry prompt that
-            could never succeed. */}
-        {mayManage && (
-          <View style={styles.addButtons}>
-            <TouchableOpacity style={styles.addBtn} onPress={() => { setPendingIds([]); setShowAdd(true); }} accessibilityRole="button">
-              <IconCircle icon="user-plus" size={36} iconSize={16} color={colors.accent} bg={colors.accentMuted} />
-              <Text style={styles.addBtnText}>Add or create person</Text>
-              <Feather name="chevron-right" size={16} color={colors.textMuted} />
-            </TouchableOpacity>
           </View>
         )}
 

@@ -6,6 +6,7 @@ import { groupByDate } from '../../../lib/txnGrouping';
 import { TransactionRow } from '../TransactionRow';
 import { TxnCell } from '../TxnCell';
 import { FilterBar } from '../../ui/FilterBar';
+import { rankTagsByFrequency } from '../../../lib/tags';
 import { applyFilters, KIND_ANY, type KindFilter, type RangePreset } from '../../../lib/txnFilter';
 import { EmptyState } from '../../ui/EmptyState';
 import { SectionHeader } from '../../ui/SectionHeader';
@@ -29,7 +30,7 @@ type Props = {
   onRefresh: () => void;
 };
 
-/** Group ledger: collapsible filter bar + date-sectioned transaction list. Owns its
+/** Group ledger: filter bar + date-sectioned transaction list. Owns its
  *  own search/kind filter (tab-local UI state). */
 export function TransactionsTab({ txns, members, meId, groupName, onDeleteTxn, onEditTxn, onAddTxn, refreshing, onRefresh }: Props) {
   const bottomPad = useContentInset({ fab: true });
@@ -39,6 +40,7 @@ export function TransactionsTab({ txns, members, meId, groupName, onDeleteTxn, o
   const [from, setFrom] = useState<number | null>(null);
   const [to, setTo] = useState<number | null>(null);
   const [personId, setPersonId] = useState<string | null>(null);
+  const [tags, setTags] = useState<string[]>([]);
 
   /*
    * `OV-34`: this searched `category + note` only, while Search searched tags and
@@ -49,14 +51,15 @@ export function TransactionsTab({ txns, members, meId, groupName, onDeleteTxn, o
    * involving Aarav" is the question the screen exists to answer and could not.
    */
   const filteredTxns = useMemo(
-    () => applyFilters(txns, { query: search, kind, from, to, personId }),
-    [txns, search, kind, from, to, personId],
+    () => applyFilters(txns, { query: search, kind, from, to, personId, tags }),
+    [txns, search, kind, from, to, personId, tags],
   );
 
   const sections = useMemo(() => groupByDate<TxnWithSplits>(filteredTxns), [filteredTxns]);
 
   // Stable identity for the person sheet — `FilterBar` memoises on it.
   const people = useMemo(() => members.map(m => ({ id: m.id, name: m.name })), [members]);
+  const tagOptions = useMemo(() => rankTagsByFrequency(txns.map(t => t.tags)), [txns]);
 
   // Stable renderItem so TransactionRow's React.memo holds; handlers read via refs.
   const delRef = useRef(onDeleteTxn); delRef.current = onDeleteTxn;
@@ -98,7 +101,6 @@ export function TransactionsTab({ txns, members, meId, groupName, onDeleteTxn, o
                 ledgers. `groups` is left for what is genuinely screen-specific,
                 and this screen has none. */}
             <FilterBar
-              collapsible
               search={search}
               onSearch={setSearch}
               searchPlaceholder="Search this group…"
@@ -113,6 +115,9 @@ export function TransactionsTab({ txns, members, meId, groupName, onDeleteTxn, o
               people={people}
               personId={personId}
               onPerson={setPersonId}
+              tagOptions={tagOptions}
+              selectedTags={tags}
+              onTags={setTags}
             />
           </View>
         ) : null

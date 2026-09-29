@@ -10,6 +10,7 @@ import { setPendingPayment } from '../../src/lib/pendingPayment';
 import { askAboutPendingPayment, recordScannedPayment } from '../../src/lib/confirmPayment';
 import { askAboutPendingSettlement } from '../../src/lib/confirmSettlement';
 import { settings } from '../../src/lib/settings';
+import { currencySymbol } from '../../src/lib/money';
 import { drainVoiceInbox } from '../../src/lib/voiceDrain';
 import { runSync, scheduleSync, setQueueListener, type SyncOutcome, type Vanished } from '../../src/lib/sync';
 import { pendingRestoreOffer } from '../../src/lib/restoreOffer';
@@ -71,14 +72,14 @@ function announceVanished(r: SyncOutcome | null) {
 const TAB_ICON: Record<string, React.ComponentProps<typeof Feather>['name']> = {
   index: 'home',
   groups: 'users',
-  savings: 'dollar-sign',
+  savings: 'dollar-sign', // replaced by the chosen currency's own symbol — see `TabGlyph`
   insights: 'pie-chart',
 };
 const TAB_LABEL: Record<string, string> = {
   index: 'Home', groups: 'Groups', savings: 'Money', insights: 'Insights',
 };
 // Order around the centered FAB: Home · Groups · [FAB] · Money · Insights. Settings is not a tab: it opens
-// from the avatar (`ProfileButton`) at the top of each.
+// from the avatar on Home.
 // The second slot is Groups or Personal depending on `flags.splitting` — see AppTabBar.
 const RIGHT = ['savings', 'insights'];
 
@@ -99,6 +100,9 @@ function AppTabBar({ state, navigation }: { state: any; navigation: any }) {
   const [scanPay, setScanPay] = useState(false);
   const [showHint, setShowHint] = useState(false);
   const activeName = state.routes[state.index]?.name;
+  // The Money tab shows the symbol of the currency you chose (₹ by default), not a dollar sign.
+  const [currencyGlyph, setCurrencyGlyph] = useState(currencySymbol());
+  useEffect(() => { settings.defaultCurrency().then(c => setCurrencyGlyph(currencySymbol(c))).catch(() => {}); }, [activeName]);
 
   // Back from a UPI app after a Scan & Pay hand-off: ask once, then file it.
   // Lives here rather than in the root layout because that sits ABOVE
@@ -204,7 +208,9 @@ function AppTabBar({ state, navigation }: { state: any; navigation: any }) {
         accessibilityState={{ selected: focused }}
         accessibilityLabel={TAB_LABEL[name]}
       >
-        <Feather name={TAB_ICON[name]} size={22} color={color} />
+        {name === 'savings'
+          ? <Text style={[styles.currencyGlyph, { color }]} allowFontScaling={false}>{currencyGlyph}</Text>
+          : <Feather name={TAB_ICON[name]} size={22} color={color} />}
         <Text style={[styles.label, { color }]}>{TAB_LABEL[name]}</Text>
       </TouchableOpacity>
     );
@@ -305,6 +311,8 @@ const styles = StyleSheet.create({
   row: { flex: 1, flexDirection: 'row', alignItems: 'flex-start' },
   slot: { flex: 1, alignItems: 'center', justifyContent: 'flex-start', gap: 3, paddingTop: 2 },
   label: { fontFamily: 'Inter_600SemiBold', fontSize: 10 },
+  // Same box as a 22pt Feather glyph, so the row does not shift.
+  currencyGlyph: { width: 22, height: 22, lineHeight: 22, fontSize: 20, textAlign: 'center', fontFamily: 'Inter_600SemiBold' },
   // Center slot is a touch wider so the FAB gets breathing room.
   fabSlot: { flex: 1.2, alignItems: 'center', justifyContent: 'flex-start' },
   hintBubble: {

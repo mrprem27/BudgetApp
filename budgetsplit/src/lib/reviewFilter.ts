@@ -58,6 +58,13 @@ export function filtersActive(f: ReviewFilters): boolean {
   return !!(f.query.trim() || f.categories.length > 0 || f.amountMin.trim() || f.amountMax.trim() || f.dateFrom.trim() || f.dateTo.trim());
 }
 
+/** How many filters are on — the badge on Review's Filters button. Text, each category, amount, date each count. */
+export function reviewFilterCount(f: ReviewFilters): number {
+  return (f.query.trim() ? 1 : 0) + f.categories.length
+    + (f.amountMin.trim() || f.amountMax.trim() ? 1 : 0)
+    + (f.dateFrom.trim() || f.dateTo.trim() ? 1 : 0);
+}
+
 /**
  * Parse a `yyyy-MM-dd` (optional ` HH:mm` / `THH:mm`) bound to epoch ms. When
  * `end` is true and no time is given, snaps to the end of that day so a date

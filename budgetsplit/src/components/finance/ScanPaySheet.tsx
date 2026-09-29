@@ -7,7 +7,8 @@ import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius } from '../tokens';
 import { SheetModal } from '../ui/SheetModal';
 import { PrimaryButton } from '../ui/PrimaryButton';
-import { Input } from '../ui/Input';
+import { AmountField } from './add/AmountField';
+import { AddKind } from '../../constants/enums';
 import { parseAnyUpiQr, buildUpiUri, type ScanTarget } from '../../lib/upiIntent';
 import { useUpiHandoff } from '../../hooks/useUpiHandoff';
 import { UpiPayButton } from './pay/UpiPayButton';
@@ -282,15 +283,8 @@ export function ScanPaySheet({
               <Text style={styles.fixedValue}>{formatRupees(amountPaise)}</Text>
             </View>
           ) : (
-            <Input
-              label="Amount"
-              value={amount}
-              onChangeText={setAmount}
-              placeholder="0"
-              keyboardType="decimal-pad"
-              autoFocus
-              style={styles.gap}
-            />
+            // The same hero amount field as Add: one way to type a number in this app.
+            <AmountField amountText={amount} onChangeText={setAmount} kind={AddKind.Expense} autoFocus />
           )}
 
           {/*
@@ -354,7 +348,6 @@ export function ScanPaySheet({
 const styles = StyleSheet.create({
   pad: { gap: space.md, paddingBottom: space.sm },
   body: { ...type.body, color: colors.textSecondary, lineHeight: 20 },
-  gap: { marginBottom: space.md },
   cameraWrap: { height: 300, borderRadius: radius.lg, overflow: 'hidden', backgroundColor: colors.bgInput, marginBottom: space.md },
   reticle: { position: 'absolute', top: 40, left: 60, right: 60, bottom: 40, borderWidth: 2, borderColor: colors.accent, borderRadius: radius.md },
   hint: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginBottom: space.md, lineHeight: 16 },

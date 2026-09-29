@@ -69,5 +69,5 @@ const styles = StyleSheet.create({
   title: { ...type.heading, color: colors.textPrimary, flex: 1 },
   titleLarge: { ...type.title, color: colors.textPrimary, flex: 1 },
   titleWithBack: { ...type.heading },
-  right: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
+  right: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
 });
