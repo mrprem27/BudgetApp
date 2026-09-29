@@ -10,7 +10,7 @@ import { Divider } from '../../ui/Divider';
 import { InfoLabel } from '../../ui/InfoLabel';
 import { formatRupees } from '../../../lib/money';
 import type { SafeToSpendBreakdown } from '../../../lib/safeToSpend';
-import { shortDate } from '../../../lib/dateFormat';
+import { dateWithYearIfOther } from '../../../lib/dateFormat';
 
 type Props = {
   visible: boolean;
@@ -36,7 +36,7 @@ type Props = {
 export function StsSheet({ visible, onClose, sts }: Props) {
   const router = useRouter();
   if (!sts) return null;
-  const until = shortDate(sts.untilMs);
+  const until = dateWithYearIfOther(sts.untilMs);
   const everydayHint = sts.dailyRate == null
     ? 'Needs a few weeks of history before this can be estimated'
     : `About ${formatRupees(sts.dailyRate)}/day — your usual, ignoring one-off days — until ${until}`;

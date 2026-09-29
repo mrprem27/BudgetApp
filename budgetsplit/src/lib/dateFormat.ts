@@ -34,6 +34,11 @@ export function shortDate(d: Date | number): string {
   return format(d, 'd MMM');
 }
 
+/** `shortDate`, plus the year whenever it is not this one — so a date a year out cannot pass for a near one. */
+export function dateWithYearIfOther(d: Date | number, now: Date | number = Date.now()): string {
+  return new Date(d).getFullYear() === new Date(now).getFullYear() ? shortDate(d) : fullDate(d);
+}
+
 export function fullDate(d: Date | number): string {
   return format(d, 'd MMM yyyy');
 }

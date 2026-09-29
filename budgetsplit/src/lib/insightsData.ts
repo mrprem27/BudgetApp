@@ -10,7 +10,8 @@ import { myShareOf } from './splitMath';
 import { expandUpcoming } from './upcoming';
 import { getAllRecurringRules, getSkipsMap } from '../db/queries/recurring';
 import { getMyGlobalBudgetSummary } from './budget';
-import { forecastMonthEnd, projectedAtDay, FORECAST_MIN_DAYS } from './forecast';
+import { monthEndFromEngine, projectedAtDay, FORECAST_MIN_DAYS } from './forecast';
+import { getSafeToSpendV2 } from '../db/queries/spendPower';
 
 /**
  * Data assembly for the Insights screen: month-vs-last-month category shifts,
@@ -76,25 +77,17 @@ export async function loadInsightsData(
     const daysInMonth = getDaysInMonth(now);
 
     /**
-     * **One** month-end forecast for the whole screen.
-     *
-     * The hero used a naive run-rate — `(monthSpend / dayOfMonth) * daysInMonth`
-     * — while the chart badge ~100px below used the credibility-weighted model,
-     * so the same screen printed two different month-end totals at the same time.
-     * The blended model is the one to keep: on day 2 a run-rate multiplies a
-     * single rent payment by fifteen, which is exactly the case the prior exists
-     * to damp. `forecastMonthEnd` floors at spent-so-far and reports `ready`, so
-     * an early month degrades honestly instead of shouting a number.
+     * **One** month-end forecast for the whole screen, on the engine's numbers (`monthEndFromEngine`)
+     * — the same model Home and Plan use. `ready` is false until the engine has a rate, so an early
+     * month degrades honestly instead of shouting a number.
      */
-    const priorMonthTotal = Object.values(lastCatMap).reduce((s, v) => s + v, 0);
-    // Known recurring bills still due this month floor the forecast (same
-    // wiring as Home and Afford — one model, one floor).
+    // Bills still due this month, the same ones the engine counts.
     const monthEndMs = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999).getTime();
     const recurRules = await getAllRecurringRules(db);
     const recurSkips = await getSkipsMap(db, recurRules.map(r => r.id));
     const committedRemaining = expandUpcoming(recurRules, meId, now.getTime(), monthEndMs, recurSkips)
       .reduce((s, o) => s + o.amount, 0);
-    const fc = forecastMonthEnd(monthSpend, dayOfMonth, daysInMonth, priorMonthTotal, committedRemaining);
+    const fc = monthEndFromEngine(monthSpend, dayOfMonth, daysInMonth, (await getSafeToSpendV2(db, now.getTime())).dailyRate, committedRemaining);
     const projected = Math.round(fc.projected);
 
     // Month-end forecast graph (moved here from Reports): a solid "spent so far"
@@ -103,7 +96,7 @@ export async function loadInsightsData(
     let forecastActual: LinePoint[] = [];
     let forecastProjected: LinePoint[] = [];
     let projectedTotal = 0;
-    if (dayOfMonth >= FORECAST_MIN_DAYS) {
+    if (fc.ready && dayOfMonth >= FORECAST_MIN_DAYS) {
       const spendByDay = new Array(daysInMonth + 1).fill(0); // 1-indexed
       for (const t of monthTxns) {
         if (t.kind !== 'expense') continue;

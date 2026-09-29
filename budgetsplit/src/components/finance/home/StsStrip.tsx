@@ -5,7 +5,7 @@ import { PressableScale } from '../../ui/PressableScale';
 import { colors, type, space, radius } from '../../tokens';
 import { formatCompact, formatRupees } from '../../../lib/money';
 import type { SafeToSpendBreakdown } from '../../../lib/safeToSpend';
-import { shortDate } from '../../../lib/dateFormat';
+import { dateWithYearIfOther } from '../../../lib/dateFormat';
 
 type Props = {
   sts: SafeToSpendBreakdown | null;
@@ -57,7 +57,7 @@ export function StsStrip({ sts, onPress, obfuscate = false }: Props) {
               {/* `EN13`: the horizon runs to the next payday, not a flat 30
                   days, so "yours to spend" now needs its own end date — a bare
                   amount reads as good for however long you like. */}
-              {over ? 'over-committed' : `yours to spend until ${shortDate(sts.untilMs)}`}
+              {over ? 'over-committed' : `yours to spend until ${dateWithYearIfOther(sts.untilMs)}`}
             </Text>
           </>
         )}

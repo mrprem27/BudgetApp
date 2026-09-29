@@ -102,3 +102,26 @@ describe('projectedAtDay', () => {
     expect(projectedAtDay(600000, 6, 30, 3000000, 30)).toBe(3000000);
   });
 });
+
+describe('monthEndFromEngine — spent + everyday rate × days left + bills still due', () => {
+  const { monthEndFromEngine } = jest.requireActual('../lib/forecast') as typeof import('../lib/forecast');
+
+  it('adds the engine rate for each day still to come, and the bills still due', () => {
+    // Day 10 of 30: ₹6,000 spent, ₹500/day usual, 20 days left, ₹2,000 of bills still due.
+    const f = monthEndFromEngine(600_000, 10, 30, 50_000, 200_000);
+    expect(f).toMatchObject({ ready: true, basis: 'engine', projected: 600_000 + 50_000 * 20 + 200_000 });
+  });
+
+  it('does not multiply an early one-off — the reason the old run-rate needed last month', () => {
+    // Day 2: a ₹22,000 rent payment. The usual rate is ₹300/day, so month-end is not ₹3.3 lakh.
+    expect(monthEndFromEngine(2_200_000, 2, 30, 30_000).projected).toBe(2_200_000 + 30_000 * 28);
+  });
+
+  it('is not ready without an engine rate, and still reports an honest floor', () => {
+    expect(monthEndFromEngine(500_000, 12, 30, null, 100_000)).toEqual({ ready: false, projected: 600_000, basis: 'insufficient', credibility: 0 });
+  });
+
+  it('on the last day the projection is what has been spent plus what is still due', () => {
+    expect(monthEndFromEngine(900_000, 30, 30, 40_000, 0).projected).toBe(900_000);
+  });
+});

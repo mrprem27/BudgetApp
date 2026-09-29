@@ -7,7 +7,9 @@ import { getMe } from '../db/queries/persons';
 import { getTransactionsInRange } from '../db/queries/transactions';
 import { getAllRecurringRules, getSkipsMap } from '../db/queries/recurring';
 import { getMyGlobalBudgetSummary } from './budget';
-import { forecastMonthEnd as computeForecastMonthEnd } from './forecast';
+import { monthEndFromEngine } from './forecast';
+import { getSafeToSpendV2 } from '../db/queries/spendPower';
+import { billsWithin } from './safeToSpend';
 import { buildUpcoming, type UpcomingItem } from './upcoming';
 import { myShareOf } from './splitMath';
 import { getAssets } from '../db/queries/assets';
@@ -58,8 +60,11 @@ export async function loadSavingsTabData(
     if (t.kind === 'expense') priorMonthTotal += myShareOf(t, meId);
   }
 
-  // Same credibility-weighted model as Reports and Insights. Hidden until day 3.
-  const f = computeForecastMonthEnd(totalMonthSpend, getDate(now), getDaysInMonth(now), priorMonthTotal);
+  // The engine's month-end spend — the same model Home and Insights use. Hidden until the engine
+  // has a rate (30 days of history).
+  const sts = await getSafeToSpendV2(db, now.getTime());
+  const f = monthEndFromEngine(totalMonthSpend, getDate(now), getDaysInMonth(now), sts.dailyRate,
+    billsWithin(sts, now.getTime(), getDaysInMonth(now) - getDate(now)));
   const forecastMonthEnd = f.ready ? f.projected : null;
 
   const forecastBudget = meId

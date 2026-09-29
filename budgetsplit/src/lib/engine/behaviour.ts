@@ -147,10 +147,20 @@ function myIncomeAmount(row: { payments: ReadonlyArray<{ personId: string; amoun
  * in review, not as a defect, but as the natural place a fifth branch would
  * hide. Resist adding one here; extract a table first.
  */
-export function incomeModel(snapshot: FinanceSnapshot): IncomeModel {
-  const rule = snapshot.recurring.rules.find(
+/** Every live recurring income rule — approved, not paused or ended. */
+export function activeIncomeRules(snapshot: FinanceSnapshot): FinanceSnapshot['recurring']['rules'] {
+  return snapshot.recurring.rules.filter(
     r => r.kind === 'income' && r.recur_freq && !r.pendingApproval && (!r.recur_state || r.recur_state === 'active'),
   );
+}
+
+export function incomeModel(snapshot: FinanceSnapshot): IncomeModel {
+  // Several income rules are normal (salary, a yearly bonus, rent). The one that sizes the horizon
+  // and names the "next payday" is the one that pays SOONEST — taking the first found let a yearly
+  // bonus stretch "safe until" to next year.
+  const rule = activeIncomeRules(snapshot)
+    .map(r => ({ r, next: nextUnskippedOccurrence(r, snapshot.asOf, new Set(snapshot.recurring.skips[r.id] ?? [])) }))
+    .sort((a, b) => (a.next ?? Infinity) - (b.next ?? Infinity))[0]?.r;
 
   const incomeRows = snapshot.history.filter(h => h.kind === 'income').sort((a, b) => a.date - b.date);
   const fromMs = snapshot.asOf - INCOME_HISTORY_WINDOW_MONTHS * 30 * DAY_MS;

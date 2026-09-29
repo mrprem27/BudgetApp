@@ -20,9 +20,11 @@ import type { FinanceSnapshot, KnownEvent, Projection } from './types';
 import { expandUpcoming } from '../upcoming';
 import { STS_HORIZON_DAYS } from '../safeToSpend';
 import { materializeInstances } from '../recurrence';
-import { everydayRate, incomeModel, IRREGULAR_MIN_HORIZON_DAYS } from './behaviour';
+import { everydayRate, incomeModel, activeIncomeRules, IRREGULAR_MIN_HORIZON_DAYS } from './behaviour';
 
 const DAY_MS = 86_400_000;
+/** The longest safety window, however far off the next income is. */
+const MAX_HORIZON_DAYS = 60;
 
 /**
  * The safety horizon, sized to the next payday rather than a flat 30 days
@@ -38,11 +40,13 @@ export function horizonDaysFor(snapshot: FinanceSnapshot): number {
   if (income.consistency === 'irregular') return Math.max(STS_HORIZON_DAYS, IRREGULAR_MIN_HORIZON_DAYS);
   if (income.nextDate == null) return STS_HORIZON_DAYS;
   const daysUntil = Math.ceil((income.nextDate - snapshot.asOf) / DAY_MS);
-  return Math.max(STS_HORIZON_DAYS, daysUntil);
+  // Capped: a "safe until" past two months is not a number anyone can plan against, and a
+  // lone yearly income would otherwise stretch it to a year.
+  return Math.min(Math.max(STS_HORIZON_DAYS, daysUntil), MAX_HORIZON_DAYS);
 }
 
 /**
- * Income's own known events (§4 E3): every occurrence of an active recurring
+ * Income's own known events (§4 E3): every occurrence of every active recurring
  * income rule inside the horizon, my-share amount. `irregular` contributes
  * nothing, matching §4 E3's own rule ("nothing, unless a rule exists").
  *
@@ -58,14 +62,12 @@ export function horizonDaysFor(snapshot: FinanceSnapshot): number {
  * That asymmetry is why the two uses were split rather than sharing one gate.
  */
 function incomeEvents(snapshot: FinanceSnapshot, horizonEndMs: number): KnownEvent[] {
-  const rule = snapshot.recurring.rules.find(
-    r => r.kind === 'income' && r.recur_freq && !r.pendingApproval && (!r.recur_state || r.recur_state === 'active'),
-  );
-  if (!rule) return [];
-  const skips = new Set(snapshot.recurring.skips[rule.id] ?? []);
-  const amount = rule.payments.find(p => p.personId === snapshot.meId)?.amount ?? 0;
-  return materializeInstances(rule, snapshot.asOf, horizonEndMs, skips)
-    .map(inst => ({ date: inst.date, amountPaise: amount, label: 'Income', kind: 'income' as const, ref: rule.id }));
+  return activeIncomeRules(snapshot).flatMap(rule => {
+    const skips = new Set(snapshot.recurring.skips[rule.id] ?? []);
+    const amount = rule.payments.find(p => p.personId === snapshot.meId)?.amount ?? 0;
+    return materializeInstances(rule, snapshot.asOf, horizonEndMs, skips)
+      .map(inst => ({ date: inst.date, amountPaise: amount, label: 'Income', kind: 'income' as const, ref: rule.id }));
+  });
 }
 
 function skipsToMap(skips: Record<string, number[]>): Map<string, Set<number>> {

@@ -20,7 +20,7 @@ import { settings } from './settings';
 import { myShareOf, myIncomeOf } from './splitMath';
 import { getMyGlobalBudgetSummary, budgetEquivalent, type Period } from './budget';
 import { computeHealthScore, type HealthInputs, type HealthResult } from './financialHealth';
-import { forecastMonthEnd, type Forecast } from './forecast';
+import { monthEndFromEngine, type Forecast } from './forecast';
 import { buildUpcoming, type UpcomingItem } from './upcoming';
 import { categoryVisual } from '../constants/categories';
 import type { CategoryRow } from '../components/finance/home/CategoryRankList';
@@ -331,7 +331,7 @@ export async function loadHomeData(
       }
       // Known committed bills still due this month floor the forecast — the
       // same figure Safe-to-Spend subtracts, so the two can't disagree.
-      forecast = forecastMonthEnd(sp, getDate(now), getDaysInMonth(now), lmSpend, billsWithin(sts, now.getTime(), getDaysInMonth(now) - getDate(now)));
+      forecast = monthEndFromEngine(sp, getDate(now), getDaysInMonth(now), sts.dailyRate, billsWithin(sts, now.getTime(), getDaysInMonth(now) - getDate(now)));
       // Biggest shift among categories present in BOTH months (avoids "new"/∞%).
       topShift = Object.entries(catMap)
         .filter(([cat]) => lmCat[cat])

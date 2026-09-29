@@ -25,7 +25,7 @@
  * paise.
  */
 
-export type ForecastBasis = 'insufficient' | 'run-rate' | 'blended';
+export type ForecastBasis = 'insufficient' | 'run-rate' | 'blended' | 'engine';
 
 export type Forecast = {
   /** Enough data to show a meaningful forecast? */
@@ -99,4 +99,38 @@ export function projectedAtDay(
   if (day <= dayOfMonth) return spentSoFar;
   if (daysInMonth <= dayOfMonth) return projected;
   return spentSoFar + (projected - spentSoFar) * ((day - dayOfMonth) / (daysInMonth - dayOfMonth));
+}
+
+/**
+ * Month-end spend on the money engine's numbers — what Home, Plan and Insights show, so the
+ * three cannot disagree with each other or with Safe-to-Spend.
+ *
+ *   projected = spent so far  +  everyday rate × days still to come  +  bills still due
+ *
+ * `everydayRate` is the engine's own (`getSafeToSpendV2().dailyRate`: a 90-day trimmed average of
+ * non-bill spending), and `committedRemaining` the bills the engine already counts. Recurring bills
+ * already paid this month are in `spentSoFar`; the rate leaves recurring rows out, so nothing is
+ * counted twice. A single big purchase on day 2 is not multiplied by anything — the reason the old
+ * run-rate needed last month to damp it.
+ *
+ * Not ready (`ready: false`) while the engine has no rate — under 30 days of history — because a
+ * guess dressed as a projection is worse than none. It still reports spent + bills so a caller
+ * that must print a figure has an honest floor.
+ *
+ * The per-group analytics screen keeps `forecastMonthEnd` above: a group has no personal rate.
+ */
+export function monthEndFromEngine(
+  spentSoFar: number,
+  dayOfMonth: number,
+  daysInMonth: number,
+  everydayRate: number | null,
+  committedRemaining = 0,
+): Forecast {
+  const spent = Number.isFinite(spentSoFar) ? Math.max(0, Math.round(spentSoFar)) : 0;
+  const committed = Number.isFinite(committedRemaining) ? Math.max(0, committedRemaining) : 0;
+  if (everydayRate == null || !Number.isFinite(everydayRate) || daysInMonth <= 0 || dayOfMonth < 1 || dayOfMonth > daysInMonth) {
+    return { ready: false, projected: spent + committed, basis: 'insufficient', credibility: 0 };
+  }
+  const daysLeft = daysInMonth - dayOfMonth;
+  return { ready: true, projected: Math.round(spent + Math.max(0, everydayRate) * daysLeft + committed), basis: 'engine', credibility: 1 };
 }
