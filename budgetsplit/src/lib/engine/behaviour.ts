@@ -162,6 +162,7 @@ export function incomeModel(snapshot: FinanceSnapshot): IncomeModel {
   const monthlyTotals = [...byMonth.values()];
   const cv = coefficientOfVariation(monthlyTotals);
   const hasHistory = monthlyTotals.length >= INCOME_HISTORY_MIN_MONTHS;
+  const spread = { spreadPct: cv == null ? null : Math.round(cv * 100), incomeMonths: monthlyTotals.length };
 
   const last3 = incomeRows.slice(-3).map(h => h.amountPaise);
   const medianRecentPaise = last3.length > 0 ? median(last3) : null;
@@ -174,7 +175,7 @@ export function incomeModel(snapshot: FinanceSnapshot): IncomeModel {
     : null;
 
   if (!rule && !hasHistory) {
-    return { consistency: 'irregular', nextDate: null, eventAmountPaise: null, medianRecentPaise };
+    return { consistency: 'irregular', nextDate: null, eventAmountPaise: null, medianRecentPaise, ...spread };
   }
 
   const consistency = rule && cv == null
@@ -188,11 +189,12 @@ export function incomeModel(snapshot: FinanceSnapshot): IncomeModel {
       nextDate: nextUnskippedOccurrence(rule, snapshot.asOf, skips),
       eventAmountPaise: myIncomeAmount(rule, snapshot.meId),
       medianRecentPaise,
+      ...spread,
     };
   }
 
   if (consistency === 'irregular' || incomeRows.length < 2) {
-    return { consistency, nextDate: null, eventAmountPaise: null, medianRecentPaise };
+    return { consistency, nextDate: null, eventAmountPaise: null, medianRecentPaise, ...spread };
   }
 
   // No rule, but a `variable` reading: infer a next date from the median gap
@@ -211,6 +213,7 @@ export function incomeModel(snapshot: FinanceSnapshot): IncomeModel {
     nextDate: inferredNext != null && inferredNext > snapshot.asOf ? inferredNext : null,
     eventAmountPaise: p20RecentPaise,
     medianRecentPaise,
+    ...spread,
   };
 }
 
@@ -306,7 +309,10 @@ export function monthlyAffordability(snapshot: FinanceSnapshot, months = 12): Mo
     const monthStart = snapshot.asOf + m * MONTH_MS;
     const requiredPaise = expenses.filter(e => e.dueDate >= monthStart).reduce((s, e) => s + e.monthlyAccrualPaise, 0);
     const surplusPaise = monthlyIncome != null ? monthlyIncome - monthlyBills - rate * 30 : null;
-    out.push({ monthIndex: m, monthStart, requiredPaise, surplusPaise, unfundable: surplusPaise != null && requiredPaise > surplusPaise });
+    out.push({
+      monthIndex: m, monthStart, requiredPaise, surplusPaise, unfundable: surplusPaise != null && requiredPaise > surplusPaise,
+      incomePaise: monthlyIncome, billsPaise: monthlyBills, everydayPaise: rate * 30,
+    });
   }
   return out;
 }

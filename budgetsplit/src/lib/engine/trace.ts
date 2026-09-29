@@ -16,7 +16,7 @@ import type { AffordResult, FinanceSnapshot, KnownEvent, Purchase } from './type
 import { projectKnown, horizonDaysFor } from './projection';
 import { dailySample, essentialFloor, incomeModel, monthlyAffordability, defaultNecessity, IRREGULAR_MIN_HORIZON_DAYS } from './behaviour';
 import { budgetCheck, purchaseEvents } from './assess';
-import { EVERYDAY_MIN_DAYS, STS_HORIZON_DAYS } from '../safeToSpend';
+import { EVERYDAY_MIN_DAYS, EVERYDAY_WINDOW_DAYS, STS_HORIZON_DAYS, TRIM_RATIO } from '../safeToSpend';
 import { formatRupees } from '../money';
 import { shortDate } from '../dateFormat';
 
@@ -98,7 +98,7 @@ export function affordTrace(
       : `At least ${STS_HORIZON_DAYS} days, or to your next income if later`;
 
   const start: TraceLine[] = [
-    { label: 'Cash you can spend now', value: formatRupees(snapshot.cash.available), detail: 'Bank + cash accounts; card limit is never counted as money', amountPaise: snapshot.cash.available },
+    { label: 'Cash you can spend now', value: formatRupees(snapshot.cash.available), detail: 'Bank, cash and wallet, plus income and settlements, minus spending and money set aside for goals. A card limit is never money', amountPaise: snapshot.cash.available },
   ];
   if (snapshot.cash.creditUsed > 0) {
     start.push({
@@ -115,14 +115,23 @@ export function affordTrace(
       status: historyDays < EVERYDAY_MIN_DAYS ? 'fail' : historyDays < EVERYDAY_MIN_DAYS * 2 ? 'warn' : 'pass',
     },
     rate != null
-      ? { label: 'Everyday spending', value: `${formatRupees(rate)}/day`, detail: 'Trimmed average of your non-bill spending — outlier days don’t skew it' }
+      ? {
+        label: 'Everyday spending',
+        value: `${formatRupees(rate)}/day`,
+        detail: `Average over your ${historyDays - Math.floor(historyDays * TRIM_RATIO)} ordinary days of the last ${historyDays} (up to ${EVERYDAY_WINDOW_DAYS}): the ${Math.floor(historyDays * TRIM_RATIO)} biggest days are dropped, quiet days are kept, and recurring bills are left out because they are counted as dated bills`,
+      }
       : { label: 'Everyday spending', value: 'Not counted', detail: `Under ${EVERYDAY_MIN_DAYS} days of history — we don’t guess`, status: 'warn' },
     {
       label: 'Income pattern',
       value: income.consistency[0].toUpperCase() + income.consistency.slice(1),
-      detail: income.nextDate != null && income.eventAmountPaise != null
-        ? `Next: ${formatRupees(income.eventAmountPaise)} on ${shortDate(income.nextDate)}${withIncome ? '' : ' (not counted)'}`
-        : 'No next payday we can date, so none is counted',
+      detail: [
+        income.nextDate != null && income.eventAmountPaise != null
+          ? `Next: ${formatRupees(income.eventAmountPaise)} on ${shortDate(income.nextDate)}${withIncome ? '' : ' (not counted)'}`
+          : 'No next payday we can date, so none is counted',
+        income.spreadPct != null
+          ? `Monthly income swung ${income.spreadPct}% over ${income.incomeMonths} month${income.incomeMonths === 1 ? '' : 's'} (under 15% is regular, under 50% variable, more is irregular)`
+          : 'Needs 3 months of income, or a recurring income, to judge how steady it is',
+      ].join('. '),
     },
     { label: 'Looking ahead', value: `${horizonDays} days`, detail: `${horizonWhy} · till ${shortDate(horizonEndMs)}` },
   );
@@ -163,7 +172,7 @@ export function affordTrace(
     {
       label: 'Safety floor',
       value: formatRupees(floor),
-      detail: floor > 0 ? 'One week of essentials: your median daily Need spend × 7' : 'Not enough essentials history yet, so the floor is ₹0',
+      detail: floor > 0 ? `One week of essentials: your median daily spend on Needs (${formatRupees(Math.round(floor / 7))}) × 7. Needs are categories like Rent, Groceries, Bills, Medical and Fuel` : 'Not enough essentials history yet, so the floor is ₹0',
     },
   ];
 
@@ -215,7 +224,7 @@ export function affordTrace(
         : {
           label: 'Next 12 months of commitments',
           value: 'Pass',
-          detail: `Spare ${formatRupees(sample.surplusPaise)}/mo covers yearly bills and goals (up to ${formatRupees(Math.max(...months.map(m => m.requiredPaise)))}/mo)`,
+          detail: `Spare ${formatRupees(sample.surplusPaise)}/mo (income ${formatRupees(sample.incomePaise ?? 0)} − recurring bills ${formatRupees(sample.billsPaise)} − everyday ${formatRupees(sample.everydayPaise)}) covers yearly bills and goals (up to ${formatRupees(Math.max(...months.map(m => m.requiredPaise)))}/mo)`,
           status: 'pass',
         });
   }

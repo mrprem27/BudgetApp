@@ -117,6 +117,9 @@ export type IncomeModel = {
   nextDate: number | null;
   eventAmountPaise: number | null;
   medianRecentPaise: number | null;
+  /** How far monthly income swings (stdev / mean, whole %), and over how many months. Explains `consistency`. */
+  spreadPct: number | null;
+  incomeMonths: number;
 };
 
 /** E2's per-friend repayment-likelihood model (`EN5`, Beta-binomial, §4 E2). Never synced, never shown as a score. */
@@ -139,6 +142,10 @@ export type MonthlyAffordability = {
   requiredPaise: number;
   surplusPaise: number | null;
   unfundable: boolean;
+  /** What `surplusPaise` is made of: income − bills − everyday spending, per month. */
+  incomePaise: number | null;
+  billsPaise: number;
+  everydayPaise: number;
 };
 
 /** What a known event is — how the Safe-to-Spend breakdown files it, never inferred from `label`. */

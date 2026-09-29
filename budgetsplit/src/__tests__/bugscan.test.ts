@@ -382,3 +382,36 @@ describe('FC-1 · the forecast chart is drawn only once it has a width', () => {
     expect(src).toMatch(/key=\{Math\.round\(chartW\)\}/);
   });
 });
+
+describe('TR-1 · the Afford working states the engine\'s real rules with real numbers', () => {
+  const { affordTrace } = jest.requireActual('../lib/engine/trace') as typeof import('../lib/engine/trace');
+  const { afford } = jest.requireActual('../lib/engine/assess') as typeof import('../lib/engine/assess');
+  const { PERSONA_NOW } = jest.requireActual('../db/enginePersonas') as typeof import('../db/enginePersonas');
+  const DAY = 86_400_000;
+  type Snap = import('../lib/engine/types').FinanceSnapshot;
+  const snap: Snap = {
+    asOf: PERSONA_NOW, meId: 'me',
+    cash: { available: 5_000_000, creditUsed: 0, creditLimit: 0, cardDueDay: null },
+    recurring: { rules: [], skips: {} },
+    goals: { list: [], savedByGoal: {}, funding: { commitMonthly: 0, fundedThisMonth: 0, remaining: 0, goalsCount: 0 } },
+    exposure: { owe: 0, owed: 0, owedExpected: 0, net: 0, owePeople: 0, owedPeople: 0, perPerson: [] },
+    receivables: [], budgets: [], futureOneOffs: [],
+    history: Array.from({ length: 40 }, (_, i) => ({ id: `e${i}`, date: PERSONA_NOW - (40 - i) * DAY, kind: 'expense' as const, category: 'Groceries', amountPaise: 20_000, isRecurringLinked: false })),
+  };
+  const purchase = { amountPaise: 100_000, when: 'now' as const };
+  const lines = () => affordTrace(snap, purchase, afford(snap, purchase)).sections.flatMap(s => s.lines);
+
+  it('says how the everyday rate is built, with the day counts', () => {
+    const rate = lines().find(l => l.label === 'Everyday spending' && l.detail?.includes('ordinary days'));
+    expect(rate?.detail).toMatch(/36 ordinary days of the last 40.*4 biggest days are dropped/);
+  });
+
+  it('explains the safety floor from the median Need day', () => {
+    const floor = lines().find(l => l.label === 'Safety floor');
+    expect(floor?.detail).toMatch(/median daily spend on Needs/);
+  });
+
+  it('says what cash includes', () => {
+    expect(lines().find(l => l.label === 'Cash you can spend now')?.detail).toMatch(/wallet.*goals/);
+  });
+});

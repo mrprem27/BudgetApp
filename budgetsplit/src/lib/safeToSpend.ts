@@ -156,7 +156,7 @@ export const EVERYDAY_WINDOW_DAYS = 90;
 /** Below this many days of history, refuse to estimate rather than guess. */
 export const EVERYDAY_MIN_DAYS = 30;
 /** Share of the highest-spend days discarded before averaging. */
-const TRIM_RATIO = 0.1;
+export const TRIM_RATIO = 0.1;
 
 const DAY_MS = 86_400_000;
 
