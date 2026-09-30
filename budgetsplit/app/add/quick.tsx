@@ -16,6 +16,7 @@ import { KeyboardForm } from '../../src/components/ui/KeyboardForm';
 import { AddHeader } from '../../src/components/finance/add/AddHeader';
 import { TabPills } from '../../src/components/ui/TabPills';
 import { CategoryPicker } from '../../src/components/finance/CategoryPicker';
+import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 import { TransferBody } from '../../src/components/finance/add/TransferBody';
 import { AmountField } from '../../src/components/finance/add/AmountField';
 import { CategoryDatePills } from '../../src/components/finance/add/CategoryDatePills';
@@ -60,6 +61,10 @@ export default function QuickAddScreen() {
 
   const { kind, flags, isEditing, isRecurEdit } = f;
   const isTransfer = kind === 'transfer';
+  // Simple (`U-01`, your call): amount, category, the group picker and Save — nothing else, except
+  // while editing, where hiding fields would hide values the entry already has.
+  const { level } = useFeatureFlags();
+  const simple = level === 'simple' && !isEditing && !isRecurEdit && !isTransfer;
   // Invest is a settlement too, but a personal one — no counterparty, no split, no
   // group. Where a gate means "is this a settlement" it must ask both; where it
   // means "does this involve another person" it must ask only `isTransfer`.
@@ -226,7 +231,7 @@ export default function QuickAddScreen() {
                   Note. `ui/Input` rather than a bespoke card input, so this field and the
                   Note sheet share one surface — they used to be `bgCard` here and
                   `bgInput` there, two looks for one value — and so it gets a focus ring. */}
-              <View style={styles.formBlock}>
+              {!simple && <View style={styles.formBlock}>
                 <Input
                   value={flags.smartCategory ? f.title : f.note}
                   onChangeText={flags.smartCategory ? f.onTitleChange : f.setNote}
@@ -238,7 +243,7 @@ export default function QuickAddScreen() {
                   autoCapitalize="sentences"
                   accessibilityLabel={flags.smartCategory ? 'Title' : 'Note'}
                 />
-              </View>
+              </View>}
 
               {/*
                 * Buying an investment is not spending, and this is where people
@@ -306,39 +311,41 @@ export default function QuickAddScreen() {
 
           {/* One details block for all three kinds. A kind OMITS a chip it cannot
               honour — it never shows one that silently drops the value. */}
-          <DetailChips
-            accent={accent}
-            // A transfer's note is `transferNote` — a different field, which is what
-            // persists and what the UPI payload reads. For the other kinds the chip is
-            // omitted when smart-category is off, because then the form's top field
-            // already IS the note and two controls would edit one value.
-            note={isTransfer ? f.transferNote : flags.smartCategory ? f.note : ''}
-            onOpenNote={isTransfer || flags.smartCategory ? () => open('note') : undefined}
-            onClearNote={() => (isTransfer ? f.setTransferNote('') : f.setNote(''))}
-            tags={f.tags}
-            onOpenTags={() => open('tags')}
-            attachmentUri={f.attachmentUri}
-            onOpenAttachment={pickReceipt}
-            onClearAttachment={() => f.setAttachmentUri(null)}
-            // Where you were is a fact about a purchase; a settlement is money moving
-            // between two people and has no place of its own.
-            place={f.locEnabled && !isEditing && !isTransfer ? f.place : undefined}
-            capturingLoc={f.capturingLoc}
-            onCaptureLocation={f.locEnabled && !isEditing && !isTransfer ? f.captureLocation : undefined}
-            onClearLocation={() => f.setPlace(null)}
-            payMethod={f.payMethod}
-            onOpenPayMethod={() => open('payMethod')}
-            isIncome={kind === 'income'}
-            onSplitByItems={!isEditing && kind === 'expense' && flags.itemized
-              ? () => router.push({ pathname: '/add/itemized', params: f.selectedGroupId ? { groupId: f.selectedGroupId } : {} })
-              : undefined}
-            recurEnabled={f.recurEnabled}
-            recurFreq={f.recurFreq}
-            recurInterval={f.recurInterval}
-            // A settlement records a payment that already happened, not a schedule,
-            // so it never repeats. Omitted, not disabled.
-            onOpenRecurring={!isEditing && flags.recurring && !isTransfer ? () => open('recurring') : undefined}
-          />
+          {!simple && (
+            <DetailChips
+              accent={accent}
+              // A transfer's note is `transferNote` — a different field, which is what
+              // persists and what the UPI payload reads. For the other kinds the chip is
+              // omitted when smart-category is off, because then the form's top field
+              // already IS the note and two controls would edit one value.
+              note={isTransfer ? f.transferNote : flags.smartCategory ? f.note : ''}
+              onOpenNote={isTransfer || flags.smartCategory ? () => open('note') : undefined}
+              onClearNote={() => (isTransfer ? f.setTransferNote('') : f.setNote(''))}
+              tags={f.tags}
+              onOpenTags={() => open('tags')}
+              attachmentUri={f.attachmentUri}
+              onOpenAttachment={pickReceipt}
+              onClearAttachment={() => f.setAttachmentUri(null)}
+              // Where you were is a fact about a purchase; a settlement is money moving
+              // between two people and has no place of its own.
+              place={f.locEnabled && !isEditing && !isTransfer ? f.place : undefined}
+              capturingLoc={f.capturingLoc}
+              onCaptureLocation={f.locEnabled && !isEditing && !isTransfer ? f.captureLocation : undefined}
+              onClearLocation={() => f.setPlace(null)}
+              payMethod={f.payMethod}
+              onOpenPayMethod={() => open('payMethod')}
+              isIncome={kind === 'income'}
+              onSplitByItems={!isEditing && kind === 'expense' && flags.itemized
+                ? () => router.push({ pathname: '/add/itemized', params: f.selectedGroupId ? { groupId: f.selectedGroupId } : {} })
+                : undefined}
+              recurEnabled={f.recurEnabled}
+              recurFreq={f.recurFreq}
+              recurInterval={f.recurInterval}
+              // A settlement records a payment that already happened, not a schedule,
+              // so it never repeats. Omitted, not disabled.
+              onOpenRecurring={!isEditing && flags.recurring && !isTransfer ? () => open('recurring') : undefined}
+            />
+          )}
       </KeyboardForm>
 
       <QuickAddSheets

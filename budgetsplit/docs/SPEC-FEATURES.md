@@ -1,6 +1,6 @@
 # SPEC-FEATURES — Feature Management by persona and level
 
-Status: **DRAFT 2026-09-30, waiting on the questions at the end.** Tracker: `U-01`. Nothing here is built.
+Status: **BUILT 2026-09-30** from your answers (below). Tracker: `U-01`. `lib/levels.ts`, `levels.test.ts`.
 
 ## The problem
 
@@ -53,14 +53,19 @@ wins over the level until you pick a level again.
 - Onboarding gains one screen after "What brings you here?": "How much do you want to start with?",
   three cards, Simple pre-selected. It must stay one tap (`project_onboarding_friction_bias`).
 
-## Questions for you
+## Your answers (2026-09-30), and what was built
 
-1. **Names** — Simple / Standard / Everything? Or Basic / Balanced / Power?
-2. **Simple's Add** — amount, category, Save only? Or keep the group picker for someone who splits?
-3. **Insights in Simple** — hide the tab, or keep it with less on it?
-4. **Offers to level up** — yes, after ~20 entries and when you reach for a hidden thing? Or never, and
-   only Feature Management changes it?
-5. **Existing installs** (you and pilot users) — start on Everything so nothing disappears?
+1. **Names:** Simple / Standard / Everything.
+2. **Simple's Add:** amount, category, the group picker, Save. Title, notes, tags, time, place,
+   receipt, repeat and pay method hide — never while editing an entry that already has them.
+3. **Insights in Simple:** kept. (Trimming what is on it is a follow-up.)
+4. **Level up:** offered on Home after 20 entries, one level at a time, dismissible for good per level.
+5. **Existing installs:** Everything, with no switch changed.
+
+**Changed from the draft:** no new onboarding screen. New installs start on Simple and grow through the
+offer, which keeps onboarding at the taps it has (`project_onboarding_friction_bias`). Feature
+Management has the level as a second row under "Your setup"; picking one resets the switches (asked
+first), and re-picking a setup keeps the level on top.
 
 ## Out of scope
 

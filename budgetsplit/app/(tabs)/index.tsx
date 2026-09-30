@@ -1,5 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { settings } from '../../src/lib/settings';
+import { nextLevel, levelOfferDismissed, dismissLevelOffer, applyLevel, LEVEL_OPTIONS, LEVEL_OFFER_AFTER } from '../../src/lib/levels';
+import { asIntent } from '../../src/lib/personaDefaults';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -52,7 +54,11 @@ export default function DashboardScreen() {
   const bottomPad = useContentInset({ tabBar: true });
   const storage = useStorageWarning();
   const groups = useStore(s => s.groups);
-  const { flags } = useFeatureFlags();
+  const { flags, level, reload: reloadFlags } = useFeatureFlags();
+  // Learn, then add (`U-01`): past a few weeks of entries, one offer of the next level at a time.
+  const [offerDismissed, setOfferDismissed] = useState(true);
+  const upTo = nextLevel(level);
+  useEffect(() => { levelOfferDismissed(level).then(setOfferDismissed).catch(() => {}); }, [level]);
   const [tab, setTab] = useState<TabKey>('month');
   // Once the user has any spend, keep the category card mounted across period
   // switches so it never collapses (a period with no spend shows an empty slot).
@@ -294,6 +300,23 @@ export default function DashboardScreen() {
                 tone={colors.healthAmber}
                 text={`Below a week of essentials on ${shortDate(sts.warning.date)}, ${sts.warning.label} ${formatCompact(Math.abs(sts.warning.amountPaise))}`}
                 onPress={() => setShowSts(true)}
+                inset={false}
+              />
+            )}
+
+            {upTo && !offerDismissed && (data?.entryCount ?? 0) >= LEVEL_OFFER_AFTER && (
+              <Banner
+                icon="zap"
+                tone={colors.accent}
+                text={`Ready for more? ${LEVEL_OPTIONS.find(l => l.key === upTo)?.desc}.`}
+                actionLabel={`Turn on ${LEVEL_OPTIONS.find(l => l.key === upTo)?.label}`}
+                onAction={async () => {
+                  try {
+                    await applyLevel(upTo, asIntent(await settings.onboardingIntent()) ?? 'both');
+                    await reloadFlags();
+                  } catch { /* the offer stays; nothing changed */ }
+                }}
+                onDismiss={() => { setOfferDismissed(true); dismissLevelOffer(level).catch(() => {}); }}
                 inset={false}
               />
             )}

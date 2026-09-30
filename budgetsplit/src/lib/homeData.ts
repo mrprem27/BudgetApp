@@ -110,7 +110,7 @@ export async function loadHomeData(
         health: null as HealthResult | null, healthInputs: null as HealthInputs | null, healthTxnCount: 0,
         upcoming: [] as UpcomingItem[],
         forecast: null as Forecast | null,
-        streak: 0, streakLoggedDays: new Set<string>(), everLogged: false,
+        streak: 0, streakLoggedDays: new Set<string>(), everLogged: false, entryCount: 0,
       };
     }
     const meInfo = { name: me.name, color: me.avatar_color, image: me.image_uri };
@@ -349,6 +349,8 @@ export async function loadHomeData(
       streak: s, streakLoggedDays: loggedDays,
       /** Anything ever logged — what separates a first run from a quiet period. */
       everLogged: ledger.txnCount > 0,
+      /** Entries logged, all time — when the next level is offered (`lib/levels.ts`). */
+      entryCount: ledger.txnCount,
     };
 }
 

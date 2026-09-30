@@ -14,6 +14,8 @@ import { SheetModal } from '../../src/components/ui/SheetModal';
 import { IconCircle } from '../../src/components/ui/IconCircle';
 import { FEATURE_KEYS, setFlag as persistFlag } from '../../src/lib/featureFlags';
 import { rescheduleReminders } from '../../src/lib/reminders';
+import { applyLevel, LEVEL_OPTIONS, type Level } from '../../src/lib/levels';
+import { OptionRow } from '../../src/components/ui/OptionRow';
 import { applyPersona, asIntent, PERSONA_OPTIONS, type OnboardingIntent } from '../../src/lib/personaDefaults';
 import { haptic } from '../../src/lib/haptics';
 
@@ -33,7 +35,8 @@ const CORES: { icon: keyof typeof Feather.glyphMap; tint: string; label: string;
 export default function FeaturesScreen() {
   const router = useRouter();
   const db = useSQLiteContext();
-  const { flags, setFlag, reload: reloadFlags } = useFeatureFlags();
+  const { flags, level, setFlag, reload: reloadFlags } = useFeatureFlags();
+  const [levelOpen, setLevelOpen] = useState(false);
   const [saveLocation, setSaveLocation] = useState(false);
   const [autoSweep, setAutoSweep] = useState(false);
   const [intent, setIntent] = useState<OnboardingIntent | null>(null);
@@ -72,6 +75,8 @@ export default function FeaturesScreen() {
           onPress: async () => {
             try {
               await applyPersona(next, FEATURE_KEYS);
+              // The level still applies on top of the new setup.
+              await applyLevel(level, next, FEATURE_KEYS);
             } catch {
               haptic.error();
               Alert.alert('Couldn’t apply that setup', 'Please try again.');
@@ -145,6 +150,27 @@ export default function FeaturesScreen() {
     haptic.selection();
     setCloudOcr(v);
     await settings.setOcrProvider(v ? 'gemini' : 'device');
+  }
+
+  /** A level resets the switches to what it and your setup add up to — so it asks first. */
+  function changeLevel(next: Level) {
+    setLevelOpen(false);
+    if (next === level) return;
+    const opt = LEVEL_OPTIONS.find(o => o.key === next);
+    Alert.alert(`Switch to ${opt?.label}?`, 'This resets the switches below to match. Nothing is deleted, and you can change any switch after.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Switch', onPress: async () => {
+        try {
+          await applyLevel(next, intent ?? 'both', FEATURE_KEYS);
+          await reloadFlags();
+          haptic.success();
+          rescheduleReminders(db).catch(() => {});
+        } catch {
+          haptic.error();
+          Alert.alert('Couldn’t switch', 'Please try again.');
+        }
+      } },
+    ]);
   }
 
   /** Scheduled notifications outlive a switch that governs them, so they are rebuilt with it. */
@@ -271,6 +297,16 @@ export default function FeaturesScreen() {
                   </View>
                   <Feather name="chevron-right" size={18} color={colors.textMuted} />
                 </TouchableOpacity>
+                <View style={styles.divider} />
+                {/* The second answer: how much at once (`U-01`). */}
+                <TouchableOpacity style={styles.row} onPress={() => setLevelOpen(true)} accessibilityRole="button" accessibilityLabel="Change how much is on">
+                  <IconCircle icon="sliders" size={32} color={colors.accent} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.label}>{LEVEL_OPTIONS.find(l => l.key === level)?.label}</Text>
+                    <Text style={styles.caption}>{LEVEL_OPTIONS.find(l => l.key === level)?.desc}</Text>
+                  </View>
+                  <Feather name="chevron-right" size={18} color={colors.textMuted} />
+                </TouchableOpacity>
               </View>
             </>
           );
@@ -323,6 +359,14 @@ export default function FeaturesScreen() {
         <Text style={styles.footer}>Enabled sections appear in their natural home.{'\n'}Nothing is deleted when a section is off.</Text>
       </ScrollView>
 
+      <SheetModal visible={levelOpen} onClose={() => setLevelOpen(false)} title="How much do you want on?">
+        <View style={styles.levelList}>
+          {LEVEL_OPTIONS.map(o => (
+            <OptionRow key={o.key} label={o.label} description={o.desc} selected={o.key === level} onPress={() => changeLevel(o.key)} />
+          ))}
+        </View>
+      </SheetModal>
+
       <SheetModal visible={pickerOpen} onClose={() => setPickerOpen(false)} title="What are you using BudgetSplit for?">
         <View style={styles.card}>
           {PERSONA_OPTIONS.map((o, i) => (
@@ -345,6 +389,7 @@ export default function FeaturesScreen() {
 }
 
 const styles = StyleSheet.create({
+  levelList: { gap: space.sm },
   container: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: layout.screenPaddingH, paddingBottom: space.lg, gap: space.xs },
   intro: { ...type.body, color: colors.textSecondary, marginBottom: space.sm, lineHeight: 20 },

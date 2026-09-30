@@ -2,7 +2,7 @@
 
 `Last verified: 2026-09-30 (§0, §1, §9–§11 and every row whose status changed; the rest as of 2026-09-07) · Guarded by: trackerIntegrity.test.ts · countClaims.test.ts · docIdGraph.test.ts`
 
-**240 items, 122 of them still open.** One row each: what it is, and where it stands.
+**240 items, 121 of them still open.** One row each: what it is, and where it stands.
 Nothing else. **This is the V1 tracker** — start at §0.
 
 **The evidence is not here.** Why each item exists, what it costs, what breaks if you touch it, and
@@ -29,7 +29,7 @@ is defined in two places.
 | §6 · Debt — `D-` | **11** | 11 |
 | §7 · Accepted — `A-` | **2** | 11 |
 | §9 · Deferred from V1 — `V-` | **7** | 7 |
-| §11 · Open from the last pass, and your feedback — `U-` | **16** | 38 |
+| §11 · Open from the last pass, and your feedback — `U-` | **15** | 38 |
 
 §8 (parked scope) and §10 (built but easy to forget) carry no ids.
 
@@ -42,7 +42,7 @@ below is the plan; every line points at rows further down, where status lives.
 
 1. **Your phone pass** — `U-10` (the list for tomorrow), `B-12`, the sweep in
    `RELEASE_CHECKLIST.md` §2 and the sync checks in §3.1. Everything it finds becomes a `U-` row in §11.
-2. **Answer the open questions** — `U-01` Feature Management (`SPEC-FEATURES.md`, 4 questions left) · `V-06` cash last confirmed · `V-07` Android before or after V1.
+2. **Answer the open questions** — `V-06` cash last confirmed · `V-07` Android before or after V1.
 3. **Fix what 1 and 2 turn up**, then the tidy-ups `U-07` and `U-08`, and measure `U-02`.
 4. **Ship steps** — `B-19` merge to `main` · `B-07` rotate the Brevo key · `B-02` the Apple
    Developer Program (a free Apple ID already covers your own phone) · `DQ-95` Workers Paid before
@@ -295,11 +295,10 @@ testing or describing the app. Where one needs action, the id says where.
 ---
 ## §11 · Open from the last pass, and your feedback — `U-`
 
-**38 items: 13 `OPEN`, 1 `DECIDE`, 1 `BLOCKED`, 1 `PARKED`, 22 `DONE`.** From the 2026-09-30 pass (`SPEC-BUGSCAN.md` Pass 2) and your answers and feedback the same night. Evidence in `FINDINGS.md` §11.
+**38 items: 13 `OPEN`, 1 `BLOCKED`, 1 `PARKED`, 23 `DONE`.** From the 2026-09-30 pass (`SPEC-BUGSCAN.md` Pass 2) and your answers and feedback the same night. Evidence in `FINDINGS.md` §11.
 
 | | What | Status | Default if never decided |
 |---|---|---|---|
-| `U-01` | Feature Management by what-for × how-much (Simple / Standard / Everything) — `SPEC-FEATURES.md`, 4 questions left | `DECIDE` | 16 switches, one dead |
 | `U-02` | Screens reload in full on every focus — measure on the phone | `OPEN` |  |
 | `U-07` | Hand-rolled cards and banners where `Card` / `Banner` / `ListRow` exist | `OPEN` |  |
 | `U-08` | About 200 unused imports and locals | `OPEN` |  |
@@ -316,4 +315,4 @@ testing or describing the app. Where one needs action, the id says where.
 | `U-31` | Sorting is not right — which lists? (the money card now orders largest first) | `OPEN` |  |
 | `U-34` | One category selector, the same in Add and in Review | `OPEN` |  |
 
-**Closed (22), detail in `FINDINGS.md`:** `U-03` `U-04` `U-05` `U-06` `U-11` `U-12` `U-17` `U-21` `U-14` `U-25` `U-26` `U-27` `U-28` `U-29` `U-30` `U-32` `U-15` `U-33` `U-35` `U-36` `U-37` `U-38`
+**Closed (23), detail in `FINDINGS.md`:** `U-01` `U-03` `U-04` `U-05` `U-06` `U-11` `U-12` `U-17` `U-21` `U-14` `U-25` `U-26` `U-27` `U-28` `U-29` `U-30` `U-32` `U-15` `U-33` `U-35` `U-36` `U-37` `U-38`

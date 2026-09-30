@@ -8,6 +8,7 @@ import { settings } from './settings';
 import type { PayMethod } from '../constants/enums';
 import { setReminderPrefs } from './reminderPrefsStore';
 import { applyPersona, type OnboardingIntent } from './personaDefaults';
+import { applyLevel } from './levels';
 import { insertAsset } from '../db/queries/assets';
 
 /** Everything the onboarding questionnaire collects, ready to persist. */
@@ -81,6 +82,8 @@ export async function finalizeOnboarding(
   // app the user lands in and it must survive a failure further down.
   try {
     await applyPersona(data.intent);
+    // New installs start Simple and are offered more as they go (`U-01`).
+    await applyLevel('simple', data.intent);
   } catch { /* the app still works on DEFAULTS */ }
 
   // Arm the Scan & Pay coach mark for this user's first visit to Home. Its own try:

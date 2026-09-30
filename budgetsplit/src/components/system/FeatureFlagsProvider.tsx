@@ -1,9 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { loadFlags, setFlag as persistFlag, DEFAULTS, type FeatureFlags, type FeatureKey } from '../../lib/featureFlags';
 import { BrandedLoader } from './BrandedLoader';
+import { loadLevel, type Level } from '../../lib/levels';
 
 type ContextValue = {
   flags: FeatureFlags;
+  /** How much of the app is on at once (`lib/levels.ts`). Everything until read, so nothing hides early. */
+  level: Level;
   setFlag: (key: FeatureKey, value: boolean) => void;
   reload: () => Promise<void>;
   ready: boolean;
@@ -13,7 +16,7 @@ type ContextValue = {
 const defaultFlags = DEFAULTS;
 
 const Ctx = createContext<ContextValue>({
-  flags: defaultFlags, setFlag: () => {}, reload: async () => {}, ready: false,
+  flags: defaultFlags, level: 'everything', setFlag: () => {}, reload: async () => {}, ready: false,
 });
 
 type Props = {
@@ -31,6 +34,8 @@ type Props = {
 export function FeatureFlagsProvider({ children, initialFlags }: Props) {
   const [flags, setFlags] = useState<FeatureFlags>(() => initialFlags ?? defaultFlags);
   const [ready, setReady] = useState(() => initialFlags !== undefined);
+  const [level, setLevel] = useState<Level>('everything');
+  useEffect(() => { loadLevel().then(setLevel).catch(() => {}); }, []);
 
   useEffect(() => {
     // Already have a fresh read from the root boot effect — nothing to do.
@@ -55,9 +60,10 @@ export function FeatureFlagsProvider({ children, initialFlags }: Props) {
    */
   const reload = useCallback(async () => {
     try { setFlags(await loadFlags()); } catch { /* keep what we have */ }
+    try { setLevel(await loadLevel()); } catch { /* keep what we have */ }
   }, []);
 
-  return <Ctx.Provider value={{ flags, setFlag: set, reload, ready }}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={{ flags, level, setFlag: set, reload, ready }}>{children}</Ctx.Provider>;
 }
 
 /**
