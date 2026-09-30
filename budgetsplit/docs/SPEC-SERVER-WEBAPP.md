@@ -1,6 +1,6 @@
 # SPEC — the server as a web app's backend, and the V1 close-out scan
 
-`Status: PROPOSED · Written 2026-09-30 · Builds on: docs/history/SPEC-SERVER.md (DQ-93) · Tracker: U-66, DQ-104–DQ-107`
+`Status: PLAN — §7 is the step-by-step · Written 2026-09-30 · Builds on: docs/history/SPEC-SERVER.md (DQ-93) · Tracker: U-66, DQ-104–DQ-107`
 
 Not a live doc. Decisions live in `TRACKER.md` §3, reasoning in `FINDINGS.md`.
 
@@ -223,3 +223,148 @@ item's columns up with each other and with the per-person totals.
 
 Payer, category, date, group, Paid from and Repeat stay on the Add screen where they already are, so
 there is one flow, one save, and an itemised entry can be edited like any other.
+
+## 7 · Implementation plan — step by step, for continuing locally
+
+Written 2026-09-30, after `U-68` step one landed (`b459517`). Order is the one you chose: entities,
+then real time, then items. Each step below is one commit: it names the files, the work, the tests
+that prove it, and the traps already found. Tracker rows are in `TRACKER.md` §0.
+
+### Before every commit
+
+- `npx tsc --noEmit -p .` in `budgetsplit/` **and** in `server/api/` (two separate projects).
+- `npx jest` in `budgetsplit/` — the server tests run from here too (`src/__tests__/server/`).
+  Last green: 2897 tests.
+- The doc guards fail on drift, not bugs. The ones that trip most often:
+
+| Guard | Fails when | Fix |
+|---|---|---|
+| `countClaims` | a new file in `src/db/queries` or `src/lib` | the count in `SYSTEM.md` (§1, "The shape of the data") |
+| `trackerIntegrity` | a tracker id with no `FINDINGS.md` entry, or the reverse; a header count off | both files, and the section's header counts |
+| `entityCoverage` | a new local table with no `### E-nn` section in `SYSTEM.md` §2 | add the section |
+| `coverage` | a new `E-`/`SC-`/`DQ-` id not in a booklet | `scripts/build-system-map.js` |
+| `backupCoverage` | a new local table in neither backup list | `src/lib/backup.ts`; new tables also go in `OPTIONAL_BACKUP_TABLES` |
+| `rowMap` | a local column with no fate | `COLUMN_FATES` in `src/lib/sync/rowMap.ts` |
+| the server schema guard | a new server table not classified | its lists in the server schemaGuards test |
+| `syncQueueCoverage` | a writer of a synced table that does not queue | queue it, or add to `EXEMPT` with the reason |
+| `settlementSurfaces` | reading `asset_id` outside the allowed files | ask `settlementView` |
+| `noEmDash` | an em dash in a user-visible string | reword |
+
+- Data fixes that must survive a restore go in `LAUNCH_INVARIANTS`, not `ONE_TIME_FIXES`: a
+  restore keeps the `fix_%` markers, so a keyed fix never runs again on restored data.
+- The server can be reset (nothing is live), so server schema changes edit
+  `server/api/migrations/0001_schema.sql` in place.
+
+### Phase 1 · Data model
+
+**1a · Accounts carry the money (`U-68`, task E2).** Step one is done: the `account` table, the
+four defaults (`default:bank|cash|wallet|card`), `account_id` on `txn` / `pending_txn` held to
+`pay_method` by `alignAccount` (`src/db/queries/accountSql.ts`), backup, sync as `accounts`.
+
+1. *Openings move onto accounts.* Add a `LAUNCH_INVARIANTS` statement: when `money.opening_bank` /
+   `_cash` / `_wallet` is non-zero, add it to that default account's `opening_balance` and zero the
+   key, in one `BEGIN…COMMIT` (copy the asset conversion's shape and its comment). Keep the legacy
+   rule from `getMoneyProfile`: only `money.opening_cash` present, no bucket keys, means **bank**.
+   Card: `money.credit_limit` and `money.card_due_day` go to `default:card`. Leave `credit_used` and
+   `card_baseline_at` in settings for now; the card baseline logic stays as it is.
+2. `getMoneyProfile` (`src/db/queries/moneyProfile.ts`) reads the openings as
+   `SUM(opening_balance)` per kind over live accounts, and `creditLimit` as the sum over cards. Every
+   consumer (`lib/cash.ts`, Safe to Spend, the health score, Plan) keeps working unchanged.
+   `setMoneyProfileRows` with an opening writes the **default** account of that kind and queues
+   `account`. Onboarding, the demo seeds and `enginePersonas` then need no change.
+3. *Per-account balances.* Add `ACCOUNT_FLOWS_SQL` beside `BUCKET_FLOWS_SQL`
+   (`src/db/queries/cashQuery.ts`): the same sums grouped by `t.account_id`. A card-bill payment
+   (`kind = 'settlement' AND pay_method = 'card'`) has the card as `account_id`, but the money left
+   the bank: count its bank side against `default:bank` until 1b gives transfers a from-account.
+   The per-kind totals must still equal `BUCKET_FLOWS_SQL`; add a parity test next to
+   `bucketFlows.test.ts`.
+4. *Accounts screen.* New route `app/(money)/accounts.tsx` (list per kind, balance each, archive)
+   and an `AccountSheet` in `components/finance/money/` for one account (name, kind, opening,
+   and for a card its limit and due day) — a sheet, per the one-field/one-form rule. Queries go in
+   a new `src/db/queries/accounts.ts`: `getAccounts`, `upsertAccount`, `archiveAccount`, each
+   queueing `account` (the guard will say so). Screen data through a `lib/accountsData.ts`.
+   Reach it from the Money tab's money card and from `MoneyEditorSheet`, whose bank / cash / wallet
+   fields become the list. Give it an `SC-` id (next free after `SC-47`), `SCREENS.md` entry, the
+   booklet, and the route count in `AGENTS.md` and `SYSTEM.md`.
+5. *Paid from picks an account.* The picker (`finance/pay/`) shows accounts grouped by kind; one
+   account per kind reads exactly as today. Choosing one sets both `pay_method` (its kind) and
+   `account_id`; `alignAccount` keeps them honest. Carry `account_id` through `insertTxnRows`,
+   `updateTxn`, the Review inbox (`pending_txn` → `txn` in `approval.ts` / review commit) and
+   `restorePending`.
+6. *Show it.* Transaction detail shows the account name. The row showing Paid from is `DQ-18`
+   (phase 3).
+
+**1b · Transfers, settlements, adjustments and repeat rules as their own records (`DQ-109`, E3).**
+One step at a time, each behind `settlementView`, so no screen changes meaning mid-way:
+
+1. **Transfers** — new local `transfer` table: `from_account_id` / `from_asset_id`,
+   `to_account_id` / `to_asset_id`, amount, date, note. A card-bill payment becomes bank → card
+   (this ends the `pay_method = 'card'` heuristic and the step-3 workaround in 1a). An investment is
+   account → asset; a redemption asset → account. Move the writers (`insertCardBillPayment`, the
+   Move money sheet, the asset flows in `db/queries/assets.ts`) and migrate existing rows with a
+   launch invariant. `settlementView` reads the new table; the ledger shows the union.
+2. **Adjustments** — `adjustment` table (account, signed amount, reason). Today it is a settlement
+   with category "Balance adjustment" (`recordBalanceAdjustment` in `spendPower.ts`).
+3. **Settlements** stay in `txn` with `kind = 'settlement'` (payer, payee, group); once 1–2 have
+   moved out, that kind means only "paying a person back", which closes `OV-02`.
+4. **Repeat rules** — a `recurring_rule` table on the phone like the server's `recurring_rules`;
+   occurrences keep `parent_recur_id`. The server's unique occurrence index is already in.
+5. Server: `transfers` and `adjustments` tables and entity specs (`server/api/sync/entities/`),
+   added to `SYNCED_TABLES`, pull, erase and the engine's `RANK`; mappers and `COLUMN_FATES`.
+6. The sweep then knows where money came from (`DQ-15`, `D-08`).
+
+**1c · Categories by id and cleanup (`DQ-106`).** `txn.category`, budgets and rules name a category
+by text (`OV-06`); switch to `category_id`, with the server's deterministic id
+(`syncIds.category`). Pick one of `category_budget.period` / `.cadence` (`OV-19`). Drop the dead
+columns in `OV-23` and `budget_group.limit_*` (`D-07`) through the `txn` rebuild pattern in
+`schema.ts`.
+
+### Phase 2 · Server as a web app (deploy needs Workers Paid, `DQ-95`)
+
+- **2a · Real time (`DQ-108`, task R).** A Durable Object per user
+  (`server/api/realtime/UserHub.ts`) holds that user's WebSockets. After `applyPush` commits, publish
+  "scope X is at seq N" to every member's hub (group scope: all active members; user scope: that
+  user). The phone opens one socket while in the foreground (`src/lib/sync/live.ts`) and on a
+  message pulls just that scope. Online-first writes: when the socket is up, drain the queue at once
+  and show the row as "saving…" until acknowledged; offline stays exactly as today. Push
+  notifications need Apple (`DQ-80`); build the server side (a `push_tokens` table, send on
+  approvals and new entries) behind a flag. Test the hub with the in-process D1 helpers.
+- **2b · Cron and Queues (`DQ-105`, `DQ-107`).** A Cron trigger posts due repeat occurrences on the
+  server (the unique occurrence index stops a double post with the phone), and a Queue sends email
+  (magic links, invites) and notifications, and cleans up expired sessions and magic links.
+- **2c · `/v1` read API (`DQ-104`).** Read-only JSON over the same tables (a group's ledger, my
+  balances, a month's report), computed with the shared `src/lib` code as the sync rules already
+  are. Writes stay on the server's sync push.
+
+### Phase 3 · Screens
+
+- **Split by items (`U-69`, task I).** Keep the wizard (`app/add/itemized.tsx`). One input pattern
+  for name / qty / price from the app's own field components, not hand-built inputs; a real grid
+  (fixed columns for qty, price and total, so rows line up with each other and with the
+  per-person footer); spacing on tokens (`space.*`, never arithmetic); shorter copy (§14 of
+  `AGENTS.md`). Chips through `ui/Chip`, rows through `ListRow`, cards through `Card`.
+- `U-20`, `W1-28`, `W1-29`, `W1-32`: spacing and alignment passes, screen by screen.
+- `U-16`: compose screens from cards and sections instead of stacked button rows.
+- `U-31`: agree which lists sort how, then fix. `U-09`: Friends shows the name when you owe.
+- `DQ-18` / `D-05`: the transaction row shows Paid from (the account name after 1a).
+- `DQ-13` / `D-06`: the transfer form gets `DetailChips`. `DQ-17` / `D-04`: Help uses the one
+  collapsible. `DQ-12` / `A-01`: one red surface at a time on Home. `OV-10`, `OV-15`.
+
+Known small bugs found in the last pass, not yet fixed:
+
+- Repeat entries post only when the author opens the app (fixed by 2b).
+- "Set where it went" also relabels entries marked Other (`setSourceForUnsetEntries`).
+- The Personal totals row shows on the Budget and Recurring tabs.
+- A friend transfer marked Credit card reads as a card bill (fixed by 1b.1).
+
+### Phase 4 · Code debt
+
+`DQ-23` / `A-11` the new `expo-file-system` API; `OV-14` a memo boundary for the engine snapshot;
+`DQ-19` foreign keys on (after 1b, when the references are real); `OV-05`, `OV-22` one vocabulary.
+
+### Phase 5 · Yours
+
+Phone pass (`U-10`, `B-12`, measure `U-02`), UPI checks on devices (`D-01`–`D-03`), Apple
+(`B-02`, `DQ-80`), Workers Paid (`DQ-95`), the Brevo key (`B-07`), a Mixpanel token (`U-24`), the
+release list (`B-19`, `B-14`, `B-04`, `B-05`, `B-08`, `B-09`, `B-10`, `B-13`), and the business
+questions (`DQ-01`, `DQ-03`, `DQ-04`).
