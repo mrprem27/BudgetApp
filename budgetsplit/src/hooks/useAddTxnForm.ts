@@ -46,6 +46,7 @@ import { TRANSFER_HIDDEN_FROM_PICKER } from '../constants/categories';
 import { settleDirection } from '../lib/owe';
 import { AddKind, ADD_KIND, PayMethod, RecurEndMode, INCOME_LANDING_DEFAULT, TRANSFER_SCOPE_ALL, asPayMethod, type TransferScope , defaultRecurMode, type RecurMode } from '../constants/enums';
 import type { SplitMode, RecurFreq } from '../constants/enums';
+import { track } from '../lib/usageEvents';
 
 export type AddTxnParams = {
   groupId?: string; kind?: string; editId?: string; recurEditId?: string;
@@ -648,6 +649,7 @@ export function useAddTxnForm(params: AddTxnParams) {
           shares: [{ personId: transferToId, amount: total }],
         });
         haptic.success();
+        track('Entry saved', { kind: 'transfer' });
         refresh();
         closeEditor(savedId);
         return;
@@ -673,6 +675,7 @@ export function useAddTxnForm(params: AddTxnParams) {
         });
       }
       haptic.success();
+      track('Entry saved', { kind });
       refresh();
       router.back();
     } catch (e) {
@@ -748,6 +751,7 @@ export function useAddTxnForm(params: AddTxnParams) {
       const assetId = investAssetId ?? (await defaultInvestmentAsset(db)).id;
       await transferToAsset(db, assetId, total, payMethod, note.trim() || undefined, txnDate);
       haptic.success();
+      track('Entry saved', { kind: 'invest' });
       refresh();
       router.back();
     } catch (e) {

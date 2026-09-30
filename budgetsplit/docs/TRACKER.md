@@ -297,7 +297,7 @@ testing or describing the app. Where one needs action, the id says where.
 ---
 ## §11 · Open from the last pass, and your feedback — `U-`
 
-**38 items: 14 `OPEN`, 1 `DECIDE`, 1 `PARKED`, 22 `DONE`.** From the 2026-09-30 pass (`SPEC-BUGSCAN.md` Pass 2) and your answers and feedback the same night. Evidence in `FINDINGS.md` §11.
+**38 items: 13 `OPEN`, 1 `DECIDE`, 1 `BLOCKED`, 1 `PARKED`, 22 `DONE`.** From the 2026-09-30 pass (`SPEC-BUGSCAN.md` Pass 2) and your answers and feedback the same night. Evidence in `FINDINGS.md` §11.
 
 | | What | Status | Default if never decided |
 |---|---|---|---|
@@ -314,7 +314,7 @@ testing or describing the app. Where one needs action, the id says where.
 | `U-20` | Spacing is uneven in many places | `OPEN` |  |
 | `U-22` | The multi-person selector needs a proper design | `OPEN` |  |
 | `U-23` | Choosing a group (in Add and elsewhere) needs a proper design | `OPEN` |  |
-| `U-24` | Product analytics (Mixpanel) before V1, with an opt-out, and in the Android port | `OPEN` |  |
+| `U-24` | Product analytics (Mixpanel): built, with an opt-out; needs your project token | `BLOCKED` |  |
 | `U-31` | Sorting is not right — which lists? (the money card now orders largest first) | `OPEN` |  |
 | `U-34` | One category selector, the same in Add and in Review | `OPEN` |  |
 

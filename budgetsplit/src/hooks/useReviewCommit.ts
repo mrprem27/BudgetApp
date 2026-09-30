@@ -10,6 +10,7 @@ import { confirmDuplicates } from '../lib/confirm';
 import { parseToPaise } from '../lib/money';
 import { haptic } from '../lib/haptics';
 import type { RecurringCandidate } from '../lib/recurringSuggest';
+import { track } from '../lib/usageEvents';
 
 type Deps = {
   db: SQLite.SQLiteDatabase;
@@ -110,6 +111,7 @@ async function confirmRow(row: PendingTxn) {
   try {
     const done = await insertCommit(row, plan);
     haptic.success();
+    track('Import committed', { rows: 1 });
     refresh();
     reload();
     showUndo({
@@ -157,6 +159,7 @@ async function saveMany(rows: PendingTxn[], label: string) {
           finally { setSavingId(null); }
           if (done.length > 0) {
             haptic.success();
+            track('Import committed', { rows: done.length });
             exitSelect();
             refresh();
             reload();

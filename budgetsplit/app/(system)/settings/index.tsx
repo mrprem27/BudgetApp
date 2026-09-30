@@ -23,6 +23,7 @@ import { PayMethodSelector } from '../../../src/components/finance/PayMethodSele
 import { Input } from '../../../src/components/ui/Input';
 import { PrimaryButton } from '../../../src/components/ui/PrimaryButton';
 import { ScreenHeader } from '../../../src/components/ui/ScreenHeader';
+import { usageEventsOn, setUsageEventsOn } from '../../../src/lib/usageEvents';
 import { MoneySettingsRows } from '../../../src/components/finance/settings/MoneySettingsRows';
 import { SettingsRow, settingsRowDivider } from '../../../src/components/ui/SettingsRow';
 import { IconCircle } from '../../../src/components/ui/IconCircle';
@@ -115,6 +116,7 @@ export default function SettingsScreen() {
     : storageVerdictNow === StorageVerdict.Critical ? colors.healthAmber
     : undefined;
   const [hideAmounts, setHideAmounts] = useState(false);
+  const [usageOn, setUsageOn] = useState(true);
 
   const [defaultCadence, setDefaultCadence] = useState<BudgetCadence>('monthly');
   const [defaultPay, setDefaultPay] = useState<PayMethod>(PayMethod.Upi);
@@ -142,6 +144,7 @@ export default function SettingsScreen() {
       setBiometric(await settings.biometricEnabled());
       setPrivacyScreen(await settings.privacyScreen());
       setHideAmounts(await settings.hideAmounts());
+      setUsageOn(await usageEventsOn());
       // Narrowed, not cast: a database written before `once` was removed still
       // holds it here, and an unknown key would index CADENCE_LABELS to undefined.
       const dc = await settings.defaultCadence();
@@ -399,6 +402,9 @@ export default function SettingsScreen() {
         <ToggleRow icon="eye-off" tint={TINT.privacy} label="Privacy screen in app switcher" value={privacyScreen} onValueChange={(v) => toggle(settings.setPrivacyScreen, v, setPrivacyScreen)} />
         <View style={settingsRowDivider} />
         <ToggleRow icon="eye" tint={TINT.hideAmounts} label="Hide amounts on home" value={hideAmounts} onValueChange={(v) => toggle(settings.setHideAmounts, v, setHideAmounts)} />
+        <View style={settingsRowDivider} />
+        {/* Which screens and actions get used, never amounts, names or notes (`U-24`). */}
+        <ToggleRow icon="bar-chart" tint={TINT.hideAmounts} label="Share anonymous usage" value={usageOn} onValueChange={(v) => { setUsageOn(v); setUsageEventsOn(v).catch(() => {}); }} />
       </View>
 
       {/* YOUR DATA */}

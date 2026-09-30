@@ -1860,8 +1860,9 @@ because those ids are already this app's contract for a reminder's source — so
 
 ## 19. Network & data egress
 
-The app is offline-first: SQLite on device, no telemetry, no analytics SDK. Three paths can
-leave the device, all listed below, and **only one is on by default**.
+The app is offline-first: SQLite on device. Anonymous usage events (which screens and actions, never
+amounts or names) go to Mixpanel unless switched off in Settings (`SYSTEM.md` §1). The paths below
+are what can carry your data, and **only one is on by default**.
 
 | # | What | Sends | When |
 |---|---|---|---|
@@ -1912,7 +1913,7 @@ party. **Feature management → Smart capture → Cloud Receipt Scanning** turns
 everything on the phone (§7.4). Because of that, and now because signing in is possible at all,
 any absolute in-app claim ("zero network calls", "nothing ever leaves your device") would be
 false as written. The strings in `app/(system)/help.tsx`, `app/(system)/settings/index.tsx`, `app/(system)/storage.tsx` and
-`VOICE_SHORTCUT_PRIVACY` are scoped instead: local-first, no tracking, no analytics, nothing
+`VOICE_SHORTCUT_PRIVACY` are scoped instead: local-first, no tracking, anonymous usage only (switch-off in Settings), nothing
 uploaded **unless you ask** — with receipt scanning and signing in named as the two
 exceptions, and the way out named for each (the OCR toggle; not signing in). Help → *The server
 can read what you sync* says plainly that the account's copy is not end-to-end encrypted.

@@ -216,15 +216,16 @@ into a personal cost, and `E-54`, which converts everything into one position.
 | The user's UPI app | A `upi://pay` intent | Tapping Pay via UPI | `FE-17` |
 | WhatsApp | A drafted message, composed not sent | Tapping the reminder | `FE-20` |
 | The OS share sheet | A CSV / PDF / backup file the user chose to export | Export | — |
+| Mixpanel | Anonymous usage: which screens open (by route shape, never ids) and four actions with a closed list of keys — entry saved (kind), Afford checked (verdict, frequency), import committed (row count). Never amounts, names, notes or categories (`lib/usageEvents.ts`, `U-24`) | While the app is used | `EXPO_PUBLIC_MIXPANEL_TOKEN` + Settings → Share anonymous usage (on by default) |
 
-Nothing else. No analytics SDK, no crash reporter, no ad network, no third-party telemetry. Receipt
+Nothing else. No crash reporter, no ad network, no advertising identifier. Receipt
 photos never sync (`SYNC-F4`); balances never travel (`E-50`).
 
 ### The shape of the data
 
 One SQLite database, `budgetsplit.db`, opened by `SQLiteProvider` at the root. It is the single
 source of truth — there is no Redux, no React Query, no in-memory mirror. Reads go through
-`src/db/queries/` (27 modules); pure logic lives in `src/lib/` (133 modules) and touches neither
+`src/db/queries/` (27 modules); pure logic lives in `src/lib/` (134 modules) and touches neither
 React nor the database.
 
 **Foreign keys are OFF** on every connection (`applyConnectionPragmas`). Every `REFERENCES` clause

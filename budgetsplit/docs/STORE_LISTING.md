@@ -117,7 +117,8 @@ split,expense,bill,budget,upi,money,shared,flatmate,trip,settle,tracker,spending
 | **Photos** (receipts) | **Yes, on by default** | No | No | Read the line items off a receipt. Never sent to our own server | `receipt-ocr-proxy` → Gemini |
 | **Financial info** (other financial info) | **Yes, once signed in** | **Yes** | No | App functionality: the account's copy of the ledger — transactions, balances, budgets, goals, assets — which syncs shared groups and restores a new phone | `lib/sync/`, `server/api/sync/`, D1 |
 | **User content** (other) | **Yes, once signed in** | **Yes** | No | Notes, category names, and the names you give the people you split with, as part of that copy | same |
-| **Identifiers / usage / diagnostics** | No | — | — | No analytics SDK, no crash reporter, no ad network | — |
+| **Usage data** (product interaction) | **Yes, on by default** | No | No | Analytics: which screens and actions are used, to improve the app. Never amounts, names or notes; a random install id, never your email. Off in Settings → Share anonymous usage | Mixpanel (`lib/usageEvents.ts`) |
+| **Identifiers / diagnostics** | No | — | — | No crash reporter, no ad network, no advertising identifier | — |
 
 ### The three answers people get wrong
 

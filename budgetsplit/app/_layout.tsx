@@ -22,6 +22,8 @@ import { rescheduleReminders } from '../src/lib/reminders';
 import { routeForReminder } from '../src/lib/notificationRoutes';
 import { setPendingOverspendNotice } from '../src/lib/overspendNotice';
 import { startForegroundMaintenance } from '../src/lib/maintenanceWrites';
+import { startUsageEvents } from '../src/lib/usageEvents';
+import { useScreenEvents } from '../src/hooks/useScreenEvents';
 import { colors } from '../src/theme';
 import { loadFlags, DEFAULTS, type FeatureFlags } from '../src/lib/featureFlags';
 import { settings } from '../src/lib/settings';
@@ -72,6 +74,7 @@ async function reapOrphanedAttachments(db: Awaited<ReturnType<typeof openDB>>): 
 
 export default function RootLayout() {
   const router = useRouter();
+  useScreenEvents();
   const [dbReady, setDbReady] = useState(false);
   const [dbError, setDbError] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -121,6 +124,7 @@ export default function RootLayout() {
           setInitialFlags(flags);
           setInitialOnboardingDone(onboardingDone);
           setDbReady(true);
+          startUsageEvents().catch(() => {});
           setDbError(false);
         }
       } catch {

@@ -786,7 +786,7 @@ is what stops that recurring.
 | Fonts | **SpaceMono** for money, **Inter** for everything else |
 | Crypto | **crypto-js** / AES-GCM for passphrase backups. Sync is not end-to-end encrypted (`DQ-93`) |
 | Server | Two Cloudflare Workers. `server/receipt-ocr-proxy/` is stateless and exists only to hold `GEMINI_API_KEY`. `server/api/` is accounts, linking and **sync** (D1, magic-link auth): it holds a **readable** copy of everything a signed-in account owns, and checks every write against the app's own rules (`DQ-93`). Receipt photos never go to either |
-| Network | Everything that leaves the device is listed in `SYSTEM.md` §1. No analytics, no crash reporter, no ad network. pdf.js is bundled, not fetched |
+| Network | Everything that leaves the device is listed in `SYSTEM.md` §1. Anonymous usage events only through `lib/usageEvents.ts` (a closed list, never amounts or names, opt-out in Settings); no crash reporter, no ad network. pdf.js is bundled, not fetched |
 
 **Sync exists**, and it is server sync: the phone stays offline-first, and a signed-in phone keeps
 the account's copy up to date (`src/lib/sync/`, `server/api/sync/`). The first, end-to-end-encrypted

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { View, Text, TextInput, StyleSheet, TouchableOpacity, Switch } from 'react-native';
 import { KeyboardForm } from '../../src/components/ui/KeyboardForm';
 import { useRouter } from 'expo-router';
@@ -18,6 +18,7 @@ import { OptionRow } from '../../src/components/ui/OptionRow';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 import type { Category } from '../../src/db/queries/categories';
 import { loadAffordData } from '../../src/lib/affordData';
+import { track } from '../../src/lib/usageEvents';
 import { afford } from '../../src/lib/engine/assess';
 import { affordTrace, type TraceLine, type TraceStatus } from '../../src/lib/engine/trace';
 import type { AffordResult, AffordVerdict, Purchase } from '../../src/lib/engine/types';
@@ -91,6 +92,11 @@ export default function AffordScreen() {
   }, [showBreakdown, snapshot, purchase, result]);
 
   const showResult = amount > 0 && !!result;
+  // Once per visit, when the first answer appears — not on every keystroke.
+  const tracked = useRef(false);
+  useEffect(() => {
+    if (!tracked.current && result) { tracked.current = true; track('Afford checked', { verdict: result.verdict ?? 'not-enough-data', frequency }); }
+  }, [result, frequency]);
   // A neutral fallback, not `null`: `verdict` is deliberately `null` when
   // history is too thin for any verdict at all (`explanation.suppressVerdict`)
   // — that's a real state to render ("Not enough data yet"), not the absence
