@@ -3,6 +3,7 @@ import { Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { colors, type, space, layout } from '../tokens';
 import { SheetModal } from '../ui/SheetModal';
 import { Input } from '../ui/Input';
+import { PhoneInput } from '../ui/PhoneInput';
 import { PrimaryButton } from '../ui/PrimaryButton';
 import { Feather } from '@expo/vector-icons';
 import { isValidVpa } from '../../lib/upiIntent';
@@ -117,15 +118,10 @@ export function PersonNameSheet({
       )}
       {onChangePhone && (
         <>
-          <Input
+          <PhoneInput
             label="Phone (optional)"
             value={phone ?? ''}
             onChangeText={onChangePhone}
-            placeholder="+91 98765 43210"
-            keyboardType="phone-pad"
-            autoCapitalize="none"
-            autoCorrect={false}
-            maxLength={24}
             style={styles.gap}
           />
           <Text style={styles.hint}>

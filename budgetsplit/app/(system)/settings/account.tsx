@@ -7,6 +7,7 @@ import { colors, type, space, layout } from '../../../src/theme';
 import { ScreenHeader } from '../../../src/components/ui/ScreenHeader';
 import { Card } from '../../../src/components/ui/Card';
 import { Input } from '../../../src/components/ui/Input';
+import { PhoneInput } from '../../../src/components/ui/PhoneInput';
 import { PrimaryButton } from '../../../src/components/ui/PrimaryButton';
 import { SecondaryButton } from '../../../src/components/ui/SecondaryButton';
 import { IconCircle } from '../../../src/components/ui/IconCircle';
@@ -374,15 +375,9 @@ export default function AccountScreen() {
       </KeyboardForm>
 
       <SheetModal visible={showPhone} onClose={() => setShowPhone(false)} title="Your phone number">
-        <Input
+        <PhoneInput
           value={phoneText}
           onChangeText={setPhoneText}
-          placeholder="+91 98765 43210"
-          icon="phone"
-          keyboardType="phone-pad"
-          autoCapitalize="none"
-          autoCorrect={false}
-          maxLength={24}
           accessibilityLabel="Your phone number"
         />
         <Text style={styles.sheetHint}>
