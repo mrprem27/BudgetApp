@@ -4,7 +4,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking, Image, M
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { dateTime, fullDate } from '../../../src/lib/dateFormat';
-import { PAY_METHOD_LABEL } from '../../../src/constants/enums';
+import { payChipLabel } from '../../../src/constants/enums';
 import { myShareOf, myPaidOf, txnTotal } from '../../../src/lib/splitMath';
 import { settlementView } from '../../../src/lib/settlementView';
 import { colors, type, space, radius, layout, alpha } from '../../../src/theme';
@@ -228,7 +228,7 @@ export default function TxnDetailScreen() {
           {txn.pay_method && (
             <>
               <View style={styles.divider} />
-              <Row label="Paid via" value={PAY_METHOD_LABEL[txn.pay_method]} />
+              <Row label="Paid via" value={payChipLabel(txn.pay_method, txn.pay_from)} />
             </>
           )}
           {/*

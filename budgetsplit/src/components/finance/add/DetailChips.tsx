@@ -5,7 +5,7 @@ import { ListRow } from '../../ui/ListRow';
 import { SectionHeader } from '../../ui/SectionHeader';
 import { space } from '../../tokens';
 import { freqLabel } from '../../../lib/recurrence';
-import { PAY_METHOD_LABEL, type PayMethod, type RecurFreq } from '../../../constants/enums';
+import { PAY_METHOD_LABEL, payChipLabel, type PayFrom, type PayMethod, type RecurFreq } from '../../../constants/enums';
 import type { CapturedPlace } from '../../../lib/location';
 
 type Props = {
@@ -37,6 +37,8 @@ type Props = {
   onClearLocation?: () => void;
 
   payMethod: PayMethod;
+  /** Shown on the chip only when it is not the usual for How (`U-48`). */
+  payFrom?: PayFrom | null;
   onOpenPayMethod: () => void;
   /** Income reads the same field as "landed in" rather than "paid by". */
   isIncome?: boolean;
@@ -77,7 +79,7 @@ export function DetailChips({
   attachmentUri, onOpenAttachment, onClearAttachment,
   tags = [], onOpenTags,
   place, capturingLoc, onCaptureLocation, onClearLocation,
-  payMethod, onOpenPayMethod, isIncome,
+  payMethod, payFrom, onOpenPayMethod, isIncome,
   onSplitByItems,
   recurEnabled, recurFreq, recurInterval, onOpenRecurring,
 }: Props) {
@@ -97,13 +99,13 @@ export function DetailChips({
         {/* Always a set chip — there is no "no pay method" state to offer. For
             income the same field means the opposite direction: where it landed. */}
         <Chip
-          label={PAY_METHOD_LABEL[payMethod]}
+          label={payChipLabel(payMethod, payFrom)}
           icon={isIncome ? 'download' : 'credit-card'}
           selected
           accent={accent}
           chevron
           onPress={onOpenPayMethod}
-          accessibilityLabel={isIncome ? `Landed in ${PAY_METHOD_LABEL[payMethod]}` : `Paid by ${PAY_METHOD_LABEL[payMethod]}`}
+          accessibilityLabel={isIncome ? `Landed in ${PAY_METHOD_LABEL[payMethod]}` : `Paid by ${payChipLabel(payMethod, payFrom)}`}
         />
 
         {/* No Time chip. It lives inside the date sheet now, and the date chip's

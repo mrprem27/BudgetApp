@@ -11,7 +11,7 @@ import { alpha } from '../../../theme';
 import type { RowEdit, SplitState } from '../../../lib/reviewCommit';
 import type { PendingTxn } from '../../../db/queries/pending';
 import type { Person } from '../../../db/queries/persons';
-import { type TxnKind, PAY_METHOD_LABEL, TXN_KIND_LABEL } from '../../../constants/enums';
+import { type TxnKind, TXN_KIND_LABEL, payChipLabel } from '../../../constants/enums';
 import { CategoryField } from '../CategoryField';
 import { Chip } from '../../ui/Chip';
 
@@ -195,13 +195,13 @@ export const ReviewRowCard = React.memo(function ReviewRowCard({
           style={[styles.payPill, v.payMethod !== '' && styles.payPillSet]}
           onPress={() => onOpenPay(row.id)}
           accessibilityRole="button"
-          accessibilityLabel={v.payMethod ? `Paid via ${PAY_METHOD_LABEL[v.payMethod]}` : 'Set payment method'}
+          accessibilityLabel={v.payMethod ? `Paid via ${payChipLabel(v.payMethod, v.payFrom)}` : 'Set payment method'}
         >
           {v.payMethod
             ? <PayMethodGlyph method={v.payMethod} size={13} color={colors.textPrimary} />
             : <Feather name="credit-card" size={13} color={colors.textMuted} />}
           <Text style={[styles.pillText, v.payMethod !== '' && { color: colors.textPrimary }]} numberOfLines={1}>
-            {v.payMethod ? PAY_METHOD_LABEL[v.payMethod] : 'Pay method'}
+            {v.payMethod ? payChipLabel(v.payMethod, v.payFrom) : 'Pay method'}
           </Text>
         </TouchableOpacity>
       </View>

@@ -17,7 +17,7 @@ const ME = 'me';
 function db() {
   const d = new DatabaseSync(':memory:');
   d.exec(`
-    CREATE TABLE txn (id TEXT PRIMARY KEY, kind TEXT, pay_method TEXT, date INTEGER,
+    CREATE TABLE txn (id TEXT PRIMARY KEY, kind TEXT, pay_method TEXT, pay_from TEXT, date INTEGER,
                       is_deleted INTEGER DEFAULT 0, recur_freq TEXT);
     CREATE TABLE txn_payment (txn_id TEXT, person_id TEXT, amount INTEGER);
     CREATE TABLE txn_share   (txn_id TEXT, person_id TEXT, amount INTEGER);
@@ -92,5 +92,24 @@ describe('BUCKET_FLOWS_SQL agrees with assetOf', () => {
     spend(d, 'a', PayMethod.Bank, 400);
     d.prepare("INSERT INTO txn_approval (txn_id, state, created_at) VALUES ('a', 'pending', 1)").run();
     expect(flows(d)).toEqual({});
+  });
+});
+
+describe('From decides the place (U-48)', () => {
+  function add(d: DatabaseSync, id: string, kind: string, method: string | null, from: string | null, pay: number, share = 0) {
+    d.prepare('INSERT INTO txn (id, kind, pay_method, pay_from, date) VALUES (?, ?, ?, ?, 1)').run(id, kind, method, from);
+    if (pay) d.prepare('INSERT INTO txn_payment (txn_id, person_id, amount) VALUES (?, ?, ?)').run(id, ME, pay);
+    if (share) d.prepare('INSERT INTO txn_share (txn_id, person_id, amount) VALUES (?, ?, ?)').run(id, ME, share);
+  }
+  it('UPI from a credit card moves no place; UPI from a wallet moves the wallet', () => {
+    const d = db();
+    add(d, 'a', 'expense', 'upi', 'credit', 4000);
+    add(d, 'b', 'expense', 'upi', 'wallet', 300);
+    expect(flows(d)).toEqual({ wallet: -300 });
+  });
+  it('paying the card bill comes out of the bank', () => {
+    const d = db();
+    add(d, 'c', 'settlement', 'card', null, 3000);
+    expect(flows(d)).toEqual({ bank: -3000 });
   });
 });

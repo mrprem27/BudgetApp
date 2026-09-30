@@ -208,6 +208,56 @@ export function assetOf(pm: PayMethod | string | null | undefined): AssetBucket 
 }
 
 /**
+ * **From** — where the money came from, apart from **How** it was paid (`U-48`, `SPEC-PAY-FROM`).
+ * A kind, not a named account: the bank, cash, a wallet, or a credit card.
+ */
+export type PayFrom = 'bank' | 'cash' | 'wallet' | 'credit';
+export const PAY_FROM_LABEL: Record<PayFrom, string> = { bank: 'Bank', cash: 'Cash', wallet: 'Wallet', credit: 'Credit card' };
+const isPayFrom = (v: unknown): v is PayFrom => v === 'bank' || v === 'cash' || v === 'wallet' || v === 'credit';
+
+/**
+ * Where you may say the money came from, per How. Only UPI and Autopay are ever in doubt: both
+ * run from a bank (a debit card is the bank), a credit card, or a wallet. Cash is from cash, a
+ * wallet from the wallet, a credit card from the card; a choice there would only let a wrong one in.
+ */
+export const PAY_FROM_CHOICES: Partial<Record<PayMethod, readonly PayFrom[]>> = {
+  [PayMethod.Upi]: ['bank', 'credit', 'wallet'],
+  [PayMethod.Autopay]: ['bank', 'credit', 'wallet'],
+};
+
+/**
+ * What to STORE as `pay_from`: the choice only when How allows one and it is not the usual. Picking
+ * Bank for UPI stores nothing; switching How to Cash drops a stale "credit card".
+ */
+export function storedPayFrom(pm: PayMethod | string | null | undefined, from: PayFrom | string | null | undefined): PayFrom | null {
+  if (!isPayFrom(from) || !pm) return null;
+  const choices = PAY_FROM_CHOICES[pm as PayMethod];
+  return choices?.includes(from) && from !== assetOf(pm) ? from : null;
+}
+
+/** A pay chip's words: "UPI", or "UPI · Credit card" when From is not the usual. */
+export function payChipLabel(pm: PayMethod, from: PayFrom | string | null | undefined): string {
+  const stored = storedPayFrom(pm, from);
+  return stored ? `${PAY_METHOD_LABEL[pm]} · ${PAY_FROM_LABEL[stored]}` : PAY_METHOD_LABEL[pm];
+}
+
+/** A card-bill payment: a settlement whose How is the card being repaid (`payCardBill`). */
+export function isCardRepayment(t: { kind?: string | null; pay_method?: string | null }): boolean {
+  return t.kind === 'settlement' && t.pay_method === PayMethod.Card;
+}
+
+/**
+ * The **effective From**: what you set, else the usual for How. A card-bill payment's How is the
+ * card it repays, and the money for it leaves the bank. Mirrored in SQL by `EFFECTIVE_FROM_SQL`
+ * (`cashQuery.ts`); `cashSql.test.ts` and `bucketFlows.test.ts` fail if the two drift.
+ */
+export function payFromOf(t: { kind?: string | null; pay_method?: string | null; pay_from?: string | null }): PayFrom | null {
+  if (isPayFrom(t.pay_from)) return t.pay_from;
+  if (isCardRepayment(t)) return 'bank';
+  return assetOf(t.pay_method);
+}
+
+/**
  * `person.receivable_state` — whether money this person owes me still counts as
  * cover. 'written_off' is NOT a settlement: the debt is still owed and still
  * shown, it just stops offsetting a shortfall or netting against what I owe.

@@ -84,7 +84,7 @@ export const PERSONAL_ENTITIES: Record<string, EntitySpec> = {
   },
   imported_transactions: {
     table: 'imported_transactions', money: false,
-    columns: ['date', 'amount', 'description', 'kind', 'category', 'direction', 'raw', 'source', 'pay_method',
+    columns: ['date', 'amount', 'description', 'kind', 'category', 'direction', 'raw', 'source', 'pay_method', 'pay_from',
       'dest_group_id', 'split_draft', 'counterparty_id', 'latitude', 'longitude', 'place_label'],
   },
 };

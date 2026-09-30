@@ -332,6 +332,7 @@ export default function QuickAddScreen() {
               onCaptureLocation={f.locEnabled && !isEditing && !isTransfer ? f.captureLocation : undefined}
               onClearLocation={() => f.setPlace(null)}
               payMethod={f.payMethod}
+              payFrom={f.payFrom}
               onOpenPayMethod={() => open('payMethod')}
               isIncome={kind === 'income'}
               onSplitByItems={!isEditing && kind === 'expense' && flags.itemized

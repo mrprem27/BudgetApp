@@ -1,5 +1,5 @@
 import { parseToPaise } from './money';
-import type { TxnKind, PayMethod } from '../constants/enums';
+import type { TxnKind, PayMethod, PayFrom } from '../constants/enums';
 
 /**
  * Tolerant statement parser for the Import → Review flow. Bank/UPI exports vary
@@ -24,6 +24,8 @@ export type ParsedRow = {
   /** Detected payment method when the source text carries a cue (email/notification
    *  alerts). Undefined for plain CSV rows; the Review inbox lets the user set it. */
   payMethod?: PayMethod;
+  /** Where the money came from, when the source says and it is not the usual (`U-48`). */
+  payFrom?: PayFrom;
   raw: string;
 };
 

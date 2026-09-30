@@ -3,7 +3,8 @@ import type { Person } from '../db/queries/persons';
 import type { ParsedDirection } from './importParse';
 import { parseToPaise, splitByMode } from './money';
 import { validateShares } from './splitMath';
-import type { TxnKind, SplitMode, PayMethod } from '../constants/enums';
+import type { TxnKind, SplitMode, PayMethod, PayFrom } from '../constants/enums';
+import { storedPayFrom } from '../constants/enums';
 
 /**
  * Pure commit logic for the Review inbox — how a pending row resolves into the
@@ -19,6 +20,8 @@ export type RowEdit = {
   amount: string;
   dest: string;
   payMethod: PayMethod | '';
+  /** Where the money came from, when not the usual (`U-48`). '' = the usual. */
+  payFrom: PayFrom | '';
   counterparty: string;
   direction: ParsedDirection;
 };
@@ -33,7 +36,7 @@ export type CommitPlan =
       ok: true; groupId: string; kind: TxnKind; payer: string;
       shares: { personId: string; amount: number }[];
       payments?: { personId: string; amount: number }[];
-      total: number; category: string; payMethod?: PayMethod; snap: PendingTxn; destName: string;
+      total: number; category: string; payMethod?: PayMethod; payFrom?: PayFrom; snap: PendingTxn; destName: string;
     }
   | { ok: false };
 
@@ -66,6 +69,7 @@ export function effectiveRow(row: PendingTxn, edits: Partial<RowEdit> | undefine
     amount: e.amount ?? String(row.amount / 100),
     dest,
     payMethod: e.payMethod ?? row.pay_method ?? '',
+    payFrom: e.payFrom ?? row.pay_from ?? '',
     // Only a transfer into a group has a counterparty; anything else drops it
     // so a leftover pick can't follow the row into another shape.
     counterparty: kind === 'settlement' && dest !== 'personal'
@@ -134,6 +138,7 @@ export function snapshotRow(row: PendingTxn, v: RowEdit, split: SplitState): Pen
     dest_group_id: isGroup ? v.dest : null,
     split_draft: isGroup && v.kind === 'expense' ? JSON.stringify(split) : null,
     pay_method: v.payMethod || null,
+    pay_from: storedPayFrom(v.payMethod, v.payFrom || null),
     counterparty_id: v.counterparty || null,
     direction: v.direction,
   };
@@ -159,6 +164,7 @@ export function planCommit(
   if (total <= 0) return { ok: false };
   const category = v.category || DEFAULT_CATEGORY[v.kind];
   const payMethod = v.payMethod || undefined;
+  const payFrom = storedPayFrom(v.payMethod, v.payFrom || null) ?? undefined;
   const groupName = (id: string) => ctx.sharedGroups.find(g => g.id === id)?.name ?? 'group';
   const snap = snapshotRow(row, v, split);
 
@@ -176,7 +182,7 @@ export function planCommit(
       const fromId = inbound ? other : ctx.meId;
       const toId = inbound ? ctx.meId : other;
       return {
-        ok: true, groupId: v.dest, kind: 'settlement', payer: fromId, total, category, payMethod, snap,
+        ok: true, groupId: v.dest, kind: 'settlement', payer: fromId, total, category, payMethod, payFrom, snap,
         payments: [{ personId: fromId, amount: total }],
         shares: [{ personId: toId, amount: total }],
         destName: groupName(v.dest),
@@ -188,7 +194,7 @@ export function planCommit(
     // carries only a payment and an inbound one only a share. Booking both
     // sides would net to zero and silently hide the movement.
     return {
-      ok: true, groupId: ctx.personalId, kind: 'settlement', payer: ctx.meId, total, category, payMethod, snap,
+      ok: true, groupId: ctx.personalId, kind: 'settlement', payer: ctx.meId, total, category, payMethod, payFrom, snap,
       payments: inbound ? [] : [{ personId: ctx.meId, amount: total }],
       shares: inbound ? [{ personId: ctx.meId, amount: total }] : [],
       destName: 'Personal',
@@ -201,13 +207,13 @@ export function planCommit(
     // Same allocation rule the Quick-Add save path uses.
     if (!validateShares(total, shares).ok) return { ok: false };
     return {
-      ok: true, groupId: v.dest, kind: 'expense', payer: payerFor(ctx, v.dest), total, category, payMethod, snap,
+      ok: true, groupId: v.dest, kind: 'expense', payer: payerFor(ctx, v.dest), total, category, payMethod, payFrom, snap,
       shares,
       destName: groupName(v.dest),
     };
   }
   return {
-    ok: true, groupId: ctx.personalId, kind: v.kind, payer: ctx.meId, total, category, payMethod, snap,
+    ok: true, groupId: ctx.personalId, kind: v.kind, payer: ctx.meId, total, category, payMethod, payFrom, snap,
     // Income has no shares (canonical shape, matches Quick); expense = my full share.
     shares: v.kind === 'income' ? [] : [{ personId: ctx.meId, amount: total }],
     destName: 'Personal',
@@ -236,6 +242,7 @@ export function txnInputFromPlan(row: PendingTxn, plan: Extract<CommitPlan, { ok
     category: plan.category,
     note: row.description,
     payMethod: plan.payMethod,
+    payFrom: plan.payFrom,
     payments: plan.payments ?? [{ personId: plan.payer, amount: plan.total }],
     shares: plan.shares,
     // Where it came from, carried through the commit. Dropping it recorded every

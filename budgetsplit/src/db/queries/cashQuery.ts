@@ -1,5 +1,22 @@
 import { NOT_AWAITING_APPROVAL } from './approvalSql';
 
+/**
+ * The effective **From** of a row (`U-48`): `pay_from` when set, else the usual for its How. The
+ * SQL twin of `payFromOf` (`constants/enums.ts`) — this module stays import-free so it can run
+ * against a real engine; the parity tests hold the two together.
+ */
+export const EFFECTIVE_FROM_SQL = `(CASE
+      WHEN t.pay_from IS NOT NULL THEN t.pay_from
+      WHEN t.pay_method = 'card' AND t.kind = 'settlement' THEN 'bank'
+      WHEN t.pay_method = 'card'   THEN 'credit'
+      WHEN t.pay_method = 'cash'   THEN 'cash'
+      WHEN t.pay_method = 'wallet' THEN 'wallet'
+      WHEN t.pay_method IN ('bank', 'upi', 'autopay') THEN 'bank'
+      ELSE NULL END)`;
+const FROM = EFFECTIVE_FROM_SQL;
+/** A card-bill payment (`isCardRepayment`). */
+const REPAY = `(t.kind = 'settlement' AND t.pay_method = 'card')`;
+
 // SQL for the derived cash position, aggregated in the DB instead of loading every
 // txn + all its split rows into JS and reducing there (getCashPosition scans all of
 // history). Kept import-free so it can be unit-tested against a real SQLite engine
@@ -15,11 +32,11 @@ import { NOT_AWAITING_APPROVAL } from './approvalSql';
  * two card-baseline filters sit in the SELECT, so they come FIRST:
  *   [cardBaselineMs, cardBaselineMs, personId, personId, toMs]
  *   income       = my payments on income txns
- *   paidExpenses = my payments on expense txns **paid with anything but a card**
- *   settledOut   = my payments on settlement txns
+ *   paidExpenses = my payments on expense txns **whose From is not a credit card**
+ *   settledOut   = my payments on settlement txns, likewise
  *   settledIn    = my shares   on settlement txns
- *   cardSpend    = my payments on **card** expense txns dated after cardBaselineMs,
- *                  MINUS my payments on card-bill settlements after it (repayment)
+ *   cardSpend    = my payments **from a credit card** (spend, or a transfer) dated after
+ *                  cardBaselineMs, MINUS my card-bill payments after it (repayment)
  *
  * The card split is the point: putting a purchase on a card doesn't move cash, it
  * creates debt. `paidExpenses` therefore excludes it and `cardSpend` carries it over
@@ -41,16 +58,17 @@ export const CASH_TOTALS_SQL = `
   SELECT
     COALESCE(SUM(CASE WHEN t.kind = 'income'     THEN mp.amt ELSE 0 END), 0) AS income,
     COALESCE(SUM(CASE WHEN t.kind = 'expense'
-                       AND (t.pay_method IS NULL OR t.pay_method <> 'card')
+                       AND (${FROM} IS NULL OR ${FROM} <> 'credit')
                       THEN mp.amt ELSE 0 END), 0) AS paidExpenses,
-    COALESCE(SUM(CASE WHEN t.kind = 'settlement' THEN mp.amt ELSE 0 END), 0) AS settledOut,
+    COALESCE(SUM(CASE WHEN t.kind = 'settlement'
+                       AND (${FROM} IS NULL OR ${FROM} <> 'credit')
+                      THEN mp.amt ELSE 0 END), 0) AS settledOut,
     COALESCE(SUM(CASE WHEN t.kind = 'settlement' THEN ms.amt ELSE 0 END), 0) AS settledIn,
-    COALESCE(SUM(CASE WHEN t.kind = 'expense'
-                       AND t.pay_method = 'card'
+    COALESCE(SUM(CASE WHEN (t.kind = 'expense' OR (t.kind = 'settlement' AND NOT ${REPAY}))
+                       AND ${FROM} = 'credit'
                        AND t.date > ?
                       THEN mp.amt
-                      WHEN t.kind = 'settlement'
-                       AND t.pay_method = 'card'
+                      WHEN ${REPAY}
                        AND t.date > ?
                       THEN -mp.amt
                       ELSE 0 END), 0) AS cardSpend
@@ -82,17 +100,14 @@ export const CASH_TOTALS_SQL = `
  * while the total stayed correct — wrong in the way nothing looks broken. They
  * come back as an unattributed row, counted in the total and attributed nowhere.
  *
- * Card is absent for the same reason it is absent from `available`: putting a
- * purchase on a card moves no money out of any bucket, it creates debt.
+ * Anything from a credit card is absent for the same reason it is absent from `available`: it
+ * moves no money out of any place, it creates debt. A card-bill payment's From is the bank, so
+ * the bank goes down when you pay the bill — before `U-48` it was skipped, and Bank + Cash +
+ * Wallet stopped adding up to Spendable after the first bill paid.
  */
 export const BUCKET_FLOWS_SQL = `
   SELECT
-    CASE
-      WHEN t.pay_method = 'cash'   THEN 'cash'
-      WHEN t.pay_method = 'wallet' THEN 'wallet'
-      WHEN t.pay_method IN ('bank', 'upi', 'autopay') THEN 'bank'
-      ELSE NULL
-    END AS bucket,
+    CASE WHEN ${FROM} IN ('bank', 'cash', 'wallet') THEN ${FROM} ELSE NULL END AS bucket,
     COALESCE(SUM(
       CASE
         WHEN t.kind = 'income'     THEN  COALESCE(mp.amt, 0)
@@ -105,7 +120,7 @@ export const BUCKET_FLOWS_SQL = `
   LEFT JOIN (SELECT txn_id, SUM(amount) AS amt FROM txn_payment WHERE person_id = ? GROUP BY txn_id) mp ON mp.txn_id = t.id
   LEFT JOIN (SELECT txn_id, SUM(amount) AS amt FROM txn_share   WHERE person_id = ? GROUP BY txn_id) ms ON ms.txn_id = t.id
   WHERE t.is_deleted = 0 AND t.recur_freq IS NULL AND t.date <= ?
-    AND (t.pay_method IS NULL OR t.pay_method <> 'card')
+    AND (${FROM} IS NULL OR ${FROM} <> 'credit')
     AND ${NOT_AWAITING_APPROVAL}
   GROUP BY bucket
 `;

@@ -89,3 +89,31 @@ describe('the pay-method picker is built once', () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe('From, apart from How (U-48)', () => {
+  const { storedPayFrom, payFromOf, payChipLabel, PAY_FROM_CHOICES } = jest.requireActual('../constants/enums') as typeof import('../constants/enums');
+
+  it('offers a choice only for UPI and Autopay', () => {
+    expect(Object.keys(PAY_FROM_CHOICES).sort()).toEqual([PayMethod.Autopay, PayMethod.Upi].sort());
+  });
+
+  it('stores a choice only when it is allowed and not the usual', () => {
+    expect(storedPayFrom(PayMethod.Upi, 'credit')).toBe('credit');
+    expect(storedPayFrom(PayMethod.Upi, 'bank')).toBeNull();      // the usual
+    expect(storedPayFrom(PayMethod.Cash, 'credit')).toBeNull();   // no choice for cash
+    expect(storedPayFrom(null, 'credit')).toBeNull();
+  });
+
+  it('derives From from How, and a card bill is paid from the bank', () => {
+    expect(payFromOf({ kind: 'expense', pay_method: 'upi' })).toBe('bank');
+    expect(payFromOf({ kind: 'expense', pay_method: 'upi', pay_from: 'credit' })).toBe('credit');
+    expect(payFromOf({ kind: 'expense', pay_method: 'card' })).toBe('credit');
+    expect(payFromOf({ kind: 'settlement', pay_method: 'card' })).toBe('bank');
+    expect(payFromOf({ kind: 'expense', pay_method: null })).toBeNull();
+  });
+
+  it('shows From on the chip only when it is not the usual', () => {
+    expect(payChipLabel(PayMethod.Upi, null)).toBe('UPI');
+    expect(payChipLabel(PayMethod.Upi, 'credit')).toBe('UPI · Credit card');
+  });
+});

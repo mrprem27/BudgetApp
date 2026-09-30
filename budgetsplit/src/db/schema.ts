@@ -81,6 +81,7 @@ CREATE TABLE IF NOT EXISTS txn (
   lng            REAL,
   place_label    TEXT,
   pay_method     TEXT,
+  pay_from       TEXT,                    -- where the money came from, only when not the usual for pay_method (U-48)
   sync_version   INTEGER NOT NULL DEFAULT 0,
   is_deleted     INTEGER NOT NULL DEFAULT 0,
   created_at     INTEGER NOT NULL,
@@ -280,6 +281,7 @@ CREATE TABLE IF NOT EXISTS pending_txn (
   counterparty_id TEXT,                     -- Review draft: the other person on a group transfer
   source      TEXT NOT NULL DEFAULT 'manual', -- where it came from (email/gpay/bank_csv/…); drives sectioned Review
   pay_method  TEXT,                         -- detected payment method (upi/card/…); pre-filled in Review, editable
+  pay_from    TEXT,                         -- detected source when not the usual (UPI on a credit card)
   lat         REAL,                         -- where it happened, when the import knows (Scan & Pay does)
   lng         REAL,
   place_label TEXT                           -- reverse-geocoded name, e.g. "Cyber Hub, Gurgaon"
@@ -660,6 +662,9 @@ export const COLUMN_MIGRATIONS = [
   // status; this lets the members list say "Invited" instead of passing them off
   // as in. 0 is right for every existing row: v1 had no invitations.
   "ALTER TABLE group_member ADD COLUMN invited INTEGER NOT NULL DEFAULT 0",
+  // U-48: where the money came from, apart from how it was paid. NULL = the usual for pay_method.
+  "ALTER TABLE txn ADD COLUMN pay_from TEXT",
+  "ALTER TABLE pending_txn ADD COLUMN pay_from TEXT",
 ];
 
 /**
@@ -1215,7 +1220,7 @@ export async function openDB(): Promise<SQLite.SQLiteDatabase> {
       // SCHEMA above.
       const cols = 'id,group_id,kind,entry_mode,date,category,note,attachment_uri,tags,adjustments,'
         + 'recur_freq,recur_interval,recur_end,recur_override_date,parent_recur_id,recur_state,'
-        + 'recur_paused_at,recur_mode,tz,lat,lng,place_label,pay_method,currency,source,asset_id,author_person_id,'
+        + 'recur_paused_at,recur_mode,tz,lat,lng,place_label,pay_method,pay_from,currency,source,asset_id,author_person_id,'
         + 'sync_version,is_deleted,created_at,updated_at';
       await rebuildTable(db, 'txn_new', `
         CREATE TABLE txn_new (
@@ -1242,6 +1247,7 @@ export async function openDB(): Promise<SQLite.SQLiteDatabase> {
           lng            REAL,
           place_label    TEXT,
           pay_method     TEXT,
+          pay_from       TEXT,
           currency       TEXT,
           source         TEXT,
           asset_id       TEXT,

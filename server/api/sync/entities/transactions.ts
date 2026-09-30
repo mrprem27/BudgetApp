@@ -26,7 +26,7 @@ import { approvalsForDelete, approvalsForWrite } from './approvals';
  */
 
 const COLUMNS = [
-  'group_id', 'kind', 'entry_mode', 'amount', 'date', 'timezone', 'category', 'note', 'pay_method', 'source',
+  'group_id', 'kind', 'entry_mode', 'amount', 'date', 'timezone', 'category', 'note', 'pay_method', 'pay_from', 'source',
   'currency', 'asset_id', 'latitude', 'longitude', 'place_label', 'adjustments', 'recurring_rule_id', 'occurrence_date',
 ] as const;
 const RULE_COLUMNS = ['frequency', 'interval', 'ends_at', 'status', 'mode', 'paused_at'] as const;

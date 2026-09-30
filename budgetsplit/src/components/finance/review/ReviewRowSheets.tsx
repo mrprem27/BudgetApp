@@ -4,7 +4,7 @@ import { ReviewDestSheet } from './ReviewDestSheet';
 import { CounterpartySheet } from './CounterpartySheet';
 import type { Category } from '../../../db/queries/categories';
 import type { Person } from '../../../db/queries/persons';
-import type { PayMethod } from '../../../constants/enums';
+import type { PayMethod, PayFrom } from '../../../constants/enums';
 
 type Group = { id: string; name: string; icon?: string; color?: string };
 
@@ -31,6 +31,8 @@ type Props = {
   payOpen: boolean;
   payMethod: PayMethod | '';
   onPayMethod: (m: PayMethod) => void;
+  payFrom?: PayFrom | '';
+  onPayFrom?: (f: PayFrom | null) => void;
   onClearPay: () => void;
   onClosePay: () => void;
 };
@@ -50,7 +52,7 @@ export function ReviewRowSheets({
   catRow, categories, onCategory, onCloseCategory,
   destOpen, dest, groups, onDest, onCloseDest,
   whoOpen, whoMembers, counterparty, inbound, onCounterparty, onCloseWho,
-  payOpen, payMethod, onPayMethod, onClearPay, onClosePay,
+  payOpen, payMethod, onPayMethod, payFrom, onPayFrom, onClearPay, onClosePay,
 }: Props) {
   return (
     <>
@@ -87,6 +89,8 @@ export function ReviewRowSheets({
         onClose={onClosePay}
         value={payMethod}
         onChange={onPayMethod}
+        payFrom={payFrom}
+        onChangeFrom={onPayFrom}
         onClear={onClearPay}
       />
     </>

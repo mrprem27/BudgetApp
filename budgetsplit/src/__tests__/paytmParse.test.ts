@@ -103,7 +103,9 @@ describe('Paytm workbook (.xlsx)', () => {
   it('detects the pay method from the funding account and the wording', () => {
     const rows = parsePaytmWorkbook(sheets).rows;
     expect(rows[1].payMethod).toBe('upi');   // bank account
-    expect(rows[2].payMethod).toBe('card');  // Rupay Credit Card
+    // A RuPay credit card on UPI: How UPI, From the card (U-48).
+    expect(rows[2].payMethod).toBe('upi');
+    expect(rows[2].payFrom).toBe('credit');
     expect(rows[5].payMethod).toBe('autopay'); // "Automatic payment for …"
   });
 
@@ -227,7 +229,7 @@ describe('Paytm PDF text', () => {
     const rows = parsePaytmStatement(PDF, NOW).rows;
     expect(rows[0]).toMatchObject({ description: 'A Friend', kind: 'settlement', category: 'Repayment', direction: 'debit' });
     expect(rows[1]).toMatchObject({ description: 'Corner Store', kind: 'expense', category: 'Groceries', payMethod: 'upi' });
-    expect(rows[2]).toMatchObject({ description: 'Some Diner', kind: 'expense', category: 'Eating Out', payMethod: 'card' });
+    expect(rows[2]).toMatchObject({ description: 'Some Diner', kind: 'expense', category: 'Eating Out', payMethod: 'upi', payFrom: 'credit' });
     expect(rows[3]).toMatchObject({ description: 'A Relative', kind: 'settlement', direction: 'credit' });
     expect(rows[5]).toMatchObject({ description: 'Apple Media Services', payMethod: 'autopay', category: 'Other' });
   });
@@ -287,12 +289,21 @@ describe('a Paytm row with a newline in its details survives', () => {
   });
 });
 
-describe('a debit card is the bank (W1-06)', () => {
-  it('reads "Debit Card" as bank and a credit card as card', () => {
+describe('a debit card is the bank; a credit card on UPI is From the card (W1-06, U-48)', () => {
+  it('reads a debit card as the bank and a credit card on UPI as card debt', () => {
     const { rows } = parsePaytmWorkbook([summarySheet, historySheet([
       row('24/07/2026', '10:00:00', 'Paid to Shop A', 'a@ybl on PhonePe', 'HDFC Bank Debit Card - 11', '-300.00', '1'),
       row('24/07/2026', '11:00:00', 'Paid to Shop B', 'b@ybl on PhonePe', 'ICICI Bank Rupay Credit Card - 00', '-400.00', '2'),
     ])]);
-    expect(rows.map(r => r.payMethod)).toEqual(['bank', 'card']);
+    expect(rows.map(r => r.payMethod)).toEqual(['upi', 'upi']);
+    expect(rows.map(r => r.payFrom)).toEqual([undefined, 'credit']);
+  });
+
+  it('a card with no UPI reference or UPI ID was charged to the card directly', () => {
+    const { rows } = parsePaytmWorkbook([summarySheet, historySheet([
+      row('24/07/2026', '12:00:00', 'Paid to Shop C', 'Order 991', 'ICICI Bank Credit Card - 00', '-500.00'),
+      row('24/07/2026', '13:00:00', 'Paid to Shop D', 'Order 992', 'HDFC Bank Debit Card - 11', '-200.00'),
+    ])]);
+    expect(rows.map(r => r.payMethod)).toEqual(['card', 'bank']);
   });
 });

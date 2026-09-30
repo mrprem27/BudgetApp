@@ -561,6 +561,7 @@ CREATE TABLE imported_transactions (
   raw              TEXT,
   source           TEXT NOT NULL DEFAULT 'manual',
   pay_method       TEXT CHECK (pay_method IS NULL OR pay_method IN ('upi','card','cash','bank','wallet','autopay','other')),
+  pay_from         TEXT CHECK (pay_from IS NULL OR pay_from IN ('bank','cash','wallet','credit')),  -- U-48: where the money came from; NULL = the usual for pay_method
   dest_group_id    TEXT,
   split_draft      TEXT CHECK (split_draft IS NULL OR json_valid(split_draft)),
   counterparty_id  TEXT,
@@ -598,6 +599,7 @@ CREATE TABLE transactions (
   category           TEXT NOT NULL CHECK (length(trim(category)) > 0),
   note               TEXT,
   pay_method         TEXT CHECK (pay_method IS NULL OR pay_method IN ('upi','card','cash','bank','wallet','autopay','other')),
+  pay_from           TEXT CHECK (pay_from IS NULL OR pay_from IN ('bank','cash','wallet','credit')),
   source             TEXT CHECK (source IS NULL OR source IN ('voice','email','gpay','paytm','bank_csv','sms','notification','upi_qr','peer','manual')),
   currency           TEXT NOT NULL DEFAULT 'INR' CHECK (length(currency) = 3),
   asset_id           TEXT REFERENCES assets(id),

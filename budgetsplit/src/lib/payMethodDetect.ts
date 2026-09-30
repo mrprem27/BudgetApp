@@ -1,4 +1,4 @@
-import { PayMethod } from '../constants/enums';
+import { PayMethod, type PayFrom } from '../constants/enums';
 
 /**
  * Detect how a payment was made from the plain text of an ingested transaction
@@ -27,6 +27,15 @@ const WALLET_RE = /\b(?:wallet|paytm balance|amazon pay balance|amazon pay|mobik
 const UPI_RE = /(?:@[a-z]{2,}\b|\bupi\b|\bvpa\b|\bp2p\b|unified payments)/i;
 // Cash — rarely in alerts, but explicit "cash".
 const CASH_RE = /\bcash\b/i;
+
+/**
+ * Where the money came from, when the text says so and it is not the usual for its How (`U-48`):
+ * a UPI payment that names a credit card is card debt, not money out of the bank.
+ */
+export function detectPayFrom(text: string | null | undefined): PayFrom | undefined {
+  const t = text ?? '';
+  return UPI_RE.test(t) && /\bcredit[\s-]?card\b/i.test(t) ? 'credit' : undefined;
+}
 
 /** Best-effort pay-method from ingested text, or null. */
 export function detectPayMethod(text: string | null | undefined): PayMethod | null {

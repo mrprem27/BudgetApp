@@ -102,6 +102,7 @@ export const COLUMN_FATES: Record<string, Record<string, Fate>> = {
     lng: '→ transactions.longitude',
     place_label: '→ transactions.place_label',
     pay_method: '→ transactions.pay_method',
+    pay_from: '→ transactions.pay_from',
     currency: '→ transactions.currency (NULL means INR)',
     source: '→ transactions.source',
     asset_id: '→ transactions.asset_id',
@@ -198,6 +199,7 @@ export const COLUMN_FATES: Record<string, Record<string, Fate>> = {
     created_at: '→ imported_transactions.created_at', dest_group_id: '→ imported_transactions.dest_group_id',
     split_draft: '→ imported_transactions.split_draft', counterparty_id: '→ imported_transactions.counterparty_id',
     source: '→ imported_transactions.source', pay_method: '→ imported_transactions.pay_method',
+    pay_from: '→ imported_transactions.pay_from',
     lat: '→ imported_transactions.latitude', lng: '→ imported_transactions.longitude',
     place_label: '→ imported_transactions.place_label',
     author_person_id: local('schema-only groundwork; nothing reads it'),
@@ -289,7 +291,7 @@ const SIMPLE: Record<'asset' | 'savings_goal' | 'savings_txn' | 'pending_txn', S
     entity: 'imported_transactions',
     cols: { date: 'date', amount: 'amount', description: 'description', kind: 'kind', category: 'category',
       direction: 'direction', raw: 'raw', created_at: 'created_at', dest_group_id: 'dest_group_id',
-      split_draft: 'split_draft', counterparty_id: 'counterparty_id', source: 'source', pay_method: 'pay_method',
+      split_draft: 'split_draft', counterparty_id: 'counterparty_id', source: 'source', pay_method: 'pay_method', pay_from: 'pay_from',
       lat: 'latitude', lng: 'longitude', place_label: 'place_label' },
   },
 };
@@ -550,6 +552,7 @@ export function txnToServer(b: LocalBundle, ctx: MapContext): Outgoing {
     data: compact({
       group_id: t.group_id, kind: t.kind, entry_mode: t.entry_mode, amount, date: t.date,
       timezone: t.tz ?? null, category: t.category, note: t.note ?? null, pay_method: t.pay_method ?? null,
+      pay_from: t.pay_from ?? null,
       source: t.source ?? null,
       currency: str(t.currency) ?? undefined,           // NULL means INR: let the server's default say so
       asset_id: t.asset_id ?? null, latitude: t.lat ?? null, longitude: t.lng ?? null,
@@ -588,6 +591,7 @@ export function serverToTxn(t: Row, ctx: MapContext): LocalBundle {
       recur_mode: rule ? rule.mode : 'auto',
       tz: t.timezone ?? null, lat: t.latitude ?? null, lng: t.longitude ?? null, place_label: t.place_label ?? null,
       pay_method: t.pay_method ?? null,
+      pay_from: t.pay_from ?? null,
       currency: t.currency === 'INR' ? null : (t.currency ?? null),
       source: t.source ?? null, asset_id: t.asset_id ?? null,
       author_person_id: author && !isMe(author, ctx) ? author : null,

@@ -3,7 +3,7 @@
 // pocket, settlements in/out, income, minus money set aside in Savings.
 // Budgets/"spending" still use your share; this is the cash-timing view.
 
-import { PayMethod } from '../constants/enums';
+import { payFromOf, isCardRepayment } from '../constants/enums';
 import { myShareOf, myPaidOf } from './splitMath';
 
 export type CashTxn = {
@@ -11,6 +11,8 @@ export type CashTxn = {
   is_deleted?: number | boolean;
   /** How it was paid. Card spend is debt, not cash out — see `computeCash`. */
   pay_method?: string | null;
+  /** Where the money came from when not the usual for How (`U-48`); see `payFromOf`. */
+  pay_from?: string | null;
   /** Epoch ms. Only used to date card spend against the money profile's baseline. */
   date?: number;
   payments: { personId: string; amount: number }[];
@@ -90,24 +92,21 @@ export function computeCash(
     if (t.is_deleted) continue;
     const pay = myPaidOf(t, myId);
     const share = myShareOf(t, myId);
+    const fromCard = payFromOf(t) === 'credit';
+    const inWindow = cardBaselineMs == null || (t.date ?? 0) > cardBaselineMs;
     if (t.kind === 'income') income += pay;
     else if (t.kind === 'expense') {
-      if (t.pay_method === PayMethod.Card) {
-        // Debt, not cash out — and only the part not already in the stated balance.
-        if (cardBaselineMs == null || (t.date ?? 0) > cardBaselineMs) cardSpend += pay;
-      } else {
-        paidExpenses += pay;                                   // cash out the moment you paid
-      }
+      // From a credit card: debt, not cash out — and only the part not already in the stated balance.
+      if (fromCard) { if (inWindow) cardSpend += pay; }
+      else paidExpenses += pay;                                // cash out the moment you paid
     }
     else if (t.kind === 'settlement') {
-      settledOut += pay; settledIn += share;
-      // A card-bill payment (settlement with pay_method 'card'): the cash left
-      // via settledOut above, and the same amount comes off the card debt —
-      // creditUsed's one way down between Plan edits. Baseline-bounded exactly
-      // like card spend: rows at/before the stated balance are already in it.
-      if (t.pay_method === PayMethod.Card && (cardBaselineMs == null || (t.date ?? 0) > cardBaselineMs)) {
-        cardSpend -= pay;
-      }
+      settledIn += share;
+      if (!fromCard) settledOut += pay;
+      else if (!isCardRepayment(t) && inWindow) cardSpend += pay;   // a transfer paid from the card
+      // A card-bill payment: the cash left via settledOut above (its From is the bank), and the
+      // same amount comes off the card debt — baseline-bounded exactly like card spend.
+      if (isCardRepayment(t) && inWindow) cardSpend -= pay;
     }
   }
   return cashPositionFromTotals({ income, paidExpenses, settledOut, settledIn, cardSpend }, savings, openingCash);

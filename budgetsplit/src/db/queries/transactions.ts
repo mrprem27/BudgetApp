@@ -9,7 +9,8 @@ import { RULE_IN_LIVE_GROUP } from './memberSql';
 import { settlementView } from '../../lib/settlementView';
 import { formatRupees } from '../../lib/money';
 import { serializeTags } from '../../lib/tags';
-import type { EntryMode, RecurFreq, RecurState, PayMethod, TxnKind, TxnSource , RecurMode } from '../../constants/enums';
+import type { EntryMode, RecurFreq, RecurState, PayMethod, TxnKind, TxnSource , RecurMode, PayFrom } from '../../constants/enums';
+import { storedPayFrom } from '../../constants/enums';
 
 /**
  * Raised when a write would change an entry somebody else wrote.
@@ -51,6 +52,8 @@ export type Txn = {
   lng: number | null;
   place_label: string | null;
   pay_method: PayMethod | null;
+  /** Where the money came from when not the usual for pay_method (`U-48`). */
+  pay_from: PayFrom | null;
   /**
    * The named asset a transfer moved money into or out of. NULL on every other
    * row — which is every row that existed before the asset register.
@@ -303,6 +306,8 @@ export type InsertTxnInput = {
   lng?: number;
   placeLabel?: string;
   payMethod?: PayMethod;
+  /** Where the money came from, when How allows a choice (`U-48`). Stored via `storedPayFrom`. */
+  payFrom?: PayFrom | null;
   /**
    * The named asset this transfer moved money into or out of, so the row can be
    * traced back to it — which is what lets an asset be deleted only when nothing
@@ -367,8 +372,8 @@ export async function insertTxnRows(
     await db.runAsync(
       `INSERT INTO txn
          (id,group_id,kind,entry_mode,date,category,note,attachment_uri,tags,
-          recur_freq,recur_interval,recur_end,recur_mode,tz,lat,lng,place_label,pay_method,currency,source,asset_id,is_deleted,created_at,updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?)`,
+          recur_freq,recur_interval,recur_end,recur_mode,tz,lat,lng,place_label,pay_method,pay_from,currency,source,asset_id,is_deleted,created_at,updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?)`,
       [
         id, input.groupId, input.kind, input.entryMode, input.date,
         input.category, input.note ?? null, input.attachmentUri ?? null,
@@ -377,6 +382,7 @@ export async function insertTxnRows(
         input.recurMode ?? 'auto',
         localTz(), input.lat ?? null, input.lng ?? null, input.placeLabel ?? null,
         input.payMethod ?? null,
+        storedPayFrom(input.payMethod, input.payFrom),
         input.currency ?? null,
         input.source ?? null,
         input.assetId ?? null,
@@ -445,6 +451,8 @@ export type SettlementInput = {
   date?: number;
   note?: string;
   payMethod?: PayMethod;
+  /** Where the money came from, when How allows a choice (`U-48`). Stored via `storedPayFrom`. */
+  payFrom?: PayFrom | null;
   /** Transfer reason — now a real 'transfer' category. Defaults to 'Settlement'. */
   category?: string;
   /**
@@ -460,7 +468,7 @@ export type SettlementInput = {
 export async function recordSettlement(db: SQLite.SQLiteDatabase, s: SettlementInput): Promise<string> {
   return insertTxn(db, {
     groupId: s.groupId, kind: 'settlement', entryMode: 'quick', date: s.date ?? Date.now(),
-    category: s.category ?? 'Settlement', note: s.note, payMethod: s.payMethod,
+    category: s.category ?? 'Settlement', note: s.note, payMethod: s.payMethod, payFrom: s.payFrom,
     tags: s.tags, attachmentUri: s.attachmentUri,
     payments: [{ personId: s.fromId, amount: s.amount }],
     shares: [{ personId: s.toId, amount: s.amount }],
@@ -503,16 +511,16 @@ export async function insertItemizedTxn(
       // exactly that case, landing as NULL — "typed by hand".
       `INSERT INTO txn
          (id,group_id,kind,entry_mode,date,category,note,attachment_uri,tags,adjustments,
-          recur_freq,recur_interval,recur_end,tz,lat,lng,place_label,pay_method,currency,source,
+          recur_freq,recur_interval,recur_end,tz,lat,lng,place_label,pay_method,pay_from,currency,source,
           is_deleted,created_at,updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?)`,
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?)`,
       [
         id, input.groupId, input.kind, 'itemized', input.date,
         input.category, input.note ?? null, input.attachmentUri ?? null,
         serializeTags(input.tags ?? []),
         input.adjustments && input.adjustments.length ? JSON.stringify(input.adjustments) : null,
         null, null, null, localTz(), input.lat ?? null, input.lng ?? null, input.placeLabel ?? null,
-        input.payMethod ?? null, input.currency ?? null, input.source ?? null, now, now,
+        input.payMethod ?? null, storedPayFrom(input.payMethod, input.payFrom), input.currency ?? null, input.source ?? null, now, now,
       ],
     );
     // Its own INSERT INTO txn — this function deliberately does NOT reuse
@@ -600,12 +608,12 @@ export async function updateItemizedTxn(
     id = await moveIfRegrouped(db, editId, input.groupId, now);
     await db.runAsync(
       `UPDATE txn SET group_id=?, category=?, note=?, attachment_uri=?, tags=?, adjustments=?,
-                      date=?, pay_method=?, currency=?, updated_at=? WHERE id=?`,
+                      date=?, pay_method=?, pay_from=?, currency=?, updated_at=? WHERE id=?`,
       [
         input.groupId, input.category, input.note ?? null, input.attachmentUri ?? null,
         serializeTags(input.tags ?? []),
         input.adjustments && input.adjustments.length ? JSON.stringify(input.adjustments) : null,
-        input.date, input.payMethod ?? null, input.currency ?? null, now, id,
+        input.date, input.payMethod ?? null, storedPayFrom(input.payMethod, input.payFrom), input.currency ?? null, now, id,
       ],
     );
     await queueEntry(db, id);
@@ -956,6 +964,8 @@ export type UpdateTxnInput = {
   category: string;
   note?: string;
   payMethod?: PayMethod;
+  /** Where the money came from, when How allows a choice (`U-48`). Stored via `storedPayFrom`. */
+  payFrom?: PayFrom | null;
   /** Full replacement set — omit to clear. Normalized by `serializeTags`. */
   tags?: string[];
   /**
@@ -1034,8 +1044,8 @@ export async function updateTxn(
     id = await moveIfRegrouped(db, input.id, input.groupId, now);
     // Columns absent from this SET are preserved — none are editable on that screen.
     await db.runAsync(
-      `UPDATE txn SET group_id=?, kind=?, date=?, category=?, note=?, pay_method=?, tags=?, updated_at=? WHERE id=?`,
-      [input.groupId, input.kind, input.date, input.category, input.note ?? null, input.payMethod ?? null, serializeTags(input.tags ?? []), now, id],
+      `UPDATE txn SET group_id=?, kind=?, date=?, category=?, note=?, pay_method=?, pay_from=?, tags=?, updated_at=? WHERE id=?`,
+      [input.groupId, input.kind, input.date, input.category, input.note ?? null, input.payMethod ?? null, storedPayFrom(input.payMethod, input.payFrom), serializeTags(input.tags ?? []), now, id],
     );
     if (input.attachmentUri !== undefined) {
       await db.runAsync('UPDATE txn SET attachment_uri=? WHERE id=?', [input.attachmentUri, id]);

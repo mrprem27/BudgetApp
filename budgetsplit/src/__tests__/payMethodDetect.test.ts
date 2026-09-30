@@ -1,4 +1,4 @@
-import { detectPayMethod } from '../lib/payMethodDetect';
+import { detectPayMethod, detectPayFrom } from '../lib/payMethodDetect';
 
 describe('detectPayMethod', () => {
   it('detects UPI from VPA handles, "UPI" and "you paid"', () => {
@@ -40,5 +40,15 @@ describe('detectPayMethod', () => {
     expect(detectPayMethod('')).toBeNull();
     expect(detectPayMethod(null)).toBeNull();
     expect(detectPayMethod(undefined)).toBeNull();
+  });
+});
+
+describe('detectPayFrom (U-48)', () => {
+  it('a UPI payment naming a credit card is From the card', () => {
+    expect(detectPayFrom('Rs 450 paid via UPI using your RuPay Credit Card xx12')).toBe('credit');
+  });
+  it('says nothing when it is the usual', () => {
+    expect(detectPayFrom('Rs 200 debited via UPI Ref 123')).toBeUndefined();
+    expect(detectPayFrom('Rs 1200 spent on your Credit Card ending 4321')).toBeUndefined();
   });
 });

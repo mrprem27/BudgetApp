@@ -1,5 +1,6 @@
 import { moneySumLines, openingFor } from '../lib/moneySum';
 import { getCashPosition, fundGoal, insertGoal } from '../db/queries/savings';
+import { payCardBill } from '../db/queries/spendPower';
 import { createTestDb, addPerson, addGroup, addMember, addTxn, asDb } from './helpers/testDb';
 
 describe('moneySumLines', () => {
@@ -39,6 +40,8 @@ describe('the sum matches the real Spendable', () => {
     addTxn(db, { groupId: g, kind: 'income', date: 2, category: 'Salary', payments: [{ personId: me, amount: 200000 }] });
     const goal = await insertGoal(asDb(db), { name: 'Trip', target: 500000, priority: 'want' });
     await fundGoal(asDb(db), goal.id, 70000);
+    // A card bill paid: before U-48 no place went down, and the sum stopped adding up.
+    await payCardBill(asDb(db), 25000);
 
     const pos = await getCashPosition(asDb(db));
     const { spendable } = moneySumLines({

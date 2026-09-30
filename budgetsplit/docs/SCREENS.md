@@ -2194,6 +2194,7 @@ widgets; `system/` = onboarding, gates, privacy. `ui/` never imports from `finan
 | `plan/TotalMoneyCard` | Available Money hero + net worth + credit headroom (`V2-12`). |
 | `plan/MoneyEditorSheet` | Editor *(sheet)* for the figures behind Total Money: takes today's balances, works out the start on save. |
 | `plan/MoneySum` | The money sum (places − In goals = Spendable + Invested − Card owed = Net worth), shared by the card and its editor. |
+| `add/PayMethodSheet` From | Under UPI and Autopay, a From row (Bank · Credit card · Wallet); the chip shows From only when it isn't the usual (`U-48`). |
 | `pay/PayMethodGlyph` | The one glyph per pay method; Bank, Wallet, Cash drawn on Feather's grid (`W1-06`). |
 | `plan/LockExplainerSheet` | Explains what protecting a goal does. |
 | `add/AmountField` · `add/CategoryDatePills` · `add/ContextPill` · `add/DetailChips` · `add/BudgetNudge` · `add/AttachmentRow` · `add/LocationRow` · `add/SplitSummary` · `add/SplitSheet` · `add/SplitEditor` · `add/PayersSheet` · `add/TransferSlotSheet` | Add-flow sub-views driven by `useAddTxnForm`. `SplitEditor` is also used inline by Review. |
