@@ -1,6 +1,5 @@
-import React, { useCallback, useState } from 'react';
-import { View, Text, StyleSheet, SectionList, TouchableOpacity } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { useCallback, useState } from 'react';
+import { View, Text, StyleSheet, SectionList } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { colors, type, space, layout } from '../../../src/theme';
 import { ScreenHeader } from '../../../src/components/ui/ScreenHeader';

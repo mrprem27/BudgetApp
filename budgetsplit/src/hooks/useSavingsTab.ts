@@ -17,7 +17,6 @@ import { Alert } from 'react-native';
 import { moveMoney, AssetError, type MoveEndpoint } from '../db/queries/assets';
 import { loadSavingsTabData } from '../lib/savingsTabData';
 import { getPendingOverspendNotice, setPendingOverspendNotice } from '../lib/overspendNotice';
-import type { MoneyProfile } from '../lib/cash';
 import { useDataRefresh } from '../components/system/DataRefreshProvider';
 import { useScreenData } from './useScreenData';
 

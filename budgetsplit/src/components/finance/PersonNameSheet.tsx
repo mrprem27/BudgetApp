@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { colors, type, space, layout } from '../tokens';
 import { SheetModal } from '../ui/SheetModal';

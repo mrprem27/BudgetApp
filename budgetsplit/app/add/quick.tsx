@@ -1,7 +1,6 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, Keyboard, Platform } from 'react-native';
+import { useState } from 'react';
+import { View, Text, StyleSheet, Keyboard } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Feather } from '@expo/vector-icons';
 import { colors, type, space, layout } from '../../src/theme';
 import { formatRupees } from '../../src/lib/money';
 import { kindAccent } from '../../src/lib/kindTheme';

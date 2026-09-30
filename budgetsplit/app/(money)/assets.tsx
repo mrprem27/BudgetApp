@@ -1,4 +1,3 @@
-import React from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { colors, space, layout } from '../../src/theme';

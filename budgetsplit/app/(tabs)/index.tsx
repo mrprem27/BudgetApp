@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { settings } from '../../src/lib/settings';
 import { nextLevel, levelOfferDismissed, dismissLevelOffer, applyLevel, LEVEL_OPTIONS, LEVEL_OFFER_AFTER } from '../../src/lib/levels';
 import { asIntent } from '../../src/lib/personaDefaults';
@@ -6,8 +6,7 @@ import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-nati
 import { Feather } from '@expo/vector-icons';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { getDate, getDaysInMonth } from 'date-fns';
+import { getDaysInMonth } from 'date-fns';
 import { colors, type, space, radius, layout, alpha } from '../../src/theme';
 import { formatCompact } from '../../src/lib/money';
 import { shortDate } from '../../src/lib/dateFormat';
@@ -37,7 +36,7 @@ import { HealthSheet } from '../../src/components/finance/HealthSheet';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { HeaderIconButton } from '../../src/components/ui/HeaderIconButton';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
-import { greeting, healthBandColor } from '../../src/components/finance/home/helpers';
+import { healthBandColor } from '../../src/components/finance/home/helpers';
 import { loadHomeData, loadCatchUp, PREV_LABEL, PERIOD_LABEL, TXN_COUNT_PERIOD_LABEL, TARGET_FOR_TAB, type TabKey } from '../../src/lib/homeData';
 import { Card } from '../../src/components/ui/Card';
 
@@ -51,7 +50,6 @@ const TABS: { key: TabKey; label: string }[] = [
 export default function DashboardScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const bottomPad = useContentInset({ tabBar: true });
   const storage = useStorageWarning();
   const groups = useStore(s => s.groups);
@@ -80,7 +78,6 @@ export default function DashboardScreen() {
 
   const meInfo = data?.meInfo ?? null;
   const spending = data?.spending ?? 0;
-  const income = data?.income ?? 0;
   const prevSpending = data?.prevSpending ?? 0;
   const oweTotal = data?.oweTotal ?? 0;
   const owedTotal = data?.owedTotal ?? 0;
@@ -413,7 +410,6 @@ export default function DashboardScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: layout.screenPaddingH },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: space.lg },
   // Dedicated first-run empty home (design Screen 6)
   // Chrome only: `EmptyState` owns the padding and the alignment inside it.
   emptyHero: { marginBottom: space.md },
@@ -424,12 +420,6 @@ const styles = StyleSheet.create({
   startIcon: { width: 40, height: 40, borderRadius: 11, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   startTitle: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   startSub: { ...type.caption, color: colors.textMuted, marginTop: 2 },
-  greeting: { ...type.caption, color: colors.textMuted, marginBottom: 2 },
-  appName: { fontSize: 24, fontFamily: 'Inter_600SemiBold', color: colors.textPrimary, letterSpacing: -0.3 },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  headerBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.bgMuted, alignItems: 'center', justifyContent: 'center' },
-  notifBadge: { position: 'absolute', top: -3, right: -3, minWidth: 16, height: 16, borderRadius: radius.sm, paddingHorizontal: space.xs, backgroundColor: colors.expense, alignItems: 'center', justifyContent: 'center', borderWidth: 0 },
-  notifBadgeText: { fontSize: 9, lineHeight: 12, fontFamily: 'Inter_600SemiBold', color: colors.onAccent },
   tabRow: { marginBottom: space.md },
   catchUpBanner: { backgroundColor: alpha(colors.healthAmber, 9), borderRadius: 14, borderWidth: 1, borderColor: alpha(colors.healthAmber, 33), padding: space.md, gap: space.sm, marginBottom: space.sm },
   catchUpRow: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm },

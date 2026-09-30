@@ -44,7 +44,7 @@ import type { Person } from '../db/queries/persons';
 import type { Category } from '../db/queries/categories';
 import { TRANSFER_HIDDEN_FROM_PICKER } from '../constants/categories';
 import { settleDirection } from '../lib/owe';
-import { AddKind, ADD_KIND, PayMethod, RecurEndMode, INCOME_LANDING_DEFAULT, TRANSFER_SCOPE_ALL, asPayMethod, type TransferScope , defaultRecurMode, type RecurMode } from '../constants/enums';
+import { AddKind, ADD_KIND, PayMethod, RecurEndMode, INCOME_LANDING_DEFAULT, TRANSFER_SCOPE_ALL, asPayMethod, type TransferScope, defaultRecurMode, type RecurMode } from '../constants/enums';
 import type { SplitMode, RecurFreq } from '../constants/enums';
 import { track } from '../lib/usageEvents';
 
@@ -445,7 +445,6 @@ export function useAddTxnForm(params: AddTxnParams) {
   const paymentsTotal = payments.reduce((s, x) => s + x.amount, 0);
   // Same allocation rule the Review commit path uses (lib/splitMath.validateShares).
   const shareCheck = validateShares(total, shares);
-  const sharesTotal = shareCheck.assigned;
   const remainder = shareCheck.delta;
   const paymentRemainder = total - paymentsTotal;
 

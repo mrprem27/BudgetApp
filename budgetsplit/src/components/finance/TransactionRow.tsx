@@ -14,7 +14,6 @@ import { settlementView } from '../../lib/settlementView';
 import { categoryVisual } from '../../constants/categories';
 import type { TxnWithSplits } from '../../db/queries/transactions';
 import type { Person } from '../../db/queries/persons';
-import { alpha } from '../../theme';
 
 type Props = {
   txn: TxnWithSplits;

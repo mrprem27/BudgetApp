@@ -1,6 +1,6 @@
 import { parseToPaise } from './money';
 import { detectPayMethod } from './payMethodDetect';
-import type { ParsedRow, ParseResult } from './importParse';
+import type { ParseResult } from './importParse';
 
 /**
  * Parser for **bank / UPI / wallet transaction-ALERT emails** (HDFC, ICICI, SBI,

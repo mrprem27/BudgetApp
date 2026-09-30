@@ -1,6 +1,6 @@
 import 'react-native-get-random-values';
 import 'react-native-reanimated';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { View, AppState } from 'react-native';
 import { Stack, useRouter, type Href } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';

@@ -1,5 +1,5 @@
-import React, { useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
+import { useMemo, useRef, useState } from 'react';
+import { View, Text, StyleSheet, TextInput } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { shortDate } from '../../../lib/dateFormat';
 import { SheetModal } from '../../ui/SheetModal';

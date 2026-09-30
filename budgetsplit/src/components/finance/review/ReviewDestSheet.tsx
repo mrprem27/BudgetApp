@@ -1,4 +1,3 @@
-import React from 'react';
 import { SheetModal } from '../../ui/SheetModal';
 import { GroupGrid } from '../GroupGrid';
 import { asFeather } from '../../../constants/palette';

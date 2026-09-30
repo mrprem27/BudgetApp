@@ -1,9 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SectionList, Alert } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { View, Text, StyleSheet, SectionList, Alert } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius, layout } from '../../src/theme';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { HeaderIconButton } from '../../src/components/ui/HeaderIconButton';
@@ -57,7 +55,6 @@ const listScroll = keyboardAwareScroll();
 
 export default function PersonalScreen() {
   const db = useSQLiteContext();
-  const insets = useSafeAreaInsets();
   const router = useRouter();
   const me = useStore((s) => s.me);
   const myId = me?.id ?? '';

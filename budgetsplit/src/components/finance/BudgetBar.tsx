@@ -1,4 +1,3 @@
-import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { colors, type, space } from '../tokens';
 import { AnimatedBar } from '../ui/anim/AnimatedBar';

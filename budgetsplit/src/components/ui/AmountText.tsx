@@ -1,4 +1,3 @@
-import React from 'react';
 import { Text, TextStyle } from 'react-native';
 import { formatRupees, formatRupeesShort, formatCompact } from '../../lib/money';
 import { type, colors } from '../tokens';

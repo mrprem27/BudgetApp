@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Alert, ActivityIndicator,
@@ -18,7 +18,6 @@ import { CategoryRankList } from '../../src/components/finance/home/CategoryRank
 import { TrendBars } from '../../src/components/finance/TrendBars';
 import { colors, type, space, radius, layout, alpha } from '../../src/theme';
 
-import type { BudgetAnalytics } from '../../src/lib/analytics';
 import { utilLabel, budgetHealth } from '../../src/lib/budget';
 import { formatCompact } from '../../src/lib/money';
 import { buildReportCsv, buildReportHtml } from '../../src/lib/reportExport';
@@ -31,18 +30,14 @@ import { EmptyState } from '../../src/components/ui/EmptyState';
 import { ErrorState } from '../../src/components/ui/ErrorState';
 import { categoryVisual } from '../../src/constants/categories';
 
-import type { BudgetGroup } from '../../src/db/queries/groups';
-import type { TxnWithSplits } from '../../src/db/queries/transactions';
 import { AppRefreshControl } from '../../src/components/ui/AppRefreshControl';
 import { loadReportsData } from '../../src/lib/reportsData';
-import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 import { backOr } from '../../src/lib/nav';
 import { Card } from '../../src/components/ui/Card';
 
 export default function ReportsScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
-  const { flags } = useFeatureFlags();
   const insets = useSafeAreaInsets();
   const [month, setMonth] = useState(() => new Date());
   const [selectedCat, setSelectedCat] = useState<string | null>(null);
@@ -480,7 +475,6 @@ const styles = StyleSheet.create({
   trendBlock: { marginTop: space.md, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: space.md },
   trendHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: space.sm },
   trendClear: { ...type.caption, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
-  groupName: { ...type.subheading, color: colors.textPrimary },
   metricRow: { flexDirection: 'row', alignItems: 'center' },
   metric: { flex: 1, alignItems: 'center', gap: 2 },
   metricDivider: { width: 1, height: 32, backgroundColor: colors.border },

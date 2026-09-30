@@ -1,4 +1,3 @@
-import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -20,16 +19,16 @@ import { TabPills } from '../../../src/components/ui/TabPills';
 import { ASSET_BUCKET, type AssetBucket } from '../../../src/constants/enums';
 import { LockExplainerSheet } from '../../../src/components/finance/plan/LockExplainerSheet';
 import { formatRupees, formatCompact, parseToPaise, paiseToInput } from '../../../src/lib/money';
-import { goalProgress, estimatedCompletion, monthlyContribution, monthsUntil, neededPerMonth } from '../../../src/lib/savings';
+import { goalProgress, monthlyContribution, monthsUntil, neededPerMonth } from '../../../src/lib/savings';
 import { PRIORITY, PRIORITY_LABEL } from '../../../src/constants/enums';
 
 import type { SavingsTxn, SavingsFrequency, Priority } from '../../../src/db/queries/savings';
+import { AppRefreshControl } from '../../../src/components/ui/AppRefreshControl';
+import { useSavingsGoalScreen } from '../../../src/hooks/useSavingsGoalScreen';
 
 // Order matches funding/raid weight: Emergency funds first & is never raided;
 // Want funds last & is raided first. See src/lib/savingsEngine.ts.
 const PRIORITY_TABS = PRIORITY.map(p => ({ key: p, label: PRIORITY_LABEL[p] }));
-import { AppRefreshControl } from '../../../src/components/ui/AppRefreshControl';
-import { useSavingsGoalScreen } from '../../../src/hooks/useSavingsGoalScreen';
 
 // Goal deadline as quick durations (no fragile date-picker modal-in-modal).
 const DEADLINE_OPTS: { label: string; months: number | null }[] = [
@@ -111,7 +110,6 @@ export default function GoalDetailScreen() {
   }
 
   const p = goalProgress(saved, goal.target);
-  const est = estimatedCompletion(p.remaining, goal.allocation, goal.frequency);
   const monthly = monthlyContribution(goal.allocation, goal.frequency);
   const isOverfunded = saved > goal.target;
   const surplus = isOverfunded ? saved - goal.target : 0;

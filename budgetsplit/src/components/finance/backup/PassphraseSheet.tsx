@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { Text, StyleSheet } from 'react-native';
 import { colors, type, space, radius } from '../../tokens';
 import { SheetModal } from '../../ui/SheetModal';
 import { Input } from '../../ui/Input';

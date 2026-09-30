@@ -1,4 +1,3 @@
-import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import Svg, { Circle } from 'react-native-svg';
@@ -194,7 +193,6 @@ const styles = StyleSheet.create({
   factorRow: { flexDirection: 'row', alignItems: 'flex-start', gap: space.smd, padding: space.md },
   factorMid: { flex: 1 },
   factorLabel: { ...type.labelSemi, color: colors.textPrimary, marginBottom: 2 },
-  factorDetail: { ...type.caption, color: colors.textSecondary, lineHeight: 16 },
   factorPts: { ...type.amountSM },
   // One dot shape. Both copies of this were 7×7 with `borderRadius: 4` — half of 7 is
   // 3.5, so they rendered very slightly squared.

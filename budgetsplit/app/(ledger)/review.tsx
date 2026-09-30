@@ -1,12 +1,9 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { View, Text, SectionList, TouchableOpacity, Alert } from 'react-native';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { View, Text, TouchableOpacity, Alert } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import 'react-native-get-random-values';
-import { v4 as uuid } from 'uuid';
 import { useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
-import { colors, space, layout } from '../../src/theme';
+import { colors, space } from '../../src/theme';
 import { reviewStyles as styles } from '../../src/components/finance/review/reviewStyles';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { HeaderIconButton } from '../../src/components/ui/HeaderIconButton';
@@ -16,30 +13,24 @@ import { SheetModal } from '../../src/components/ui/SheetModal';
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
 import { SecondaryButton } from '../../src/components/ui/SecondaryButton';
 import { Banner } from '../../src/components/ui/Banner';
-import { ReviewSourceTabs, ReviewSourceHeader } from '../../src/components/finance/review/ReviewSourceTabs';
+import { ReviewSourceTabs } from '../../src/components/finance/review/ReviewSourceTabs';
 import { KeyboardFooter } from '../../src/components/ui/KeyboardForm';
 import { ReviewList } from '../../src/components/finance/review/ReviewList';
 import { useReviewCommit } from '../../src/hooks/useReviewCommit';
 import { SkeletonCard } from '../../src/components/ui/Skeleton';
-import { AppRefreshControl } from '../../src/components/ui/AppRefreshControl';
 import { ReviewRowSheets } from '../../src/components/finance/review/ReviewRowSheets';
-import type { ParsedDirection } from '../../src/lib/importParse';
 import {
-  effectiveRow, effectiveSplit, snapshotRow, planCommit as planCommitPure, txnInputFromPlan,
-  type RowEdit, type SplitState, type CommitPlan, type ReviewContext,
+  effectiveRow, effectiveSplit, planCommit as planCommitPure, type RowEdit, type SplitState, type CommitPlan, type ReviewContext
 } from '../../src/lib/reviewCommit';
 import { ReviewFilterSheet } from '../../src/components/finance/review/ReviewFilterSheet';
 import { SaveViewForm } from '../../src/components/finance/review/SaveViewForm';
-import { ReviewRowCard } from '../../src/components/finance/review/ReviewRowCard';
 import { BulkGroupSheet } from '../../src/components/finance/review/BulkGroupSheet';
 import { ReviewBulkSheets } from '../../src/components/finance/review/ReviewBulkSheets';
 import { ReviewOverflowSheet } from '../../src/components/finance/review/ReviewOverflowSheet';
 import { SavedViewsSheet } from '../../src/components/finance/review/SavedViewsSheet';
 import type { PendingTxn, PendingDraft } from '../../src/db/queries/pending';
 import type { Category } from '../../src/db/queries/categories';
-import type { Person } from '../../src/db/queries/persons';
 import { loadReview, saveDraft, convertSuggestions } from '../../src/lib/reviewData';
-import { confirmDuplicates } from '../../src/lib/confirm';
 import { parseToPaise } from '../../src/lib/money';
 import { recordCorrection } from '../../src/lib/smartCategoryLearn';
 import { detectRecurringCandidates, toRecurRows, type RecurringCandidate } from '../../src/lib/recurringSuggest';
@@ -47,9 +38,8 @@ import { RecurringSuggestionBanner } from '../../src/components/finance/review/R
 import { RecurringSuggestionsSheet } from '../../src/components/finance/review/RecurringSuggestionsSheet';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 import {
-  type ReviewFilters, DEFAULT_FILTERS,
-  filtersActive, reviewFilterCount, deriveWorkingSet, isSimilarMerchant,
-  groupBySource, presentSourcesOf, sourceSections,
+  type ReviewFilters, DEFAULT_FILTERS, reviewFilterCount, deriveWorkingSet, isSimilarMerchant,
+  groupBySource, presentSourcesOf, sourceSections
 } from '../../src/lib/reviewFilter';
 import { type SavedView, loadViews, upsertView, deleteView, makeViewId } from '../../src/lib/reviewViews';
 import { useScreenData } from '../../src/hooks/useScreenData';
@@ -57,7 +47,6 @@ import { useContentInset } from '../../src/hooks/useContentInset';
 import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
 import { useToast } from '../../src/components/system/Toast';
 import { haptic } from '../../src/lib/haptics';
-import { saveFailureMessage } from '../../src/lib/dbErrors';
 import {
   type TxnSource, TXN_SOURCE_LABEL,
 } from '../../src/constants/enums';
@@ -71,7 +60,6 @@ const BATCH = '__batch__';
 export default function ReviewScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const { refresh } = useDataRefresh();
   const { showUndo } = useToast();
   const { flags } = useFeatureFlags();
@@ -233,7 +221,7 @@ export default function ReviewScreen() {
   // each — lives in its own hook. This screen still owns the state; the hook owns
   // the transactions.
   const {
-    confirmRow, saveMany, discard, deleteRow, deleteSelected, handleClearAll,
+    confirmRow, saveMany, deleteRow, deleteSelected, handleClearAll,
   } = useReviewCommit({
     db, pending, selected, savingId, setSavingId, BATCH,
     planCommit, eff, splitState, refresh, reload, showUndo, exitSelect,

@@ -1,4 +1,3 @@
-import React from 'react';
 import { View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { SheetModal } from '../../ui/SheetModal';
@@ -6,7 +5,7 @@ import { Card } from '../../ui/Card';
 import { ListRow } from '../../ui/ListRow';
 import { Divider } from '../../ui/Divider';
 import { AmountText } from '../../ui/AmountText';
-import { colors, layout } from '../../tokens';
+import { colors } from '../../tokens';
 import type { TransferScopes } from '../../../lib/settleScope';
 import { TRANSFER_SCOPE_ALL, type TransferScope } from '../../../constants/enums';
 

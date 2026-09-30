@@ -1,4 +1,3 @@
-import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { format, isSameDay } from 'date-fns';
 import { shortDate, timeOfDay } from '../../../lib/dateFormat';

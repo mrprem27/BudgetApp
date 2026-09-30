@@ -1,17 +1,14 @@
-import React, { useState, useCallback, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput } from 'react-native';
+import { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 
-import { useRouter, type Href, useLocalSearchParams } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius, layout, alpha } from '../../src/theme';
 import { asFeather, GOAL_COLORS, GOAL_ICONS } from '../../src/constants/palette';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
-import { BudgetBar } from '../../src/components/finance/BudgetBar';
 import { EmptyState } from '../../src/components/ui/EmptyState';
 import { ErrorState } from '../../src/components/ui/ErrorState';
-import { PressableScale } from '../../src/components/ui/PressableScale';
 import { SheetModal } from '../../src/components/ui/SheetModal';
 import { DraggableList } from '../../src/components/ui/DraggableList';
 import { Input } from '../../src/components/ui/Input';
@@ -30,8 +27,6 @@ import { AssetsSection } from '../../src/components/finance/plan/AssetsSection';
 import { AffordHeroCard } from '../../src/components/finance/plan/AffordHeroCard';
 import { HeaderIconButton } from '../../src/components/ui/HeaderIconButton';
 import { Card } from '../../src/components/ui/Card';
-import { ListRow } from '../../src/components/ui/ListRow';
-import { Divider } from '../../src/components/ui/Divider';
 import { SectionHeader } from '../../src/components/ui/SectionHeader';
 import { formatCompact, parseToPaise } from '../../src/lib/money';
 
@@ -66,10 +61,8 @@ const PRIORITY_HINT: Record<Priority, string> = {
   want: 'The first goals an overspend dips into, if any.',
 };
 
-import type { MoneyProfile } from '../../src/lib/cash';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 
-import { useScreenData } from '../../src/hooks/useScreenData';
 import { useContentInset } from '../../src/hooks/useContentInset';
 import { useSavingsTab } from '../../src/hooks/useSavingsTab';
 
@@ -88,7 +81,6 @@ type MoneyTab = 'overview' | 'assets' | 'goals';
 
 export default function SavingsScreen() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   // `useContentInset`, not a hand-rolled sum. The previous expression cleared the
   // tab bar but not the "New" FAB floating above it, so the last goal card sat
   // underneath the button — the exact failure `useContentInset` was written for.
@@ -455,13 +447,10 @@ const styles = StyleSheet.create({
   // labelled columns leave ~16pt of slack, but `type.caption` scales with Dynamic
   // Type, and without this the title collapsed to "…" first and then the rightmost
   // button ran off the screen edge, since the row does not clip.
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: space.xs, flexShrink: 1 },
   // A labelled column, not a disc: the tinted circle was carrying the whole burden
   // of "this is tappable", which is why four of them read as decoration. The label
   // does that job now, so the button is the icon over its name — and `touchMin`
   // keeps the target at §6's floor even though the painted glyph is 18pt.
-  headerIconBtn: { minWidth: layout.touchMin, minHeight: layout.touchMin, alignItems: 'center', justifyContent: 'center', gap: space.xs, paddingHorizontal: space.xs, flexShrink: 1 },
-  headerIconLabel: { ...type.caption, color: colors.accent },
   hint: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginBottom: space.md },
   inputGap: { marginBottom: space.sm },
   fieldLabel: { ...type.label, color: colors.textSecondary, marginTop: space.sm, marginBottom: space.xs },

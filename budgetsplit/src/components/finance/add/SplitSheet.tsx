@@ -1,6 +1,6 @@
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
-import { colors, type, space, radius } from '../../tokens';
+import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { colors, type, space } from '../../tokens';
 import { splitEqual, splitByPercent, splitByShares, parseToPaise, formatRupees } from '../../../lib/money';
 import { SplitEditor } from './SplitEditor';
 import { PrimaryButton } from '../../ui/PrimaryButton';

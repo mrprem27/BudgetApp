@@ -1,4 +1,3 @@
-import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { colors, type, space, radius } from '../../tokens';
 import { formatCompact } from '../../../lib/money';

@@ -1,9 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, Alert } from 'react-native';
+import { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { KeyboardForm } from '../../../../src/components/ui/KeyboardForm';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useScreenData } from '../../../../src/hooks/useScreenData';
 import { canDeleteGroup, canEditGroup, isAdmin } from '../../../../src/lib/permissions';
 import { colors, type, space, radius, layout } from '../../../../src/theme';
@@ -28,7 +27,6 @@ export default function EditGroupScreen() {
   const db = useSQLiteContext();
   const { refresh } = useDataRefresh();
   const router = useRouter();
-  const insets = useSafeAreaInsets();
 
   const [name, setName] = useState('');
   const [icon, setIcon] = useState('credit-card');

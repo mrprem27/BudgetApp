@@ -1,8 +1,6 @@
-import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Chip } from '../../ui/Chip';
 import { Card } from '../../ui/Card';
-import { Divider } from '../../ui/Divider';
 import { ListRow } from '../../ui/ListRow';
 import { SectionHeader } from '../../ui/SectionHeader';
 import { space } from '../../tokens';

@@ -1,4 +1,3 @@
-import React from 'react';
 import { StyleSheet } from 'react-native';
 import { Chip } from '../../ui/Chip';
 import { colors, type, space, radius } from '../../tokens';

@@ -9,7 +9,6 @@ import { saveFailureMessage } from '../lib/dbErrors';
 import { confirmDuplicates } from '../lib/confirm';
 import { parseToPaise } from '../lib/money';
 import { haptic } from '../lib/haptics';
-import type { RecurringCandidate } from '../lib/recurringSuggest';
 import { track } from '../lib/usageEvents';
 
 type Deps = {

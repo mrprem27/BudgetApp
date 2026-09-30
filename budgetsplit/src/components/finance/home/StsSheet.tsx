@@ -128,7 +128,6 @@ export function StsSheet({ visible, onClose, sts }: Props) {
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: space.smd, gap: space.md },
   left: { flex: 1 },
-  label: { ...type.body, color: colors.textPrimary },
   amount: { ...type.bodySemi, fontFamily: 'SpaceMono_400Regular', color: colors.textPrimary },
   chevron: { marginLeft: -space.xs },
   totalLabel: { ...type.bodySemi, color: colors.textPrimary },

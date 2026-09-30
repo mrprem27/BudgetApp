@@ -1,5 +1,4 @@
 import type * as SQLite from 'expo-sqlite';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getActiveRecurringRules } from '../db/queries/transactions';
 import { getSkipsMap } from '../db/queries/recurring';
 import { getMe } from '../db/queries/persons';
@@ -14,10 +13,8 @@ import { settings } from './settings';
 import { loadFlags } from './featureFlags';
 import { getStoredSession } from './serverApi';
 import {
-  type ReminderPrefs, type ReminderTime, type PlannedReminder,
-  DEFAULT_RENEWAL_TIME, DEFAULT_DAILY_TIME, DEFAULT_BACKUP_TIME,
-  clampLead, clampTime, defaultReminderPrefs, limitReminders, atTimeOfDay, nextMonthlyAnchor,
-  planRenewalReminders,
+  DEFAULT_BACKUP_TIME, limitReminders, atTimeOfDay, nextMonthlyAnchor,
+  planRenewalReminders
 } from './reminderPlan';
 
 // Re-export the pure surface so callers import everything from one place.
@@ -27,7 +24,6 @@ export {
   REMINDER_CAP, formatReminderTime, limitReminders,
 } from './reminderPlan';
 
-const DAY = 24 * 60 * 60 * 1000;
 // Preference persistence lives in reminderPrefsStore (AsyncStorage only, no
 // expo-notifications) so non-scheduling callers can read/write a pref without
 // pulling the native module in. Re-exported here so callers see one surface.

@@ -1,4 +1,3 @@
-import React from 'react';
 import { Chip } from '../ui/Chip';
 import { IconCircle } from '../ui/IconCircle';
 import { colors } from '../tokens';

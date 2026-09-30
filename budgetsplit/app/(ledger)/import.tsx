@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, Platform, TouchableOpacity, Alert } from 'react-native';
+import { useState } from 'react';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert } from 'react-native';
 import { KeyboardForm } from '../../src/components/ui/KeyboardForm';
 import { saveFailureMessage } from '../../src/lib/dbErrors';
 import { useSQLiteContext } from 'expo-sqlite';

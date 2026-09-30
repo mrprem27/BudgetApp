@@ -1,4 +1,3 @@
-import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { PrimaryButton } from '../../ui/PrimaryButton';
 import { UpiAppGrid } from './UpiAppGrid';

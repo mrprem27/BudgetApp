@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { Animated, ViewStyle, StyleProp, DimensionValue } from 'react-native';
 import { colors, radius } from '../tokens';
 

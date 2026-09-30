@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
   View, Text, TextInput, StyleSheet, TouchableOpacity,
   FlatList, Platform,
@@ -10,7 +10,7 @@ import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius, layout, alpha } from '../../src/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { formatRupees, parseToPaise } from '../../src/lib/money';
-import { computeItemSubtotal, splitItemBase, type Adjustment } from '../../src/lib/itemized';
+import { computeItemSubtotal, splitItemBase } from '../../src/lib/itemized';
 import { SplitEditor } from '../../src/components/finance/add/SplitEditor';
 import { ReceiptScanSheet } from '../../src/components/finance/add/ReceiptScanSheet';
 import { ScanningOverlay } from '../../src/components/finance/add/ScanningOverlay';

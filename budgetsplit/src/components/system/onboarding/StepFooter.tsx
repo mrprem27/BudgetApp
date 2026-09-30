@@ -1,4 +1,3 @@
-import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { PrimaryButton } from '../../ui/PrimaryButton';
 import { colors, type, space } from '../../tokens';

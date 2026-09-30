@@ -1,7 +1,7 @@
-import React, { useState, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, Switch, TouchableOpacity,
-  ScrollView, Alert, Platform, ActivityIndicator,
+  ScrollView, Alert
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import * as LocalAuthentication from 'expo-local-authentication';
@@ -32,7 +32,6 @@ import { freeBytes } from '../../../src/lib/deviceStorage';
 import { StorageVerdict, storageVerdict, formatBytes } from '../../../src/lib/storage';
 import { DEV_TOOLS_ENABLED } from '../../../src/constants/devTools';
 import { useFeatureFlags } from '../../../src/components/system/FeatureFlagsProvider';
-import type { Person } from '../../../src/db/queries/persons';
 import type { BudgetCadence } from '../../../src/db/queries/categoryBudgets';
 import { asBudgetCadence, asPayMethod, PayMethod, PAY_METHOD_ICON, PAY_METHOD_LABEL } from '../../../src/constants/enums';
 import { useScreenData } from '../../../src/hooks/useScreenData';
@@ -86,7 +85,7 @@ export default function SettingsScreen() {
   const { refresh } = useDataRefresh();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { flags, setFlag } = useFeatureFlags();
+  const { flags } = useFeatureFlags();
 
   const [showName, setShowName] = useState(false);
   const [nameText, setNameText] = useState('');
@@ -551,10 +550,7 @@ function ToggleRow({ icon, tint = colors.accent, label, value, onValueChange }: 
 const styles = StyleSheet.create({
   root: { flex: 1 },
   container: { flex: 1, backgroundColor: colors.bg },
-  statusBarCover: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 },
   scroll: { padding: layout.screenPaddingH, paddingBottom: space.lg },
-  header: { marginBottom: space.sm },
-  title: { ...type.title, color: colors.textPrimary },
   sectionTitle: { ...type.label, color: colors.textSecondary, marginBottom: space.sm, marginTop: 20, textTransform: 'uppercase', letterSpacing: 0.5 },
   profileTap: { marginBottom: space.lg },
   profileCard: { flexDirection: 'row', alignItems: 'center', gap: space.md },

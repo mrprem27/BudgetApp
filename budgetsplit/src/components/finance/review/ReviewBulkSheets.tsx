@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { View, Alert } from 'react-native';
 import { SheetModal } from '../../ui/SheetModal';
 import { Card } from '../../ui/Card';

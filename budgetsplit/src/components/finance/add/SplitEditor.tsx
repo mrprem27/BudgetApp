@@ -1,4 +1,3 @@
-import React from 'react';
 import { View, Text, TextInput, StyleSheet } from 'react-native';
 import { colors, type, space, radius } from '../../tokens';
 import { TabPills } from '../../ui/TabPills';

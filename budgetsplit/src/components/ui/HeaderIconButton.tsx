@@ -1,4 +1,3 @@
-import React from 'react';
 import { Text, View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { colors, radius, layout } from '../tokens';

@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { View, Text, StyleSheet, SectionList, TouchableOpacity, ScrollView, TextInput } from 'react-native';
+import { useState, useMemo, useEffect } from 'react';
+import { View, Text, StyleSheet, SectionList, TouchableOpacity, TextInput } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius, layout } from '../../src/theme';
@@ -12,8 +12,8 @@ import { SectionHeader } from '../../src/components/ui/SectionHeader';
 import { formatCompact } from '../../src/lib/money';
 import { FilterBar } from '../../src/components/ui/FilterBar';
 import { rankTagsByFrequency } from '../../src/lib/tags';
-import { resolveRange, KIND_ANY, type KindFilter, type RangePreset } from '../../src/lib/txnFilter';
-import { loadSearchData, searchResults, isMore, type SearchRow as Row } from '../../src/lib/searchData';
+import { KIND_ANY, type KindFilter, type RangePreset } from '../../src/lib/txnFilter';
+import { loadSearchData, searchResults, isMore } from '../../src/lib/searchData';
 import { useScreenData } from '../../src/hooks/useScreenData';
 import { SEARCH_SOURCE, SEARCH_SOURCE_LABEL, type SearchSource } from '../../src/constants/enums';
 import { keyboardAwareScroll } from '../../src/components/ui/KeyboardForm';

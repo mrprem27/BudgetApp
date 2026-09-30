@@ -1,9 +1,9 @@
-import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert, findNodeHandle } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, Alert, findNodeHandle } from 'react-native';
 import type { KeyboardAwareScrollViewRef } from 'react-native-keyboard-controller';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { colors, type, space, radius, layout, shadow } from '../../tokens';
+import { colors, type, space, layout } from '../../tokens';
 import { ScreenHeader } from '../../ui/ScreenHeader';
 import { PrimaryButton } from '../../ui/PrimaryButton';
 import { EmptyState } from '../../ui/EmptyState';

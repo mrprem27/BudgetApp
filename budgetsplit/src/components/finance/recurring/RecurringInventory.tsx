@@ -1,4 +1,3 @@
-import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { colors, type, space, layout } from '../../tokens';
 import { alpha } from '../../../theme';

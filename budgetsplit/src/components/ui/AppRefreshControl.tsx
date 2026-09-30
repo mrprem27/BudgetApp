@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { RefreshControl } from 'react-native';
 import { colors } from '../tokens';
 

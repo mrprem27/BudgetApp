@@ -1,4 +1,3 @@
-import React from 'react';
 import { AddKind } from '../../../constants/enums';
 import { timeOfDay } from '../../../lib/dateFormat';
 import { SplitSheet } from './SplitSheet';

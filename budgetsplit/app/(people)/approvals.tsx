@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { View, ScrollView, StyleSheet, Alert } from 'react-native';
 import { saveFailureMessage } from '../../src/lib/dbErrors';
 import { haptic } from '../../src/lib/haptics';

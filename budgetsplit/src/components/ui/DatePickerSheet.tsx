@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import {
@@ -6,7 +6,7 @@ import {
   addMonths, subMonths, addYears, isSameDay, isSameMonth, isBefore, startOfDay, format,
 } from 'date-fns';
 import { monthLabel } from '../../lib/dateFormat';
-import { colors, type, space, radius } from '../tokens';
+import { colors, type, space } from '../tokens';
 import { SheetModal } from './SheetModal';
 import { Divider } from './Divider';
 import { ListRow } from './ListRow';

@@ -1,4 +1,3 @@
-import React from 'react';
 import { CategoryPicker } from '../CategoryPicker';
 import { PayMethodSheet } from '../add/PayMethodSheet';
 import { ReviewDestSheet } from './ReviewDestSheet';

@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Alert, ActivityIndicator, Switch, Share } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { format } from 'date-fns';
@@ -510,6 +510,5 @@ const styles = StyleSheet.create({
   hint: { ...type.caption, color: colors.textMuted, lineHeight: 18, textAlign: 'center', marginTop: space.sm },
   qrWrap: { alignItems: 'center', paddingVertical: space.md },
   unmatch: { marginTop: space.md },
-  hint2: { marginBottom: space.sm },
   sheetHint: { ...type.caption, color: colors.textMuted, lineHeight: 18, marginBottom: space.md, textAlign: 'center' },
 });

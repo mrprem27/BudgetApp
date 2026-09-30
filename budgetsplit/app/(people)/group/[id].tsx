@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, type, space, radius, layout } from '../../../src/theme';
 import { loadGroupHub, setSimplifyDebt, archiveGroup, setCategoryBudgets, trustPeople } from '../../../src/lib/groupsData';
 import { useScreenData } from '../../../src/hooks/useScreenData';
@@ -11,11 +10,7 @@ import { useGroupTxnActions } from '../../../src/hooks/useGroupTxnActions';
 import { asTrustState } from '../../../src/constants/enums';
 import { confirmAsync } from '../../../src/lib/confirm';
 import { trustMeans } from '../../../src/lib/trustCopy';
-import { getCategoryBudgetStatus } from '../../../src/lib/budget';
-import type { CategoryBudgetStatus } from '../../../src/lib/budget';
-import { getBudgetAnalytics } from '../../../src/lib/analytics';
 import { canEditGroupBudget } from '../../../src/lib/permissions';
-import type { BudgetAnalytics } from '../../../src/lib/analytics';
 import { simplify, rawDebts } from '../../../src/lib/settle';
 import {
   computeContributions,
@@ -40,7 +35,6 @@ import { RecurringTab } from '../../../src/components/finance/group/RecurringTab
 import { buildGroupExportCsv } from '../../../src/lib/groupExport';
 import { useFeatureFlags } from '../../../src/components/system/FeatureFlagsProvider';
 import { shareCsv, csvFileSlug } from '../../../src/lib/shareCsv';
-import type { TxnWithSplits } from '../../../src/db/queries/transactions';
 import { ARCHIVE_GROUP } from '../../../src/lib/groupCopy';
 
 type TabKey = 'transactions' | 'budget' | 'members' | 'recurring';
@@ -49,7 +43,6 @@ export default function GroupDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const db = useSQLiteContext();
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<TabKey>('transactions');
   const [simplifyOn, setSimplifyOn] = useState(true);
   const [trusting, setTrusting] = useState(false);

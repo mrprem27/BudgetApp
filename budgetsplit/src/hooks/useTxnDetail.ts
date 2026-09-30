@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Alert, Platform, ActionSheetIOS } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
-import { getApproval } from '../db/queries/approval';
 import { disputesFor } from '../db/queries/approval';
 import { useRouter } from 'expo-router';
 import { freeBytes } from '../lib/deviceStorage';

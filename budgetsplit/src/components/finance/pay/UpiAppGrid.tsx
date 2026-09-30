@@ -1,4 +1,3 @@
-import React from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { PressableScale } from '../../ui/PressableScale';
 import { UpiAppIcon } from './UpiAppIcon';

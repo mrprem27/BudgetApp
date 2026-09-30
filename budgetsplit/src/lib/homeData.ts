@@ -4,7 +4,7 @@ import {
   subDays, subMonths, subYears, getDate, getDaysInMonth,
 } from 'date-fns';
 import { getAllPersons } from '../db/queries/persons';
-import { getAllGroups, sharedGroupsOf } from '../db/queries/groups';
+import { sharedGroupsOf } from '../db/queries/groups';
 import { getMyExposure } from '../db/queries/balances';
 import { getSafeToSpendV2 } from '../db/queries/spendPower';
 import { billsWithin } from './safeToSpend';
@@ -23,7 +23,6 @@ import { computeHealthScore, type HealthInputs, type HealthResult } from './fina
 import { monthEndFromEngine, type Forecast } from './forecast';
 import { streakFrom } from './streak';
 import { buildUpcoming, type UpcomingItem } from './upcoming';
-import { categoryVisual } from '../constants/categories';
 import type { CategoryRow } from '../components/finance/home/CategoryRankList';
 import type { BudgetGroup } from '../db/queries/groups';
 

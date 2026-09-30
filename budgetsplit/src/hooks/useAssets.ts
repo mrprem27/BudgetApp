@@ -5,7 +5,6 @@ import { useScreenData } from './useScreenData';
 import { useDataRefresh } from '../components/system/DataRefreshProvider';
 import { haptic } from '../lib/haptics';
 import { formatRupees } from '../lib/money';
-import { PayMethod } from '../constants/enums';
 import {
   getAssets, getArchivedAssets, insertAsset, updateAsset, archiveAsset, deleteAsset,
   restateAssetBalance, moveMoney, setAssetOrder,

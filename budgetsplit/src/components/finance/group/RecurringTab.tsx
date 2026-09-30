@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import { StyleSheet, ScrollView } from 'react-native';
 import { space, layout } from '../../tokens';
 import { useContentInset } from '../../../hooks/useContentInset';

@@ -1,4 +1,4 @@
-import { addDays, addWeeks, addMonths, addYears, isAfter, isBefore, startOfDay } from 'date-fns';
+import { addDays, addWeeks, addMonths, addYears, isAfter, isBefore } from 'date-fns';
 import type { RecurFreq } from '../constants/enums';
 import type { Txn, TxnWithSplits } from '../db/queries/transactions';
 

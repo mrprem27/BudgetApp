@@ -1,11 +1,10 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { View, Text, FlatList, StyleSheet, TouchableOpacity } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useScreenData } from '../../../src/hooks/useScreenData';
 import { Feather } from '@expo/vector-icons';
 import {
-  startOfDay, endOfDay, startOfMonth, endOfMonth, startOfYear, endOfYear,
-  getDaysInMonth, getDaysInYear,
+  startOfDay, endOfDay, startOfMonth, endOfMonth, startOfYear, endOfYear
 } from 'date-fns';
 import { colors, type, space, radius, layout, alpha } from '../../../src/theme';
 import { BudgetBar } from '../../../src/components/finance/BudgetBar';
@@ -19,7 +18,6 @@ import { type Period as BudgetPeriod } from '../../../src/lib/budget';
 import { loadCategoryDetail, categoryPeriodBudget } from '../../../src/lib/categoryDetailData';
 import { categoryVisual } from '../../../src/constants/categories';
 import { matchesCategory } from '../../../src/lib/categoryFold';
-import { recurringMonthlyEquivalent } from '../../../src/lib/recurrence';
 import { formatRupees, formatCompact } from '../../../src/lib/money';
 import { usageText } from '../../../src/lib/budgetCopy';
 import { myShareOf, myShareOrTotal } from '../../../src/lib/splitMath';

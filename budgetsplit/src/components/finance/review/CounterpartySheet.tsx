@@ -1,4 +1,3 @@
-import React from 'react';
 import { SheetModal } from '../../ui/SheetModal';
 import { EmptyState } from '../../ui/EmptyState';
 import { PersonPicker } from '../PersonPicker';

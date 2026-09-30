@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { colors, type, space, layout } from '../tokens';
 import { IconCircle } from '../ui/IconCircle';

@@ -36,7 +36,6 @@ export async function loadSavingsTabData(
     getAssets(db),
   ]);
   const money = computeTotalMoney(cashPos, profile);
-  const meId = me?.id ?? '';
 
   let upcoming: UpcomingItem[] = [];
   if (me) {

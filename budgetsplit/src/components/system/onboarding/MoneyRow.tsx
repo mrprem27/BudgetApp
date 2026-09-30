@@ -1,8 +1,7 @@
-import React from 'react';
 import { Text, StyleSheet, TextInput, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { ListRow } from '../../ui/ListRow';
-import { colors, type, space } from '../../tokens';
+import { colors, type } from '../../tokens';
 
 type Props = {
   icon: keyof typeof Feather.glyphMap;

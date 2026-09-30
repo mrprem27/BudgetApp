@@ -1,5 +1,5 @@
-import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Animated, Easing, Dimensions, Pressable } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { Text, StyleSheet, Animated, Easing, Dimensions, Pressable } from 'react-native';
 import { colors, type, space, radius, shadow } from '../tokens';
 import { IconCircle } from '../ui/IconCircle';
 

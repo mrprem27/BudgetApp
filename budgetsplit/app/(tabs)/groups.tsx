@@ -1,7 +1,6 @@
-import React, { useState, useRef, useMemo } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import {
-  View, Text, FlatList, StyleSheet, TouchableOpacity,
-  TextInput, ScrollView, Animated, Alert,
+  View, Text, FlatList, StyleSheet, TouchableOpacity, Alert
 } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -27,7 +26,6 @@ import { BudgetBar } from '../../src/components/finance/BudgetBar';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { AvatarStack } from '../../src/components/finance/AvatarStack';
 import { BalanceChip } from '../../src/components/ui/BalanceChip';
-import { AmountText } from '../../src/components/ui/AmountText';
 import { AppRefreshControl } from '../../src/components/ui/AppRefreshControl';
 import { PressableScale } from '../../src/components/ui/PressableScale';
 import { EmptyState } from '../../src/components/ui/EmptyState';
@@ -113,10 +111,6 @@ export default function GroupsScreen() {
     setGroupMembers([]);
     setDefaultSplit('equal');
     setShowCreate(true);
-  }
-
-  function toggleMember(id: string) {
-    setGroupMembers(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   }
 
   /**
@@ -417,7 +411,6 @@ const STRIPE_W = 4;
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  headerAdd: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.bgMuted, alignItems: 'center', justifyContent: 'center' },
   list: { padding: layout.screenPaddingH },
   balancesWrap: { marginBottom: space.sm },
   balListLabel: { ...type.label, color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: space.lg, marginBottom: space.sm },

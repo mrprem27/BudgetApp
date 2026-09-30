@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert,
+  View, Text, StyleSheet, TouchableOpacity, Alert
 } from 'react-native';
 import { KeyboardForm } from '../../src/components/ui/KeyboardForm';
 import { useRouter } from 'expo-router';

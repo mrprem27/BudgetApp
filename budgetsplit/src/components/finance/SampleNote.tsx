@@ -1,4 +1,3 @@
-import React from 'react';
 import { Text, StyleSheet, type StyleProp, type TextStyle } from 'react-native';
 import { colors, type, space } from '../tokens';
 

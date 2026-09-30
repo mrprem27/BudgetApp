@@ -1,4 +1,3 @@
-import React from 'react';
 import { View, StyleSheet, type ViewStyle, type StyleProp } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { colors } from '../tokens';

@@ -1,4 +1,3 @@
-import React from 'react';
 import { SectionList } from 'react-native';
 import { reviewStyles as styles } from './reviewStyles';
 import { ReviewRowCard } from './ReviewRowCard';
@@ -6,12 +5,12 @@ import { ReviewSourceHeader } from './ReviewSourceTabs';
 import { ReviewListHeader } from './ReviewListHeader';
 import { AppRefreshControl } from '../../ui/AppRefreshControl';
 import { keyboardAwareScroll } from '../../ui/KeyboardForm';
-
-const listScroll = keyboardAwareScroll();
 import type { PendingTxn } from '../../../db/queries/pending';
 import type { Person } from '../../../db/queries/persons';
 import type { TxnSource } from '../../../constants/enums';
 import type { RowEdit, SplitState } from '../../../lib/reviewCommit';
+
+const listScroll = keyboardAwareScroll();
 
 type Section = { source: TxnSource; data: PendingTxn[] };
 

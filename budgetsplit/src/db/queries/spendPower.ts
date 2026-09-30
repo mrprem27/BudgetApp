@@ -1,7 +1,5 @@
 import * as SQLite from 'expo-sqlite';
 import 'react-native-get-random-values';
-import { v4 as uuid } from 'uuid';
-import { INVESTMENT_CATEGORY } from '../../constants/categories';
 import { startOfMonth } from 'date-fns';
 import {
   computeSafeToSpend, goalRemainingThisCycle, typicalDailySpend,

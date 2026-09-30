@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { SheetModal } from '../../ui/SheetModal';
 import { Chip } from '../../ui/Chip';

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { format } from 'date-fns';
 import { colors, type, space } from '../../tokens';

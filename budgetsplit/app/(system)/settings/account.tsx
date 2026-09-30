@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { KeyboardForm } from '../../../src/components/ui/KeyboardForm';
 import { useRouter } from 'expo-router';
@@ -25,7 +25,6 @@ import { useEmailSignIn } from '../../../src/hooks/useEmailSignIn';
 import { useSignOut } from '../../../src/hooks/useSignOut';
 import { useStore } from '../../../src/store';
 import { haptic } from '../../../src/lib/haptics';
-import { settings } from '../../../src/lib/settings';
 import {
   deleteAccount, updateProfile, uploadAvatar, deviceLabel,
 } from '../../../src/lib/serverApi';

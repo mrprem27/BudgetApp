@@ -1,4 +1,3 @@
-import React from 'react';
 import { colors } from '../tokens';
 import { EmptyState } from './EmptyState';
 

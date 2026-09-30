@@ -1,9 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking, Image, Modal, useWindowDimensions } from 'react-native';
 
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { useScreenData } from '../../../src/hooks/useScreenData';
 import { dateTime, fullDate } from '../../../src/lib/dateFormat';
 import { PAY_METHOD_LABEL } from '../../../src/constants/enums';
 import { myShareOf, myPaidOf, txnTotal } from '../../../src/lib/splitMath';
@@ -19,8 +18,6 @@ import { MemberAvatar } from '../../../src/components/finance/MemberAvatar';
 import { categoryVisual } from '../../../src/constants/categories';
 import { formatRupees } from '../../../src/lib/money';
 
-import type { TxnWithSplits, LineItem } from '../../../src/db/queries/transactions';
-import type { Person } from '../../../src/db/queries/persons';
 import { IconCircle } from '../../../src/components/ui/IconCircle';
 import { useTxnDetail } from '../../../src/hooks/useTxnDetail';
 import { authorLabel } from '../../../src/lib/txnDetail';

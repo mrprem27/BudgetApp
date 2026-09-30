@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -16,7 +16,6 @@ import { useToast } from '../../../../src/components/system/Toast';
 import { MemberAvatar } from '../../../../src/components/finance/MemberAvatar';
 import { PersonPicker } from '../../../../src/components/finance/PersonPicker';
 import { SheetModal } from '../../../../src/components/ui/SheetModal';
-import { Input } from '../../../../src/components/ui/Input';
 import { PrimaryButton } from '../../../../src/components/ui/PrimaryButton';
 import { ErrorState } from '../../../../src/components/ui/ErrorState';
 import { formatRupees } from '../../../../src/lib/money';
@@ -48,13 +47,11 @@ export default function MembersScreen() {
   const meId = data?.meId ?? '';
   const ctx = data?.ctx ?? null;
   const roleOf = new Map((data?.roles ?? []).map(r => [r.person_id, r]));
-  const isPersonal = data?.group?.is_personal === 1;
   const mayManage = ctx ? isAdmin(ctx) : false;
 
   useEffect(() => { if (!groupId) router.back(); }, [groupId]);
   if (!groupId) return null;
 
-  const memberIds = new Set(members.map(m => m.id));
 
   /**
    * Whether to offer the swipe at all.

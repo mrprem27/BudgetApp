@@ -4,7 +4,6 @@ import { useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 import { useScreenData } from '../../src/hooks/useScreenData';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LineChart } from 'react-native-gifted-charts';
 import { getDate, getDaysInMonth } from 'date-fns';
 import { monthLabel } from '../../src/lib/dateFormat';
@@ -68,7 +67,6 @@ export default function InsightsScreen() {
   const db = useSQLiteContext();
   const { flags } = useFeatureFlags();
   const { exporting, exportAll } = useExportAll(db);
-  const insets = useSafeAreaInsets();
   const [cutPct, setCutPct] = useState(20);
   const [open, setOpen] = useState<Set<string>>(new Set([DEFAULT_OPEN]));
   const toggle = (key: string) =>

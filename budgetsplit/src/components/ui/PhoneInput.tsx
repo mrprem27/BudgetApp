@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { View, Text, TextInput, StyleSheet, ViewStyle } from 'react-native';
 import { colors, type, space, radius, layout } from '../tokens';
 import { Input } from './Input';

@@ -1,4 +1,3 @@
-import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { space } from '../tokens';
 import { formatCompact } from '../../lib/money';

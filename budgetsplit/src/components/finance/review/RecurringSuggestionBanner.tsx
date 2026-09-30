@@ -1,4 +1,3 @@
-import React from 'react';
 import { Banner } from '../../ui/Banner';
 
 /** Dismissible banner surfaced after a batch Save finds transactions that look

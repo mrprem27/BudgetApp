@@ -16,7 +16,6 @@ import { Chip } from '../../src/components/ui/Chip';
 import { SheetModal } from '../../src/components/ui/SheetModal';
 import { OptionRow } from '../../src/components/ui/OptionRow';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
-import type { Category } from '../../src/db/queries/categories';
 import { loadAffordData } from '../../src/lib/affordData';
 import { track } from '../../src/lib/usageEvents';
 import { afford } from '../../src/lib/engine/assess';

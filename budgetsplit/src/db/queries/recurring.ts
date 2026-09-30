@@ -8,8 +8,8 @@ import { nextOccurrenceOnOrAfter, occurrenceDatesUpTo, matchWindowDays, amountMa
 import { logAudit } from './audit';
 import type { RecurFreq } from '../../constants/enums';
 import {
-  loadSplits, loadSplitsMany, getTxnById, insertTxn, insertTxnRows,
-  type Txn, type TxnWithSplits, type InsertTxnInput,
+  loadSplits, loadSplitsMany, getTxnById, insertTxnRows,
+  type Txn, type TxnWithSplits, type InsertTxnInput
 } from './transactions';
 
 /**
@@ -294,14 +294,6 @@ async function insertOccurrence(
     await db.runAsync('INSERT INTO txn_share (txn_id, person_id, amount) VALUES (?, ?, ?)', [newId, s.personId, s.amount]);
   }
   return newId;
-}
-
-/** Merge skip + claimed-occurrence sets for one series into a single omit-set. */
-function mergedOmit(skips?: Set<number>, claimed?: Set<number>): Set<number> | undefined {
-  if (!skips && !claimed) return undefined;
-  const out = new Set<number>(skips);
-  if (claimed) for (const c of claimed) out.add(c);
-  return out;
 }
 
 /**

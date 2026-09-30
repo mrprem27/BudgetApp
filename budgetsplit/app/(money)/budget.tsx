@@ -1,4 +1,3 @@
-import React from 'react';
 import { useLocalSearchParams } from 'expo-router';
 import { BudgetEditor } from '../../src/components/finance/budget/BudgetEditor';
 

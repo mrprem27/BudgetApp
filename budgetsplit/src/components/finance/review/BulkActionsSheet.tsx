@@ -1,4 +1,3 @@
-import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { SheetModal } from '../../ui/SheetModal';
 import { Card } from '../../ui/Card';

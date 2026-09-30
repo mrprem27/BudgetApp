@@ -1,4 +1,4 @@
-import { isSameDay, isSameYear, format, subDays } from 'date-fns';
+import { isSameDay, isSameYear, subDays } from 'date-fns';
 import { shortDate, fullDate } from './dateFormat';
 
 /**

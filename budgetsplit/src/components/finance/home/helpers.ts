@@ -4,12 +4,6 @@ import type { HealthBand } from '../../../lib/financialHealth';
 // Budget utilisation label lives in the budget domain now (one source).
 export { utilLabel } from '../../../lib/budget';
 
-/** Time-of-day greeting for the Home header. */
-export function greeting(): string {
-  const h = new Date().getHours();
-  return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
-}
-
 /** Accent colour for a health tier (FinHealth's three: see financialHealth.ts). */
 export function healthBandColor(band: HealthBand): string {
   switch (band) {

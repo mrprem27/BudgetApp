@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, SectionList, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, SectionList } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { colors, type, space, layout } from '../../../src/theme';
 import { Card } from '../../../src/components/ui/Card';
@@ -44,9 +44,9 @@ export default function PersonScreen() {
   const router = useRouter();
   const bottomPad = useContentInset({});
   const {
-    me, person, activity, sections, net, scopes, rhythm,
+    me, person, sections, net, scopes, rhythm,
     receivableState, suggestWriteOff, toggleWrittenOff, syncNote,
-    trustState, trustIsLive, trustApplies, toggleTrusted,
+    trustState, trustIsLive, toggleTrusted,
     sharedGroups, groupTrust, setGroupTrustFor, canCombine,
     loading, error, refreshing, onRefresh, reload,
   } = usePersonScreen(id ?? '');
@@ -285,17 +285,7 @@ const styles = StyleSheet.create({
   writtenOff: { ...type.caption, color: colors.textMuted, marginTop: space.xs, textAlign: 'center' },
   stale: { ...type.caption, color: colors.healthAmber, marginTop: space.xs, textAlign: 'center' },
   writeOffBtn: { marginTop: space.sm },
-  trustBtn: { marginTop: space.md },
   trustCard: { marginTop: space.md, alignSelf: 'stretch' },
   trustHint: { ...type.caption, color: colors.textMuted, marginTop: space.xs, textAlign: 'center' },
-  groupTrust: { marginTop: space.md, alignSelf: 'stretch' },
-  groupTrustLabel: { ...type.sectionLabel, color: colors.textSecondary, marginBottom: space.sm },
-  groupTrustRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    gap: space.sm, minHeight: layout.touchMin, paddingVertical: space.xs,
-  },
-  groupTrustName: { ...type.body, color: colors.textPrimary, flexShrink: 1 },
-  groupTrustValue: { ...type.labelSemi, color: colors.accent },
-  groupTrustInherit: { color: colors.textMuted },
   settle: { alignSelf: 'stretch', marginTop: space.md },
 });

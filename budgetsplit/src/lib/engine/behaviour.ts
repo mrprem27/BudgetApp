@@ -5,7 +5,7 @@
  */
 import type { FinanceSnapshot, Behaviour, IncomeModel, RepaymentModel, TrueExpense, MonthlyAffordability } from './types';
 import { dailySpendTotals, typicalDailySpend, EVERYDAY_WINDOW_DAYS, EVERYDAY_MIN_DAYS } from '../safeToSpend';
-import { nextUnskippedOccurrence, materializeInstances, recurringMonthlyEquivalent } from '../recurrence';
+import { nextUnskippedOccurrence, recurringMonthlyEquivalent } from '../recurrence';
 import { myShareOrTotal } from '../splitMath';
 
 const DAY_MS = 86_400_000;
