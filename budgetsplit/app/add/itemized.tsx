@@ -435,9 +435,9 @@ export default function ItemizedScreen() {
             onChangeText={f.setNote}
           />
 
-          {/* How it was paid — the same picker Quick Add uses. Card vs cash is
-              not cosmetic: lib/cash books card spend as debt, not cash out. */}
-          <Text style={[styles.fieldLabel, { marginTop: space.sm }]}>Paid via</Text>
+          {/* Where the money came from — the same picker Quick Add uses. Credit card vs
+              cash is not cosmetic: lib/cash books card spend as debt, not cash out. */}
+          <Text style={[styles.fieldLabel, { marginTop: space.sm }]}>Paid from</Text>
           <Chip
             icon="credit-card"
             label={PAY_METHOD_LABEL[f.payMethod]}

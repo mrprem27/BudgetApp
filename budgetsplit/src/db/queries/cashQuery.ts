@@ -1,17 +1,17 @@
 import { NOT_AWAITING_APPROVAL } from './approvalSql';
 
 /**
- * The effective **From** of a row (`U-48`): `pay_from` when set, else the usual for its How. The
- * SQL twin of `payFromOf` (`constants/enums.ts`) — this module stays import-free so it can run
- * against a real engine; the parity tests hold the two together.
+ * The place a row's money moved from: its From, except a card-bill payment, whose From names the
+ * card it repays while the money leaves the bank. The SQL twin of `payFromOf`
+ * (`constants/enums.ts`) — this module stays import-free so it can run against a real engine; the
+ * parity tests hold the two together.
  */
 export const EFFECTIVE_FROM_SQL = `(CASE
-      WHEN t.pay_from IS NOT NULL THEN t.pay_from
       WHEN t.pay_method = 'card' AND t.kind = 'settlement' THEN 'bank'
       WHEN t.pay_method = 'card'   THEN 'credit'
       WHEN t.pay_method = 'cash'   THEN 'cash'
       WHEN t.pay_method = 'wallet' THEN 'wallet'
-      WHEN t.pay_method IN ('bank', 'upi', 'autopay') THEN 'bank'
+      WHEN t.pay_method = 'bank'   THEN 'bank'
       ELSE NULL END)`;
 const FROM = EFFECTIVE_FROM_SQL;
 /** A card-bill payment (`isCardRepayment`). */
@@ -90,7 +90,7 @@ export const CASH_TOTALS_SQL = `
  * nothing about it.
  *
  * The bucket mapping mirrors `assetOf` in `constants/enums.ts` — that file owns
- * the policy (why `upi` and `autopay` read as bank), this is the same rule in SQL
+ * the policy (what each From draws on), this is the same rule in SQL
  * because this module stays import-free so it can be tested against a real engine.
  * If one changes, change both; `bucketFlows.test.ts` fails when they disagree.
  *

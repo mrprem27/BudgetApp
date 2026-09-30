@@ -123,7 +123,7 @@ export function MoneyEditorSheet({
         <InfoLabel
           label="Where your money is"
           labelStyle={styles.label}
-          info="What each place holds today, as your bank app or wallet shows it. Your transactions move them from here, using each one's pay method."
+          info="What each place holds today, as your bank app or wallet shows it. Your transactions move them from here, using where each was paid from."
         />
         <Card clip style={styles.card}>
           <AmountRow icon="briefcase" label="Bank" value={bank} onChangeText={setBank} />

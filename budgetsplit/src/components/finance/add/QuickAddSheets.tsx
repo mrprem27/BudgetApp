@@ -124,8 +124,6 @@ export function QuickAddSheets({
         onClose={onClose}
         value={f.payMethod}
         onChange={f.setPayMethod}
-        payFrom={f.payFrom}
-        onChangeFrom={f.setPayFrom}
         accent={accent}
         kind={f.kind}
       />

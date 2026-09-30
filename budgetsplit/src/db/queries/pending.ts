@@ -1,8 +1,7 @@
 import * as SQLite from 'expo-sqlite';
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
-import type { TxnKind, TxnSource, PayMethod, PayFrom } from '../../constants/enums';
-import { storedPayFrom } from '../../constants/enums';
+import type { TxnKind, TxnSource, PayMethod } from '../../constants/enums';
 import type { ParsedDirection } from '../../lib/importParse';
 import { queueDelete, queueUpsert } from './syncQueue';
 
@@ -28,8 +27,6 @@ export type PendingTxn = {
   source: TxnSource;
   /** Detected/edited payment method carried through ingest → Review → txn. */
   pay_method: PayMethod | null;
-  /** Detected source when not the usual for pay_method — UPI on a credit card (`U-48`). */
-  pay_from: PayFrom | null;
   /**
    * Where the payment happened, when the import knows it first-hand.
    *
@@ -56,14 +53,13 @@ export type PendingTxn = {
 // forcing every one of them to write `lat: null` would be noise around the single
 // route that does.
 export type NewPending =
-  Omit<PendingTxn, 'id' | 'created_at' | 'dest_group_id' | 'split_draft' | 'counterparty_id' | 'lat' | 'lng' | 'place_label' | 'author_person_id' | 'payer_person_id' | 'pay_from'>
-  & { pay_from?: PayFrom | null }
+  Omit<PendingTxn, 'id' | 'created_at' | 'dest_group_id' | 'split_draft' | 'counterparty_id' | 'lat' | 'lng' | 'place_label' | 'author_person_id' | 'payer_person_id'>
   // `counterparty_id` is settable at ingest, not only in Review: a voice settlement already
   // knows who was named, and re-asking for it would be asking twice.
   & Partial<Pick<PendingTxn, 'lat' | 'lng' | 'place_label' | 'counterparty_id'>>;
 
 /** The subset of a pending row the Review screen auto-saves as you edit it. */
-export type PendingDraft = Partial<Pick<PendingTxn, 'kind' | 'category' | 'amount' | 'dest_group_id' | 'split_draft' | 'pay_method' | 'pay_from' | 'counterparty_id' | 'direction'>>;
+export type PendingDraft = Partial<Pick<PendingTxn, 'kind' | 'category' | 'amount' | 'dest_group_id' | 'split_draft' | 'pay_method' | 'counterparty_id' | 'direction'>>;
 
 export async function insertPending(db: SQLite.SQLiteDatabase, rows: NewPending[]): Promise<void> {
   if (rows.length === 0) return;
@@ -72,10 +68,9 @@ export async function insertPending(db: SQLite.SQLiteDatabase, rows: NewPending[
     for (const r of rows) {
       const id = uuid();
       await db.runAsync(
-        `INSERT INTO pending_txn (id, date, amount, description, kind, category, direction, raw, created_at, source, pay_method, pay_from, lat, lng, place_label, counterparty_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO pending_txn (id, date, amount, description, kind, category, direction, raw, created_at, source, pay_method, lat, lng, place_label, counterparty_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [id, r.date, r.amount, r.description, r.kind, r.category ?? null, r.direction, r.raw ?? null, now, r.source ?? 'manual', r.pay_method ?? null,
-          storedPayFrom(r.pay_method, r.pay_from),
           r.lat ?? null, r.lng ?? null, r.place_label ?? null, r.counterparty_id ?? null],
       );
       await queueUpsert(db, 'pending_txn', id);
@@ -101,7 +96,6 @@ export async function updatePendingDraft(
   if (d.dest_group_id !== undefined) { sets.push('dest_group_id=?'); args.push(d.dest_group_id); }
   if (d.split_draft !== undefined) { sets.push('split_draft=?'); args.push(d.split_draft); }
   if (d.pay_method !== undefined) { sets.push('pay_method=?'); args.push(d.pay_method); }
-  if (d.pay_from !== undefined) { sets.push('pay_from=?'); args.push(d.pay_from); }
   if (d.counterparty_id !== undefined) { sets.push('counterparty_id=?'); args.push(d.counterparty_id); }
   // Editable in Review. Most statements sign their amounts, but not all: Paytm
   // prints a self-transfer unsigned, and the generic CSV parser has to guess
@@ -126,13 +120,13 @@ export async function restorePending(db: SQLite.SQLiteDatabase, row: PendingTxn)
     // falls behind the table again.
     `INSERT OR REPLACE INTO pending_txn
        (id, date, amount, description, kind, category, direction, raw, created_at,
-        dest_group_id, split_draft, source, pay_method, pay_from, counterparty_id,
+        dest_group_id, split_draft, source, pay_method, counterparty_id,
         lat, lng, place_label, author_person_id, payer_person_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       row.id, row.date, row.amount, row.description, row.kind, row.category ?? null,
       row.direction, row.raw ?? null, row.created_at, row.dest_group_id ?? null, row.split_draft ?? null,
-      row.source ?? 'manual', row.pay_method ?? null, row.pay_from ?? null, row.counterparty_id ?? null,
+      row.source ?? 'manual', row.pay_method ?? null, row.counterparty_id ?? null,
       row.lat ?? null, row.lng ?? null, row.place_label ?? null,
       row.author_person_id ?? null, row.payer_person_id ?? null,
     ],

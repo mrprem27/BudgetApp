@@ -1,5 +1,9 @@
 # SPEC — "How" and "From" are two things (`U-48`)
 
+> **Superseded the same day by `U-49`:** the app keeps From only. How (UPI, net banking, autopay)
+> is no longer stored; imports read it only to tell the source. The money rules below — anything
+> from a credit card is card debt, a card bill leaves the bank — still hold. See `FINDINGS.md` `U-49`.
+
 Your point, 2026-09-30: *how* you paid (UPI, net banking, credit card, cash) is not *where the money
 came from*. Today the app stores only how (`txn.pay_method`) and guesses from with one fixed rule
 (`assetOf`: UPI, net banking, autopay → Bank). That guess is wrong for UPI on a RuPay credit card —

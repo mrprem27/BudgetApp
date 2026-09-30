@@ -103,12 +103,11 @@ export const settings = {
   defaultCurrency: () => getString(K.defaultCurrency),
   setDefaultCurrency: (v: string) => setString(K.defaultCurrency, v),
   /**
-   * How this user usually pays. A *capture* preference — it seeds the Add screen's
-   * pay-method chip so the common case needs no tap. It does not touch the money
-   * model: `lib/cash.ts` still branches on `PayMethod.Card` alone, and per-method
-   * balances stay parked (RELEASE_CHECKLIST post-pilot).
+   * Where this user usually pays from. A *capture* preference — it seeds the Add
+   * screen's From chip so the common case needs no tap.
    *
-   * Unset means UPI, which is what both Add forms hardcoded before this existed.
+   * Unset means Bank. A stored 'upi' or 'autopay' from before `U-49` reads as Bank too
+   * (`asPayMethod`).
    */
   defaultPayMethod: () => getString(K.defaultPayMethod),
   setDefaultPayMethod: (v: string) => setString(K.defaultPayMethod, v),

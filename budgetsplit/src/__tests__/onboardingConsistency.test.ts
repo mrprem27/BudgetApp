@@ -137,8 +137,8 @@ describe('each question is asked exactly once', () => {
     expect(src.match(/<PayMethodSelector\b/g) ?? []).toHaveLength(1);
   });
 
-  it('asks "how do you usually pay" once', () => {
-    expect(src.match(/How do you usually pay\?/g) ?? []).toHaveLength(1);
+  it('asks "where do you usually pay from" once', () => {
+    expect(src.match(/Where do you usually pay from\?/g) ?? []).toHaveLength(1);
   });
 });
 

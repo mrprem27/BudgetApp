@@ -265,8 +265,8 @@ describe('updateItemizedTxn replaces its own items', () => {
     const db = await seed();
     const id = await insertItemizedTxn(db, bill({ payMethod: 'card' } as never) as Parameters<typeof insertItemizedTxn>[1]);
     expect((await getTxnById(db, id))?.pay_method).toBe('card');
-    await updateItemizedTxn(db, id, bill({ payMethod: 'upi' } as never) as Parameters<typeof insertItemizedTxn>[1]);
-    expect((await getTxnById(db, id))?.pay_method).toBe('upi');
+    await updateItemizedTxn(db, id, bill({ payMethod: 'wallet' } as never) as Parameters<typeof insertItemizedTxn>[1]);
+    expect((await getTxnById(db, id))?.pay_method).toBe('wallet');
   });
 
   it('clears the items when the edit removes them all', async () => {

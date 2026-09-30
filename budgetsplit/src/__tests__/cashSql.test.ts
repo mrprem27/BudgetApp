@@ -18,8 +18,6 @@ type Fixture = {
   date: number;
   /** null = not recorded (treated as non-card, i.e. real cash out). */
   pay_method?: string | null;
-  /** Where it came from when not the usual (`U-48`). */
-  pay_from?: string | null;
   payments: Split[];
   shares: Split[];
 };
@@ -29,17 +27,17 @@ function makeDb(fixtures: Fixture[]): DatabaseSync {
   db.exec(`
     CREATE TABLE txn (
       id TEXT PRIMARY KEY, group_id TEXT, kind TEXT, is_deleted INTEGER,
-      recur_freq TEXT, date INTEGER, pay_method TEXT, pay_from TEXT
+      recur_freq TEXT, date INTEGER, pay_method TEXT
     );
     CREATE TABLE txn_payment (txn_id TEXT, person_id TEXT, amount INTEGER, PRIMARY KEY (txn_id, person_id));
     CREATE TABLE txn_share   (txn_id TEXT, person_id TEXT, amount INTEGER, PRIMARY KEY (txn_id, person_id));
     CREATE TABLE txn_approval (txn_id TEXT PRIMARY KEY, state TEXT NOT NULL, created_at INTEGER NOT NULL, decided_at INTEGER);
   `);
-  const insTxn = db.prepare('INSERT INTO txn (id, group_id, kind, is_deleted, recur_freq, date, pay_method, pay_from) VALUES (?,?,?,?,?,?,?,?)');
+  const insTxn = db.prepare('INSERT INTO txn (id, group_id, kind, is_deleted, recur_freq, date, pay_method) VALUES (?,?,?,?,?,?,?)');
   const insPay = db.prepare('INSERT INTO txn_payment (txn_id, person_id, amount) VALUES (?,?,?)');
   const insShare = db.prepare('INSERT INTO txn_share (txn_id, person_id, amount) VALUES (?,?,?)');
   for (const f of fixtures) {
-    insTxn.run(f.id, 'g1', f.kind, f.is_deleted, f.recur_freq, f.date, f.pay_method ?? null, f.pay_from ?? null);
+    insTxn.run(f.id, 'g1', f.kind, f.is_deleted, f.recur_freq, f.date, f.pay_method ?? null);
     for (const p of f.payments) insPay.run(f.id, p.person, p.amount);
     for (const s of f.shares) insShare.run(f.id, s.person, s.amount);
   }
@@ -68,7 +66,6 @@ function toCashTxns(fixtures: Fixture[], cutoff: number): CashTxn[] {
       kind: f.kind,
       is_deleted: 0,
       pay_method: f.pay_method ?? null,
-      pay_from: f.pay_from ?? null,
       date: f.date,
       payments: f.payments.map(p => ({ personId: p.person, amount: p.amount })),
       shares: f.shares.map(s => ({ personId: s.person, amount: s.amount })),
@@ -188,27 +185,27 @@ describe('CASH_TOTALS_SQL parity with computeCash', () => {
   });
 });
 
-describe('From, apart from How (U-48)', () => {
-  const upiFromCard: Fixture = { id: 'u1', kind: 'expense', is_deleted: 0, recur_freq: null, date: 100, pay_method: 'upi', pay_from: 'credit', payments: [{ person: ME, amount: 4000 }], shares: [{ person: ME, amount: 4000 }] };
+describe('From decides card debt (U-48, U-49)', () => {
+  // UPI on a RuPay credit card is stored as From = Credit card: card debt, not cash out.
+  const upiFromCard: Fixture = { id: 'u1', kind: 'expense', is_deleted: 0, recur_freq: null, date: 100, pay_method: 'card', payments: [{ person: ME, amount: 4000 }], shares: [{ person: ME, amount: 4000 }] };
   const cardBill: Fixture = { id: 'c1', kind: 'settlement', is_deleted: 0, recur_freq: null, date: 200, pay_method: 'card', payments: [{ person: ME, amount: 3000 }], shares: [] };
-  const transferFromCard: Fixture = { id: 'x1', kind: 'settlement', is_deleted: 0, recur_freq: null, date: 300, pay_method: 'upi', pay_from: 'credit', payments: [{ person: ME, amount: 500 }], shares: [{ person: 'a', amount: 500 }] };
-  const upiFromBank: Fixture = { id: 'u2', kind: 'expense', is_deleted: 0, recur_freq: null, date: 400, pay_method: 'upi', payments: [{ person: ME, amount: 700 }], shares: [{ person: ME, amount: 700 }] };
+  const upiFromBank: Fixture = { id: 'u2', kind: 'expense', is_deleted: 0, recur_freq: null, date: 400, pay_method: 'bank', payments: [{ person: ME, amount: 700 }], shares: [{ person: ME, amount: 700 }] };
 
-  it('SQL and JS agree with UPI on a card, a card bill, and a transfer from a card', () => {
-    assertParity([upiFromCard, cardBill, transferFromCard, upiFromBank], 0, 100000);
-    assertParity([upiFromCard, cardBill, transferFromCard, upiFromBank], 0, 100000, 250);
+  it('SQL and JS agree with credit-card spend, a card bill, and bank spend', () => {
+    assertParity([upiFromCard, cardBill, upiFromBank], 0, 100000);
+    assertParity([upiFromCard, cardBill, upiFromBank], 0, 100000, 250);
   });
 
-  it('UPI on a credit card is card debt, not cash out', () => {
+  it('credit-card spend is card debt, not cash out', () => {
     const pos = computeCash(toCashTxns([upiFromCard, upiFromBank], CUTOFF), ME, 0, 100000);
     expect(pos.paidExpenses).toBe(700);
     expect(pos.cardSpend).toBe(4000);
     expect(pos.available).toBe(99300);
   });
 
-  it('a transfer paid from the card raises the card, not cash out', () => {
-    const pos = computeCash(toCashTxns([transferFromCard], CUTOFF), ME, 0, 0);
-    expect(pos.settledOut).toBe(0);
-    expect(pos.cardSpend).toBe(500);
+  it('a card bill leaves the bank and brings the card down', () => {
+    const pos = computeCash(toCashTxns([upiFromCard, cardBill], CUTOFF), ME, 0, 100000);
+    expect(pos.settledOut).toBe(3000);
+    expect(pos.cardSpend).toBe(1000);
   });
 });

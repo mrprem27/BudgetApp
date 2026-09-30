@@ -560,8 +560,7 @@ CREATE TABLE imported_transactions (
   direction        TEXT NOT NULL DEFAULT 'unknown' CHECK (direction IN ('debit','credit','unknown')),
   raw              TEXT,
   source           TEXT NOT NULL DEFAULT 'manual',
-  pay_method       TEXT CHECK (pay_method IS NULL OR pay_method IN ('upi','card','cash','bank','wallet','autopay','other')),
-  pay_from         TEXT CHECK (pay_from IS NULL OR pay_from IN ('bank','cash','wallet','credit')),  -- U-48: where the money came from; NULL = the usual for pay_method
+  pay_method       TEXT CHECK (pay_method IS NULL OR pay_method IN ('bank','card','cash','wallet','other')),
   dest_group_id    TEXT,
   split_draft      TEXT CHECK (split_draft IS NULL OR json_valid(split_draft)),
   counterparty_id  TEXT,
@@ -598,8 +597,7 @@ CREATE TABLE transactions (
   timezone           TEXT,
   category           TEXT NOT NULL CHECK (length(trim(category)) > 0),
   note               TEXT,
-  pay_method         TEXT CHECK (pay_method IS NULL OR pay_method IN ('upi','card','cash','bank','wallet','autopay','other')),
-  pay_from           TEXT CHECK (pay_from IS NULL OR pay_from IN ('bank','cash','wallet','credit')),
+  pay_method         TEXT CHECK (pay_method IS NULL OR pay_method IN ('bank','card','cash','wallet','other')),
   source             TEXT CHECK (source IS NULL OR source IN ('voice','email','gpay','paytm','bank_csv','sms','notification','upi_qr','peer','manual')),
   currency           TEXT NOT NULL DEFAULT 'INR' CHECK (length(currency) = 3),
   asset_id           TEXT REFERENCES assets(id),
@@ -734,7 +732,7 @@ CREATE TABLE approvals (
   status             TEXT NOT NULL CHECK (status IN ('pending','approved','rejected')),
   -- The author retracted an entry I had accepted; it keeps counting until I agree.
   is_pending_delete  INTEGER NOT NULL DEFAULT 0 CHECK (is_pending_delete IN (0,1)),
-  landed_pay_method  TEXT CHECK (landed_pay_method IS NULL OR landed_pay_method IN ('upi','card','cash','bank','wallet','autopay','other')),
+  landed_pay_method  TEXT CHECK (landed_pay_method IS NULL OR landed_pay_method IN ('bank','card','cash','wallet','other')),
   arrived_at         INTEGER NOT NULL,     -- when it ARRIVED: a back-dated entry cannot bury itself
   decided_at         INTEGER,
   CHECK (scope_id = user_id),

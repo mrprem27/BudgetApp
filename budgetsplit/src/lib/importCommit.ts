@@ -2,7 +2,7 @@ import type * as SQLite from 'expo-sqlite';
 import { getCategories } from '../db/queries/categories';
 import { insertPending } from '../db/queries/pending';
 import { matchCategory } from './smartCategory';
-import { detectPayMethod, detectPayFrom } from './payMethodDetect';
+import { detectPayMethod } from './payMethodDetect';
 import type { DetectedParse } from './importDetect';
 import type { TxnKind } from '../constants/enums';
 
@@ -28,10 +28,9 @@ export async function queueImportedRows(db: SQLite.SQLiteDatabase, { result, sou
     category: r.category ?? matchCategory(r.description, catalogFor[r.kind]),
     direction: r.direction,
     source,
-    // Prefer the parser's detected method; else sniff the row's raw text. Null
+    // Prefer the parser's detected From; else sniff the row's raw text. Null
     // when nothing matches — the user sets it in Review.
     pay_method: r.payMethod ?? detectPayMethod(r.raw) ?? null,
-    pay_from: r.payFrom ?? detectPayFrom(r.raw) ?? null,
     raw: r.raw,
   })));
   return result.rows.length;

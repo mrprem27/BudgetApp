@@ -2007,7 +2007,7 @@ The `✖` rows above are the documented exemptions — query-driven (`search`), 
 | Add (expense) | Destination | `DestinationRow` → `DestinationSheet`, all groups, Personal first then most-recently-used |
 | Add | Other details | Note · Receipt · Location · Pay method · Repeat *(chips, set ones show their value)* |
 | Add (shared) | Split mode | Equal · Exact · % · Shares |
-| Add (any kind) | Pay method | UPI · Card · Cash · Bank · Wallet · Autopay · Other |
+| Add (any kind) | Paid from (`U-49`) | Bank · Credit card · Cash · Wallet · Other |
 | Itemized | Step dots | Add items · Assign items · Who paid? · Review & save |
 | Personal | Tabs | Activity · Budget · Recurring |
 | Personal › Activity | Scope filter | Personal · Groups · All · {each group} |
@@ -2194,7 +2194,7 @@ widgets; `system/` = onboarding, gates, privacy. `ui/` never imports from `finan
 | `plan/TotalMoneyCard` | Available Money hero + net worth + credit headroom (`V2-12`). |
 | `plan/MoneyEditorSheet` | Editor *(sheet)* for the figures behind Total Money: takes today's balances, works out the start on save. |
 | `plan/MoneySum` | The money sum (places − In goals = Spendable + Invested − Card owed = Net worth), shared by the card and its editor. |
-| `add/PayMethodSheet` From | Under UPI and Autopay, a From row (Bank · Credit card · Wallet); the chip shows From only when it isn't the usual (`U-48`). |
+| `add/PayMethodSheet` From | "Where did it come from?" — one list: Bank (UPI, debit card, net banking, autopay) · Credit card (including UPI on a credit card) · Cash · Wallet · Other. The chip reads "From Bank" under a **Payment** header, beside Repeat (`U-49`). |
 | `pay/PayMethodGlyph` | The one glyph per pay method; Bank, Wallet, Cash drawn on Feather's grid (`W1-06`). |
 | `plan/LockExplainerSheet` | Explains what protecting a goal does. |
 | `add/AmountField` · `add/CategoryDatePills` · `add/ContextPill` · `add/DetailChips` · `add/BudgetNudge` · `add/AttachmentRow` · `add/LocationRow` · `add/SplitSummary` · `add/SplitSheet` · `add/SplitEditor` · `add/PayersSheet` · `add/TransferSlotSheet` | Add-flow sub-views driven by `useAddTxnForm`. `SplitEditor` is also used inline by Review. |

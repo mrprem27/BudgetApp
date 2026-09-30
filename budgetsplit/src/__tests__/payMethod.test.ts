@@ -1,46 +1,47 @@
 import { readFileSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
 import {
-  PAY_METHOD, PAY_METHOD_CHOOSABLE, PAY_METHOD_LABEL,
-  INCOME_LANDING, PayMethod, assetOf,
+  PAY_METHOD, PAY_METHOD_LABEL, INCOME_LANDING, PayMethod, assetOf, payFromOf, asPayMethod,
 } from '../constants/enums';
 
 /**
- * Two lists, and the difference between them is the point.
- *
- * `PAY_METHOD` is what a row may STORE. `PAY_METHOD_CHOOSABLE` is what a person
- * may PICK. Collapsing those into one list is what put `Autopay` in front of the
- * user (`OV-28`) — a value that is not a payment method at all: it carries the
- * `repeat` glyph, folds to `bank` in every money calculation, and means what the
- * recurring control's `auto` mode already means, two rows away on the same screen.
+ * One field: where the money came from (`U-49`). How it moved — UPI, a debit card, net banking,
+ * an autopay mandate — is not stored; every one of those is the bank, and UPI on a credit card is
+ * the card. U-48 kept How and From as two fields; this is the guard that the second one stays gone.
  */
-describe('what may be stored vs what may be picked', () => {
-  it('offers everything except Autopay', () => {
-    expect(PAY_METHOD_CHOOSABLE).not.toContain(PayMethod.Autopay);
-    expect([...PAY_METHOD_CHOOSABLE].sort())
-      .toEqual([...PAY_METHOD].filter(m => m !== PayMethod.Autopay).sort());
-  });
-
-  it('keeps Autopay storable, because an import genuinely produces it', () => {
-    // A mandate debit arrives labelled "autopay" and `payMethodDetect` matches it.
-    // There is no rule on this device to carry `recurMode`, so the value is the
-    // honest record of what the statement said. Detected, never picked.
-    expect(PAY_METHOD).toContain(PayMethod.Autopay);
-    expect(PAY_METHOD_LABEL[PayMethod.Autopay]).toBeTruthy();
-    // And nothing about the money math moves: it still draws from bank.
-    expect(assetOf(PayMethod.Autopay)).toBe('bank');
+describe('From is the only pay field', () => {
+  it('offers exactly the sources, and nothing that is a way of paying', () => {
+    expect([...PAY_METHOD]).toEqual([PayMethod.Bank, PayMethod.Card, PayMethod.Cash, PayMethod.Wallet, PayMethod.Other]);
+    expect(PAY_METHOD).not.toContain('upi');
+    expect(PAY_METHOD).not.toContain('autopay');
+    expect(PAY_METHOD_LABEL[PayMethod.Card]).toBe('Credit card');
   });
 
   it('keeps Other, because "I do not know" is a real answer', () => {
     // Hiding a legitimate option pushes people onto a wrong one.
-    expect(PAY_METHOD_CHOOSABLE).toContain(PayMethod.Other);
+    expect(PAY_METHOD).toContain(PayMethod.Other);
   });
 
   it('never offers a landing option that cannot receive money', () => {
-    // Income arrives INTO somewhere. It never arrives "by card" or "by autopay".
-    for (const m of INCOME_LANDING) expect(PAY_METHOD_CHOOSABLE).toContain(m);
+    // Income arrives INTO somewhere — never onto a credit card.
+    for (const m of INCOME_LANDING) expect(PAY_METHOD).toContain(m);
     expect(INCOME_LANDING).not.toContain(PayMethod.Card);
-    expect(INCOME_LANDING).not.toContain(PayMethod.Autopay);
+    expect(INCOME_LANDING).not.toContain(PayMethod.Other);
+  });
+
+  it('reads a saved default from before U-49 as Bank', () => {
+    expect(asPayMethod('upi')).toBe(PayMethod.Bank);
+    expect(asPayMethod('autopay')).toBe(PayMethod.Bank);
+    expect(asPayMethod('wallet')).toBe(PayMethod.Wallet);
+  });
+
+  it('draws each From on its own place, and a card bill on the bank', () => {
+    expect(assetOf(PayMethod.Bank)).toBe('bank');
+    expect(assetOf(PayMethod.Card)).toBe('credit');
+    expect(assetOf(PayMethod.Other)).toBeNull();
+    expect(payFromOf({ kind: 'expense', pay_method: 'card' })).toBe('credit');
+    expect(payFromOf({ kind: 'settlement', pay_method: 'card' })).toBe('bank');
+    expect(payFromOf({ kind: 'expense', pay_method: null })).toBeNull();
   });
 });
 
@@ -83,37 +84,9 @@ describe('the pay-method picker is built once', () => {
     for (const file of ROOTS.flatMap(walk)) {
       const src = readFileSync(file, 'utf8');
       // `.map(` over either list is how both hand-rolls were written.
-      if (!/PAY_METHOD(_CHOOSABLE)?\s*\.\s*map\(|PAY_CHOICES\s*\.\s*map\(/.test(src)) continue;
+      if (!/PAY_METHOD\s*\.\s*map\(|PAY_CHOICES\s*\.\s*map\(/.test(src)) continue;
       if (!ALLOWED[label(file)]) offenders.push(label(file));
     }
     expect(offenders).toEqual([]);
-  });
-});
-
-describe('From, apart from How (U-48)', () => {
-  const { storedPayFrom, payFromOf, payChipLabel, PAY_FROM_CHOICES } = jest.requireActual('../constants/enums') as typeof import('../constants/enums');
-
-  it('offers a choice only for UPI and Autopay', () => {
-    expect(Object.keys(PAY_FROM_CHOICES).sort()).toEqual([PayMethod.Autopay, PayMethod.Upi].sort());
-  });
-
-  it('stores a choice only when it is allowed and not the usual', () => {
-    expect(storedPayFrom(PayMethod.Upi, 'credit')).toBe('credit');
-    expect(storedPayFrom(PayMethod.Upi, 'bank')).toBeNull();      // the usual
-    expect(storedPayFrom(PayMethod.Cash, 'credit')).toBeNull();   // no choice for cash
-    expect(storedPayFrom(null, 'credit')).toBeNull();
-  });
-
-  it('derives From from How, and a card bill is paid from the bank', () => {
-    expect(payFromOf({ kind: 'expense', pay_method: 'upi' })).toBe('bank');
-    expect(payFromOf({ kind: 'expense', pay_method: 'upi', pay_from: 'credit' })).toBe('credit');
-    expect(payFromOf({ kind: 'expense', pay_method: 'card' })).toBe('credit');
-    expect(payFromOf({ kind: 'settlement', pay_method: 'card' })).toBe('bank');
-    expect(payFromOf({ kind: 'expense', pay_method: null })).toBeNull();
-  });
-
-  it('shows From on the chip only when it is not the usual', () => {
-    expect(payChipLabel(PayMethod.Upi, null)).toBe('UPI');
-    expect(payChipLabel(PayMethod.Upi, 'credit')).toBe('UPI · Credit card');
   });
 });

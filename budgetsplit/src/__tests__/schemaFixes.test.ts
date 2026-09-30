@@ -35,7 +35,9 @@ function makeDb(): DatabaseSync {
       deleted_at INTEGER,
       PRIMARY KEY (group_id, person_id)
     );
-    CREATE TABLE txn (id TEXT PRIMARY KEY, group_id TEXT, category TEXT NOT NULL);
+    CREATE TABLE txn (id TEXT PRIMARY KEY, group_id TEXT, category TEXT NOT NULL, pay_method TEXT);
+    CREATE TABLE pending_txn (id TEXT PRIMARY KEY, pay_method TEXT);
+    CREATE TABLE txn_approval (txn_id TEXT PRIMARY KEY, landed_pay_method TEXT);
     CREATE TABLE category (
       id TEXT PRIMARY KEY, group_id TEXT, name TEXT NOT NULL,
       icon TEXT, color TEXT, kind TEXT NOT NULL DEFAULT 'expense', section TEXT,
@@ -88,6 +90,25 @@ const catNames = (db: DatabaseSync) =>
   (db.prepare('SELECT name, kind FROM category ORDER BY name, kind').all() as { name: string; kind: string }[]);
 
 describe('one-time data fixes', () => {
+  it('folds UPI and autopay into Bank, and leaves every other From alone (U-49)', async () => {
+    const db = makeDb();
+    db.exec(`
+      INSERT INTO txn (id, group_id, category, pay_method) VALUES
+        ('u','g','Food','upi'), ('a','g','Rent','autopay'), ('c','g','Food','card'),
+        ('w','g','Food','wallet'), ('n','g','Food',NULL);
+      INSERT INTO pending_txn (id, pay_method) VALUES ('pu','upi'), ('pc','card');
+      INSERT INTO txn_approval (txn_id, landed_pay_method) VALUES ('au','autopay'), ('ac','cash');
+    `);
+
+    await launch(db);
+
+    const from = (table: string, col: string, key: string) =>
+      Object.fromEntries((db.prepare(`SELECT ${key} AS k, ${col} AS v FROM ${table}`).all() as { k: string; v: string | null }[]).map(r => [r.k, r.v]));
+    expect(from('txn', 'pay_method', 'id')).toEqual({ u: 'bank', a: 'bank', c: 'card', w: 'wallet', n: null });
+    expect(from('pending_txn', 'pay_method', 'id')).toEqual({ pu: 'bank', pc: 'card' });
+    expect(from('txn_approval', 'landed_pay_method', 'txn_id')).toEqual({ au: 'bank', ac: 'cash' });
+  });
+
   it('applies every fix on a fresh database, then never again', async () => {
     const db = makeDb();
 

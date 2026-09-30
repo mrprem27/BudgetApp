@@ -68,9 +68,9 @@ describe('parseTransactionEmail', () => {
     expect(rows[0].date).toBe(NOW);
   });
 
-  it('carries a detected pay method through to the parsed row', () => {
+  it('carries a detected From through to the parsed row', () => {
     const upi = parseTransactionEmail("You've paid ₹450 to BigBasket via UPI on 3 Jun 2026", NOW);
-    expect(upi.rows[0].payMethod).toBe('upi');
+    expect(upi.rows[0].payMethod).toBe('bank');
     const card = parseTransactionEmail('Rs 1,200.00 debited on your Credit Card ending 4321 to Amazon', NOW);
     expect(card.rows[0].payMethod).toBe('card');
   });

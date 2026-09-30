@@ -88,7 +88,7 @@ export async function recordScannedPayment(
     category,
     direction: 'debit',
     source: 'upi_qr',
-    pay_method: PayMethod.Upi,
+    pay_method: PayMethod.Bank,   // a UPI payment runs from the bank (`U-49`)
     raw: `Scanned & paid ${p.vpa}`,
     // Captured at scan time, not now: `nowMs` can be hours after the payment, and the
     // user has moved. See `PendingPayment.lat`.

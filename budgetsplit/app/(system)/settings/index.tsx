@@ -121,7 +121,7 @@ export default function SettingsScreen() {
   const [usageOn, setUsageOn] = useState(true);
 
   const [defaultCadence, setDefaultCadence] = useState<BudgetCadence>('monthly');
-  const [defaultPay, setDefaultPay] = useState<PayMethod>(PayMethod.Upi);
+  const [defaultPay, setDefaultPay] = useState<PayMethod>(PayMethod.Bank);
   const [showPayMethod, setShowPayMethod] = useState(false);
   const [showCadence, setShowCadence] = useState(false);
 
@@ -378,10 +378,10 @@ export default function SettingsScreen() {
             currency to pick between. */}
         <ListRow
           leading={<PayMethodDisc method={defaultPay} size={layout.iconCircle} color={TINT.payMethod} />}
-          title="Default pay method"
+          title="Usually paid from"
           value={PAY_METHOD_LABEL[defaultPay]}
           onPress={() => setShowPayMethod(true)}
-          accessibilityLabel="Default pay method"
+          accessibilityLabel="Usually paid from"
         />
         <View style={settingsRowDivider} />
         <SettingsRow icon="repeat" label="Default budget cadence" tint={TINT.cadence} value={CADENCE_LABELS[defaultCadence]} onPress={() => setShowCadence(true)} />
@@ -526,7 +526,7 @@ export default function SettingsScreen() {
 
       {/* Reuses the Add screen's own picker, so the tiles here are the tiles the
           preference actually seeds — not a second list that could drift from it. */}
-      <SheetModal visible={showPayMethod} onClose={() => setShowPayMethod(false)} title="How do you usually pay?" scroll={false}>
+      <SheetModal visible={showPayMethod} onClose={() => setShowPayMethod(false)} title="Where do you usually pay from?" scroll={false}>
         <PayMethodSelector value={defaultPay} onChange={pickPayMethod} />
       </SheetModal>
 

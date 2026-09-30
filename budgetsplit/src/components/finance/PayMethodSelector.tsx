@@ -7,7 +7,7 @@ import { Card } from '../ui/Card';
 import { Divider } from '../ui/Divider';
 import { ListRow } from '../ui/ListRow';
 import {
-  PAY_METHOD_CHOOSABLE, PAY_METHOD_LABEL, PAY_METHOD_HINT, type PayMethod,
+  PAY_METHOD, PAY_METHOD_LABEL, PAY_METHOD_HINT, type PayMethod,
 } from '../../constants/enums';
 
 type Props = {
@@ -43,11 +43,10 @@ type Props = {
  * component rather than two half-shared ones.
  *
  * The set, the labels and the glyphs still come from the enum, so they live in
- * exactly one place — and the default set is `PAY_METHOD_CHOOSABLE`, which drops
- * `Autopay` because that is detected on an import and never picked (`OV-28`).
+ * exactly one place.
  */
 export function PayMethodSelector({
-  value, onChange, accent = colors.accent, options = PAY_METHOD_CHOOSABLE,
+  value, onChange, accent = colors.accent, options = PAY_METHOD,
 }: Props) {
   return (
     <Card clip>

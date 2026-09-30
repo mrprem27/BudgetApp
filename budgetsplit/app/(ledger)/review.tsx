@@ -141,7 +141,6 @@ export default function ReviewScreen() {
     if (p.category !== undefined) draft.category = p.category;
     if (p.dest !== undefined) draft.dest_group_id = p.dest === 'personal' ? null : p.dest;
     if (p.payMethod !== undefined) draft.pay_method = p.payMethod === '' ? null : p.payMethod;
-    if (p.payFrom !== undefined) draft.pay_from = p.payFrom === '' ? null : p.payFrom;
     if (p.counterparty !== undefined) draft.counterparty_id = p.counterparty === '' ? null : p.counterparty;
     if (p.direction !== undefined) draft.direction = p.direction;
     // amount is flushed on blur (below), not on every keystroke.
@@ -520,8 +519,6 @@ export default function ReviewScreen() {
         payOpen={paySheetFor !== null}
         payMethod={payRow ? eff(payRow).payMethod : ''}
         onPayMethod={(m) => { if (paySheetFor) patch(paySheetFor, { payMethod: m }); }}
-        payFrom={payRow ? eff(payRow).payFrom : ''}
-        onPayFrom={(f) => { if (paySheetFor) patch(paySheetFor, { payFrom: f ?? '' }); }}
         onClearPay={() => { if (paySheetFor) patch(paySheetFor, { payMethod: '' }); }}
         onClosePay={() => setPaySheetFor(null)}
       />

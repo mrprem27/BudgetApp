@@ -92,7 +92,7 @@ export function ReviewBulkSheets({
         onChange={(m) => {
           const n = onApply({ payMethod: m });
           setPayOpen(false);
-          Alert.alert('Payment method set', `Applied to ${plural(n)}.`);
+          Alert.alert('Paid from set', `Applied to ${plural(n)}.`);
         }}
       />
 

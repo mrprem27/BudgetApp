@@ -55,7 +55,7 @@ export function BulkActionsSheet({
         )}
         <ListRow icon="tag" title="Set category" value={n} onPress={then(onCategory)} />
         <Divider indent="text" />
-        <ListRow icon="credit-card" title="Set payment method" value={n} onPress={then(onPayMethod)} />
+        <ListRow icon="credit-card" title="Set paid from" value={n} onPress={then(onPayMethod)} />
         <Divider indent="text" />
         <ListRow icon="repeat" title="Change kind" value={n} onPress={then(onKind)} />
         <Divider indent="text" />

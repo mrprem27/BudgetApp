@@ -103,66 +103,46 @@ export const SETTLEMENT_ADD_KINDS: readonly AddKind[] = [AddKind.Transfer, AddKi
 export const ENTRY_MODE = ['quick', 'itemized'] as const;
 export type EntryMode = typeof ENTRY_MODE[number];
 
-/** `txn.pay_method` / `pending_txn.pay_method` — nullable. How a payment was made.
- *  Applies to every txn kind (expense/income/transfer/settlement). Detected from
- *  imported text (see `payMethodDetect`), pre-filled in Review, always editable. */
+/** `txn.pay_method` / `pending_txn.pay_method` — nullable. **From**: where the money came from
+ *  (`U-49`). A kind of source, not *how* it was paid: UPI from an account, a debit card, net
+ *  banking and an autopay mandate are all the bank; UPI on a RuPay credit card is the card.
+ *  Imports still read the How words ("UPI", "mandate", "credit card") — only to tell the source
+ *  (`payMethodDetect`). Applies to every txn kind; for income it is where the money landed. */
 export enum PayMethod {
-  Upi = 'upi',
+  Bank = 'bank',
   Card = 'card',
   Cash = 'cash',
-  Bank = 'bank',
   Wallet = 'wallet',
-  Autopay = 'autopay',
   Other = 'other',
 }
-/** Render order for the pay-method picker. */
+/** Render order for the From picker. `Other` is kept: "I don't know" is a real state a ledger
+ *  has to be able to hold, and hiding it pushes people onto a wrong answer. */
 export const PAY_METHOD = [
-  PayMethod.Upi, PayMethod.Card, PayMethod.Cash, PayMethod.Bank,
-  PayMethod.Wallet, PayMethod.Autopay, PayMethod.Other,
+  PayMethod.Bank, PayMethod.Card, PayMethod.Cash, PayMethod.Wallet, PayMethod.Other,
 ] as const;
 export const PAY_METHOD_LABEL: Record<PayMethod, string> = {
-  [PayMethod.Upi]: 'UPI', [PayMethod.Card]: 'Credit card', [PayMethod.Cash]: 'Cash',
-  [PayMethod.Bank]: 'Bank', [PayMethod.Wallet]: 'Wallet',
-  [PayMethod.Autopay]: 'Autopay', [PayMethod.Other]: 'Other',
+  [PayMethod.Bank]: 'Bank', [PayMethod.Card]: 'Credit card', [PayMethod.Cash]: 'Cash',
+  [PayMethod.Wallet]: 'Wallet', [PayMethod.Other]: 'Other',
 };
-/** One hint where a label alone leaves a doubt: a debit card is the bank account (`W1-06`). */
+/** One hint where a label alone leaves a doubt: the bank is every way of paying from an account
+ *  (`W1-06`, `U-49`). */
 export const PAY_METHOD_HINT: Partial<Record<PayMethod, string>> = {
-  [PayMethod.Bank]: 'Account, debit card, net banking',
+  [PayMethod.Bank]: 'UPI, debit card, net banking, autopay',
+  [PayMethod.Card]: 'Including UPI on a credit card',
 };
-// Each pay method's glyph lives in `components/finance/pay/PayMethodGlyph` (`W1-06`).
-
-/**
- * What a PERSON may choose. `PAY_METHOD` is what a row may STORE (`OV-28`).
- *
- * `Autopay` is not a payment method, and the enum was the only place saying it is.
- * It carries the `repeat` glyph, `payMethodBucket` folds it to `bank` so no money
- * calculation treats it as its own thing, and it means what the recurring
- * control's `RECUR_MODE = 'auto'` already means — on the same screen, two rows
- * apart. Offering both made one screen ask the same question twice, and the
- * answer the user reached first was the one that changed nothing.
- *
- * It stays in `PAY_METHOD` because it is the right answer for an **imported**
- * row: a mandate debit genuinely arrives labelled "autopay", `payMethodDetect`
- * matches it, and there is no rule on this device to carry `recurMode`. Detected,
- * never picked — which is the whole distinction this constant exists to make.
- *
- * `Other` is deliberately KEPT. Hiding a legitimate answer pushes people onto a
- * wrong one, and "I don't know" is a real state a ledger has to be able to hold.
- */
-export const PAY_METHOD_CHOOSABLE: readonly PayMethod[] =
-  PAY_METHOD.filter(m => m !== PayMethod.Autopay);
+// Each source's glyph lives in `components/finance/pay/PayMethodGlyph` (`W1-06`).
 
 /**
  * Where incoming money can land. The same `pay_method` column, asked the other way
- * round: income arrives *into* cash, a bank account or a wallet — it never arrives
- * "by card" or "by autopay". Bank is the default because salary is the common case.
+ * round: income arrives *into* cash, a bank account or a wallet — never onto a credit card.
+ * Bank is the default because salary is the common case.
  *
  * This is deliberately a view over `PAY_METHOD` rather than a new `account` concept.
  * Accounts as real entities (with balances) is a separate, larger design — see the
  * note in `DEBT_TRACKER.md`.
  */
 export const INCOME_LANDING: readonly PayMethod[] = [
-  PayMethod.Bank, PayMethod.Cash, PayMethod.Wallet, PayMethod.Upi,
+  PayMethod.Bank, PayMethod.Cash, PayMethod.Wallet,
 ];
 export const INCOME_LANDING_DEFAULT = PayMethod.Bank;
 
@@ -180,14 +160,9 @@ export const ASSET_BUCKET = ['bank', 'cash', 'wallet'] as const;
 export type AssetBucket = typeof ASSET_BUCKET[number];
 
 /**
- * Where a payment method draws from, or `null` when it genuinely is not known.
+ * The place a stored From draws on, or `null` when it genuinely is not known.
  *
- * **This mapping is a policy, not a fact, and it lives here so it is decided once.**
- * `upi` and `autopay` are read as bank because that is where they draw from for
- * almost everyone — but a UPI payment CAN come out of a wallet, so this is a
- * defensible default and not a truth.
- *
- * `null` for an unrecorded method is the important case, not an oversight.
+ * `null` for an unrecorded source is the important case, not an oversight.
  * `txn.pay_method` is nullable and real rows have NULL, where it has always meant
  * "not card" and nothing more. Forcing those into bank would silently drain one
  * bucket for every legacy row while the total stayed correct — the worst kind of
@@ -200,59 +175,23 @@ export function assetOf(pm: PayMethod | string | null | undefined): AssetBucket 
     case PayMethod.Card:    return 'credit';
     case PayMethod.Cash:    return 'cash';
     case PayMethod.Wallet:  return 'wallet';
-    case PayMethod.Bank:
-    case PayMethod.Upi:
-    case PayMethod.Autopay: return 'bank';
+    case PayMethod.Bank:    return 'bank';
     default:                return null;   // 'other', and every legacy NULL
   }
 }
 
-/**
- * **From** — where the money came from, apart from **How** it was paid (`U-48`, `SPEC-PAY-FROM`).
- * A kind, not a named account: the bank, cash, a wallet, or a credit card.
- */
-export type PayFrom = 'bank' | 'cash' | 'wallet' | 'credit';
-export const PAY_FROM_LABEL: Record<PayFrom, string> = { bank: 'Bank', cash: 'Cash', wallet: 'Wallet', credit: 'Credit card' };
-const isPayFrom = (v: unknown): v is PayFrom => v === 'bank' || v === 'cash' || v === 'wallet' || v === 'credit';
-
-/**
- * Where you may say the money came from, per How. Only UPI and Autopay are ever in doubt: both
- * run from a bank (a debit card is the bank), a credit card, or a wallet. Cash is from cash, a
- * wallet from the wallet, a credit card from the card; a choice there would only let a wrong one in.
- */
-export const PAY_FROM_CHOICES: Partial<Record<PayMethod, readonly PayFrom[]>> = {
-  [PayMethod.Upi]: ['bank', 'credit', 'wallet'],
-  [PayMethod.Autopay]: ['bank', 'credit', 'wallet'],
-};
-
-/**
- * What to STORE as `pay_from`: the choice only when How allows one and it is not the usual. Picking
- * Bank for UPI stores nothing; switching How to Cash drops a stale "credit card".
- */
-export function storedPayFrom(pm: PayMethod | string | null | undefined, from: PayFrom | string | null | undefined): PayFrom | null {
-  if (!isPayFrom(from) || !pm) return null;
-  const choices = PAY_FROM_CHOICES[pm as PayMethod];
-  return choices?.includes(from) && from !== assetOf(pm) ? from : null;
-}
-
-/** A pay chip's words: "UPI", or "UPI · Credit card" when From is not the usual. */
-export function payChipLabel(pm: PayMethod, from: PayFrom | string | null | undefined): string {
-  const stored = storedPayFrom(pm, from);
-  return stored ? `${PAY_METHOD_LABEL[pm]} · ${PAY_FROM_LABEL[stored]}` : PAY_METHOD_LABEL[pm];
-}
-
-/** A card-bill payment: a settlement whose How is the card being repaid (`payCardBill`). */
+/** A card-bill payment: a settlement whose From is the card being repaid (`payCardBill`). */
 export function isCardRepayment(t: { kind?: string | null; pay_method?: string | null }): boolean {
   return t.kind === 'settlement' && t.pay_method === PayMethod.Card;
 }
 
 /**
- * The **effective From**: what you set, else the usual for How. A card-bill payment's How is the
- * card it repays, and the money for it leaves the bank. Mirrored in SQL by `EFFECTIVE_FROM_SQL`
- * (`cashQuery.ts`); `cashSql.test.ts` and `bucketFlows.test.ts` fail if the two drift.
+ * The place a row's money actually moved from. Its From, except a card-bill payment: that row's
+ * `pay_method` names the card it repays, and the money for it leaves the bank. Mirrored in SQL by
+ * `EFFECTIVE_FROM_SQL` (`cashQuery.ts`); `cashSql.test.ts` and `bucketFlows.test.ts` fail if the
+ * two drift.
  */
-export function payFromOf(t: { kind?: string | null; pay_method?: string | null; pay_from?: string | null }): PayFrom | null {
-  if (isPayFrom(t.pay_from)) return t.pay_from;
+export function payFromOf(t: { kind?: string | null; pay_method?: string | null }): AssetBucket | 'credit' | null {
   if (isCardRepayment(t)) return 'bank';
   return assetOf(t.pay_method);
 }
@@ -324,7 +263,7 @@ export function defaultRecurMode(kind: string): RecurMode {
 }
 
 /** Narrow a stored preference string to a PayMethod. Mirrors `asBudgetCadence`. */
-export function asPayMethod(v: string | null | undefined, fallback: PayMethod = PayMethod.Upi): PayMethod {
+export function asPayMethod(v: string | null | undefined, fallback: PayMethod = PayMethod.Bank): PayMethod {
   return (PAY_METHOD as readonly string[]).includes(v ?? '') ? (v as PayMethod) : fallback;
 }
 

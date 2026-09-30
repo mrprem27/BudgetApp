@@ -213,23 +213,23 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
 
   // This month — drives forecast, budgets (over/near/under) and shift teaser.
   await exp('Rent', 22000, thisMonth(2), { note: 'Flat rent', pay: PayMethod.Bank });
-  await exp('Groceries', 3500, thisMonth(3), { place: 'BigBasket', pay: PayMethod.Upi });
+  await exp('Groceries', 3500, thisMonth(3), { place: 'BigBasket', pay: PayMethod.Bank });
   await exp('Groceries', 3200, thisMonth(9), { place: 'DMart, HSR Layout', lat: 12.91, lng: 77.64 });
-  await exp('Groceries', 2300, thisMonth(15), { pay: PayMethod.Upi });                         // → ₹9,000 vs ₹8,000 budget = OVER
+  await exp('Groceries', 2300, thisMonth(15), { pay: PayMethod.Bank });                         // → ₹9,000 vs ₹8,000 budget = OVER
   await exp('Eating Out', 1200, thisMonth(4), { note: 'Dinner with friends', place: 'Truffles, Koramangala', lat: 12.93, lng: 77.62 });
   await exp('Eating Out', 900, thisMonth(11), { pay: PayMethod.Cash });
   await exp('Eating Out', 600, thisMonth(18), { note: 'Brunch' });                      // → ₹2,700 vs ₹3,000 = NEAR
-  await exp('Fuel', 1500, thisMonth(6), { place: 'Indian Oil', pay: PayMethod.Upi });           // → under budget
+  await exp('Fuel', 1500, thisMonth(6), { place: 'Indian Oil', pay: PayMethod.Bank });           // → under budget
   await exp('Electricity', 2200, thisMonth(7), { note: 'BESCOM bill', attach: 'demo://receipt-bescom.pdf' });
   await exp('Shopping', 4500, thisMonth(8), { note: 'Winter clothes', place: 'Phoenix Mall' });
   await exp('Health & Pharmacy', 800, thisMonth(10), { pay: PayMethod.Cash });
   await exp('Chai & Snacks', 20, thisMonth(12));                                         // tiny-amount edge case
   await exp('Chai & Snacks', 30, thisMonth(14));
-  await exp('Cab & Auto', 350, thisMonth(13), { place: 'Uber', pay: PayMethod.Upi });
+  await exp('Cab & Auto', 350, thisMonth(13), { place: 'Uber', pay: PayMethod.Bank });
   // A daily chai for the last nine days, today included: a live ⚡ streak on Home (`U-40`).
   for (let back = 0; back < 9; back++) {
     const d = new Date(); d.setDate(d.getDate() - back); d.setHours(9, 30, 0, 0);
-    await exp('Chai & Snacks', 20 + ((back * 17) % 41), d.getTime(), { pay: PayMethod.Upi });
+    await exp('Chai & Snacks', 20 + ((back * 17) % 41), d.getTime(), { pay: PayMethod.Bank });
   }
 
   // Last month — gives shifts vs this month + reports/trend depth + a big one-off.
@@ -259,9 +259,9 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
     const drift = (base: number, k: number) => Math.round(base * (0.85 + ((back * 7 + k * 3) % 10) / 33));
     await income('Salary', 85000, monthsBack(back, 1), 'Monthly salary');
     await exp('Rent', 22000, monthsBack(back, 2), { pay: PayMethod.Bank });
-    await exp('Groceries', drift(6000, 1), monthsBack(back, 6), { pay: PayMethod.Upi });
+    await exp('Groceries', drift(6000, 1), monthsBack(back, 6), { pay: PayMethod.Bank });
     await exp('Eating Out', drift(1800, 2), monthsBack(back, 11));
-    await exp('Fuel', drift(1800, 3), monthsBack(back, 13), { pay: PayMethod.Upi });
+    await exp('Fuel', drift(1800, 3), monthsBack(back, 13), { pay: PayMethod.Bank });
     await exp('Electricity', drift(1900, 4), monthsBack(back, 7));
     if (back % 3 === 0) await exp('Shopping', drift(3500, 5), monthsBack(back, 20));
   }
@@ -308,7 +308,7 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
   await insertTxn(db, { groupId: roommates.id, kind: 'expense', entryMode: 'quick', date: thisMonth(4), category: 'Groceries', note: 'Weekly groceries', payments: [{ personId: aarav.id, amount: R(4500) }], shares: [{ personId: meId, amount: R(1500) }, { personId: aarav.id, amount: R(1500) }, { personId: priya.id, amount: R(1500) }] });
   await insertTxn(db, { groupId: roommates.id, kind: 'expense', entryMode: 'quick', date: thisMonth(6), category: 'WiFi & Broadband', note: 'Internet', payments: [{ personId: priya.id, amount: R(1200) }], shares: [{ personId: meId, amount: R(400) }, { personId: aarav.id, amount: R(400) }, { personId: priya.id, amount: R(400) }] });
   await insertTxn(db, { groupId: roommates.id, kind: 'expense', entryMode: 'quick', date: thisMonth(9), category: 'Electricity', note: 'Power bill', payments: [{ personId: meId, amount: R(1800) }], shares: [{ personId: meId, amount: R(600) }, { personId: aarav.id, amount: R(600) }, { personId: priya.id, amount: R(600) }] });
-  await recordSettlement(db, { groupId: roommates.id, fromId: aarav.id, toId: meId, amount: R(1500), date: thisMonth(12), payMethod: PayMethod.Upi, category: 'Shared Bill', note: 'For the electricity' });
+  await recordSettlement(db, { groupId: roommates.id, fromId: aarav.id, toId: meId, amount: R(1500), date: thisMonth(12), payMethod: PayMethod.Bank, category: 'Shared Bill', note: 'For the electricity' });
   await recordSettlement(db, { groupId: roommates.id, fromId: priya.id, toId: meId, amount: R(600), date: thisMonth(14), payMethod: PayMethod.Cash, category: 'Repayment' });
   // Shared-group recurring rule → Personal → Recurring shows a second group section (Roommates).
   // Starts next month: dated in the past it would materialise months of maid payments I fronted and nobody repaid.
@@ -345,7 +345,7 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
 
   // --- Office Lunch: fully settled (tests the "all settled up" state) ------
   await insertTxn(db, { groupId: office.id, kind: 'expense', entryMode: 'quick', date: thisMonth(5), category: 'Eating Out', note: 'Team lunch', payments: [{ personId: meId, amount: R(1500) }], shares: [{ personId: meId, amount: R(500) }, { personId: priya.id, amount: R(500) }, { personId: vikram.id, amount: R(500) }] });
-  await recordSettlement(db, { groupId: office.id, fromId: priya.id, toId: meId, amount: R(500), date: thisMonth(6), payMethod: PayMethod.Upi, category: 'Shared Bill' });
+  await recordSettlement(db, { groupId: office.id, fromId: priya.id, toId: meId, amount: R(500), date: thisMonth(6), payMethod: PayMethod.Bank, category: 'Shared Bill' });
   await recordSettlement(db, { groupId: office.id, fromId: vikram.id, toId: meId, amount: R(500), date: thisMonth(6), payMethod: PayMethod.Cash, category: 'Shared Bill' });
 
   // --- Family: I owe THEM (they paid) → a "you owe" balance direction --------
@@ -530,7 +530,7 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
   await peerTxn({
     groupId: roommates.id, author: aarav.id, date: thisMonth(23),
     kind: 'settlement', category: 'Settle up', note: 'Aarav says he sent this by UPI',
-    payMethod: PayMethod.Upi,
+    payMethod: PayMethod.Bank,
     payments: [{ personId: aarav.id, amount: R(1500) }],
     shares: [{ personId: meId, amount: R(1500) }],
     pending: true,
@@ -558,16 +558,16 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
   // expense/income, some pre-categorized, one shareable-in-a-group, one uncategorized.
   await insertPending(db, [
     // Google Pay import (most rows) — a couple carry a detected pay method.
-    { date: thisMonth(20), amount: R(950), description: 'Sandeep Malik', kind: 'expense', category: null, direction: 'debit', source: 'gpay', pay_method: PayMethod.Upi, raw: 'UPI 651859540084 · Paid to Sandeep Malik ₹950' },
-    { date: thisMonth(20), amount: R(485), description: 'Select Infrastructure', kind: 'expense', category: 'Bills', direction: 'debit', source: 'gpay', pay_method: PayMethod.Upi, raw: null },
+    { date: thisMonth(20), amount: R(950), description: 'Sandeep Malik', kind: 'expense', category: null, direction: 'debit', source: 'gpay', pay_method: PayMethod.Bank, raw: 'UPI 651859540084 · Paid to Sandeep Malik ₹950' },
+    { date: thisMonth(20), amount: R(485), description: 'Select Infrastructure', kind: 'expense', category: 'Bills', direction: 'debit', source: 'gpay', pay_method: PayMethod.Bank, raw: null },
     { date: thisMonth(19), amount: R(70), description: 'PVR LIMITED', kind: 'expense', category: 'Entertainment', direction: 'debit', source: 'gpay', pay_method: null, raw: null },
     { date: thisMonth(19), amount: R(420), description: 'Amazon Pay', kind: 'expense', category: 'Shopping', direction: 'debit', source: 'gpay', pay_method: PayMethod.Wallet, raw: null },
     { date: thisMonth(18), amount: R(1000), description: 'RAHUL VERMA', kind: 'income', category: null, direction: 'credit', source: 'gpay', pay_method: null, raw: null },
-    { date: thisMonth(18), amount: R(2000), description: 'Om Prakash Basnet', kind: 'expense', category: null, direction: 'debit', source: 'gpay', pay_method: PayMethod.Upi, raw: null },
+    { date: thisMonth(18), amount: R(2000), description: 'Om Prakash Basnet', kind: 'expense', category: null, direction: 'debit', source: 'gpay', pay_method: PayMethod.Bank, raw: null },
     // Bank / UPI email alerts — a separate section in Review.
     { date: thisMonth(17), amount: R(264), description: 'GOKUL MEDICAL STORE', kind: 'expense', category: 'Health & Pharmacy', direction: 'debit', source: 'email', pay_method: PayMethod.Card, raw: 'Rs 264.00 spent on Credit Card ending 4321 at GOKUL MEDICAL STORE' },
-    { date: thisMonth(17), amount: R(73), description: 'Rapido', kind: 'expense', category: 'Cab & Auto', direction: 'debit', source: 'email', pay_method: PayMethod.Upi, raw: 'You paid ₹73 to Rapido via UPI' },
-    { date: thisMonth(16), amount: R(2500), description: 'Society maintenance', kind: 'expense', category: 'Maintenance', direction: 'debit', source: 'email', pay_method: PayMethod.Autopay, raw: 'E-mandate debit of Rs 2500 towards Society maintenance' },
+    { date: thisMonth(17), amount: R(73), description: 'Rapido', kind: 'expense', category: 'Cab & Auto', direction: 'debit', source: 'email', pay_method: PayMethod.Bank, raw: 'You paid ₹73 to Rapido via UPI' },
+    { date: thisMonth(16), amount: R(2500), description: 'Society maintenance', kind: 'expense', category: 'Maintenance', direction: 'debit', source: 'email', pay_method: PayMethod.Bank, raw: 'E-mandate debit of Rs 2500 towards Society maintenance' },
   ]);
 
   // Verify the writes actually landed — turns a silent "empty app" into a clear signal.

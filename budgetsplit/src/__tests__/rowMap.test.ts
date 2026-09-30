@@ -73,7 +73,7 @@ describe('round trips through the real push and pull', () => {
     const asset = { id: 'a1', name: 'Gold', kind: 'gold', icon: 'award', color: '#F5B700', balance: 500000, is_archived: 0, sort_order: 2, created_at: T0 - 5_000 };
     const goal = { id: 'g1', name: 'Trip', target: 5000000, priority: 'want', category: 'Travel', icon: 'map', color: '#20C4B8', allocation: 100000, frequency: 'monthly', locked: 1, is_archived: 0, last_auto_at: T0 - 9, target_date: T0 + 9, sort_order: 0, created_at: T0 - 7_000 };
     const st = { id: 's1', goal_id: 'g1', amount: 100000, kind: 'deposit', source: 'auto', date: T0 - 3, note: 'Sept', created_at: T0 - 2, source_asset: 'bank' };
-    const imp = { id: 'i1', date: T0 - 10, amount: 4500, description: 'SWIGGY', kind: 'expense', category: 'Food', direction: 'debit', raw: 'row', created_at: T0 - 11, dest_group_id: null, split_draft: '{"mode":"equal"}', counterparty_id: null, source: 'paytm', pay_method: 'upi', pay_from: 'credit', lat: 28.4, lng: 77.1, place_label: 'Cyber Hub' };
+    const imp = { id: 'i1', date: T0 - 10, amount: 4500, description: 'SWIGGY', kind: 'expense', category: 'Food', direction: 'debit', raw: 'row', created_at: T0 - 11, dest_group_id: null, split_draft: '{"mode":"equal"}', counterparty_id: null, source: 'paytm', pay_method: 'card', lat: 28.4, lng: 77.1, place_label: 'Cyber Hub' };
     await send(db, [assetToServer(asset), goalToServer(goal), savingsTxnToServer(st), importToServer(imp)]);
     const p = await pulled(db);
     expect(simpleToLocal('asset', rowsOf(p, 'assets')[0])).toEqual({ ...asset, updated_at: T0 + 1_000 });
@@ -120,7 +120,7 @@ describe('round trips through the real push and pull', () => {
       note: 'Sept', tags: JSON.stringify(['home', 'fixed']), adjustments: '{"tax":0}',
       recur_freq: 'monthly', recur_interval: 1, recur_end: T0 + 99, recur_override_date: null, parent_recur_id: null,
       recur_state: 'paused', recur_paused_at: null, recur_mode: 'remind',
-      tz: 'Asia/Kolkata', lat: 12.9, lng: 77.6, place_label: 'Home', pay_method: 'upi', pay_from: 'credit', currency: null, source: 'manual',
+      tz: 'Asia/Kolkata', lat: 12.9, lng: 77.6, place_label: 'Home', pay_method: 'card', currency: null, source: 'manual',
       asset_id: null, author_person_id: null, is_deleted: 0, created_at: T0 - 90, updated_at: T0 + 1_000,
     };
     const bundle = {

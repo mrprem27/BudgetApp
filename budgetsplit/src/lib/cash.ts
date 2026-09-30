@@ -9,10 +9,8 @@ import { myShareOf, myPaidOf } from './splitMath';
 export type CashTxn = {
   kind: string;
   is_deleted?: number | boolean;
-  /** How it was paid. Card spend is debt, not cash out — see `computeCash`. */
+  /** Where the money came from. Credit-card spend is debt, not cash out — see `computeCash`. */
   pay_method?: string | null;
-  /** Where the money came from when not the usual for How (`U-48`); see `payFromOf`. */
-  pay_from?: string | null;
   /** Epoch ms. Only used to date card spend against the money profile's baseline. */
   date?: number;
   payments: { personId: string; amount: number }[];

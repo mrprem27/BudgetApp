@@ -44,8 +44,8 @@ import type { Person } from '../db/queries/persons';
 import type { Category } from '../db/queries/categories';
 import { TRANSFER_HIDDEN_FROM_PICKER } from '../constants/categories';
 import { settleDirection } from '../lib/owe';
-import { AddKind, ADD_KIND, PayMethod, RecurEndMode, INCOME_LANDING_DEFAULT, TRANSFER_SCOPE_ALL, asPayMethod, type TransferScope, defaultRecurMode, type RecurMode } from '../constants/enums';
-import type { SplitMode, RecurFreq, PayFrom } from '../constants/enums';
+import { AddKind, ADD_KIND, PayMethod, RecurEndMode, INCOME_LANDING, INCOME_LANDING_DEFAULT, TRANSFER_SCOPE_ALL, asPayMethod, type TransferScope, defaultRecurMode, type RecurMode } from '../constants/enums';
+import type { SplitMode, RecurFreq } from '../constants/enums';
 import { track } from '../lib/usageEvents';
 
 export type AddTxnParams = {
@@ -114,9 +114,7 @@ export function useAddTxnForm(params: AddTxnParams) {
    */
   const [transferScope, setTransferScope] = useState<TransferScope>(TRANSFER_SCOPE_ALL);
   const [transferScopes, setTransferScopes] = useState<TransferScopes | null>(null);
-  const [payMethod, setPayMethod] = useState<PayMethod>(PayMethod.Upi);
-  // Where the money came from, when How allows a choice and it is not the usual (`U-48`).
-  const [payFrom, setPayFrom] = useState<PayFrom | null>(null);  // Seeded from the user's default in the settings effect below.
+  const [payMethod, setPayMethod] = useState<PayMethod>(PayMethod.Bank);  // Seeded from the user's default in the settings effect below.
   const [transferNote, setTransferNote] = useState('');
   /**
    * Where an Invest entry lands, and the assets it can choose from.
@@ -255,8 +253,7 @@ export function useAddTxnForm(params: AddTxnParams) {
           setNote(txn.note ?? '');
           // Income's pay method means "where did it land?", so an income row with
           // no stored value must fall back to the landing default, not to UPI.
-          setPayMethod(txn.pay_method ?? (txn.kind === 'income' ? INCOME_LANDING_DEFAULT : PayMethod.Upi));
-          setPayFrom(txn.pay_from ?? null);
+          setPayMethod(txn.pay_method ?? (txn.kind === 'income' ? INCOME_LANDING_DEFAULT : PayMethod.Bank));
           // Hydrated for EVERY load, not just a recurring one. This sat inside the
           // `recurEditId` branch below, so opening a normal transaction to edit it
           // left `tags` empty — and `handleSave` passes that straight to
@@ -498,11 +495,10 @@ export function useAddTxnForm(params: AddTxnParams) {
       const gid = p?.id ?? selectedGroupId;
       if (p && p.id !== selectedGroupId) setSelectedGroupId(p.id);
       if (gid) loadGroup(gid, me, undefined, 'income');
-      // For income the pay-method field means "where did it land?", and the default
-      // for spending (UPI) isn't a place money arrives into. Salary lands in a bank
-      // account, so that's the sensible pre-fill. Only overridden when the user is
-      // still on the spending default — never clobber a deliberate choice.
-      if (!isEditing && payMethod === PayMethod.Upi) setPayMethod(INCOME_LANDING_DEFAULT);
+      // For income the From field means "where did it land?", and money never lands on a
+      // credit card (or "Other"). Salary lands in a bank account, so that's the pre-fill.
+      // A place money can land in is kept — never clobber a deliberate choice.
+      if (!isEditing && !INCOME_LANDING.includes(payMethod)) setPayMethod(INCOME_LANDING_DEFAULT);
     }
   }
 
@@ -651,7 +647,7 @@ export function useAddTxnForm(params: AddTxnParams) {
         const savedId = await updateTxn(db, {
           id: editId!, groupId: transferScope === TRANSFER_SCOPE_ALL ? selectedGroupId : transferScope,
           kind: 'settlement', date: txnDate, category: transferCategory,
-          note: transferFullNote, payMethod, payFrom, tags,
+          note: transferFullNote, payMethod, tags,
           payments: [{ personId: transferFromId, amount: total }],
           shares: [{ personId: transferToId, amount: total }],
         });
@@ -672,7 +668,7 @@ export function useAddTxnForm(params: AddTxnParams) {
       for (const [i, p] of finalPlans.entries()) {
         await recordSettlement(db, {
           groupId: p.groupId, fromId: p.from, toId: p.to, amount: p.amount,
-          date: txnDate, note: transferFullNote, payMethod, payFrom, category: transferCategory,
+          date: txnDate, note: transferFullNote, payMethod, category: transferCategory,
           tags,
           // The receipt goes on the FIRST plan only. Settling "all groups" writes one
           // settlement per group, and two rows pointing at the same file would let
@@ -802,7 +798,7 @@ export function useAddTxnForm(params: AddTxnParams) {
       if (isEditing) {
         const savedId = await updateTxn(db, {
           id: editId!, groupId: selectedGroupId, kind, date: txnDate,
-          category: selectedCategory!.name, note: composedNote, payMethod, payFrom, tags,
+          category: selectedCategory!.name, note: composedNote, payMethod, tags,
           attachmentUri, payments: finalPayments, shares: finalShares,
         });
         // Replacing or removing the receipt must unlink the old file, or it
@@ -823,7 +819,7 @@ export function useAddTxnForm(params: AddTxnParams) {
         // saved when nothing at all had been written.
         const splitId = await splitRecurringSeries(db, recurEditId!, {
           groupId: selectedGroupId, kind, entryMode: 'quick',
-          date: txnDate, category: selectedCategory!.name, note: composedNote, payMethod, payFrom,
+          date: txnDate, category: selectedCategory!.name, note: composedNote, payMethod,
           // Tags and the receipt are part of the rule the user is editing; omitting
           // them here silently stripped both from the series on every "this & future".
           tags,
@@ -879,7 +875,7 @@ export function useAddTxnForm(params: AddTxnParams) {
       const commit = async () => {
         const newId = await insertTxn(db, {
           groupId: selectedGroupId, kind, entryMode: 'quick', date: txnDate,
-          category: selectedCategory!.name, note: composedNote, payMethod, payFrom, tags,
+          category: selectedCategory!.name, note: composedNote, payMethod, tags,
           attachmentUri: attachmentUri ?? undefined,
           recurFreq: recurEnabled ? recurNorm.freq : undefined,
           recurInterval: recurEnabled ? recurNorm.interval : undefined,
@@ -966,7 +962,7 @@ export function useAddTxnForm(params: AddTxnParams) {
     assets, investAssetId, setInvestAssetId,
     transferFrom, transferTo, transferPayee, transferHandoff, canPayTransferUpi, canRequestTransferQr,
     transferHandoffHooks,
-    payMethod, setPayMethod, payFrom, setPayFrom,
+    payMethod, setPayMethod,
     // recurring
     recurEnabled, setRecurEnabled,
     recurMode, setRecurMode, recurFreq, setRecurFreq, recurInterval, setRecurInterval,

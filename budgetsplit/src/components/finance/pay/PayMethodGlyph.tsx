@@ -12,9 +12,7 @@ import { IconCircle } from '../../ui/IconCircle';
  * the others are Feather's.
  */
 const FEATHER: Partial<Record<PayMethod, FeatherName>> = {
-  [PayMethod.Upi]: 'smartphone',
   [PayMethod.Card]: 'credit-card',
-  [PayMethod.Autopay]: 'repeat',
   [PayMethod.Other]: 'more-horizontal',
 };
 

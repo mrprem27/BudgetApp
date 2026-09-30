@@ -249,7 +249,7 @@ describe('a transfer I have to confirm', () => {
    */
   it('records where it actually landed, not where they said they sent it', async () => {
     const s = await setup({ trusted: true });
-    const id = arrival(s.db, s, { payMethod: 'upi' });   // how they sent it
+    const id = arrival(s.db, s, { payMethod: 'wallet' });   // where they said they sent it from
 
     await approveTxn(asDb(s.db), id, PayMethod.Bank);      // where it arrived
 

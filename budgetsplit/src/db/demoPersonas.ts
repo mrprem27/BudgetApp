@@ -57,7 +57,7 @@ function earn(c: Ctx, category: string, rupees: number, back: number, note?: str
 /** One everyday purchase a day for `days` days, rotating through `mix`. */
 async function everyday(c: Ctx, days: number, dailyRupees: number, mix: string[]) {
   for (let i = 1; i <= days; i++) {
-    await spend(c, mix[i % mix.length], Math.max(10, Math.round(dailyRupees * wobble(i))), i, undefined, i % 3 === 0 ? PayMethod.Cash : PayMethod.Upi);
+    await spend(c, mix[i % mix.length], Math.max(10, Math.round(dailyRupees * wobble(i))), i, undefined, i % 3 === 0 ? PayMethod.Cash : PayMethod.Bank);
   }
 }
 
@@ -105,7 +105,7 @@ async function student(db: SQLite.SQLiteDatabase): Promise<string> {
   await everyday(c, 75, 105, ['Chai & Snacks', 'Metro & Bus', 'Education']);
   // Eating out this month is well past its budget — the over-budget multiple shows on Home.
   const today = new Date().getDate();
-  for (let i = 0; i < Math.min(6, today); i++) await spend(c, 'Eating Out', 330, i, i === 0 ? 'Birthday treat' : undefined, PayMethod.Upi);
+  for (let i = 0; i < Math.min(6, today); i++) await spend(c, 'Eating Out', 330, i, i === 0 ? 'Birthday treat' : undefined, PayMethod.Bank);
   await setCategoryBudgets(db, c.personalId, [{ category: 'Eating Out', cadence: 'monthly', amount: R(1_500) }], { level: 'group', actorId: c.meId });
 
   // Hostel friends: they fronted the trip and the food, so I owe them.
@@ -120,7 +120,7 @@ async function student(db: SQLite.SQLiteDatabase): Promise<string> {
   await split3(kabir.id, 2_400, 20, 'Travel', 'Weekend trip, bus tickets');
   await split3(ananya.id, 1_200, 9, 'Groceries', 'Maggi & snacks run');
   await split3(c.meId, 900, 5, 'WiFi & Broadband', 'Room WiFi');
-  await recordSettlement(db, { groupId: hostel.id, fromId: c.meId, toId: kabir.id, amount: R(300), date: daysAgo(3), payMethod: PayMethod.Upi, category: 'Repayment' });
+  await recordSettlement(db, { groupId: hostel.id, fromId: c.meId, toId: kabir.id, amount: R(300), date: daysAgo(3), payMethod: PayMethod.Bank, category: 'Repayment' });
   const laptop = await insertGoal(db, { name: 'Laptop for college', target: R(45_000), priority: 'need', icon: 'monitor', color: '#818CF8' });
   await fundGoal(db, laptop.id, R(6_000), 'manual');
   return '3 months · allowance · owes 2 friends · over budget';

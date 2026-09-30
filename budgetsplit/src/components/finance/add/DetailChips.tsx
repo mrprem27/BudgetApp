@@ -5,7 +5,7 @@ import { ListRow } from '../../ui/ListRow';
 import { SectionHeader } from '../../ui/SectionHeader';
 import { space } from '../../tokens';
 import { freqLabel } from '../../../lib/recurrence';
-import { PAY_METHOD_LABEL, payChipLabel, type PayFrom, type PayMethod, type RecurFreq } from '../../../constants/enums';
+import { PAY_METHOD_LABEL, type PayMethod, type RecurFreq } from '../../../constants/enums';
 import type { CapturedPlace } from '../../../lib/location';
 
 type Props = {
@@ -36,11 +36,10 @@ type Props = {
   onCaptureLocation?: () => void;
   onClearLocation?: () => void;
 
+  /** Where the money came from (`U-49`). */
   payMethod: PayMethod;
-  /** Shown on the chip only when it is not the usual for How (`U-48`). */
-  payFrom?: PayFrom | null;
   onOpenPayMethod: () => void;
-  /** Income reads the same field as "landed in" rather than "paid by". */
+  /** Income reads the same field as "landed in" rather than "paid from". */
   isIncome?: boolean;
 
   /** Opens the itemized-split wizard. */
@@ -54,8 +53,9 @@ type Props = {
 };
 
 /**
- * The optional details on the Add screen, in three groups: what you attach, how
- * and when it was paid, and the two actions that change the transaction's shape.
+ * The optional details on the Add screen, in three groups: the payment (where the
+ * money came from, and whether it repeats), what you attach, and the one action that
+ * changes the transaction's shape (split by items).
  *
  * It was one flat wrap of eight chips holding three different kinds of thing —
  * values you attach, settings that are always set, and actions. The last pair read
@@ -79,7 +79,7 @@ export function DetailChips({
   attachmentUri, onOpenAttachment, onClearAttachment,
   tags = [], onOpenTags,
   place, capturingLoc, onCaptureLocation, onClearLocation,
-  payMethod, payFrom, onOpenPayMethod, isIncome,
+  payMethod, onOpenPayMethod, isIncome,
   onSplitByItems,
   recurEnabled, recurFreq, recurInterval, onOpenRecurring,
 }: Props) {
@@ -90,22 +90,25 @@ export function DetailChips({
     // No `gap` on this container: `SectionHeader` owns its own vertical margins and
     // the two would silently add up (AGENTS §3/§12).
     <View>
-      {/* How & when leads: pay method, time and repeat are the things people
-          actually change, and Details (note, tags, receipt, place) are the ones
+      {/* Payment leads: where it came from and whether it repeats are the things
+          people actually change, and Details (note, tags, receipt, place) are the ones
           they add occasionally. The frequent group should not sit under the rare
-          one. `first` because this is now the top block. */}
-      <SectionHeader title="How & when" first />
+          one. `first` because this is the top block. It was "How & when": How is
+          gone (`U-49` — the app keeps where the money came from, not how it moved),
+          and When lives in the date chip at the top. */}
+      <SectionHeader title="Payment" first />
       <View style={styles.row}>
-        {/* Always a set chip — there is no "no pay method" state to offer. For
-            income the same field means the opposite direction: where it landed. */}
+        {/* Always a set chip — there is no "no source" state to offer. For
+            income the same field means the opposite direction: where it landed.
+            "From Bank", not "Bank": the chip names the question as well as the answer. */}
         <Chip
-          label={payChipLabel(payMethod, payFrom)}
+          label={`${isIncome ? 'Into' : 'From'} ${PAY_METHOD_LABEL[payMethod]}`}
           icon={isIncome ? 'download' : 'credit-card'}
           selected
           accent={accent}
           chevron
           onPress={onOpenPayMethod}
-          accessibilityLabel={isIncome ? `Landed in ${PAY_METHOD_LABEL[payMethod]}` : `Paid by ${payChipLabel(payMethod, payFrom)}`}
+          accessibilityLabel={isIncome ? `Landed in ${PAY_METHOD_LABEL[payMethod]}` : `Paid from ${PAY_METHOD_LABEL[payMethod]}`}
         />
 
         {/* No Time chip. It lives inside the date sheet now, and the date chip's
@@ -118,12 +121,9 @@ export function DetailChips({
             settable things — as a card row its only state signal was a line of
             grey text, and "is this repeating?" could not be answered at a glance.
 
-            LAST of the three on purpose, and the header above has said so all
-            along: pay method and time describe the entry you are writing now,
-            while repeat describes every future copy of it. Sitting second, it
-            interrupted "how it was paid" and "when" with a question about other
-            months entirely — and it is the only one of the three that is usually
-            left alone. */}
+            AFTER From on purpose: From describes the entry you are writing now,
+            while repeat describes every future copy of it — and it is the one
+            that is usually left alone. */}
         {onOpenRecurring && (
           <Chip
             label={recurEnabled ? freqLabel(recurFreq, Number(recurInterval ?? '1')) : 'Repeat'}
@@ -208,6 +208,7 @@ export function DetailChips({
               <ListRow
                 icon="list"
                 title="Split by items"
+                subtitle="One bill, each item split its own way"
                 onPress={onSplitByItems}
                 accessibilityLabel="Split this bill by items"
               />

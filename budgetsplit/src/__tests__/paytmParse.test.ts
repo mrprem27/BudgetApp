@@ -100,13 +100,12 @@ describe('Paytm workbook (.xlsx)', () => {
     expect(rows[1]).toMatchObject({ kind: 'expense', direction: 'debit' });
   });
 
-  it('detects the pay method from the funding account and the wording', () => {
+  it('detects From from the funding account (U-49)', () => {
     const rows = parsePaytmWorkbook(sheets).rows;
-    expect(rows[1].payMethod).toBe('upi');   // bank account
-    // A RuPay credit card on UPI: How UPI, From the card (U-48).
-    expect(rows[2].payMethod).toBe('upi');
-    expect(rows[2].payFrom).toBe('credit');
-    expect(rows[5].payMethod).toBe('autopay'); // "Automatic payment for …"
+    expect(rows[1].payMethod).toBe('bank');   // UPI from a bank account
+    // A RuPay credit card on UPI is card debt.
+    expect(rows[2].payMethod).toBe('card');
+    expect(rows[5].payMethod).toBe('bank');   // "Automatic payment for …", from the bank
   });
 
   it('keeps the UPI ref and tag in raw for the Review inbox', () => {
@@ -228,10 +227,10 @@ describe('Paytm PDF text', () => {
   it('agrees with the workbook on kind, category and pay method', () => {
     const rows = parsePaytmStatement(PDF, NOW).rows;
     expect(rows[0]).toMatchObject({ description: 'A Friend', kind: 'settlement', category: 'Repayment', direction: 'debit' });
-    expect(rows[1]).toMatchObject({ description: 'Corner Store', kind: 'expense', category: 'Groceries', payMethod: 'upi' });
-    expect(rows[2]).toMatchObject({ description: 'Some Diner', kind: 'expense', category: 'Eating Out', payMethod: 'upi', payFrom: 'credit' });
+    expect(rows[1]).toMatchObject({ description: 'Corner Store', kind: 'expense', category: 'Groceries', payMethod: 'bank' });
+    expect(rows[2]).toMatchObject({ description: 'Some Diner', kind: 'expense', category: 'Eating Out', payMethod: 'card' });
     expect(rows[3]).toMatchObject({ description: 'A Relative', kind: 'settlement', direction: 'credit' });
-    expect(rows[5]).toMatchObject({ description: 'Apple Media Services', payMethod: 'autopay', category: 'Other' });
+    expect(rows[5]).toMatchObject({ description: 'Apple Media Services', payMethod: 'bank', category: 'Other' });
   });
 
   it('reads an unsigned amount (self transfer) without dropping the row', () => {
@@ -289,14 +288,13 @@ describe('a Paytm row with a newline in its details survives', () => {
   });
 });
 
-describe('a debit card is the bank; a credit card on UPI is From the card (W1-06, U-48)', () => {
+describe('a debit card is the bank; a credit card on UPI is the card (W1-06, U-49)', () => {
   it('reads a debit card as the bank and a credit card on UPI as card debt', () => {
     const { rows } = parsePaytmWorkbook([summarySheet, historySheet([
       row('24/07/2026', '10:00:00', 'Paid to Shop A', 'a@ybl on PhonePe', 'HDFC Bank Debit Card - 11', '-300.00', '1'),
       row('24/07/2026', '11:00:00', 'Paid to Shop B', 'b@ybl on PhonePe', 'ICICI Bank Rupay Credit Card - 00', '-400.00', '2'),
     ])]);
-    expect(rows.map(r => r.payMethod)).toEqual(['upi', 'upi']);
-    expect(rows.map(r => r.payFrom)).toEqual([undefined, 'credit']);
+    expect(rows.map(r => r.payMethod)).toEqual(['bank', 'card']);
   });
 
   it('a card with no UPI reference or UPI ID was charged to the card directly', () => {

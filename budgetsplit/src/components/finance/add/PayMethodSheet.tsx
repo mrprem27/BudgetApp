@@ -1,10 +1,9 @@
-import { StyleSheet, Text } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { SheetModal } from '../../ui/SheetModal';
 import { SecondaryButton } from '../../ui/SecondaryButton';
 import { PayMethodSelector } from '../PayMethodSelector';
-import { colors, space, type } from '../../tokens';
-import { TabPills } from '../../ui/TabPills';
-import { INCOME_LANDING, PAY_FROM_CHOICES, PAY_FROM_LABEL, assetOf, type PayMethod, type PayFrom } from '../../../constants/enums';
+import { space } from '../../tokens';
+import { INCOME_LANDING, type PayMethod } from '../../../constants/enums';
 import type { AddKind } from '../../../constants/enums';
 
 type Props = {
@@ -22,16 +21,10 @@ type Props = {
    * Review needs it (a bank export may carry no cue); Add never does.
    */
   onClear?: () => void;
-  /**
-   * Where the money came from (`U-48`). Offered only when How allows a choice — UPI and Autopay
-   * run from the bank, a credit card or a wallet. Changing How resets it to the usual.
-   */
-  payFrom?: PayFrom | '' | null;
-  onChangeFrom?: (f: PayFrom | null) => void;
 };
 
 /**
- * "How was it paid?" as a sheet, so the pay method can be a chip on the form
+ * "Where did it come from?" as a sheet, so From can be a chip on the form
  * instead of a block of tiles taking permanent vertical space.
  *
  * A thin wrapper — `PayMethodSelector` stays the one pay-method picker in the app
@@ -41,28 +34,16 @@ type Props = {
  * sheet beside it used `colors.settle` — one screen, two "selected" colours in adjacent
  * sheets.
  */
-export function PayMethodSheet({ visible, onClose, value, onChange, accent, kind, onClear, payFrom, onChangeFrom }: Props) {
+export function PayMethodSheet({ visible, onClose, value, onChange, accent, kind, onClear }: Props) {
   const income = kind === 'income';
-  const choices = !income && onChangeFrom && value ? PAY_FROM_CHOICES[value] : undefined;
   return (
-    <SheetModal visible={visible} onClose={onClose} title={income ? 'Where did it land?' : 'How was it paid?'}>
+    <SheetModal visible={visible} onClose={onClose} title={income ? 'Where did it land?' : 'Where did it come from?'}>
       <PayMethodSelector
         value={value}
-        onChange={(m) => { onChange(m); onChangeFrom?.(null); onClose(); }}
+        onChange={(m) => { onChange(m); onClose(); }}
         accent={accent}
         options={income ? INCOME_LANDING : undefined}
       />
-      {choices && value && (
-        <>
-          <Text style={styles.fromLabel}>From</Text>
-          <TabPills
-            tabs={choices.map(f => ({ key: f, label: PAY_FROM_LABEL[f] }))}
-            active={payFrom || assetOf(value) || 'bank'}
-            onChange={(k) => { onChangeFrom?.(k as PayFrom); onClose(); }}
-            activeColor={accent}
-          />
-        </>
-      )}
       {onClear && value !== '' && (
         <SecondaryButton label="Clear" icon="x" onPress={() => { onClear(); onClose(); }} style={styles.clear} />
       )}
@@ -72,5 +53,4 @@ export function PayMethodSheet({ visible, onClose, value, onChange, accent, kind
 
 const styles = StyleSheet.create({
   clear: { marginTop: space.md },
-  fromLabel: { ...type.label, color: colors.textSecondary, marginTop: space.md, marginBottom: space.xs },
 });

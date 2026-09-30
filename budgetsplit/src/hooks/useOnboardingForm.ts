@@ -55,7 +55,7 @@ export function useOnboardingForm({ onDone }: { onDone: () => void }) {
   const [investText, setInvestText] = useState('');             // total investments (rupees)
   const [creditLimitText, setCreditLimitText] = useState('');   // credit card limit (rupees)
   const [creditUsedText, setCreditUsedText] = useState('');     // credit already used (rupees)
-  const [payMethod, setPayMethod] = useState<PayMethod>(PayMethod.Upi);
+  const [payMethod, setPayMethod] = useState<PayMethod>(PayMethod.Bank);
   const [notifPerm, setNotifPerm] = useState(false);
   const [locPerm, setLocPerm] = useState(false);
 

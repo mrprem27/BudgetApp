@@ -99,7 +99,7 @@ export function useItemizedForm(paramGroupId?: string, editId?: string) {
   // How the bill was paid. Itemized never captured this, so a card-paid
   // restaurant bill was booked as cash out in lib/cash — the exact bug the
   // recurring-materialize path documents having fixed.
-  const [payMethod, setPayMethod] = useState<PayMethod>(PayMethod.Upi);
+  const [payMethod, setPayMethod] = useState<PayMethod>(PayMethod.Bank);
   const [showAdjModal, setShowAdjModal] = useState(false);
   const [adjType, setAdjType] = useState<AdjustmentType>('tax');
   const [adjMode, setAdjMode] = useState<'flat' | 'percent'>('percent');

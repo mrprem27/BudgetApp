@@ -17,7 +17,7 @@ const ME = 'me';
 function db() {
   const d = new DatabaseSync(':memory:');
   d.exec(`
-    CREATE TABLE txn (id TEXT PRIMARY KEY, kind TEXT, pay_method TEXT, pay_from TEXT, date INTEGER,
+    CREATE TABLE txn (id TEXT PRIMARY KEY, kind TEXT, pay_method TEXT, date INTEGER,
                       is_deleted INTEGER DEFAULT 0, recur_freq TEXT);
     CREATE TABLE txn_payment (txn_id TEXT, person_id TEXT, amount INTEGER);
     CREATE TABLE txn_share   (txn_id TEXT, person_id TEXT, amount INTEGER);
@@ -58,16 +58,6 @@ describe('BUCKET_FLOWS_SQL agrees with assetOf', () => {
     expect(flows(d)).toEqual(expected);
   });
 
-  it('reads upi and autopay as bank, exactly as assetOf does', () => {
-    const d = db();
-    spend(d, 'a', PayMethod.Upi, 500);
-    spend(d, 'b', PayMethod.Autopay, 300);
-    spend(d, 'c', PayMethod.Bank, 200);
-    expect(flows(d).bank).toBe(-1000);
-    expect(assetOf(PayMethod.Upi)).toBe('bank');
-    expect(assetOf(PayMethod.Autopay)).toBe('bank');
-  });
-
   it('leaves an unrecorded pay method unattributed rather than guessing', () => {
     // The legacy case, and the whole reason there is a fourth group. Defaulting
     // NULL into bank would drain that bucket for every old row while the total
@@ -95,21 +85,21 @@ describe('BUCKET_FLOWS_SQL agrees with assetOf', () => {
   });
 });
 
-describe('From decides the place (U-48)', () => {
-  function add(d: DatabaseSync, id: string, kind: string, method: string | null, from: string | null, pay: number, share = 0) {
-    d.prepare('INSERT INTO txn (id, kind, pay_method, pay_from, date) VALUES (?, ?, ?, ?, 1)').run(id, kind, method, from);
+describe('From decides the place (U-48, U-49)', () => {
+  function add(d: DatabaseSync, id: string, kind: string, method: string | null, pay: number, share = 0) {
+    d.prepare('INSERT INTO txn (id, kind, pay_method, date) VALUES (?, ?, ?, 1)').run(id, kind, method);
     if (pay) d.prepare('INSERT INTO txn_payment (txn_id, person_id, amount) VALUES (?, ?, ?)').run(id, ME, pay);
     if (share) d.prepare('INSERT INTO txn_share (txn_id, person_id, amount) VALUES (?, ?, ?)').run(id, ME, share);
   }
-  it('UPI from a credit card moves no place; UPI from a wallet moves the wallet', () => {
+  it('a credit card moves no place; a wallet moves the wallet', () => {
     const d = db();
-    add(d, 'a', 'expense', 'upi', 'credit', 4000);
-    add(d, 'b', 'expense', 'upi', 'wallet', 300);
+    add(d, 'a', 'expense', 'card', 4000);
+    add(d, 'b', 'expense', 'wallet', 300);
     expect(flows(d)).toEqual({ wallet: -300 });
   });
   it('paying the card bill comes out of the bank', () => {
     const d = db();
-    add(d, 'c', 'settlement', 'card', null, 3000);
+    add(d, 'c', 'settlement', 'card', 3000);
     expect(flows(d)).toEqual({ bank: -3000 });
   });
 });

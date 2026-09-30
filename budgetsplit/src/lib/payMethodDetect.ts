@@ -1,17 +1,19 @@
-import { PayMethod, type PayFrom } from '../constants/enums';
+import { PayMethod } from '../constants/enums';
 
 /**
- * Detect how a payment was made from the plain text of an ingested transaction
+ * Detect where the money came from, from the plain text of an ingested transaction
  * (a bank/UPI alert email today; a bank/UPI-app notification later). Pure, no
  * DB / RN — unit-tested. Best-effort: returns null when nothing matches, and the
  * Review inbox lets the user set/override it. The detected value is a *suggestion*.
  *
- * Order matters: the more specific / higher-signal cues are tested first so a
- * mail that says both "UPI" and "credit card" resolves to the dominant instrument.
+ * The text names HOW it was paid ("UPI", "mandate", "NEFT") — those words are still read, but only
+ * to tell the source (`U-49`): the app stores From alone. UPI and an autopay run from the bank
+ * unless the text names a credit card, in which case it is card debt.
+ *
+ * Order matters: the more specific / higher-signal cues are tested first.
  */
 
-// autopay first — a mandate debit often also names the instrument ("e-mandate on
-// your card"), but the defining fact is that it's an automatic recurring debit.
+// An autopay mandate or a UPI payment is the bank — unless it names a credit card.
 const AUTOPAY_RE = /\b(?:auto[\s-]?pay|autopay|e-?mandate|mandate|standing instruction|si\s+debit|auto[\s-]?debit)\b/i;
 // A debit card is the bank account (`W1-06`): the money leaves the bank, and nothing is owed on a
 // card. Tested before CARD_RE, which would otherwise book it as credit-card debt.
@@ -28,22 +30,15 @@ const UPI_RE = /(?:@[a-z]{2,}\b|\bupi\b|\bvpa\b|\bp2p\b|unified payments)/i;
 // Cash — rarely in alerts, but explicit "cash".
 const CASH_RE = /\bcash\b/i;
 
-/**
- * Where the money came from, when the text says so and it is not the usual for its How (`U-48`):
- * a UPI payment that names a credit card is card debt, not money out of the bank.
- */
-export function detectPayFrom(text: string | null | undefined): PayFrom | undefined {
-  const t = text ?? '';
-  return UPI_RE.test(t) && /\bcredit[\s-]?card\b/i.test(t) ? 'credit' : undefined;
-}
+const CREDIT_CARD_RE = /\bcredit[\s-]?card\b/i;
 
-/** Best-effort pay-method from ingested text, or null. */
+/** Best-effort From from ingested text, or null. */
 export function detectPayMethod(text: string | null | undefined): PayMethod | null {
   const t = text ?? '';
   if (!t) return null;
-  if (AUTOPAY_RE.test(t)) return PayMethod.Autopay;
+  if (AUTOPAY_RE.test(t)) return CREDIT_CARD_RE.test(t) ? PayMethod.Card : PayMethod.Bank;
   if (WALLET_RE.test(t)) return PayMethod.Wallet;
-  if (UPI_RE.test(t)) return PayMethod.Upi;
+  if (UPI_RE.test(t)) return CREDIT_CARD_RE.test(t) ? PayMethod.Card : PayMethod.Bank;
   if (DEBIT_CARD_RE.test(t)) return PayMethod.Bank;
   if (CARD_RE.test(t)) return PayMethod.Card;
   if (BANK_RE.test(t)) return PayMethod.Bank;

@@ -1,6 +1,6 @@
 import { parseToPaise } from './money';
 import { splitCsvRows, type ParsedRow, type ParseResult, type ParsedDirection } from './importParse';
-import { TxnKind, PayMethod, type PayFrom } from '../constants/enums';
+import { TxnKind, PayMethod } from '../constants/enums';
 import type { Sheet } from './xlsx';
 
 /**
@@ -140,18 +140,15 @@ function counterparty(details: string): string {
 }
 
 /**
- * How it was paid, and where the money came from (`U-48`). A RuPay credit card funding a UPI
- * payment is How UPI, From the card: card debt, not money out of the bank. With no UPI reference
- * it was charged to the card directly. A debit card is the bank account (`W1-06`).
+ * Where the money came from (`U-49`), read off the funding account Paytm prints. A RuPay credit
+ * card is the card — card debt, whether it paid by UPI, directly or by an autopay mandate. A debit
+ * card is the bank account (`W1-06`), and so is plain UPI, which Paytm runs from a linked account.
  */
-function payMethodFor(account: string, details: string, upi: boolean): { payMethod: PayMethod; payFrom?: PayFrom } {
-  if (/automatic payment|autopay|mandate/i.test(details)) {
-    return /credit card/i.test(account) ? { payMethod: PayMethod.Autopay, payFrom: 'credit' } : { payMethod: PayMethod.Autopay };
-  }
-  if (/debit[\s-]?card/i.test(account)) return { payMethod: upi ? PayMethod.Upi : PayMethod.Bank };
-  if (/credit card|\bcard\b/i.test(account)) return upi ? { payMethod: PayMethod.Upi, payFrom: 'credit' } : { payMethod: PayMethod.Card };
+function payMethodFor(account: string): { payMethod: PayMethod } {
+  if (/debit[\s-]?card/i.test(account)) return { payMethod: PayMethod.Bank };
+  if (/credit card|\bcard\b/i.test(account)) return { payMethod: PayMethod.Card };
   if (/wallet/i.test(account)) return { payMethod: PayMethod.Wallet };
-  return { payMethod: PayMethod.Upi };
+  return { payMethod: PayMethod.Bank };
 }
 
 /** Resolve kind/direction/category for a row, given its tag and sign. */
@@ -262,7 +259,7 @@ function parseRows(rows: string[][]): ParseResult {
       description: counterparty(details) || 'Paytm transaction',
       direction, kind, category,
       // A UPI reference or a UPI ID (name@handle) says it went over UPI.
-      ...payMethodFor(account, details, !!cell(cols.ref) || /@/.test(cell(cols.other))),
+      ...payMethodFor(account),
       raw,
     });
   }
@@ -433,7 +430,7 @@ export function parsePaytmStatement(text: string, now: number = Date.now()): Par
       amount,
       description: counterparty(details) || 'Paytm transaction',
       direction, kind, category,
-      ...payMethodFor(account, details, /UPI Ref/i.test(block)),
+      ...payMethodFor(account),
       raw: block.trim(),
     });
   }

@@ -403,14 +403,14 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
       )}
 
       {/*
-        PAY STEP — how you usually pay.
+        PAY STEP — where you usually pay from.
 
-        This was already being SAVED — defaulted to UPI, never asked — so every
-        transaction carried a payment method the user had not chosen and would
+        This was already being SAVED — defaulted, never asked — so every
+        transaction carried a source the user had not chosen and would
         have no reason to suspect. Asking makes the default theirs, and it is the
         one question here whose answer shows up on literally every entry.
 
-        Skippable, and skipping keeps UPI: it is the right guess for this market,
+        Skippable, and skipping keeps Bank: UPI from an account is the right guess for this market,
         and a required question about a preference is a worse trade than a good
         default. The Settings row stays the way to change it later.
       */}
@@ -419,7 +419,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
           stageKey="pay"
           onBack={() => setStage('money')}
           {...(stepPosition('pay') ?? {})}
-          title="How do you usually pay?"
+          title="Where do you usually pay from?"
           subtitle="Filled in for you on every new expense, so the common case takes no taps. You can change it on any single one."
           footer={
             <StepFooter

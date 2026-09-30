@@ -1,10 +1,14 @@
-import { detectPayMethod, detectPayFrom } from '../lib/payMethodDetect';
+import { detectPayMethod } from '../lib/payMethodDetect';
 
 describe('detectPayMethod', () => {
-  it('detects UPI from VPA handles, "UPI" and "you paid"', () => {
-    expect(detectPayMethod('You paid ₹450 to bigbasket@okhdfcbank via UPI')).toBe('upi');
-    expect(detectPayMethod('Rs 200 debited via UPI Ref 123')).toBe('upi');
-    expect(detectPayMethod('Payment to swiggy@ybl successful')).toBe('upi');
+  it('reads UPI (VPA handles, "UPI") as the bank — From, not How (U-49)', () => {
+    expect(detectPayMethod('You paid ₹450 to bigbasket@okhdfcbank via UPI')).toBe('bank');
+    expect(detectPayMethod('Rs 200 debited via UPI Ref 123')).toBe('bank');
+    expect(detectPayMethod('Payment to swiggy@ybl successful')).toBe('bank');
+  });
+
+  it('reads UPI on a RuPay credit card as the card: card debt, not the bank', () => {
+    expect(detectPayMethod('Rs 450 paid via UPI using your RuPay Credit Card xx12')).toBe('card');
   });
 
   it('detects a credit card from "credit card" / "card ending"', () => {
@@ -29,10 +33,9 @@ describe('detectPayMethod', () => {
     expect(detectPayMethod('MobiKwik wallet used')).toBe('wallet');
   });
 
-  it('detects autopay/mandate and prefers it over the instrument named', () => {
-    expect(detectPayMethod('E-mandate debit of Rs 499 for Netflix')).toBe('autopay');
-    // Autopay wins even when a card is named — the defining fact is the mandate.
-    expect(detectPayMethod('Autopay on your credit card: Rs 199')).toBe('autopay');
+  it('reads an autopay mandate as the bank, unless it names a credit card', () => {
+    expect(detectPayMethod('E-mandate debit of Rs 499 for Netflix')).toBe('bank');
+    expect(detectPayMethod('Autopay on your credit card: Rs 199')).toBe('card');
   });
 
   it('returns null when nothing matches (Review lets the user set it)', () => {
@@ -40,15 +43,5 @@ describe('detectPayMethod', () => {
     expect(detectPayMethod('')).toBeNull();
     expect(detectPayMethod(null)).toBeNull();
     expect(detectPayMethod(undefined)).toBeNull();
-  });
-});
-
-describe('detectPayFrom (U-48)', () => {
-  it('a UPI payment naming a credit card is From the card', () => {
-    expect(detectPayFrom('Rs 450 paid via UPI using your RuPay Credit Card xx12')).toBe('credit');
-  });
-  it('says nothing when it is the usual', () => {
-    expect(detectPayFrom('Rs 200 debited via UPI Ref 123')).toBeUndefined();
-    expect(detectPayFrom('Rs 1200 spent on your Credit Card ending 4321')).toBeUndefined();
   });
 });
