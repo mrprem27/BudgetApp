@@ -45,7 +45,8 @@ export function SplitSheet({
     const idx = splitMembers.indexOf(id);
     if (splitType === 'exact') return parseToPaise(exactAmounts[id] ?? '0');
     if (splitType === 'percent') {
-      const pcts = splitMembers.map(mid => { const p = parseInt(percentages[mid] ?? '0', 10); return Number.isFinite(p) ? p : 0; });
+      // Decimals allowed (`U-67`): three people cannot each type a whole-number third.
+      const pcts = splitMembers.map(mid => { const p = parseFloat(percentages[mid] ?? '0'); return Number.isFinite(p) ? p : 0; });
       return splitByPercent(total, pcts)[idx] ?? 0;
     }
     if (splitType === 'shares') {

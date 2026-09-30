@@ -281,7 +281,7 @@ export default function QuickAddScreen() {
               {/* Split is core to a shared expense, so it sits above the optional
                   details — it used to render below the "More options" accordion,
                   which pushed it off-screen the moment that was expanded. */}
-              {kind === 'expense' && f.members.length > 1 && f.total > 0 && (
+              {kind === 'expense' && f.members.length > 1 && (
                 <View style={styles.formBlock}>
                   <SplitSummary
                     members={f.members}

@@ -133,3 +133,88 @@ from the route table, so a web client is typed from the server, not guessed.
 rotation, the device pass (`B-12`), merging to `main` (`B-19`). 32 decisions have a stated default that
 ships if never answered. UI items still open: `W1-28`, `W1-29`, `W1-32`, `U-09` (friend's name missing
 when you owe), `U-31` (sorting), `U-20` (spacing), `U-02` (reload cost, measure on the phone).
+
+---
+
+## 4 · Connected in real time (`DQ-108`)
+
+**Today.** A write is saved on the phone and uploaded about 2 seconds later (`scheduleSync`). Other
+people's phones fetch it the next time they sync — when they open or return to the app. Nobody is
+told; a friend's expense can sit unseen for hours, and the web could not show it live at all.
+
+**Proposed — the server is the truth, and it tells everyone.**
+
+| | How |
+|---|---|
+| **Write** | Online: the entry goes to the server first and is confirmed back (an optimistic row shows at once, marked "saving…"). Offline: queued exactly as today, and it says so. |
+| **Fan-out** | After a write commits, the server knows every scope it touched (a group → its members; a person → their devices). It publishes "scope X moved to seq N" to a **Durable Object** per user, which holds that user's open connections. |
+| **Receive** | Every open phone or browser keeps one WebSocket to its Durable Object and pulls just that scope the moment it hears. A closed app gets a **push notification** for things that need them ("Riya added ₹1,200 · waiting for you"). |
+| **Rules** | Unchanged: approvals, trust, author-only edits and every validation still run on the one write path. |
+
+So "whenever someone adds a transaction it goes where it makes sense": to the group's ledger, to
+each member's Personal, to whoever must approve it, to every device of theirs — within a second
+while they are online, and as a notification when they are not.
+
+## 5 · Entities, not flags (`DQ-109`)
+
+You are right: several things the app talks about as different are stored as one table plus a flag.
+They work — `settlementView` decides each case in one place — but a web API would expose the flags,
+and every new client would have to re-learn the rules.
+
+| One row today | Really is | Told apart by |
+|---|---|---|
+| `txn` kind `settlement` | paying a friend back | no `asset_id`, not card, not adjustment |
+| | moving money into an asset / out of it | `asset_id` + which side has rows |
+| | paying a card bill | `pay_method = 'card'` |
+| | a balance adjustment | `category = 'Balance adjustment'` |
+| `txn` with `recur_freq` | a **repeat rule** (not an entry) | `recur_freq IS NOT NULL` — the server already splits it into `recurring_rules` |
+| `budget_group` with `is_personal` | your personal ledger | `is_personal = 1` |
+| `person` with `is_me` | you | `is_me = 1` |
+| Bank / Cash / Wallet, the card | **accounts** | not entities at all: opening balances and card limit are settings keys; "Paid from" is a text value |
+
+**Proposed model** (server first, then the phone follows):
+
+- **`accounts`** — Bank (can be several, named), Cash, Wallet, Credit card (limit, due day). Every
+  transaction references the account it came from (`account_id`), replacing `pay_method` and the money
+  settings. This is `DQ-14`, and it ends the card-bill heuristic.
+- **`transfers`** — money between two of *your* places: account → account (paying the card bill),
+  account → asset, asset → account. Two ends, one amount, never spending.
+- **`settlements`** — money between two *people*: payer, payee, amount, group.
+- **`adjustments`** — one account's correction, with the reason.
+- **`expenses`** and **`incomes`** stay the transaction core, with their payers and splits.
+- **`recurring_rules`** as their own entity on the phone too, not flagged transactions.
+
+A shared ledger view is then a query over these (a union), not one table read five ways. Cost:
+real — every screen that reads `txn` and every sync mapping moves. Best done in the same reset as
+`DQ-106`, before a web client exists.
+
+## 6 · Split and split by items (`U-67`)
+
+### Split on the Add screen — fixed now
+
+| Was | Now |
+|---|---|
+| Only the small avatar toggled a person in or out of the split | The whole row toggles, and people who are out read muted |
+| Percent took whole numbers only, so three people could not take a third each | Decimals, and the parts still add to the paisa |
+| "Who paid" meant typing the full amount into someone's box; only "I paid" had a shortcut | Tap anyone to make them the payer of the whole bill; amounts only when several paid |
+| "Split with" was a bordered field and "Paid by" a centred link beneath it | Two matching rows in one box |
+| The split block appeared only after an amount was typed | It appears as soon as the group has other members |
+
+### Split by items — what is wrong, and the proposal (`DQ-110`)
+
+Today it is a separate 4-step screen (items → assign → payers → review) with its own header, dots and
+buttons. It asks again for things the Add screen already has (payer, category, date, group), its
+inputs are hand-built rather than the app's own fields, each item opens a full split editor with its
+own Equal / Exact / % / Shares tabs, and it cannot be reached while editing an entry.
+
+**Proposed:** "By items" becomes a fifth split mode on the Add screen — Equal · Exact · % · Shares ·
+**Items**. Choosing it opens one items sheet:
+
+- a list of items (name, price, qty) with **Scan receipt** at the top;
+- under each item, a row of people chips — tap to include; equal within the item by default, with
+  "Custom" for the rare uneven item;
+- tax / tip / discount lines shared in proportion, as today (`lib/itemized.ts` is kept);
+- a live footer: each person's total, and anything unassigned.
+
+Payer, category, date, group, Paid from and Repeat stay on the Add screen where they already are, so
+there is one flow, one save, and an itemised entry can be edited like any other.

@@ -1,4 +1,4 @@
-import { View, Text, TextInput, StyleSheet } from 'react-native';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity } from 'react-native';
 import { colors, type, space, radius } from '../../tokens';
 import { TabPills } from '../../ui/TabPills';
 import { MemberAvatar } from '../MemberAvatar';
@@ -21,7 +21,7 @@ const SPLIT_MODE_TABS = SPLIT_MODE.map(m => ({ key: m, label: SPLIT_MODE_LABEL[m
 
 const PLACEHOLDER: Record<SplitMode, string> = { equal: '', exact: '₹0', percent: '%', shares: '1' };
 const KEYBOARD: Record<SplitMode, 'decimal-pad' | 'number-pad'> = {
-  equal: 'number-pad', exact: 'decimal-pad', percent: 'number-pad', shares: 'number-pad',
+  equal: 'number-pad', exact: 'decimal-pad', percent: 'decimal-pad', shares: 'number-pad',
 };
 
 type Props = {
@@ -47,9 +47,19 @@ export function SplitEditor({ members, included, onToggle, mode, onMode, rawValu
       {members.map(mem => {
         const on = included.includes(mem.id);
         return (
-          <View key={mem.id} style={styles.row}>
-            <MemberAvatar name={mem.name} color={mem.avatar_color} size={avatarSize} imageUri={mem.image_uri} selected={on} onPress={() => onToggle(mem.id)} />
-            <Text style={styles.name} numberOfLines={1}>{mem.name}</Text>
+          // The whole row toggles, not only the avatar (`U-67`): a 36pt disc was the only target, so
+          // "who is in this split" was a precision tap on each face.
+          <TouchableOpacity
+            key={mem.id}
+            style={styles.row}
+            onPress={() => onToggle(mem.id)}
+            activeOpacity={0.7}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: on }}
+            accessibilityLabel={`${mem.name}, ${on ? 'in the split' : 'not in the split'}`}
+          >
+            <MemberAvatar name={mem.name} color={mem.avatar_color} size={avatarSize} imageUri={mem.image_uri} selected={on} />
+            <Text style={[styles.name, !on && styles.nameOff]} numberOfLines={1}>{mem.name}</Text>
             {on && mode !== 'equal' && (
               <TextInput
                 style={styles.input}
@@ -62,7 +72,7 @@ export function SplitEditor({ members, included, onToggle, mode, onMode, rawValu
               />
             )}
             {on && <Text style={styles.result}>{formatRupees(result(mem.id))}</Text>}
-          </View>
+          </TouchableOpacity>
         );
       })}
     </View>
@@ -73,6 +83,7 @@ const styles = StyleSheet.create({
   wrap: { gap: space.sm },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm },
   name: { ...type.body, color: colors.textPrimary, flex: 1 },
+  nameOff: { color: colors.textMuted },
   input: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.sm, paddingHorizontal: space.sm, paddingVertical: space.xs, width: 80, textAlign: 'right', borderWidth: 1, borderColor: colors.border },
   result: { fontFamily: 'SpaceMono_400Regular', fontSize: 13, color: colors.textSecondary, minWidth: 64, textAlign: 'right' },
 });

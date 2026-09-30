@@ -162,3 +162,12 @@ describe('computePayments', () => {
     expect(computePayments({}, undefined, 10000)).toEqual([]);
   });
 });
+
+describe('percent splits take decimals (U-67)', () => {
+  it('lets three people each take a third', () => {
+    const { splitByMode } = jest.requireActual('../lib/money') as typeof import('../lib/money');
+    const out = splitByMode(30_000, ['a', 'b', 'c'], 'percent', { a: '33.33', b: '33.33', c: '33.34' });
+    expect(out.a + out.b + out.c).toBe(30_000);
+    expect(out.c).toBeGreaterThanOrEqual(out.a);
+  });
+});

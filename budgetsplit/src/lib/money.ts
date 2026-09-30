@@ -268,7 +268,7 @@ export function splitByMode(
   if (mode === 'exact') {
     ids.forEach(id => { out[id] = parseToPaise(values[id] ?? '0'); });
   } else if (mode === 'percent') {
-    const pcts = ids.map(id => { const p = parseInt(values[id] ?? '0', 10); return Number.isFinite(p) ? p : 0; });
+    const pcts = ids.map(id => { const p = parseFloat(values[id] ?? '0'); return Number.isFinite(p) ? p : 0; });
     const amts = splitByPercent(total, pcts);
     ids.forEach((id, i) => { out[id] = amts[i]; });
   } else if (mode === 'shares') {

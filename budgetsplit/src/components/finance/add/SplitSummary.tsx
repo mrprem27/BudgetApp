@@ -32,36 +32,37 @@ export function SplitSummary({ members, splitMembers, splitType, total, payments
     : `${payments.length} people`;
   const payers = payments.map(p => members.find(m => m.id === p.personId)).filter((m): m is Person => !!m);
 
+  // Two rows of one box, the same shape (`U-67`). "Paid by" was a centred text link under a
+  // bordered field — two different kinds of control for two halves of one question.
   return (
-    <View>
-      <TouchableOpacity style={styles.splitWithRow} onPress={onOpenSplit} accessibilityRole="button" accessibilityLabel="Configure split">
-        <Text style={styles.splitWithLabel}>Split with</Text>
-        <View style={styles.splitWithRight}>
+    <View style={styles.box}>
+      <TouchableOpacity style={styles.row} onPress={onOpenSplit} accessibilityRole="button" accessibilityLabel={`Split with ${inSplit.length}. ${summary}. Change`}>
+        <Text style={styles.label}>Split with</Text>
+        <View style={styles.right}>
           <AvatarStack people={inSplit} size={24} max={4} />
-          <Text style={[styles.splitWithValue, { color: accent }]}>{summary}</Text>
+          <Text style={[styles.value, { color: accent }]} numberOfLines={1}>{summary}</Text>
+          <Feather name="chevron-right" size={15} color={colors.textMuted} />
         </View>
       </TouchableOpacity>
-      <TouchableOpacity style={styles.paidByLine} onPress={onOpenPayers} accessibilityRole="button" accessibilityLabel="Who paid">
-        <Text style={styles.paidByLabel}>Paid by</Text>
-        {payments.length > 1 && <AvatarStack people={payers} size={20} max={3} />}
-        <Text style={styles.paidByValue}>{payerName}</Text>
-        <Feather name="chevron-right" size={15} color={colors.textSecondary} />
+      <View style={styles.divider} />
+      <TouchableOpacity style={styles.row} onPress={onOpenPayers} accessibilityRole="button" accessibilityLabel={`Paid by ${payerName}. Change`}>
+        <Text style={styles.label}>Paid by</Text>
+        <View style={styles.right}>
+          <AvatarStack people={payers} size={24} max={3} />
+          <Text style={[styles.value, { color: accent }]} numberOfLines={1}>{payerName}</Text>
+          <Feather name="chevron-right" size={15} color={colors.textMuted} />
+        </View>
       </TouchableOpacity>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  // Height matched to `ui/Input`, not padded to whatever the 24pt avatars happened to make
-  // (which came out 56 against the title field's 48). Two heights in one column read as two
-  // different kinds of control.
-  splitWithRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', height: layout.fieldHeight, paddingHorizontal: space.md, borderRadius: radius.md, backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border },
-  splitWithLabel: { ...type.body, color: colors.textSecondary },
-  splitWithRight: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  splitWithValue: { ...type.labelSemi, color: colors.accent },
-  // Symmetric padding: with only `paddingTop` the row's tap target ran to the block's very
-  // edge, and the 44pt target (AGENTS §6) was made up entirely of space above the text.
-  paidByLine: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.xs, paddingVertical: space.sm },
-  paidByLabel: { ...type.body, color: colors.textSecondary },
-  paidByValue: { ...type.bodySemi, color: colors.textPrimary },
+  box: { borderRadius: radius.md, backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
+  // Each row the height of `ui/Input`, so the block lines up with the fields above it.
+  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', height: layout.fieldHeight, paddingHorizontal: space.md },
+  label: { ...type.body, color: colors.textSecondary },
+  right: { flexDirection: 'row', alignItems: 'center', gap: space.sm, flexShrink: 1 },
+  value: { ...type.labelSemi, flexShrink: 1 },
+  divider: { height: 1, backgroundColor: colors.border, marginLeft: space.md },
 });

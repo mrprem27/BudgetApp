@@ -1,6 +1,5 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput } from 'react-native';
-import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius } from '../../tokens';
 import { formatRupees, paiseToInput } from '../../../lib/money';
 import { SheetModal } from '../../ui/SheetModal';
@@ -26,11 +25,25 @@ export function PayersSheet({
 }) {
   return (
     <SheetModal visible={visible} onClose={onClose} title="Who paid?">
-      <Text style={styles.payerHint}>Set how much each person paid. Leave others blank.</Text>
-      {members.map(m => (
+      {/* One person paying is the common case, so it is one tap on them (`U-67`). It used to mean
+          typing the whole total into their field, with a shortcut only for "I paid". Amounts are
+          for when several people chipped in. */}
+      <Text style={styles.payerHint}>Tap who paid the whole bill, or type what each person paid.</Text>
+      {members.map(m => {
+        const soleIsThem = paiseToInput(total) === (payerAmounts[m.id] ?? '')
+          && Object.entries(payerAmounts).every(([id, v]) => id === m.id || !v || v === '0');
+        return (
         <View key={m.id} style={styles.payerSheetRow}>
-          <MemberAvatar name={m.name} color={m.avatar_color} size={36} imageUri={m.image_uri} />
-          <Text style={styles.payerSheetName} numberOfLines={1}>{m.name}{m.is_me ? ' (you)' : ''}</Text>
+          <TouchableOpacity
+            style={styles.payerWho}
+            onPress={() => setPayerAmounts({ [m.id]: paiseToInput(total) })}
+            accessibilityRole="button"
+            accessibilityLabel={`${m.name} paid the whole bill`}
+            accessibilityState={{ selected: soleIsThem }}
+          >
+            <MemberAvatar name={m.name} color={m.avatar_color} size={36} imageUri={m.image_uri} selected={soleIsThem} />
+            <Text style={styles.payerSheetName} numberOfLines={1}>{m.name}{m.is_me ? ' (you)' : ''}</Text>
+          </TouchableOpacity>
           <View style={styles.payerInputWrap}>
             <Text style={styles.payerRupee}>₹</Text>
             <TextInput
@@ -43,15 +56,8 @@ export function PayersSheet({
             />
           </View>
         </View>
-      ))}
-      <TouchableOpacity
-        style={styles.payerQuickBtn}
-        onPress={() => me && setPayerAmounts({ [me.id]: paiseToInput(total) })}
-        accessibilityRole="button"
-      >
-        <Feather name="user" size={14} color={colors.accent} />
-        <Text style={styles.payerQuickText}>I paid the whole bill</Text>
-      </TouchableOpacity>
+        );
+      })}
       <View style={styles.remainderBar}>
         <Text style={[styles.remainderText, { color: paymentRemainder === 0 ? colors.income : colors.expense }]}>
           {paymentRemainder === 0 ? 'Balanced' : paymentRemainder > 0 ? `${formatRupees(paymentRemainder)} left to assign` : `${formatRupees(-paymentRemainder)} over`}
@@ -65,12 +71,11 @@ export function PayersSheet({
 const styles = StyleSheet.create({
   payerHint: { ...type.caption, color: colors.textMuted },
   payerSheetRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.xs },
+  payerWho: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: 44 },
   payerSheetName: { ...type.body, color: colors.textPrimary, flex: 1 },
   payerInputWrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.bgInput, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.sm, minWidth: 100 },
   payerRupee: { ...type.body, color: colors.textMuted },
   payerSheetInput: { ...type.body, color: colors.textPrimary, flex: 1, textAlign: 'right', paddingVertical: space.sm, paddingLeft: 2 },
-  payerQuickBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.xs, paddingVertical: space.sm, borderRadius: radius.md, backgroundColor: colors.accentMuted },
-  payerQuickText: { ...type.labelSemi, color: colors.accent },
   remainderBar: { paddingVertical: space.sm, alignItems: 'center', borderTopWidth: 1, borderColor: colors.border },
   remainderText: { ...type.labelSemi },
 });
