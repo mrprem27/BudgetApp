@@ -615,6 +615,11 @@ CREATE TABLE transactions (
 CREATE INDEX idx_transactions_pull ON transactions(scope_id, seq);
 CREATE INDEX idx_transactions_group_date ON transactions(group_id, date);
 CREATE INDEX idx_transactions_rule ON transactions(recurring_rule_id) WHERE recurring_rule_id IS NOT NULL;
+-- One live occurrence per rule per due date (U-66). Materialisation runs on the author's devices;
+-- a second device (or, later, the web) posting the same occurrence is refused here and reverted on
+-- the phone that sent it, instead of charging the rent twice.
+CREATE UNIQUE INDEX ux_transactions_occurrence ON transactions(recurring_rule_id, occurrence_date)
+  WHERE recurring_rule_id IS NOT NULL AND occurrence_date IS NOT NULL AND deleted_at IS NULL;
 
 -- Income is never grouped, and what you own is not the group's business: income
 -- and asset movements live only in a personal group. Cross-table, so a trigger.

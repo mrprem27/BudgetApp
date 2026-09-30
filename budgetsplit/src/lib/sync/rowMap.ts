@@ -306,6 +306,7 @@ export function simpleToLocal(table: keyof typeof SIMPLE, row: Row): Row {
   const out: Row = { id: row.id };
   for (const [l, s] of Object.entries(cols)) out[l] = row[s] ?? null;
   if (table === 'asset') out.updated_at = row.updated_at;
+  if (table === 'pending_txn') out.pay_method = localPayMethod(out.pay_method);
   return out;
 }
 
@@ -570,6 +571,16 @@ export function txnToServer(b: LocalBundle, ctx: MapContext): Outgoing {
 }
 
 /** A pulled transaction bundle back into the phone's rows. */
+/**
+ * A stored Paid from as this app understands it (`U-49`, `U-66`). A server that has not been
+ * reset since How and From were merged may still send 'upi' or 'autopay' — both ran from the bank.
+ * Anything else unknown is dropped to "not recorded" rather than stored as a value nothing can draw.
+ */
+export function localPayMethod(v: unknown): string | null {
+  if (v === 'upi' || v === 'autopay') return 'bank';
+  return v === 'bank' || v === 'card' || v === 'cash' || v === 'wallet' || v === 'other' ? v : null;
+}
+
 export function serverToTxn(t: Row, ctx: MapContext): LocalBundle {
   const rule = t.recurrence as Row | null | undefined;
   const author = str(t.author_id);
@@ -587,7 +598,7 @@ export function serverToTxn(t: Row, ctx: MapContext): LocalBundle {
       recur_paused_at: rule ? rule.paused_at ?? null : null,
       recur_mode: rule ? rule.mode : 'auto',
       tz: t.timezone ?? null, lat: t.latitude ?? null, lng: t.longitude ?? null, place_label: t.place_label ?? null,
-      pay_method: t.pay_method ?? null,
+      pay_method: localPayMethod(t.pay_method),
       currency: t.currency === 'INR' ? null : (t.currency ?? null),
       source: t.source ?? null, asset_id: t.asset_id ?? null,
       author_person_id: author && !isMe(author, ctx) ? author : null,
@@ -614,7 +625,7 @@ export function serverToApproval(a: Row): Row {
   // flag, never 'pending', which would drop it from my figures before I'd said so.
   const retraction = Number(a.is_pending_delete ?? 0) === 1;
   return {
-    txn_id: a.transaction_id, state: retraction ? 'approved' : a.status, landed_pay_method: a.landed_pay_method ?? null,
+    txn_id: a.transaction_id, state: retraction ? 'approved' : a.status, landed_pay_method: localPayMethod(a.landed_pay_method),
     created_at: a.arrived_at, decided_at: a.decided_at ?? null, dispute_state: null,
     pending_delete: a.is_pending_delete ?? 0,
   };

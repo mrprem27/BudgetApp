@@ -2,7 +2,7 @@
 
 `Last verified: 2026-09-30 (§0, §1, §9–§11 and every row whose status changed; the rest as of 2026-09-07) · Guarded by: trackerIntegrity.test.ts · countClaims.test.ts · docIdGraph.test.ts`
 
-**267 items, 104 of them still open.** One row each: what it is, and where it stands.
+**272 items, 108 of them still open.** One row each: what it is, and where it stands.
 Nothing else. **This is the V1 tracker** — start at §0.
 
 **The evidence is not here.** Why each item exists, what it costs, what breaks if you touch it, and
@@ -23,13 +23,13 @@ is defined in two places.
 |---|---|---|
 | §1 · Ship blockers | **12** | 19 |
 | §2 · Complexity — `OV-` | **13** | 34 |
-| §3 · Decisions — `DQ-` | **39** | 57 |
+| §3 · Decisions — `DQ-` | **43** | 61 |
 | §4 · Walk 1 — `W1-` | **12** | 39 |
 | §5 · Sync — `SYNC-F` | **0** | 24 |
 | §6 · Debt — `D-` | **10** | 11 |
 | §7 · Accepted — `A-` | **2** | 11 |
 | §9 · Deferred from V1 — `V-` | **7** | 7 |
-| §11 · Open from the last pass, and your feedback — `U-` | **9** | 65 |
+| §11 · Open from the last pass, and your feedback — `U-` | **9** | 66 |
 
 §8 (parked scope) and §10 (built but easy to forget) carry no ids.
 
@@ -102,7 +102,7 @@ below is the plan; every line points at rows further down, where status lives.
 ---
 ## §3 · Open decisions — `DQ-`
 
-**57 items: 32 `DECIDE`, 7 `BLOCKED`, 18 `DONE`.** A `DQ-` is a question only you can answer, so every unanswered one is `DECIDE` by definition. The default column is what ships if you never decide.
+**61 items: 36 `DECIDE`, 7 `BLOCKED`, 18 `DONE`.** A `DQ-` is a question only you can answer, so every unanswered one is `DECIDE` by definition. The default column is what ships if you never decide.
 
 | | What | Status | Default if never decided |
 |---|---|---|---|
@@ -138,6 +138,10 @@ below is the plan; every line points at rows further down, where status lives.
 | `DQ-92` | Home's "Coming up" list is gone (a badge count only); bring it back, or finish removing it from docs/demo expectations? | `DECIDE` | Leave it removed — a badge only, no card |
 | `DQ-95` | Workers Paid ($5/mo) before the pilot, now that D1 Free hard-stops at 100k rows written/day? | `DECIDE` | Free while developing; Paid before the first non-you sign-in |
 | `DQ-96` | May a group member edit someone else's transaction (Splitwise's model)? | `DECIDE` | No — author-only; approve/reject answers someone else's entry |
+| `DQ-104` | A web client: a `/v1` read API over the server (writes through the same rules as sync), or a local-first web replica? | `DECIDE` | The `/v1` read API (`SPEC-SERVER-WEBAPP.md` §2.1) |
+| `DQ-105` | Should the server post recurring occurrences (Cron + Queue) instead of the author's phone? | `DECIDE` | Yes, after Workers Paid; phones keep posting until the server path has run a clean month |
+| `DQ-106` | Settle categories-by-id, budget period vs cadence and dead columns before any public API? | `DECIDE` | Yes — `OV-06`, `OV-19`, `OV-23` in the server schema while a reset is still free |
+| `DQ-107` | Queues and Cron for email, notifications and cleanup (needs Workers Paid) | `DECIDE` | With `DQ-95`: before the first sign-in that isn't you |
 | `DQ-80` | Paid Apple Developer account, $99/yr | `BLOCKED` | Apple |
 | `DQ-81` | Google OAuth **CASA Tier-3** for `gmail.readonly` | `BLOCKED` | Google |
 | `DQ-82` | The GPay export format | `BLOCKED` | Google |
@@ -286,7 +290,7 @@ testing or describing the app. Where one needs action, the id says where.
 ---
 ## §11 · Open from the last pass, and your feedback — `U-`
 
-**65 items: 7 `OPEN`, 1 `BLOCKED`, 1 `PARKED`, 56 `DONE`.** From the 2026-09-30 pass (`SPEC-BUGSCAN.md` Pass 2) and your answers and feedback the same night. Evidence in `FINDINGS.md` §11.
+**66 items: 7 `OPEN`, 1 `BLOCKED`, 1 `PARKED`, 57 `DONE`.** From the 2026-09-30 pass (`SPEC-BUGSCAN.md` Pass 2) and your answers and feedback the same night. Evidence in `FINDINGS.md` §11.
 
 | | What | Status | Default if never decided |
 |---|---|---|---|
@@ -300,4 +304,4 @@ testing or describing the app. Where one needs action, the id says where.
 | `U-24` | Product analytics (Mixpanel): built, with an opt-out; needs your project token | `BLOCKED` |  |
 | `U-31` | Sorting is not right — which lists? (the money card now orders largest first) | `OPEN` |  |
 
-**Closed (56), detail in `FINDINGS.md`:** `U-01` `U-03` `U-04` `U-05` `U-06` `U-11` `U-12` `U-17` `U-21` `U-14` `U-25` `U-26` `U-27` `U-28` `U-29` `U-30` `U-32` `U-15` `U-33` `U-35` `U-36` `U-37` `U-34` `U-38` `U-39` `U-40` `U-41` `U-42` `U-43` `U-13` `U-44` `U-45` `U-46` `U-22` `U-23` `U-07` `U-08` `U-47` `U-48` `U-49` `U-50` `U-51` `U-52` `U-53` `U-54` `U-55` `U-56` `U-57` `U-58` `U-59` `U-60` `U-61` `U-62` `U-63` `U-64` `U-65`
+**Closed (57), detail in `FINDINGS.md`:** `U-01` `U-03` `U-04` `U-05` `U-06` `U-11` `U-12` `U-17` `U-21` `U-14` `U-25` `U-26` `U-27` `U-28` `U-29` `U-30` `U-32` `U-15` `U-33` `U-35` `U-36` `U-37` `U-34` `U-38` `U-39` `U-40` `U-41` `U-42` `U-43` `U-13` `U-44` `U-45` `U-46` `U-22` `U-23` `U-07` `U-08` `U-47` `U-48` `U-49` `U-50` `U-51` `U-52` `U-53` `U-54` `U-55` `U-56` `U-57` `U-58` `U-59` `U-60` `U-61` `U-62` `U-63` `U-64` `U-65` `U-66`

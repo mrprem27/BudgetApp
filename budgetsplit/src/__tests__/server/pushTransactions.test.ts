@@ -187,6 +187,30 @@ describe('push — the transaction bundle', () => {
     expect(await rejections(db)).toEqual([]);
   });
 
+  it('refuses a second copy of the same occurrence from another device (U-66)', async () => {
+    const { db, me, g } = await personalWorld();
+    const mine = me.personId;
+    await push(db, me.userId, [
+      txn(2, 'rent', g, mine, { recurrence: { frequency: 'monthly', interval: 1 } }),
+      txn(3, 'rent-oct-a', g, mine, { recurring_rule_id: 'rent', occurrence_date: T0 + 2 }),
+    ]);
+    // The same due date, minted again with its own id on a second device.
+    await push(db, me.userId, [txn(1, 'rent-oct-b', g, mine, { recurring_rule_id: 'rent', occurrence_date: T0 + 2 })], T0, 'dev-second');
+    expect(await count(db, 'SELECT COUNT(*) AS n FROM transactions WHERE recurring_rule_id = ? AND deleted_at IS NULL', 'rent')).toBe(1);
+    expect((await rejections(db)).length).toBe(1);
+  });
+
+  it('accepts a balance adjustment either way — a personal settlement with one side only (U-64)', async () => {
+    const { db, me, g } = await personalWorld();
+    const mine = me.personId;
+    await push(db, me.userId, [
+      txn(2, 'adj-up', g, mine, { kind: 'settlement', amount: 5000, category: 'Balance adjustment', pay_method: 'wallet', payers: [], splits: [{ person_id: mine, amount: 5000 }] }),
+      txn(3, 'adj-down', g, mine, { kind: 'settlement', amount: 2000, category: 'Balance adjustment', pay_method: 'bank', payers: [{ person_id: mine, amount: 2000 }], splits: [] }),
+    ]);
+    expect(await rejections(db)).toEqual([]);
+    expect(await count(db, "SELECT COUNT(*) AS n FROM transactions WHERE category = 'Balance adjustment'")).toBe(2);
+  });
+
   it('holds income in the personal group', async () => {
     const { db, me, g } = await personalWorld();
     const mine = me.personId;
