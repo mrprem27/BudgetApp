@@ -1,23 +1,25 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, TextInput, ScrollView, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import Animated, { FadeIn, FadeInLeft, FadeOut, ReduceMotion } from 'react-native-reanimated';
 import { Chip } from './Chip';
 import { SheetModal } from './SheetModal';
+import { OptionRow } from './OptionRow';
 import { PrimaryButton } from './PrimaryButton';
-import { SecondaryButton } from './SecondaryButton';
 import { DateRangeSheet } from './DateRangeSheet';
-import { FiltersButton } from './FiltersButton';
-import { colors, type, space, radius, layout } from '../tokens';
+import { colors, type, space, radius } from '../tokens';
 import { shortDate } from '../../lib/dateFormat';
 import { TXN_KIND, TXN_KIND_LABEL_PLURAL } from '../../constants/enums';
 import { tagKey } from '../../lib/tags';
 import {
-  KIND_ANY, RANGE_LABEL, resolveRange, extraFilterCount,
+  KIND_ANY, RANGE_LABEL, resolveRange,
   type KindFilter, type RangePreset,
 } from '../../lib/txnFilter';
 
 export type ChipGroup = {
   key: string;
+  /** Sheet title, e.g. "Show". Defaults to "Show". */
+  title?: string;
   /** First option is treated as the "All"/reset default. */
   options: { label: string; value: string }[];
 };
@@ -40,7 +42,7 @@ type Props = {
   selected: Record<string, string>;
   onSelect: (key: string, value: string) => void;
 
-  /** Kind. Omit the handler to hide the chips. */
+  /** Kind. Omit the handler to hide the chip. */
   kind?: KindFilter;
   onKind?: (k: KindFilter) => void;
 
@@ -50,12 +52,12 @@ type Props = {
   customTo?: number | null;
   onRange?: (preset: RangePreset, from: number | null, to: number | null) => void;
 
-  /** Who is on the entry. Pass an empty list to hide the section. */
+  /** Who is on the entry. Pass an empty list to hide the chip. */
   people?: FilterPerson[];
   personId?: string | null;
   onPerson?: (id: string | null) => void;
 
-  /** Tags found on the rows, most used first. Empty list hides the section. */
+  /** Tags found on the rows, most used first. Empty list hides the chip. */
   tagOptions?: string[];
   selectedTags?: string[];
   onTags?: (tags: string[]) => void;
@@ -63,13 +65,27 @@ type Props = {
 
 const RANGE_PRESETS: RangePreset[] = ['any', '7d', '30d', 'thisMonth', 'lastMonth'];
 
+/** The row swapping between chips and the search field: a short cross-fade, the field arriving
+ *  from where the button was. Snaps under Reduce Motion (AGENTS §11). */
+const FIELD_IN = FadeInLeft.duration(200).reduceMotion(ReduceMotion.System);
+const CHIPS_IN = FadeIn.duration(180).reduceMotion(ReduceMotion.System);
+const OUT = FadeOut.duration(120).reduceMotion(ReduceMotion.System);
+
+type Picker = { kind: 'group'; key: string } | { kind: 'type' | 'date' | 'who' | 'tags' };
+
 /**
  * The one filter structure, on every ledger (Search, Personal, a group).
  *
- * Two tiers, by how often you reach for them:
- *   - **inline** — the search field, the screen's own scope, and the entry type. Always visible.
- *   - **behind `Filters`** — when, who, tags. One button with a count badge; whatever is set shows
- *     below as removable chips, and only then, so an unfiltered list carries no extra row.
+ * **One row: a round search button, then one chip per thing you can filter by**, each saying
+ * what it filters ("Date ⌄") until it is set, then its value with a ✕ ("Last 30 days ✕"). Tapping
+ * a chip opens a short list for that one question. The pattern of Fold, Google Play and most
+ * shopping apps, chosen because nobody has to learn it: the chip names the question, the sheet
+ * answers it, the ✕ undoes it.
+ *
+ * It replaced a search row + a mixed strip of scope and type chips + a Filters button + a second
+ * row of active chips + a sheet of chip grids — four controls to learn and two rows that came and
+ * went (`U-17`). Tapping search turns the row into the field (with Cancel), so search never costs
+ * a row of its own.
  *
  * What a filter *means* lives in `lib/txnFilter.ts`, so every screen matches the same way; this
  * file is only the controls. Chips are `ui/Chip` (AGENTS §9) — never hand-rolled.
@@ -82,141 +98,165 @@ export function FilterBar({
   people = [], personId = null, onPerson,
   tagOptions = [], selectedTags = [], onTags,
 }: Props) {
-  const [sheetOpen, setSheetOpen] = useState(false);
+  const [picker, setPicker] = useState<Picker | null>(null);
+  // Search lives in the chip row: a round button, or the query as a chip once typed. Only while
+  // typing does the row become the field, so a query never hides the filters beside it.
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searching = !!onSearch && searchOpen;
   const [rangeOpen, setRangeOpen] = useState(false);
+  const close = () => setPicker(null);
 
   const person = people.find(p => p.id === personId) ?? null;
   const rangeLabel = range === 'custom'
     ? `${customFrom ? shortDate(new Date(customFrom)) : 'Start'} – ${customTo ? shortDate(new Date(customTo)) : 'Now'}`
     : RANGE_LABEL[range];
+  const kindSet = !!kind && kind !== KIND_ANY;
+  const tagsLabel = selectedTags.length === 0 ? 'Tags'
+    : selectedTags.length === 1 ? selectedTags[0] : `${selectedTags[0]} +${selectedTags.length - 1}`;
 
-  const hasWhen = !!onRange;
-  const hasWho = !!onPerson && people.length > 0;
-  const hasTags = !!onTags && tagOptions.length > 0;
-  const hasMore = hasWhen || hasWho || hasTags;
-  // A set range counts once, whichever preset; the badge rule lives in `extraFilterCount`.
-  const activeCount = extraFilterCount({ from: range === 'any' ? null : 0, to: null, personId: person?.id ?? null, tags: selectedTags });
+  const setCount = (kindSet ? 1 : 0) + (range !== 'any' ? 1 : 0) + (person ? 1 : 0) + (selectedTags.length > 0 ? 1 : 0);
+  const clearAll = () => { onKind?.(KIND_ANY); onRange?.('any', null, null); onPerson?.(null); onTags?.([]); };
 
   const toggleTag = (t: string) => {
     const has = selectedTags.some(x => tagKey(x) === tagKey(t));
     onTags?.(has ? selectedTags.filter(x => tagKey(x) !== tagKey(t)) : [...selectedTags, t]);
   };
-  const clearAll = () => { onRange?.('any', null, null); onPerson?.(null); onTags?.([]); };
 
-  /* Memoised: a search field sits directly above, and without this each keystroke rebuilt every
-     chip on top of the consumer's own re-filter (`personal.tsx` froze on a large ledger).
-     Consumers must pass a stable `groups` array for it to hold. */
-  const scopeChips = useMemo(() => groups.flatMap(g => {
-    const active = selected[g.key] ?? g.options[0]?.value;
-    return g.options.map(o => (
-      <Chip key={`${g.key}:${o.value}`} label={o.label} selected={active === o.value} onPress={() => onSelect(g.key, o.value)} />
-    ));
-  }), [groups, selected, onSelect]);
-
-  const kindChips = onKind && TXN_KIND.map(k => (
-    <Chip key={k} label={TXN_KIND_LABEL_PLURAL[k]} selected={kind === k} onPress={() => onKind(kind === k ? KIND_ANY : k)} />
-  ));
-
-  const filtersButton = hasMore ? <FiltersButton count={activeCount} onPress={() => setSheetOpen(true)} /> : null;
-
-  const inlineChips = (scopeChips.length > 0 || kindChips) ? (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow} keyboardShouldPersistTaps="handled" style={styles.flex}>
-      {scopeChips}
-      {kindChips}
-    </ScrollView>
-  ) : <View style={styles.flex} />;
+  const openGroup = picker?.kind === 'group' ? groups.find(g => g.key === picker.key) : undefined;
 
   return (
     <View style={styles.wrap}>
-      {onSearch ? (
-        <>
-          <View style={styles.topRow}>
-            <View style={styles.searchBox}>
-              <Feather name="search" size={15} color={colors.textMuted} />
-              <TextInput
-                style={styles.searchInput}
-                placeholder={searchPlaceholder}
-                placeholderTextColor={colors.textMuted}
-                value={search}
-                onChangeText={onSearch}
-                autoCorrect={false}
-                returnKeyType="search"
-              />
-              {!!search && (
-                <TouchableOpacity onPress={() => onSearch('')} hitSlop={8} accessibilityRole="button" accessibilityLabel="Clear search">
-                  <Feather name="x" size={15} color={colors.textMuted} />
-                </TouchableOpacity>
-              )}
-            </View>
-            {filtersButton}
+      {searching ? (
+        <Animated.View key="search" style={styles.row} entering={FIELD_IN} exiting={OUT}>
+          <View style={styles.searchBox}>
+            <Feather name="search" size={15} color={colors.textMuted} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder={searchPlaceholder}
+              placeholderTextColor={colors.textMuted}
+              value={search}
+              onChangeText={onSearch}
+              autoCorrect={false}
+              autoFocus
+              onBlur={() => setSearchOpen(false)}
+              onSubmitEditing={() => setSearchOpen(false)}
+              returnKeyType="search"
+            />
+            {!!search && (
+              <TouchableOpacity onPress={() => onSearch?.('')} hitSlop={10} accessibilityRole="button" accessibilityLabel="Clear search">
+                <Feather name="x-circle" size={15} color={colors.textMuted} />
+              </TouchableOpacity>
+            )}
           </View>
-          {(scopeChips.length > 0 || kindChips) && inlineChips}
-        </>
+          <TouchableOpacity onPress={() => { onSearch?.(''); setSearchOpen(false); }} hitSlop={10} accessibilityRole="button" style={styles.textBtn}>
+            <Text style={styles.textBtnLabel}>Cancel</Text>
+          </TouchableOpacity>
+        </Animated.View>
       ) : (
-        <View style={styles.topRow}>
-          {inlineChips}
-          {filtersButton}
+      <Animated.View key="chips" entering={CHIPS_IN} exiting={OUT}>
+      /* `flexGrow: 0`: a horizontal ScrollView in a column otherwise takes whatever height the
+         parent offers — the row that collapsed or ballooned depending on the screen. */
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.strip}
+        contentContainerStyle={styles.chipRow}
+        keyboardShouldPersistTaps="handled"
+      >
+        {onSearch && (search
+          ? <Chip icon="search" label={`“${search}”`} selected maxWidth={160}
+              onPress={() => setSearchOpen(true)} onRemove={() => onSearch('')} />
+          : (
+            <TouchableOpacity onPress={() => setSearchOpen(true)} style={styles.searchBtn} hitSlop={4} accessibilityRole="button" accessibilityLabel="Search">
+              <Feather name="search" size={16} color={colors.textSecondary} />
+            </TouchableOpacity>
+          ))}
+        {groups.map(g => {
+          const value = selected[g.key] ?? g.options[0]?.value;
+          const opt = g.options.find(o => o.value === value) ?? g.options[0];
+          const isDefault = value === g.options[0]?.value;
+          return (
+            <Chip key={g.key} label={opt?.label ?? ''} selected={!isDefault} chevron maxWidth={180}
+              onPress={() => setPicker({ kind: 'group', key: g.key })} />
+          );
+        })}
+        {onKind && (
+          <Chip icon="layers" label={kindSet ? TXN_KIND_LABEL_PLURAL[kind as typeof TXN_KIND[number]] : 'Type'}
+            selected={kindSet} chevron={!kindSet} onRemove={kindSet ? () => onKind(KIND_ANY) : undefined}
+            onPress={() => setPicker({ kind: 'type' })} />
+        )}
+        {onRange && (
+          <Chip icon="calendar" label={range === 'any' ? 'Date' : rangeLabel} maxWidth={200}
+            selected={range !== 'any'} chevron={range === 'any'}
+            onRemove={range !== 'any' ? () => onRange('any', null, null) : undefined}
+            onPress={() => setPicker({ kind: 'date' })} />
+        )}
+        {onPerson && people.length > 0 && (
+          <Chip icon="user" label={person?.name ?? 'Who'} maxWidth={180}
+            selected={!!person} chevron={!person} onRemove={person ? () => onPerson(null) : undefined}
+            onPress={() => setPicker({ kind: 'who' })} />
+        )}
+        {onTags && tagOptions.length > 0 && (
+          <Chip icon="tag" label={tagsLabel} maxWidth={180}
+            selected={selectedTags.length > 0} chevron={selectedTags.length === 0}
+            onRemove={selectedTags.length > 0 ? () => onTags([]) : undefined}
+            onPress={() => setPicker({ kind: 'tags' })} />
+        )}
+        {setCount > 1 && (
+          <TouchableOpacity onPress={clearAll} hitSlop={10} accessibilityRole="button" style={styles.clearAll}>
+            <Text style={styles.clearAllText}>Clear all</Text>
+          </TouchableOpacity>
+        )}
+      </ScrollView>
+      </Animated.View>
+      )}
+
+      {/* One sheet, one question at a time. A single-choice pick closes it; tags stay open. */}
+      <SheetModal visible={picker !== null} onClose={close} title={
+        openGroup ? (openGroup.title ?? 'Show')
+          : picker?.kind === 'type' ? 'Type'
+          : picker?.kind === 'date' ? 'Date'
+          : picker?.kind === 'who' ? 'Who'
+          : 'Tags'
+      }>
+        <View style={styles.list}>
+          {openGroup && openGroup.options.map(o => (
+            <OptionRow key={o.value} label={o.label}
+              selected={(selected[openGroup.key] ?? openGroup.options[0]?.value) === o.value}
+              onPress={() => { onSelect(openGroup.key, o.value); close(); }} />
+          ))}
+          {picker?.kind === 'type' && onKind && [KIND_ANY, ...TXN_KIND].map(k => (
+            <OptionRow key={k} label={k === KIND_ANY ? 'Everything' : TXN_KIND_LABEL_PLURAL[k as typeof TXN_KIND[number]]}
+              selected={(kind ?? KIND_ANY) === k} onPress={() => { onKind(k as KindFilter); close(); }} />
+          ))}
+          {picker?.kind === 'date' && (
+            <>
+              {RANGE_PRESETS.map(r => (
+                <OptionRow key={r} label={RANGE_LABEL[r]} selected={range === r}
+                  onPress={() => { const { from, to } = resolveRange(r); onRange?.(r, from, to); close(); }} />
+              ))}
+              <OptionRow label={range === 'custom' ? rangeLabel : 'Pick dates…'} selected={range === 'custom'}
+                onPress={() => { close(); setRangeOpen(true); }} />
+            </>
+          )}
+          {picker?.kind === 'who' && (
+            <>
+              <OptionRow label="Anyone" selected={!person} onPress={() => { onPerson?.(null); close(); }} />
+              {people.map(p => (
+                <OptionRow key={p.id} label={p.name} selected={personId === p.id}
+                  onPress={() => { onPerson?.(p.id); close(); }} />
+              ))}
+            </>
+          )}
+          {picker?.kind === 'tags' && (
+            <>
+              {tagOptions.map(t => (
+                <OptionRow key={t} label={t} selected={selectedTags.some(x => tagKey(x) === tagKey(t))} onPress={() => toggleTag(t)} />
+              ))}
+              <PrimaryButton label="Done" onPress={close} style={styles.done} />
+            </>
+          )}
         </View>
-      )}
-
-      {activeCount > 0 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow} keyboardShouldPersistTaps="handled">
-          {range !== 'any' && <Chip icon="calendar" label={rangeLabel} selected maxWidth={180} onRemove={() => onRange?.('any', null, null)} />}
-          {person && <Chip icon="user" label={person.name} selected maxWidth={160} onRemove={() => onPerson?.(null)} />}
-          {selectedTags.map(t => <Chip key={t} icon="tag" label={t} selected maxWidth={140} onRemove={() => toggleTag(t)} />)}
-        </ScrollView>
-      )}
-
-      <SheetModal visible={sheetOpen} onClose={() => setSheetOpen(false)} title="Filters">
-        <>
-          {hasWhen && (
-            <>
-              <Text style={styles.section}>When</Text>
-              <View style={styles.wrapChips}>
-                {RANGE_PRESETS.map(r => (
-                  <Chip
-                    key={r}
-                    label={RANGE_LABEL[r]}
-                    selected={range === r}
-                    onPress={() => { const { from, to } = resolveRange(r); onRange?.(r, from, to); }}
-                  />
-                ))}
-                <Chip
-                  icon="calendar"
-                  label={range === 'custom' ? rangeLabel : 'Pick dates'}
-                  selected={range === 'custom'}
-                  chevron
-                  onPress={() => { setSheetOpen(false); setRangeOpen(true); }}
-                />
-              </View>
-            </>
-          )}
-          {hasWho && (
-            <>
-              <Text style={styles.section}>Who</Text>
-              <View style={styles.wrapChips}>
-                <Chip label="Anyone" selected={!person} onPress={() => onPerson?.(null)} />
-                {people.map(p => (
-                  <Chip key={p.id} label={p.name} maxWidth={160} selected={personId === p.id} onPress={() => onPerson?.(personId === p.id ? null : p.id)} />
-                ))}
-              </View>
-            </>
-          )}
-          {hasTags && (
-            <>
-              <Text style={styles.section}>Tags</Text>
-              <View style={styles.wrapChips}>
-                {tagOptions.map(t => (
-                  <Chip key={t} icon="tag" label={t} maxWidth={160} selected={selectedTags.some(x => tagKey(x) === tagKey(t))} onPress={() => toggleTag(t)} />
-                ))}
-              </View>
-            </>
-          )}
-          <View style={styles.footer}>
-            {activeCount > 0 && <SecondaryButton label="Clear" onPress={clearAll} style={styles.footerBtn} />}
-            <PrimaryButton label="Done" onPress={() => setSheetOpen(false)} style={styles.footerBtn} />
-          </View>
-        </>
       </SheetModal>
 
       {/* Custom bounds: one calendar, tap the first day then the last. */}
@@ -232,21 +272,26 @@ export function FilterBar({
 }
 
 const styles = StyleSheet.create({
-  wrap: { gap: space.sm },
-  flex: { flex: 1 },
-  topRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  wrap: {},
+  strip: { flexGrow: 0 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  // Same height and shape as a Chip, so the row reads as one set of pills.
+  searchBtn: {
+    width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border,
+  },
   chipRow: { gap: space.sm, alignItems: 'center', flexDirection: 'row' },
-
   searchBox: {
     flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.sm,
-    backgroundColor: colors.bgInput, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border,
-    paddingHorizontal: space.md, height: 40,
+    backgroundColor: colors.bgInput, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border,
+    paddingHorizontal: space.smd, height: 36,
   },
   // No lineHeight — it misaligns the placeholder/text in a single-line input.
   searchInput: { flex: 1, fontFamily: 'Inter_400Regular', fontSize: 15, color: colors.textPrimary, padding: 0 },
-
-  section: { ...type.label, color: colors.textSecondary, marginTop: space.md, marginBottom: space.sm },
-  wrapChips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
-  footer: { flexDirection: 'row', gap: space.sm, marginTop: space.lg },
-  footerBtn: { flex: 1, minHeight: layout.touchMin },
+  clearAll: { paddingHorizontal: space.sm, height: 36, justifyContent: 'center' },
+  clearAllText: { ...type.labelSemi, color: colors.accent },
+  textBtn: { height: 36, justifyContent: 'center' },
+  textBtnLabel: { ...type.labelSemi, color: colors.accent },
+  list: { gap: space.sm },
+  done: { marginTop: space.md },
 });

@@ -635,9 +635,8 @@ describe('G2b · Review carries the same Filters button, with a count', () => {
     expect(reviewFilterCount(DEFAULT_FILTERS)).toBe(0);
     expect(reviewFilterCount({ ...DEFAULT_FILTERS, query: 'swiggy', categories: ['Food', 'Fuel'], amountMin: '100', dateFrom: '2026-09-01' })).toBe(5);
   });
-  it('Review and the shared bar use the one FiltersButton', () => {
+  it('Review keeps its Filters button', () => {
     expect(fs.readFileSync('app/(ledger)/review.tsx', 'utf8')).toMatch(/<FiltersButton/);
-    expect(fs.readFileSync('src/components/ui/FilterBar.tsx', 'utf8')).toMatch(/<FiltersButton/);
   });
 });
 
@@ -1073,3 +1072,18 @@ describe('P2-15 · the streak switch says what it controls', () => {
     expect(fs.readFileSync('app/(system)/features.tsx', 'utf8')).toMatch(/label: 'Streak Calendar', caption: '[^']*⚡ count shows either way'/);
   });
 });
+
+describe('U-17 · the ledger filter is one search field and one row of chips, one chip per question', () => {
+  const src = fs.readFileSync('src/components/ui/FilterBar.tsx', 'utf8');
+  it('names each question on its chip, and a set chip clears with its ✕', () => {
+    for (const q of ["'Type'", "'Date'", "'Who'", "'Tags'"]) expect(src).toContain(q);
+    expect((src.match(/onRemove=\{\w+Set|onRemove=\{range|onRemove=\{person|onRemove=\{selectedTags/g) ?? []).length).toBe(4);
+  });
+  it('has no second row of active chips and no separate Filters button', () => {
+    expect(src).not.toMatch(/<FiltersButton|activeCount > 0 &&/);
+  });
+  it('keeps its horizontal strip from taking the parent\'s height', () => {
+    expect(src).toMatch(/strip: \{ flexGrow: 0 \}/);
+  });
+});
+

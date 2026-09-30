@@ -128,10 +128,10 @@ export default function PersonalScreen() {
   );
   const sections = useMemo(() => groupByDate(filtered), [filtered]);
 
-  // `FilterBar` memoises its chip elements on these three; passing a literal
-  // would defeat that on every render.
+  // Stable identities, so the filter bar and the list below do not re-render per keystroke.
   const filterGroups = useMemo(() => [{
     key: 'scope',
+    title: 'Show',
     options: [
       { label: 'Personal', value: 'personal' },
       { label: 'Groups', value: 'groups' },

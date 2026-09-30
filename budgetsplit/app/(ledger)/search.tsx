@@ -24,6 +24,7 @@ import { keyboardAwareScroll } from '../../src/components/ui/KeyboardForm';
 /** Stable identity — `FilterBar` memoises its chips on it (see the note there). */
 const SOURCE_GROUP = [{
   key: 'source',
+  title: 'Look in',
   options: SEARCH_SOURCE.map(v => ({ label: SEARCH_SOURCE_LABEL[v], value: v })),
 }];
 
