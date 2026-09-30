@@ -95,3 +95,8 @@ class_name = "UserHub"
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["UserHub"]
+
+# --- Cron: nightly cleanup of expired links, sessions and invites (maintenance.ts) ---
+# 21:30 UTC is 03:00 in India. Cron triggers are on Workers Free.
+[triggers]
+crons = ["30 21 * * *"]

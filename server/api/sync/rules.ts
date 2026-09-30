@@ -14,3 +14,4 @@ export {
 } from '../../../budgetsplit/src/lib/permissions';
 export type { GroupContext } from '../../../budgetsplit/src/lib/permissions';
 export { selfPersonId, syncIds, SYNCED_PREFERENCES, isSyncedPreference } from '../../../budgetsplit/src/lib/sync/ids';
+export { simplify } from '../../../budgetsplit/src/lib/settle';

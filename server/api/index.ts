@@ -59,6 +59,8 @@ import { callerIp, magicLinkAllowed, recordMagicLink } from './rateLimit';
 import { storage } from './storage';
 import { handleSync, handleHistory, eraseAccount, liveAccount } from './sync';
 import { hubsOf } from './realtime/UserHub';
+import { cleanupExpired } from './maintenance';
+import { handleV1 } from './v1/routes';
 
 export { UserHub } from './realtime/UserHub';
 
@@ -86,6 +88,11 @@ export default {
       const detail = errorMessage(err);
       return json({ error: 'Server error', detail: detail.slice(0, 300) }, 500);
     }
+  },
+
+  /** The nightly cron (`wrangler.toml` `[triggers]`). */
+  async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(cleanupExpired(env.DB, Date.now()));
   },
 };
 
@@ -118,6 +125,8 @@ async function route(request: Request, env: Env, ctx: ExecutionContext): Promise
     if (!env.USER_HUB) return json({ error: 'Live updates are not configured on this server.' }, 503);
     return env.USER_HUB.get(env.USER_HUB.idFromName(auth.user.id)).fetch(request);
   }
+  const v1 = await handleV1(request, env, path, url);
+  if (v1) return v1;
   const historyMatch = /^\/transactions\/([^/]+)\/history$/.exec(path);
   if (historyMatch) return handleHistory(request, env, decodeURIComponent(historyMatch[1]));
 
