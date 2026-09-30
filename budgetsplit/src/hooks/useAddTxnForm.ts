@@ -14,10 +14,10 @@ import { getGroupMembers, getMe, getAllPersons } from '../db/queries/persons';
 import { getFriendBalances } from '../db/queries/balances';
 import { computeTransferScopes, planAllGroupsSettlement, type TransferScopes } from '../lib/settleScope';
 import { getCategoriesByFrequency, type CategoryKind } from '../db/queries/categories';
-import { insertTxn, updateTxn, getTxnById, findRecentDuplicate, recordSettlement, attachmentInUse, getTagsByFrequency } from '../db/queries/transactions';
+import { insertTxn, updateTxn, getTxnById, findRecentDuplicate, recordSettlement, attachmentInUse, getTagRows } from '../db/queries/transactions';
 import { useCategoryCreate } from './useCategoryCreate';
 import { splitRecurringSeries } from '../db/queries/recurring';
-import { parseTags } from '../lib/tags';
+import { parseTags, rankTagsForCategory } from '../lib/tags';
 import { deleteAttachment } from '../lib/attachment';
 import { parseToPaise, formatRupees, paiseToInput } from '../lib/money';
 import { computeShares as calcShares, computePayments as calcPayments, validateShares } from '../lib/splitMath';
@@ -132,9 +132,11 @@ export function useAddTxnForm(params: AddTxnParams) {
   const createCategory = useCategoryCreate(setCategories);
   // The tag vocabulary is derived from existing transactions, so it's read once per
   // mount — nothing here writes to it mid-edit.
-  const [tagSuggestions, setTagSuggestions] = useState<string[]>([]);
-  useEffect(() => { getTagsByFrequency(db).then(setTagSuggestions).catch(() => {}); }, [db]);
+  const [tagRows, setTagRows] = useState<{ tags: string | null; category: string | null }[]>([]);
+  useEffect(() => { getTagRows(db).then(setTagRows).catch(() => {}); }, [db]);
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
+  // Tags used on the chosen category first, then the rest (`W1-31`).
+  const tagSuggestions = useMemo(() => rankTagsForCategory(tagRows, selectedCategory?.name), [tagRows, selectedCategory?.name]);
   const [catManual, setCatManual] = useState(false);
   const [learned, setLearned] = useState<LearnedMap>({});
   const [members, setMembers] = useState<Person[]>([]);

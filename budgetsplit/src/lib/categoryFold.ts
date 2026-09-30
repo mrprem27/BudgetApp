@@ -1,5 +1,5 @@
 /** The single combined bucket for category names not in the user's catalog. */
-export const OTHERS_LABEL = 'Others';
+export const OTHERS_LABEL = 'Everything else';
 
 /**
  * Fold spend recorded under category names that aren't in the user's global

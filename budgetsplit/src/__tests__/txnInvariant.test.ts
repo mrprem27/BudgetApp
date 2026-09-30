@@ -72,8 +72,8 @@ const ALLOWLIST: { file: string; contains: string; why: string }[] = [
   },
   {
     file: 'transactions.ts',
-    contains: 'SELECT tags FROM txn',
-    why: 'Building the tag vocabulary (getTagsByFrequency). A tag applied to a recurring RULE is a tag genuinely in use, so it belongs in the picker — excluding templates would hide a tag the user typed and then never offer it back. This counts tag names, not money or dates, so the usual reason to exclude rules (double-counting a template as a transaction) does not apply.',
+    contains: 'SELECT tags, category FROM txn',
+    why: 'Building the tag vocabulary (getTagRows). A tag applied to a recurring RULE is a tag genuinely in use, so it belongs in the picker — excluding templates would hide a tag the user typed and then never offer it back. This counts tag names, not money or dates, so the usual reason to exclude rules (double-counting a template as a transaction) does not apply.',
   },
   {
     file: 'transactions.ts',

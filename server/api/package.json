@@ -5,7 +5,8 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "deploy": "npm run migrate && wrangler deploy",
+    "deploy:code-only": "wrangler deploy",
     "migrate": "wrangler d1 migrations apply budgetsplit-api --remote",
     "migrate:local": "wrangler d1 migrations apply budgetsplit-api --local"
   },

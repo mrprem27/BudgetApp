@@ -8,7 +8,7 @@ import { NOT_AWAITING_APPROVAL, AWAITING_APPROVAL_COL } from './approvalSql';
 import { RULE_IN_LIVE_GROUP } from './memberSql';
 import { settlementView } from '../../lib/settlementView';
 import { formatRupees } from '../../lib/money';
-import { rankTagsByFrequency, serializeTags } from '../../lib/tags';
+import { serializeTags } from '../../lib/tags';
 import type { EntryMode, RecurFreq, RecurState, PayMethod, TxnKind, TxnSource , RecurMode } from '../../constants/enums';
 
 /**
@@ -322,7 +322,8 @@ export function localTz(): string {
 }
 
 /**
- * Every tag in use, most-used first — the vocabulary for the tag picker.
+ * Every tagged row's tags and category — the vocabulary for the tag picker, ranked per
+ * category by `rankTagsForCategory` (`W1-31`).
  *
  * No `tag` table on purpose: tags are derived from the rows that use them, so there is
  * nothing to keep in sync, no orphan cleanup, and renaming is just editing the rows.
@@ -332,11 +333,10 @@ export function localTz(): string {
  * SQLite can't split it without `json_each`; the SELECT is narrowed to non-null values so
  * only rows that actually carry tags are read.
  */
-export async function getTagsByFrequency(db: SQLite.SQLiteDatabase): Promise<string[]> {
-  const rows = await db.getAllAsync<{ tags: string | null }>(
-    `SELECT tags FROM txn WHERE tags IS NOT NULL AND is_deleted = 0`,
+export async function getTagRows(db: SQLite.SQLiteDatabase): Promise<{ tags: string | null; category: string | null }[]> {
+  return db.getAllAsync<{ tags: string | null; category: string | null }>(
+    `SELECT tags, category FROM txn WHERE tags IS NOT NULL AND is_deleted = 0`,
   );
-  return rankTagsByFrequency(rows.map(r => r.tags));
 }
 
 export async function insertTxn(

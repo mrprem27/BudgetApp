@@ -145,10 +145,10 @@ describe('loadHomeData — category ranking', () => {
     addSimpleExpense(db, { groupId: personal, personId: me, amount: 30000, date: today(), category: 'UPI-1234' });
 
     const d = await load(db, 'month');
-    expect(d.catRows.map(r => r.name).sort()).toEqual(['Food', 'Others']);
+    expect(d.catRows.map(r => r.name).sort()).toEqual(['Everything else', 'Food']);
     // Nothing is lost in the fold.
     expect(d.catTotal).toBe(60000);
-    expect(d.catRows.find(r => r.name === 'Others')?.paise).toBe(50000);
+    expect(d.catRows.find(r => r.name === 'Everything else')?.paise).toBe(50000);
   });
 
   it('counts only MY share of a shared expense', async () => {

@@ -26,6 +26,7 @@ import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { AmountText } from '../../src/components/ui/AmountText';
 import { BudgetBar } from '../../src/components/finance/BudgetBar';
 import { SkeletonCard } from '../../src/components/ui/Skeleton';
+import { SectionCard } from '../../src/components/ui/SectionCard';
 import { EmptyState } from '../../src/components/ui/EmptyState';
 import { ErrorState } from '../../src/components/ui/ErrorState';
 import { categoryVisual } from '../../src/constants/categories';
@@ -44,6 +45,7 @@ export default function ReportsScreen() {
   const insets = useSafeAreaInsets();
   const [month, setMonth] = useState(() => new Date());
   const [selectedCat, setSelectedCat] = useState<string | null>(null);
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const [catExpanded, setCatExpanded] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [pdfExporting, setPdfExporting] = useState(false);
@@ -332,9 +334,17 @@ export default function ReportsScreen() {
             />
           )}
 
-          {summaries.map(s => (
-            <View key={s.group.id} style={styles.card}>
-              <Text style={styles.groupName}>{s.group.name}</Text>
+          {/* One disclosure per group (`W1-17`): the first opens, the rest read as one line
+              each until tapped, so a user with many groups isn't scrolling past all of them. */}
+          {summaries.map((s, i) => (
+            <SectionCard
+              key={s.group.id}
+              title={s.group.name}
+              subtitle={s.income === 0 && s.expense === 0 ? 'Nothing this month' : `Spent ${formatCompact(s.expense)} · Received ${formatCompact(s.income)}`}
+              expanded={openGroups[s.group.id] ?? i === 0}
+              onToggle={() => setOpenGroups(o => ({ ...o, [s.group.id]: !(o[s.group.id] ?? i === 0) }))}
+            >
+            <View style={styles.groupBody}>
 
               <View style={styles.metricRow}>
                 <View style={styles.metric}>
@@ -401,6 +411,7 @@ export default function ReportsScreen() {
                 <Text style={styles.emptyGroup}>No transactions this month</Text>
               )}
             </View>
+            </SectionCard>
           ))}
 
           <Text style={styles.sectionTitle}>{format(month, 'yyyy')} Year in Review</Text>
@@ -463,6 +474,7 @@ const styles = StyleSheet.create({
   summaryDeltaRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   summaryDelta: { ...type.caption, fontFamily: 'Inter_600SemiBold' },
   card: { backgroundColor: colors.bgCard, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: space.md, gap: space.sm },
+  groupBody: { paddingHorizontal: space.md, paddingBottom: space.md, gap: space.sm },
   chartTitle: { ...type.label, color: colors.textSecondary, marginBottom: space.sm },
   trendBlock: { marginTop: space.md, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: space.md },
   trendHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: space.sm },

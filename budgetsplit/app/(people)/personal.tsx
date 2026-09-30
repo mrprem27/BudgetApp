@@ -216,7 +216,7 @@ export default function PersonalScreen() {
             </View>
             <View style={styles.summaryDivider} />
             <View style={styles.summaryItem}>
-              <Text style={styles.summaryLabel}>Net</Text>
+              <Text style={styles.summaryLabel}>Net, everyone</Text>
               {(() => {
                 const ov = oweView(net);
                 return (

@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { colors, type, space, layout } from '../tokens';
 import { IconCircle } from '../ui/IconCircle';
 import { PrimaryButton } from '../ui/PrimaryButton';
 import { SecondaryButton } from '../ui/SecondaryButton';
 import { AnimatedBar } from '../ui/anim/AnimatedBar';
+import { getStoredSession } from '../../lib/serverApi';
 
 type Props =
   | { kind: 'restore'; progress: number }
@@ -23,6 +24,11 @@ type Props =
  * they can't word or draw it differently.
  */
 export function FirstSignInStep(props: Props) {
+  // Which account this is, on the one screen where a typo'd address would restore someone
+  // else's nothing over your phone (`SYNC-F8`). Read once: the session is stored before this
+  // step can show.
+  const [email, setEmail] = useState<string | null>(null);
+  useEffect(() => { getStoredSession().then(s => setEmail(s?.user.email ?? null)).catch(() => {}); }, []);
   const progressing = props.kind === 'restore' || props.kind === 'merge';
   const pct = progressing ? Math.round(Math.max(0, Math.min(1, props.progress)) * 100) : 0;
 
@@ -52,6 +58,7 @@ export function FirstSignInStep(props: Props) {
           bg={colors.accentMuted}
         />
         <Text style={styles.title}>{title}</Text>
+        {email ? <Text style={styles.account} numberOfLines={1}>Signed in as {email}</Text> : null}
         <Text style={styles.sentence}>{sentence}</Text>
         {progressing ? (
           <View style={styles.progress}>
@@ -81,6 +88,7 @@ const styles = StyleSheet.create({
   below: { flex: 2 },
   body: { alignItems: 'center', gap: space.md },
   title: { ...type.title, color: colors.textPrimary, textAlign: 'center' },
+  account: { ...type.labelSemi, color: colors.accent, textAlign: 'center' },
   sentence: { ...type.body, color: colors.textSecondary, textAlign: 'center', lineHeight: 22 },
   progress: { alignSelf: 'stretch', gap: space.sm, marginTop: space.sm },
   pct: { ...type.label, color: colors.textSecondary, textAlign: 'center' },

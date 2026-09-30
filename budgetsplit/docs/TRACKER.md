@@ -2,7 +2,7 @@
 
 `Last verified: 2026-09-30 (§0, §1, §9–§11 and every row whose status changed; the rest as of 2026-09-07) · Guarded by: trackerIntegrity.test.ts · countClaims.test.ts · docIdGraph.test.ts`
 
-**248 items, 117 of them still open.** One row each: what it is, and where it stands.
+**248 items, 109 of them still open.** One row each: what it is, and where it stands.
 Nothing else. **This is the V1 tracker** — start at §0.
 
 **The evidence is not here.** Why each item exists, what it costs, what breaks if you touch it, and
@@ -22,11 +22,11 @@ is defined in two places.
 | Section | Open | Total |
 |---|---|---|
 | §1 · Ship blockers | **12** | 19 |
-| §2 · Complexity — `OV-` | **18** | 34 |
+| §2 · Complexity — `OV-` | **14** | 34 |
 | §3 · Decisions — `DQ-` | **39** | 57 |
-| §4 · Walk 1 — `W1-` | **16** | 39 |
-| §5 · Sync — `SYNC-F` | **1** | 24 |
-| §6 · Debt — `D-` | **11** | 11 |
+| §4 · Walk 1 — `W1-` | **14** | 39 |
+| §5 · Sync — `SYNC-F` | **0** | 24 |
+| §6 · Debt — `D-` | **10** | 11 |
 | §7 · Accepted — `A-` | **2** | 11 |
 | §9 · Deferred from V1 — `V-` | **7** | 7 |
 | §11 · Open from the last pass, and your feedback — `U-` | **11** | 46 |
@@ -79,17 +79,13 @@ below is the plan; every line points at rows further down, where status lives.
 ---
 ## §2 · Complexity and overlap — `OV-`
 
-**34 items: 7 `OPEN`, 6 `DECIDE`, 5 `PARKED`, 16 `DONE`.** Duplications, overloads and phantoms, each with a verdict. `FINDINGS.md` §2 carries the count, the blast radius and the risk for each.
+**34 items: 3 `OPEN`, 6 `DECIDE`, 5 `PARKED`, 20 `DONE`.** Duplications, overloads and phantoms, each with a verdict. `FINDINGS.md` §2 carries the count, the blast radius and the risk for each.
 
 | | What | Status |
 |---|---|---|
 | `OV-01` | Nine names for one row | `OPEN` |
-| `OV-04` | Seven names over four shapes for a balance | `OPEN` |
 | `OV-05` | Person, friend, member, roster member, contact | `OPEN` |
-| `OV-18` | `Other` and `Others`, one character apart | `OPEN` |
-| `OV-20` | Seven near-identical investment identifiers | `OPEN` |
 | `OV-22` | Six vocabularies over daily/weekly/monthly/yearly | `OPEN` |
-| `OV-11` | A group has three end states that get conflated | `OPEN` |
 | `OV-06` | Categories are referenced by NAME, not by id | `DECIDE` |
 | `OV-10` | backOr is used in 6 of 44 route files | `DECIDE` |
 | `OV-14` | E-50 is recomputed on every read, with no memo boundary | `DECIDE` |
@@ -102,7 +98,7 @@ below is the plan; every line points at rows further down, where status lives.
 | `OV-17` | The tab bar owns sync, alerts, reconciliation and snapshots | `PARKED` |
 | `OV-24` | SC-19 owns twelve sheet states | `PARKED` |
 
-**Closed (16), detail in `FINDINGS.md`:** `OV-27` `OV-12` `OV-09` `OV-25` `OV-28` `OV-29` `OV-30` `OV-31` `OV-32` `OV-33` `OV-34` `OV-26` `OV-03` `OV-13` `OV-21` `OV-16`
+**Closed (20), detail in `FINDINGS.md`:** `OV-27` `OV-12` `OV-09` `OV-25` `OV-28` `OV-29` `OV-30` `OV-31` `OV-32` `OV-33` `OV-34` `OV-26` `OV-03` `OV-13` `OV-21` `OV-16` `OV-18` `OV-20` `OV-11` `OV-04`
 
 ---
 ## §3 · Open decisions — `DQ-`
@@ -156,16 +152,14 @@ below is the plan; every line points at rows further down, where status lives.
 ---
 ## §4 · Walk 1 — `W1-`
 
-**39 items: 7 `OPEN`, 9 `PARKED`, 23 `DONE`.** The cold sweep: an unpopulated app, opened as a first-time user. 38 ids were assigned — W1-38 was never used — and the nineteenth split into two leaves.
+**39 items: 5 `OPEN`, 9 `PARKED`, 25 `DONE`.** The cold sweep: an unpopulated app, opened as a first-time user. 38 ids were assigned — W1-38 was never used — and the nineteenth split into two leaves.
 
 | | What | Status | Un-parks when |
 |---|---|---|---|
 | `W1-06` | More pay methods, and better icons for them | `OPEN` |  |
-| `W1-17` | Reports groups are not collapsible (`SC-21`) | `OPEN` |  |
 | `W1-18` | Member and group-edit rows read as undesigned (`SC-09`, `SC-11`, `SC-13`) | `OPEN` |  |
 | `W1-28` | *"Component placement comes and goes in a line/section and sizes change — feels broken."* The… | `OPEN` |  |
 | `W1-29` | *"Transfer and Income have a bottom line, others don't."* **No divider asymmetry exists in… | `OPEN` |  |
-| `W1-31` | Tags are already saved for reuse and ranked by frequency, derived from your own rows | `OPEN` |  |
 | `W1-32` | The category chip is a `grow` chip with a chevron and may be clipped on the right | `OPEN` |  |
 | `W1-11` | A light "additional income" entry | `PARKED` | Weighed against `OV-08` — `/add/quick` already has… |
 | `W1-16` | `SC-16` could suggest a top 3 before any spend exists | `PARKED` | Taste, cheap, no urgency |
@@ -177,23 +171,22 @@ below is the plan; every line points at rows further down, where status lives.
 | `W1-36` | Colours, view and position on `SC-18` | `PARKED` | Taste, cheap, no urgency |
 | `W1-37` | `SC-42` needs a clearer outline | `PARKED` | Taste, cheap, no urgency |
 
-**Closed (23), detail in `FINDINGS.md`:** `W1-01` `W1-02` `W1-03` `W1-04` `W1-05` `W1-07` `W1-08` `W1-09` `W1-10` `W1-12` `W1-13` `W1-14` `W1-15` `W1-19a` `W1-20` `W1-21` `W1-22` `W1-23` `W1-25` `W1-26` `W1-27` `W1-33` `W1-39`
+**Closed (25), detail in `FINDINGS.md`:** `W1-01` `W1-02` `W1-03` `W1-04` `W1-05` `W1-07` `W1-08` `W1-09` `W1-10` `W1-12` `W1-13` `W1-14` `W1-15` `W1-19a` `W1-20` `W1-21` `W1-22` `W1-23` `W1-25` `W1-26` `W1-27` `W1-33` `W1-39` `W1-31` `W1-17`
 
 ---
 ## §5 · Sync — `SYNC-F`
 
-**24 items: 1 `OPEN`, 23 `DONE`.** `SYNC-F1`–`F12` were written while designing, so a `DONE` there means the wall exists. `F13`–`F24` came from tracing the built code, where four were live defects.
+**24 items: 24 `DONE`.** `SYNC-F1`–`F12` were written while designing, so a `DONE` there means the wall exists. `F13`–`F24` came from tracing the built code, where four were live defects.
 
 | | What | Status | Note |
 |---|---|---|---|
-| `SYNC-F8` | Email is the only identity and cannot be changed or merged | `OPEN` |  |
 
-**Closed (23), detail in `FINDINGS.md`:** `SYNC-F1` `SYNC-F2` `SYNC-F3` `SYNC-F4` `SYNC-F5` `SYNC-F6` `SYNC-F7` `SYNC-F9` `SYNC-F10` `SYNC-F11` `SYNC-F12` `SYNC-F13` `SYNC-F14` `SYNC-F15` `SYNC-F16` `SYNC-F17` `SYNC-F18` `SYNC-F19` `SYNC-F20` `SYNC-F21` `SYNC-F22` `SYNC-F23` `SYNC-F24`
+**Closed (24), detail in `FINDINGS.md`:** `SYNC-F1` `SYNC-F2` `SYNC-F3` `SYNC-F4` `SYNC-F5` `SYNC-F6` `SYNC-F7` `SYNC-F9` `SYNC-F10` `SYNC-F11` `SYNC-F12` `SYNC-F13` `SYNC-F14` `SYNC-F15` `SYNC-F16` `SYNC-F17` `SYNC-F18` `SYNC-F19` `SYNC-F20` `SYNC-F21` `SYNC-F22` `SYNC-F23` `SYNC-F24` `SYNC-F8`
 
 ---
 ## §6 · Open debt — `D-`
 
-**11 items: 5 `OPEN`, 2 `DECIDE`, 4 `PARKED`.** Real, evidenced, not blocking the pilot. **Verify a bullet against the tree before acting on it, and delete it the moment it lands.**
+**11 items: 4 `OPEN`, 2 `DECIDE`, 4 `PARKED`, 1 `DONE`.** Real, evidenced, not blocking the pilot. **Verify a bullet against the tree before acting on it, and delete it the moment it lands.**
 
 | | What | Status |
 |---|---|---|
@@ -201,13 +194,14 @@ below is the plan; every line points at rows further down, where status lives.
 | `D-02` | Amazon Pay and WhatsApp were both tested against the same `@kotak` handle | `OPEN` |
 | `D-03` | Android UPI is entirely untested | `OPEN` |
 | `D-04` | `help.tsx` is a third collapsible | `OPEN` |
-| `D-10` | Migrations are forward-only, applied by hand, with no rollback and no staging | `OPEN` |
 | `D-05` | `TransactionRow` never displays pay method | `DECIDE` |
 | `D-06` | Transfer has no `DetailChips` | `DECIDE` |
 | `D-07` | `budget_group.limit_daily/monthly/yearly` still exist as columns | `PARKED` |
 | `D-08` | The sweep has to know *where from*, and give it back to the same place | `PARKED` |
 | `D-09` | Named accounts as entities | `PARKED` |
 | `D-12` | Import restructure (remainder) | `PARKED` |
+
+**Closed (1), detail in `FINDINGS.md`:** `D-10`
 
 ---
 ## §7 · Known and accepted — `A-`

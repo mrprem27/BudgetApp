@@ -41,6 +41,7 @@ import { buildGroupExportCsv } from '../../../src/lib/groupExport';
 import { useFeatureFlags } from '../../../src/components/system/FeatureFlagsProvider';
 import { shareCsv, csvFileSlug } from '../../../src/lib/shareCsv';
 import type { TxnWithSplits } from '../../../src/db/queries/transactions';
+import { ARCHIVE_GROUP } from '../../../src/lib/groupCopy';
 
 type TabKey = 'transactions' | 'budget' | 'members' | 'recurring';
 
@@ -330,11 +331,12 @@ export default function GroupDetailScreen() {
           style={styles.archiveBtn}
           onPress={() => {
             setShowMenu(false);
-            Alert.alert('Archive group?', `${group.name} will be hidden. Its data is kept.`, [
+            Alert.alert(ARCHIVE_GROUP.title(group.name), ARCHIVE_GROUP.body, [
               { text: 'Cancel', style: 'cancel' },
-              { text: 'Archive', style: 'destructive', onPress: async () => {
+              { text: ARCHIVE_GROUP.confirm, onPress: async () => {
                 try {
-                  if (await archiveGroup(db, id)) { haptic.warning(); refresh(); router.back(); }
+                  // Same exit as the edit screen's Archive: the list, not the stack below it.
+                  if (await archiveGroup(db, id)) { haptic.warning(); refresh(); router.dismissTo('/groups'); }
                 } catch {
                   haptic.error();
                   Alert.alert('Couldn’t archive', 'Please try again.');
@@ -344,8 +346,8 @@ export default function GroupDetailScreen() {
           }}
           accessibilityRole="button"
         >
-          <Feather name="archive" size={16} color={colors.expense} />
-          <Text style={styles.archiveText}>Archive group</Text>
+          <Feather name="archive" size={16} color={colors.textSecondary} />
+          <Text style={styles.archiveText}>{ARCHIVE_GROUP.action}</Text>
         </TouchableOpacity>
       </SheetModal>
       <RebalanceSheet
@@ -384,5 +386,5 @@ const styles = StyleSheet.create({
   tabs: { marginHorizontal: layout.screenPaddingH, marginBottom: space.sm },
   menuCard: { backgroundColor: colors.bgInput, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
   archiveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, paddingVertical: space.md, marginTop: space.sm },
-  archiveText: { ...type.body, color: colors.expense, fontFamily: 'Inter_600SemiBold' },
+  archiveText: { ...type.body, color: colors.textSecondary, fontFamily: 'Inter_600SemiBold' },
 });

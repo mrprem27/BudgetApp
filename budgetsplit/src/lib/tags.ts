@@ -111,3 +111,19 @@ export function rankTagsByFrequency(rawValues: readonly (string | null)[]): stri
     .sort((a, b) => (b.n - a.n) || a.display.localeCompare(b.display))
     .map(v => v.display);
 }
+
+/**
+ * The tag vocabulary with the ones you have used on **this category** first (`W1-31`): coffee
+ * gets `#office`, travel gets `#goa`. Within each part, most-used first, ties alphabetical, so the
+ * order is stable. No category (or none used with it yet) is plain global frequency.
+ */
+export function rankTagsForCategory(
+  rows: readonly { tags: string | null; category: string | null }[],
+  category: string | null | undefined,
+): string[] {
+  const all = rankTagsByFrequency(rows.map(r => r.tags));
+  if (!category) return all;
+  const mine = rankTagsByFrequency(rows.filter(r => r.category === category).map(r => r.tags));
+  const first = new Set(mine.map(tagKey));
+  return [...mine, ...all.filter(t => !first.has(tagKey(t)))];
+}

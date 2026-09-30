@@ -78,7 +78,7 @@ const ALLOWLIST: { file: string; contains: string; why: string }[] = [
   {
     file: 'categories.ts',
     contains: 'FROM txn t',
-    why: 'Counts how often a category is USED, to rank the category picker. No money and no window — the same reasoning as the getTagsByFrequency exemption in txnInvariant.test.ts.',
+    why: 'Counts how often a category is USED, to rank the category picker. No money and no window — the same reasoning as the getTagRows exemption in txnInvariant.test.ts.',
   },
   {
     file: 'categories.ts',
@@ -92,7 +92,7 @@ const ALLOWLIST: { file: string; contains: string; why: string }[] = [
   },
   {
     file: 'transactions.ts',
-    contains: 'SELECT tags FROM txn',
+    contains: 'SELECT tags, category FROM txn',
     why: 'The tag vocabulary. Counts tag names for a picker, never money.',
   },
   {

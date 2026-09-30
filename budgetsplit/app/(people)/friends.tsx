@@ -217,7 +217,7 @@ export default function FriendsScreen() {
                 hint={peopleCount(exposure.owedPeople)} />
               <SumLine op="−" label="You owe" value={exposure.owe} color={exposure.owe > 0 ? colors.expense : undefined}
                 hint={peopleCount(exposure.owePeople)} />
-              <SumLine op="=" label="Net" value={exposure.net} total />
+              <SumLine op="=" label="Net with friends" value={exposure.net} total />
             </View>
           )}
 

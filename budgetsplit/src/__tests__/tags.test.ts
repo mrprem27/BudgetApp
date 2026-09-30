@@ -1,5 +1,5 @@
 import {
-  cleanTag, tagKey, normalizeTags, parseTags, serializeTags, rankTagsByFrequency,
+  cleanTag, tagKey, normalizeTags, parseTags, serializeTags, rankTagsByFrequency, rankTagsForCategory,
   TAG_MAX_LENGTH, TAG_MAX_COUNT,
 } from '../lib/tags';
 
@@ -110,5 +110,26 @@ describe('rankTagsByFrequency', () => {
   it('returns [] for no rows at all — the state every database is in today', () => {
     expect(rankTagsByFrequency([])).toEqual([]);
     expect(rankTagsByFrequency([null, null])).toEqual([]);
+  });
+});
+
+describe('rankTagsForCategory (W1-31)', () => {
+  const rows = [
+    { tags: '["goa"]', category: 'Travel' },
+    { tags: '["goa","friends"]', category: 'Travel' },
+    { tags: '["office"]', category: 'Coffee' },
+    { tags: '["office"]', category: 'Lunch' },
+    { tags: '["office"]', category: 'Lunch' },
+  ];
+  it("puts this category's tags first, then the rest by overall use", () => {
+    expect(rankTagsForCategory(rows, 'Travel')).toEqual(['goa', 'friends', 'office']);
+    expect(rankTagsForCategory(rows, 'Coffee')).toEqual(['office', 'goa', 'friends']);
+  });
+  it('is plain overall frequency with no category, or an unused one', () => {
+    expect(rankTagsForCategory(rows, null)).toEqual(['office', 'goa', 'friends']);
+    expect(rankTagsForCategory(rows, 'Rent')).toEqual(['office', 'goa', 'friends']);
+  });
+  it('handles no rows', () => {
+    expect(rankTagsForCategory([], 'Travel')).toEqual([]);
   });
 });

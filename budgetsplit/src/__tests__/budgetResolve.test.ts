@@ -169,8 +169,8 @@ describe('getCategoryBudgetStatus folds against the catalog', () => {
   it('shows Gym as Others while it is absent from the catalog', async () => {
     const d = await seed();
     const rows = await getCategoryBudgetStatus(d, group, new Date(), 'me');
-    expect(rows.map(r => r.category).sort()).toEqual(['Groceries', 'Others']);
-    expect(rows.find(r => r.category === 'Others')!.allocated).toBe(200000);
+    expect(rows.map(r => r.category).sort()).toEqual(['Everything else', 'Groceries']);
+    expect(rows.find(r => r.category === 'Everything else')!.allocated).toBe(200000);
   });
 
   it('shows Gym as itself once the category is created', async () => {

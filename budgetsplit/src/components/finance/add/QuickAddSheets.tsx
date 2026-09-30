@@ -38,7 +38,7 @@ type Props = {
   onCloseTransferSlot: () => void;
   /** Kind colour, so a sheet's selected state matches the form behind it. */
   accent: string;
-  /** Tag vocabulary from existing transactions (`getTagsByFrequency`). */
+  /** Tag vocabulary from existing transactions (`rankTagsForCategory`: this category's first). */
   tagSuggestions: string[];
 };
 

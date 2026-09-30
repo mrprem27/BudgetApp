@@ -9,7 +9,7 @@ import type { PayMethod } from '../constants/enums';
 import { setReminderPrefs } from './reminderPrefsStore';
 import { applyPersona, type OnboardingIntent } from './personaDefaults';
 import { applyLevel } from './levels';
-import { insertAsset } from '../db/queries/assets';
+import { insertAsset, MIGRATED_INVESTMENTS_NAME } from '../db/queries/assets';
 
 /** Everything the onboarding questionnaire collects, ready to persist. */
 export type OnboardingData = {
@@ -158,7 +158,7 @@ export async function finalizeOnboarding(
     if (data.money.investments > 0) {
       try {
         await insertAsset(db, {
-          name: 'Investments', kind: 'investment', icon: 'trending-up',
+          name: MIGRATED_INVESTMENTS_NAME, kind: 'investment', icon: 'trending-up',
           balance: data.money.investments,
         });
       } catch {

@@ -1313,7 +1313,7 @@ current month** (`reports.tsx:81`). SPENT/EARNED cards; then the synced breakdow
 labels** (`CategoryRankList`) + a **donut** (`CategoryDonut`, no bottom legend, centre label
 auto-shrinks to fit) + a **6-month trend** (`TrendBars`) — all two-way synced via `selectedCat`,
 so picking a category in any one redraws the trend for it. Un-adopted category names fold into
-one **"Others"** slice (`foldUncategorized`). Forecast line; year-in-review; export CSV / PDF.
+one **"Everything else"** slice (`foldUncategorized`, `OV-18`). Forecast line; year-in-review; export CSV / PDF.
 Tapping a category opens the drill-down.
 
 ### Report transactions — `app/(money)/report-transactions.tsx`
@@ -1381,7 +1381,7 @@ above it (`sectionTop(isFirst)`) — Account when configured, else Getting paid,
 | Screen | Route | What it does | States |
 |---|---|---|---|
 | **People** | `friends.tsx` | Sum card, open balances (amount right), All square section; tap → `/person/{id}`; add/rename person *(sheet)*. You are edited in Settings. | Error + retry · `EmptyState` · pull-to-refresh |
-| **Categories** | `categories.tsx` | Single **global catalog** (no group scoping). 🔘 `Expense · Income · Transfer` kind tabs; collapsible sections; add (name/icon/colour) / rename / delete; an **Uncategorized** section per kind (names on txns not in the catalog → **Add** to adopt, else counted under "Others"). Self-heals an empty catalog. | Error + retry · pull-to-refresh |
+| **Categories** | `categories.tsx` | Single **global catalog** (no group scoping). 🔘 `Expense · Income · Transfer` kind tabs; collapsible sections; add (name/icon/colour) / rename / delete; an **Uncategorized** section per kind (names on txns not in the catalog → **Add** to adopt, else counted under "Everything else"). Self-heals an empty catalog. | Error + retry · pull-to-refresh |
 | **Feature management** | `features.tsx` | "Always on" pillars (no toggle) + module switches in four sections. Two rows are **not** feature flags and behave differently: **Location Tagging** asks OS permission and refuses if denied (§17), and **Cloud Receipt Scanning** picks the OCR provider (§7.4). Turning **splitting off** first names how many unsettled balances and what amount would disappear (nothing is deleted); turning it on is silent. | No loading/error state — flags are already in context |
 | **Help** | `help.tsx` | Static FAQ accordion, ordered by screen flow, including **Settling Up & Paying** (UPI hand-off, which apps arrive pre-filled, request-QR). No data access. | None (static) |
 | **Audit log** | `history.tsx` | Date-grouped change log with coloured dots, EDIT/DEL badges, "Load older" (30/page). Filters by `?groupId=`. | Error + retry · `EmptyState` "Nothing logged yet" · pull-to-refresh |

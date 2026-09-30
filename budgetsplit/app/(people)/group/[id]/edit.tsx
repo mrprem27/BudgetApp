@@ -21,6 +21,7 @@ import { oweView } from '../../../../src/lib/owe';
 import { GROUP_COLORS } from '../../../../src/constants/palette';
 import { useDataRefresh } from '../../../../src/components/system/DataRefreshProvider';
 import { haptic } from '../../../../src/lib/haptics';
+import { ARCHIVE_GROUP } from '../../../../src/lib/groupCopy';
 
 export default function EditGroupScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -105,9 +106,9 @@ export default function EditGroupScreen() {
   }
 
   function confirmArchive() {
-    Alert.alert('Archive this group?', 'It’s hidden from your main view but all data is kept. You can restore it later.', [
+    Alert.alert(ARCHIVE_GROUP.title(name || 'this group'), ARCHIVE_GROUP.body, [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Archive', style: 'destructive', onPress: async () => {
+      { text: ARCHIVE_GROUP.confirm, onPress: async () => {
         try {
           const ok = await archiveGroup(db, id);
           // `dismissTo`, like delete and leave below — `replace` swaps only THIS
@@ -252,7 +253,7 @@ export default function EditGroupScreen() {
         {!isPersonal && (
           <View style={styles.danger}>
             <TouchableOpacity style={styles.dangerBtn} onPress={confirmArchive} accessibilityRole="button">
-              <Text style={styles.dangerArchive}>Archive group</Text>
+              <Text style={styles.dangerArchive}>{ARCHIVE_GROUP.action}</Text>
             </TouchableOpacity>
             {/* The creator's exit is Delete; everyone else's is Leave. The two are
                 mutually exclusive because a group must always keep the one person

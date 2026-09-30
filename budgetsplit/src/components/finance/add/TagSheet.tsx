@@ -14,7 +14,7 @@ type Props = {
   /** Currently applied tags. */
   value: string[];
   onChange: (tags: string[]) => void;
-  /** Every tag already in use, most-used first (`getTagsByFrequency`). */
+  /** Every tag already in use, most-used first (`rankTagsForCategory`: this category's first). */
   suggestions: string[];
   /** Tint for selected chips — the screen's kind colour. */
   accent?: string;

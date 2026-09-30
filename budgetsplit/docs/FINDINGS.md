@@ -141,7 +141,7 @@ seven touches money, the wire, or a migration.
 **By verdict:** 11 `COLLAPSE` · 5 `COLLAPSE-AFTER-PILOT` · 8 `RENAME-ONLY` · 3 `KEEP-DOCUMENTED` ·
 1 `LABELLED` · 6 `NEEDS-DECISION`.
 
-**Still open:** `OV-01` `OV-04` `OV-05` `OV-11` `OV-18` `OV-20` `OV-21` `OV-27`.
+**Still open:** `OV-01` `OV-05` `OV-22`.
 **Needs a decision from you:** `OV-06` `OV-10` `OV-14` `OV-15` `OV-19` `OV-23`.
 
 ---
@@ -526,6 +526,9 @@ OV-04 · Seven names over four shapes for a balance                 [alias-spraw
   over getGroupNet / getGlobalNet / getNetByGroup / MyExposure.
   Verdict. RENAME-ONLY, with one rule attached: **a balance is never named without
            its scope** (IV-07). "Net" alone should not appear anywhere.
+  Done.    2026-09-30, the rule: no balance is labelled a bare "Net" (Friends: "Net with
+           friends"; Personal: "Net, everyone"). Reports' Net is income minus expense, not a
+           balance. Code identifiers left as they are: renaming them buys nothing a reader sees.
 
 OV-05 · Person, friend, member, roster member, contact             [alias-sprawl]
   One `person` row; FriendBalance is a projection that also RETAINS people who
@@ -537,6 +540,8 @@ OV-18 · `Other` and `Others`, one character apart                  [alias-spraw
   `Other` is a real seeded category in all three kinds. `Others` is the synthetic
   fold bucket (E-63). Both render in the same breakdown.
   Verdict. RENAME-ONLY. Rename the fold to **"Everything else"**. One string.
+  Done.    2026-09-30: the fold is "Everything else" (`OTHERS_LABEL`), and its icon entry is
+           keyed by the constant, not a second copy of the string.
 
 OV-20 · Seven near-identical investment identifiers                [alias-sprawl]
   'Investments / SIP' (expense category) · 'Investment' (transfer category) ·
@@ -554,6 +559,9 @@ OV-20 · Seven near-identical investment identifiers                [alias-spraw
            things: one is money consumed, one is money moved. What P8 fixed is the
            PRESENTATION sprawl (four words for one movement, lib/settlementView.ts);
            the identifier sprawl is untouched and still open.
+  Done.    2026-09-30: the uncontrolled copies are gone (onboarding imports
+           MIGRATED_INVESTMENTS_NAME). The category names that remain are STORED values, so
+           renaming them is a data migration, not a rename; kept on purpose.
 
 OV-22 · Six vocabularies over daily/weekly/monthly/yearly          [alias-sprawl]
   BUDGET_CADENCE · Period · BUDGET_PERIOD · TabKey+TARGET_FOR_TAB · RECUR_FREQ ·
@@ -577,6 +585,9 @@ OV-11 · A group has three end states that get conflated               [overload
            of today**. It was true once, it caused exactly the damage you would
            expect, and it was fixed. Two documents still describe the old behaviour.
   Verdict. RENAME-ONLY. The three states are right; the UI words for them are not.
+  Done.    2026-09-30: Archive / Leave / Delete for everyone, with the Archive confirm said once
+           (`lib/groupCopy.ts`). Archive is no longer tinted or styled destructive, and both
+           Archive paths land on the Groups list.
 
 OV-26 · Create-as-sheet, edit-as-route                        [path-duplication]
   Creating a group is a SheetModal; editing one is a route. Adding a person is a
@@ -851,11 +862,11 @@ that the money is right.
 | | Finding | Status |
 |---|---|---|
 | `W1-06` | More pay methods, and better icons for them. Layout. | `OPEN` |
-| `W1-17` | Reports groups are not collapsible (`SC-21`). | `OPEN` |
+| `W1-17` | Reports groups are not collapsible (`SC-21`). **Done 2026-09-30:** each group is a `SectionCard` (the shared disclosure); the first opens, the rest read as one line, "Spent · Received". | — |
 | `W1-18` | Member and group-edit rows read as undesigned (`SC-09`, `SC-11`, `SC-13`). | `OPEN` |
 | `W1-28` | *"Component placement comes and goes in a line/section and sizes change — feels broken."* The general form of `W1-05` and the empty-state anchor: **things that appear conditionally must not move what is already on screen.** Worth one rule rather than N fixes. | `OPEN` |
 | `W1-29` | *"Transfer and Income have a bottom line, others don't."* **No divider asymmetry exists in source** — `formBlock` is margin-only and `AmountField`'s underline is on every kind. Needs a device look to locate. | `OPEN` |
-| `W1-31` | Tags are already saved for reuse and ranked by frequency, derived from your own rows. The real delta is **per-category** ranking. | `OPEN` |
+| `W1-31` | Tags are already saved for reuse and ranked by frequency, derived from your own rows. The real delta is **per-category** ranking. **Done 2026-09-30:** `rankTagsForCategory` puts the tags used on the chosen category first, then the rest; Add re-ranks when the category changes. | — |
 | `W1-32` | The category chip is a `grow` chip with a chevron and may be clipped on the right. Cosmetic, needs a device look. | `OPEN` |
 
 ### Parked, with the trigger
@@ -922,7 +933,7 @@ defects that moved numbers or lost data.
 
 | | Failure | The wall that stops it |
 |---|---|---|
-| `SYNC-F8` | **Email is the only identity and cannot be changed or merged** — a typo at sign-in is a second account with none of your backups. | A change-email flow. **At minimum, show the signed-in email wherever a restore is offered** — cheap, and pilot-relevant. |
+| `SYNC-F8` | **Email is the only identity and cannot be changed or merged** — a typo at sign-in is a second account with none of your backups. | A change-email flow. **At minimum, show the signed-in email wherever a restore is offered** — cheap, and pilot-relevant. **Done 2026-09-30:** the first sign-in step (restore, merge, or choose) says "Signed in as …" under its title. A change-email flow stays a server feature for later. |
 
 ### Done
 
@@ -973,7 +984,7 @@ Real, evidenced, and not blocking the pilot.
 | `D-07` | **`budget_group.limit_daily/monthly/yearly` still exist as columns.** Removed from the `BudgetGroup` type — nothing ever wrote them, so the type was advertising a group-level budget the app does not have. The physical columns stay: dropping one in SQLite needs a table rebuild, not worth a migration for three fields nobody reads. **`person.remote_uid` is not dead** — `SYNC-F5` uses it. `OV-23`. | `PARKED` |
 | `D-08` | **The sweep has to know *where from*, and give it back to the same place.** A surplus sweep moves money out of a specific asset, and a later withdrawal has to return it to **that same one** — handing ₹5,000 back as "cash" when it came from a bank account silently rewrites where the money is, and every figure built on that is then wrong. The sweep logic is small; **the prerequisite is not.** Parked *behind* the per-method baselines pass, not beside it, because building it first would bake the pooled-cash assumption into the savings ledger — the hardest place to unpick it. When built: `savings_txn` needs the source asset on the row, a withdrawal must default to it and be unable to silently pick another, and an auto-sweep must **refuse rather than guess** when the source is ambiguous. `DQ-15`. | `PARKED` |
 | `D-09` | **Named accounts as entities.** Cash is now three buckets — bank / cash / wallet — with real per-bucket balances (`assetOf`, `BUCKET_FLOWS_SQL`, `openingTotal`), and `INCOME_LANDING`'s answer is finally read; `savings_txn.source_asset` means a goal remembers which bucket funded it and a withdrawal is capped by it. **Still open is named accounts** ("HDFC", "Paytm") with their own balances, which is what bank sync would eventually need. `DQ-14`, `W1-24`. | `PARKED` |
-| `D-10` | **Migrations are forward-only, applied by hand, with no rollback and no staging.** `0004_sync.sql` is strictly additive and readable by the currently deployed Worker — because `deploy` and `migrate` are separate manual commands and **nothing orders them.** | `OPEN` |
+| `D-10` | **Migrations are forward-only, applied by hand, with no rollback and no staging.** `0004_sync.sql` is strictly additive and readable by the currently deployed Worker — because `deploy` and `migrate` are separate manual commands and **nothing orders them.** **Done 2026-09-30 for the ordering:** `npm run deploy` now migrates first (`deploy:code-only` for a code-only push). Rollback and staging wait for a real account, per the dev-phase rule. | — |
 | `D-12` | **Import restructure (remainder).** pdf.js vendoring is done; `app/(ledger)/import.tsx` and `paytmParse.ts` are still one long screen and one long parser. | `PARKED` |
 
 ---

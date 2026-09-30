@@ -1,4 +1,5 @@
 import type { FeatherName } from './palette';
+import { OTHERS_LABEL } from '../lib/categoryFold';
 
 export type CategoryDef = {
   name: string;
@@ -190,7 +191,7 @@ const EXTRA_LOOKUP: Record<string, { icon: FeatherName; color: string }> = {
   Settlement: { icon: 'check-circle',   color: '#7C6AF7' },
   Income:     { icon: 'trending-up',    color: '#3ECF8E' },
   // The combined bucket for un-adopted category names (see lib/categoryFold).
-  Others:     { icon: 'more-horizontal', color: '#8B8A99' },
+  [OTHERS_LABEL]: { icon: 'more-horizontal', color: '#8B8A99' },
 };
 
 /** Resolve icon + colour for any category name, with a sensible fallback. */
