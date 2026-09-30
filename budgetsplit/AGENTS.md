@@ -241,6 +241,9 @@ Icon in a colored dot — **use the `IconCircle` component**, don't hand-roll it
   snippet exactly: icon = `size / 2`, background = icon colour + `'22'`.
 - Icon opacity bg = icon color + `'22'` (hex ~13% opacity)
 - Never `'wallet'` — it doesn't exist in Feather. Use `'credit-card'`.
+- **Pay methods are the one exception:** `finance/pay/PayMethodGlyph` draws Bank, Wallet and Cash on
+  Feather's grid (a briefcase, a shopping bag and a dollar sign were the stand-ins). Every pay-method
+  icon comes from it (`PayMethodGlyph`, or `PayMethodDisc` in a row), never a Feather name.
 
 ---
 

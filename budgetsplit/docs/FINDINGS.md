@@ -863,9 +863,9 @@ that the money is right.
 
 | | Finding | Status |
 |---|---|---|
-| `W1-06` | More pay methods, and better icons for them. Layout. | `OPEN` |
+| `W1-06` | More pay methods, and better icons for them. Layout. **Icons done 2026-09-30:** `PayMethodGlyph` draws Bank (a bank building), Wallet and Cash (a banknote) on Feather's grid, replacing a briefcase, a shopping bag and a dollar sign; every pay-method icon comes from it. **More methods: waiting on you** — a new value changes the server schema's CHECK and needs a deploy. The one with a real money reason is Debit card: today "Card" means credit, so a debit-card spend logged as Card counts as card debt instead of leaving the bank. | `OPEN` |
 | `W1-17` | Reports groups are not collapsible (`SC-21`). **Done 2026-09-30:** each group is a `SectionCard` (the shared disclosure); the first opens, the rest read as one line, "Spent · Received". | — |
-| `W1-18` | Member and group-edit rows read as undesigned (`SC-09`, `SC-11`, `SC-13`). | `OPEN` |
+| `W1-18` | Member and group-edit rows read as undesigned (`SC-09`, `SC-11`, `SC-13`). **Done 2026-09-30:** Members rows are name and role on the left, the balance on the right (amount and Owes/Owed/Settled), and one tap opens a sheet with Rename, Make or Remove admin, and Remove from group; the shield and pencil buttons are gone, swipe-to-remove stays. Group edit's member strip is the shared `PersonPicker` grid, + New first. The group hub's Members tab already had this shape. | — |
 | `W1-28` | *"Component placement comes and goes in a line/section and sizes change — feels broken."* The general form of `W1-05` and the empty-state anchor: **things that appear conditionally must not move what is already on screen.** Worth one rule rather than N fixes. | `OPEN` |
 | `W1-29` | *"Transfer and Income have a bottom line, others don't."* **No divider asymmetry exists in source** — `formBlock` is margin-only and `AmountField`'s underline is on every kind. Needs a device look to locate. | `OPEN` |
 | `W1-31` | Tags are already saved for reuse and ranked by frequency, derived from your own rows. The real delta is **per-category** ranking. **Done 2026-09-30:** `rankTagsForCategory` puts the tags used on the chosen category first, then the rest; Add re-ranks when the category changes. | — |

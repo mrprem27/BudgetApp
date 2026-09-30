@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { PayMethodGlyph } from '../pay/PayMethodGlyph';
 import { format } from 'date-fns';
 import { SplitEditor } from '../add/SplitEditor';
 import { colors, type, space, radius, layout, shadow } from '../../tokens';
@@ -10,7 +11,7 @@ import { alpha } from '../../../theme';
 import type { RowEdit, SplitState } from '../../../lib/reviewCommit';
 import type { PendingTxn } from '../../../db/queries/pending';
 import type { Person } from '../../../db/queries/persons';
-import { type TxnKind, PAY_METHOD_LABEL, PAY_METHOD_ICON, TXN_KIND_LABEL } from '../../../constants/enums';
+import { type TxnKind, PAY_METHOD_LABEL, TXN_KIND_LABEL } from '../../../constants/enums';
 import { CategoryField } from '../CategoryField';
 import { Chip } from '../../ui/Chip';
 
@@ -196,11 +197,9 @@ export const ReviewRowCard = React.memo(function ReviewRowCard({
           accessibilityRole="button"
           accessibilityLabel={v.payMethod ? `Paid via ${PAY_METHOD_LABEL[v.payMethod]}` : 'Set payment method'}
         >
-          <Feather
-            name={v.payMethod ? PAY_METHOD_ICON[v.payMethod] : 'credit-card'}
-            size={13}
-            color={v.payMethod !== '' ? colors.textPrimary : colors.textMuted}
-          />
+          {v.payMethod
+            ? <PayMethodGlyph method={v.payMethod} size={13} color={colors.textPrimary} />
+            : <Feather name="credit-card" size={13} color={colors.textMuted} />}
           <Text style={[styles.pillText, v.payMethod !== '' && { color: colors.textPrimary }]} numberOfLines={1}>
             {v.payMethod ? PAY_METHOD_LABEL[v.payMethod] : 'Pay method'}
           </Text>

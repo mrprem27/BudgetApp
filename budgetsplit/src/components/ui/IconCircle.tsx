@@ -27,8 +27,11 @@ export function IconCircle({
   borderColor,
   iconSize,
   style,
+  glyph,
 }: {
-  icon: keyof typeof Feather.glyphMap;
+  icon?: keyof typeof Feather.glyphMap;
+  /** A drawn glyph in place of a Feather name (a pay method's bank or wallet). Wins over `icon`. */
+  glyph?: React.ReactNode;
   /** Diameter in px. The icon defaults to half this. */
   size?: number;
   /** Icon colour; also drives the default background tint. */
@@ -55,7 +58,7 @@ export function IconCircle({
         style,
       ]}
     >
-      <Feather name={icon} size={iconSize ?? Math.round(size / 2)} color={color} />
+      {glyph ?? (icon ? <Feather name={icon} size={iconSize ?? Math.round(size / 2)} color={color} /> : null)}
     </View>
   );
 }

@@ -8,8 +8,9 @@ import { Chip } from '../../ui/Chip';
 import { InfoLabel } from '../../ui/InfoLabel';
 import { PrimaryButton } from '../../ui/PrimaryButton';
 import { formatRupees, parseToPaise } from '../../../lib/money';
-import { ASSET_BUCKET, PayMethod, PAY_METHOD_ICON, PAY_METHOD_LABEL, type AssetBucket } from '../../../constants/enums';
+import { ASSET_BUCKET, PayMethod, PAY_METHOD_LABEL, type AssetBucket } from '../../../constants/enums';
 import { ASSET_KIND_ICON } from '../../../constants/assets';
+import { PayMethodGlyph } from '../pay/PayMethodGlyph';
 import type { Asset, MoveEndpoint } from '../../../db/queries/assets';
 
 const BUCKET_PAY: Record<AssetBucket, PayMethod> = { bank: PayMethod.Bank, cash: PayMethod.Cash, wallet: PayMethod.Wallet };
@@ -17,7 +18,7 @@ const BUCKET_PAY: Record<AssetBucket, PayMethod> = { bank: PayMethod.Bank, cash:
 /** A stable key for an endpoint, for comparing and for React. */
 export const endpointKey = (e: MoveEndpoint) => (e.kind === 'bucket' ? `b:${e.bucket}` : `a:${e.id}`);
 
-type Place = { key: string; label: string; icon: React.ComponentProps<typeof Feather>['name']; endpoint: MoveEndpoint };
+type Place = { key: string; label: string; icon?: React.ComponentProps<typeof Feather>['name']; method?: PayMethod; endpoint: MoveEndpoint };
 
 /**
  * The one form for moving money: **from** any place you hold it, **to** any other —
@@ -58,7 +59,7 @@ export function MoveMoneySheet({
 
   const places: Place[] = [
     ...ASSET_BUCKET.map((b): Place => ({
-      key: `b:${b}`, label: PAY_METHOD_LABEL[BUCKET_PAY[b]], icon: PAY_METHOD_ICON[BUCKET_PAY[b]], endpoint: { kind: 'bucket', bucket: b },
+      key: `b:${b}`, label: PAY_METHOD_LABEL[BUCKET_PAY[b]], method: BUCKET_PAY[b], endpoint: { kind: 'bucket', bucket: b },
     })),
     ...assets.map((a): Place => ({ key: `a:${a.id}`, label: a.name, icon: ASSET_KIND_ICON[a.kind], endpoint: { kind: 'asset', id: a.id } })),
   ];
@@ -83,6 +84,7 @@ export function MoveMoneySheet({
             key={p.key}
             label={p.label}
             icon={p.icon}
+            leading={p.method ? <PayMethodGlyph method={p.method} size={14} color={p.key === endpointKey(current) ? colors.accent : colors.textSecondary} /> : undefined}
             maxWidth={170}
             selected={p.key === endpointKey(current)}
             onPress={() => pick(p.endpoint)}

@@ -7,7 +7,7 @@ import { Feather } from '@expo/vector-icons';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { getDaysInMonth } from 'date-fns';
-import { colors, type, space, radius, layout, alpha } from '../../src/theme';
+import { colors, type, space, layout, alpha } from '../../src/theme';
 import { formatCompact } from '../../src/lib/money';
 import { shortDate } from '../../src/lib/dateFormat';
 import { useStore } from '../../src/store';

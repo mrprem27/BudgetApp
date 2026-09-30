@@ -18,7 +18,7 @@ import { PersonPicker } from '../../../../src/components/finance/PersonPicker';
 import { SheetModal } from '../../../../src/components/ui/SheetModal';
 import { PrimaryButton } from '../../../../src/components/ui/PrimaryButton';
 import { ErrorState } from '../../../../src/components/ui/ErrorState';
-import { formatRupees } from '../../../../src/lib/money';
+import { formatCompact } from '../../../../src/lib/money';
 import { oweView } from '../../../../src/lib/owe';
 import { useDataRefresh } from '../../../../src/components/system/DataRefreshProvider';
 import { haptic } from '../../../../src/lib/haptics';
@@ -27,6 +27,8 @@ import { IconCircle } from '../../../../src/components/ui/IconCircle';
 import { PersonNameSheet } from '../../../../src/components/finance/PersonNameSheet';
 import { isAdmin, canRemoveMember, canChangeRole } from '../../../../src/lib/permissions';
 import { Card } from '../../../../src/components/ui/Card';
+import { ListRow } from '../../../../src/components/ui/ListRow';
+import { Divider } from '../../../../src/components/ui/Divider';
 
 export default function MembersScreen() {
   const { id: groupId } = useLocalSearchParams<{ id: string }>();
@@ -38,6 +40,8 @@ export default function MembersScreen() {
   const [pendingIds, setPendingIds] = useState<string[]>([]);
   const [renamePerson, setRenamePerson] = useState<Person | null>(null);
   const [renameText, setRenameText] = useState('');
+  // One member's actions, in a sheet (`W1-18`): the row carries its balance, not two icon buttons.
+  const [actionsFor, setActionsFor] = useState<Person | null>(null);
   const swipeableRefs = useRef<Map<string, Swipeable>>(new Map());
 
   const { data, error: loadError, refreshing, onRefresh, reload } = useScreenData((db) => loadGroupMembers(db, groupId), [groupId]);
@@ -248,51 +252,36 @@ export default function MembersScreen() {
                       }}
                     />
                     <TouchableOpacity
-                      style={{ flex: 1 }}
-                      onPress={() => openRename(item)}
+                      style={styles.rowMain}
+                      onPress={() => setActionsFor(item)}
                       accessibilityRole="button"
-                      accessibilityLabel={`Rename ${item.name}`}
+                      accessibilityLabel={`${item.name}, options`}
                     >
-                      <View style={styles.nameRow}>
-                        <Text style={styles.name} numberOfLines={1}>{item.name}{item.is_me ? ' (me)' : ''}</Text>
-                        {/* Creator outranks admin as a label: "Admin" is a role that can
-                            be taken away, "Creator" never can, and the difference is the
-                            whole point of the protection. */}
-                        {/* Invited outranks both: until they accept they are in
-                            nothing, whatever role they were given. */}
-                        {roleOf.get(item.id)?.invited ? (
-                          <View style={styles.invitedBadge}><Text style={styles.invitedBadgeText}>Invited</Text></View>
-                        ) : roleOf.get(item.id)?.is_creator ? (
-                          <View style={styles.roleBadge}><Text style={styles.roleBadgeText}>Creator</Text></View>
-                        ) : roleOf.get(item.id)?.role === 'admin' ? (
-                          <View style={styles.roleBadge}><Text style={styles.roleBadgeText}>Admin</Text></View>
-                        ) : null}
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <View style={styles.nameRow}>
+                          <Text style={styles.name} numberOfLines={1}>{item.name}{item.is_me ? ' (me)' : ''}</Text>
+                          {/* Creator outranks admin as a label: "Admin" is a role that can
+                              be taken away, "Creator" never can. Invited outranks both: until
+                              they accept they are in nothing, whatever role they were given. */}
+                          {roleOf.get(item.id)?.invited ? (
+                            <View style={styles.invitedBadge}><Text style={styles.invitedBadgeText}>Invited</Text></View>
+                          ) : roleOf.get(item.id)?.is_creator ? (
+                            <View style={styles.roleBadge}><Text style={styles.roleBadgeText}>Creator</Text></View>
+                          ) : roleOf.get(item.id)?.role === 'admin' ? (
+                            <View style={styles.roleBadge}><Text style={styles.roleBadgeText}>Admin</Text></View>
+                          ) : null}
+                        </View>
                       </View>
-                      {net[item.id] !== undefined && net[item.id] !== 0 && (() => {
-                        const ov = oweView(net[item.id]);
+                      {/* The balance on the right, as on Friends and the group's Members tab. */}
+                      {(() => {
+                        const ov = oweView(net[item.id] ?? 0);
                         return (
-                          <Text style={[styles.netText, { color: ov.color }]}>
-                            {ov.thirdPerson} {formatRupees(ov.amount)}
-                          </Text>
+                          <View style={styles.balCol}>
+                            <Text style={[styles.balAmt, { color: ov.color }]}>{ov.direction === 'settled' ? '₹0' : formatCompact(ov.amount)}</Text>
+                            <Text style={styles.balLabel}>{ov.direction === 'settled' ? 'Settled' : ov.thirdPerson}</Text>
+                          </View>
                         );
                       })()}
-                    </TouchableOpacity>
-                    {mayManage && canChangeRole(ctx!, item.id) && (
-                      <TouchableOpacity
-                        onPress={() => toggleAdmin(item)}
-                        hitSlop={10}
-                        accessibilityRole="button"
-                        accessibilityLabel={roleOf.get(item.id)?.role === 'admin' ? `Remove admin from ${item.name}` : `Make ${item.name} an admin`}
-                      >
-                        <Feather
-                          name={roleOf.get(item.id)?.role === 'admin' ? 'shield-off' : 'shield'}
-                          size={15}
-                          color={roleOf.get(item.id)?.role === 'admin' ? colors.accent : colors.textMuted}
-                        />
-                      </TouchableOpacity>
-                    )}
-                    <TouchableOpacity onPress={() => openRename(item)} hitSlop={10} accessibilityRole="button" accessibilityLabel={`Edit ${item.name}`}>
-                      <Feather name="edit-2" size={15} color={colors.textMuted} />
                     </TouchableOpacity>
                   </View>
                 </Swipeable>
@@ -308,6 +297,30 @@ export default function MembersScreen() {
         */}
       </ScrollView>
       )}
+
+      <SheetModal visible={!!actionsFor} onClose={() => setActionsFor(null)} title={actionsFor?.name ?? ''}>
+        {actionsFor && (
+          <Card clip>
+            <ListRow icon="edit-2" title="Rename" onPress={() => { const p = actionsFor; setActionsFor(null); openRename(p); }} />
+            {mayManage && canChangeRole(ctx!, actionsFor.id) && (
+              <>
+                <Divider indent="text" />
+                <ListRow
+                  icon={roleOf.get(actionsFor.id)?.role === 'admin' ? 'shield-off' : 'shield'}
+                  title={roleOf.get(actionsFor.id)?.role === 'admin' ? 'Remove admin' : 'Make admin'}
+                  onPress={() => { const p = actionsFor; setActionsFor(null); void toggleAdmin(p); }}
+                />
+              </>
+            )}
+            {canSwipeToRemove(actionsFor) && (
+              <>
+                <Divider indent="text" />
+                <ListRow icon="user-minus" title="Remove from group" danger onPress={() => { const p = actionsFor; setActionsFor(null); void handleRemove(p); }} />
+              </>
+            )}
+          </Card>
+        )}
+      </SheetModal>
 
       {/* Add person sheet — search + multi-select existing, or create new */}
       <SheetModal visible={showAdd} onClose={() => { setShowAdd(false); setPendingIds([]); }} title="Add to group">
@@ -345,6 +358,10 @@ export default function MembersScreen() {
 }
 
 const styles = StyleSheet.create({
+  rowMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.md },
+  balCol: { alignItems: 'flex-end' },
+  balAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 14 },
+  balLabel: { ...type.caption, color: colors.textMuted, marginTop: 2 },
   container: { flex: 1, backgroundColor: colors.bg },
   list: { padding: layout.screenPaddingH, paddingBottom: space.lg },
 
@@ -357,7 +374,6 @@ const styles = StyleSheet.create({
   invitedBadge: { backgroundColor: colors.bgMuted, borderRadius: radius.pill, paddingHorizontal: space.sm, paddingVertical: 2 },
   invitedBadgeText: { ...type.caption, color: colors.textSecondary, fontFamily: 'Inter_600SemiBold' },
   name: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
-  netText: { ...type.caption, marginTop: 2 },
   swipeAction: { backgroundColor: colors.expense, justifyContent: 'center', alignItems: 'center', width: 80, gap: space.xs },
   swipeActionText: { ...type.caption, color: colors.onAccent, fontFamily: 'Inter_600SemiBold' },
 

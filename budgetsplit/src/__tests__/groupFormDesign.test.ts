@@ -51,7 +51,8 @@ describe('Default split is TabPills, a single choice, not a Chip row', () => {
 describe('a new friend can be added without leaving the sheet', () => {
   it('exposes onRequestNewPerson and renders a tile that calls it', () => {
     expect(src).toMatch(/onRequestNewPerson\?:/);
-    expect(src).toMatch(/onPress=\{onRequestNewPerson\}/);
+    // The tile is PersonPicker's + New, routed to the form's own name sheet (`W1-18`).
+    expect(src).toMatch(/<PersonPicker[^>]*onNew=\{onRequestNewPerson\}/);
   });
 
   it('both New Group and Edit Group wire it to a PersonNameSheet', () => {

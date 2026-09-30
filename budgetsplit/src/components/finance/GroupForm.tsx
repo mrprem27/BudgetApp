@@ -1,8 +1,7 @@
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
 import { colors, type, space, radius, layout } from '../tokens';
 import { GROUP_TYPES, asFeather } from '../../constants/palette';
-import { MemberAvatar } from './MemberAvatar';
+import { PersonPicker } from './PersonPicker';
 import { IconCircle } from '../ui/IconCircle';
 import { Card } from '../ui/Card';
 import { TabPills } from '../ui/TabPills';
@@ -102,28 +101,8 @@ export function GroupForm({ values, onChange, allPersons, showMembers = true, au
       {showMembers && (allPersons.length > 0 || onRequestNewPerson) && (
         <>
           <Text style={styles.fieldLabel}>Members</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.memberRow} keyboardShouldPersistTaps="handled">
-            {onRequestNewPerson && (
-              <TouchableOpacity style={styles.memberPick} onPress={onRequestNewPerson} accessibilityRole="button" accessibilityLabel="Add a new friend">
-                <View style={styles.memberAddWrap}>
-                  <Feather name="plus" size={18} color={colors.accent} />
-                </View>
-                <Text style={styles.memberPickName} numberOfLines={1}>New</Text>
-              </TouchableOpacity>
-            )}
-            {allPersons.map(p => {
-              const on = values.members.includes(p.id);
-              return (
-                <TouchableOpacity key={p.id} style={styles.memberPick} onPress={() => toggleMember(p.id)} accessibilityRole="button" accessibilityState={{ selected: on }} accessibilityLabel={p.name}>
-                  <View style={[styles.memberAvatarWrap, on && styles.memberAvatarOn]}>
-                    <MemberAvatar name={p.name} color={p.avatar_color} size={44} imageUri={p.image_uri} />
-                    {on && <View style={styles.memberCheck}><Feather name="check" size={11} color={colors.bg} /></View>}
-                  </View>
-                  <Text style={styles.memberPickName} numberOfLines={1}>{p.name.split(' ')[0]}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
+          {/* The shared people grid (`U-22`, `W1-18`), not a third avatar strip of its own. */}
+          <PersonPicker persons={allPersons} selected={values.members} onToggle={toggleMember} onNew={onRequestNewPerson} />
         </>
       )}
 
@@ -156,17 +135,7 @@ const styles = StyleSheet.create({
   typeTileActive: { borderColor: colors.accent, backgroundColor: colors.bgMuted },
   typeLabel: { ...type.caption, color: colors.textSecondary, textAlign: 'center' },
   typeLabelActive: { color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
-  memberRow: { gap: space.md, paddingVertical: space.xs, paddingRight: space.md },
-  memberPick: { alignItems: 'center', gap: space.xs, width: 52 },
-  memberAvatarWrap: { borderRadius: 24, borderWidth: 2, borderColor: 'transparent' },
-  memberAvatarOn: { borderColor: colors.accent },
-  memberCheck: { position: 'absolute', bottom: -2, right: -2, width: 18, height: 18, borderRadius: 9, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.bgCard },
-  memberPickName: { ...type.caption, color: colors.textSecondary, fontSize: 10 },
   // Dashed, not solid — an empty slot rather than a person, the same
   // distinction `CategoryPicker`'s own `+` tile draws with a plain accent
   // ring instead of a filled disc.
-  memberAddWrap: {
-    width: 44, height: 44, borderRadius: 22, borderWidth: 1.5, borderStyle: 'dashed' as const,
-    borderColor: colors.accent, alignItems: 'center', justifyContent: 'center',
-  },
 });

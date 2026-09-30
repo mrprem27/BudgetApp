@@ -13,6 +13,8 @@ type Props = {
   selected: string[];
   onToggle: (id: string) => void;
   onCreate?: (name: string) => Promise<Person>;
+  /** Where + New goes when the caller creates people its own way (a name sheet). */
+  onNew?: () => void;
   exclude?: string[];
   multi?: boolean;
   placeholder?: string;
@@ -28,7 +30,7 @@ const AVATAR = 52;
  * typed name that matches nobody can be created. One control for every place people are picked.
  */
 export function PersonPicker({
-  persons, selected, onToggle, onCreate, exclude, multi = true, placeholder = onCreate ? 'Search or add…' : 'Search people…',
+  persons, selected, onToggle, onCreate, onNew, exclude, multi = true, placeholder = onCreate ? 'Search or add…' : 'Search people…',
 }: Props) {
   const [query, setQuery] = useState('');
   const input = useRef<TextInput>(null);
@@ -92,8 +94,8 @@ export function PersonPicker({
       )}
 
       <View style={styles.grid}>
-        {onCreate && !query && (
-          <TouchableOpacity style={styles.tile} onPress={() => input.current?.focus()} accessibilityRole="button" accessibilityLabel="Add a new person">
+        {(onCreate || onNew) && !query && (
+          <TouchableOpacity style={styles.tile} onPress={() => (onNew ? onNew() : input.current?.focus())} accessibilityRole="button" accessibilityLabel="Add a new person">
             <View style={styles.newCircle}><Feather name="plus" size={22} color={colors.accent} /></View>
             <Text style={[styles.name, { color: colors.accent }]} numberOfLines={1}>New</Text>
           </TouchableOpacity>

@@ -759,7 +759,11 @@ describe('B2 · Edit group: the name sits in a card row by its icon, and New per
     expect(src).not.toMatch(/styles\.input\b/);
   });
   it('the add-person tile precedes the people', () => {
-    expect(src.indexOf('Add a new friend')).toBeLessThan(src.indexOf('allPersons.map'));
+    // GroupForm draws members with PersonPicker (`W1-18`); its + New tile renders before the people.
+    expect(src).toMatch(/<PersonPicker[^>]*onNew=/);
+    const picker = fs.readFileSync('src/components/finance/PersonPicker.tsx', 'utf8');
+    expect(picker.indexOf('Add a new person')).toBeGreaterThan(-1);
+    expect(picker.indexOf('Add a new person')).toBeLessThan(picker.indexOf('visible.map'));
   });
 });
 
@@ -1267,5 +1271,23 @@ describe('U-47 · the money editor reconciles like the card outside', () => {
   });
   it('has no button in the middle of the editor', () => {
     expect(fs.readFileSync('src/components/finance/plan/MoneyEditorSheet.tsx', 'utf8')).not.toMatch(/SecondaryButton/);
+  });
+});
+
+describe('W1-18 · member rows carry their balance, not icon buttons', () => {
+  const src = fs.readFileSync('app/(people)/group/[id]/members.tsx', 'utf8');
+  it('opens one actions sheet from the row', () => {
+    expect(src).toMatch(/onPress=\{\(\) => setActionsFor\(item\)\}/);
+    expect(src).toMatch(/title="Remove from group" danger/);
+  });
+  it('has no shield or pencil button on the row itself', () => {
+    expect(src).not.toMatch(/<Feather\s+name=\{roleOf/);
+    expect(src).not.toMatch(/name="edit-2" size=\{15\}/);
+  });
+});
+
+describe('W1-06 · every pay-method icon comes from PayMethodGlyph', () => {
+  it('no Feather-name map for pay methods remains', () => {
+    expect(fs.readFileSync('src/constants/enums.ts', 'utf8')).not.toMatch(/PAY_METHOD_ICON/);
   });
 });

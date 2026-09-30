@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
 import {
-  PAY_METHOD, PAY_METHOD_CHOOSABLE, PAY_METHOD_LABEL, PAY_METHOD_ICON,
+  PAY_METHOD, PAY_METHOD_CHOOSABLE, PAY_METHOD_LABEL,
   INCOME_LANDING, PayMethod, assetOf,
 } from '../constants/enums';
 
@@ -27,7 +27,6 @@ describe('what may be stored vs what may be picked', () => {
     // honest record of what the statement said. Detected, never picked.
     expect(PAY_METHOD).toContain(PayMethod.Autopay);
     expect(PAY_METHOD_LABEL[PayMethod.Autopay]).toBeTruthy();
-    expect(PAY_METHOD_ICON[PayMethod.Autopay]).toBeTruthy();
     // And nothing about the money math moves: it still draws from bank.
     expect(assetOf(PayMethod.Autopay)).toBe('bank');
   });

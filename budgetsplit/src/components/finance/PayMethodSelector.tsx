@@ -1,12 +1,13 @@
 import React from 'react';
 import { Feather } from '@expo/vector-icons';
-import { colors } from '../tokens';
+import { PayMethodDisc } from './pay/PayMethodGlyph';
+import { colors, layout } from '../tokens';
 import { haptic } from '../../lib/haptics';
 import { Card } from '../ui/Card';
 import { Divider } from '../ui/Divider';
 import { ListRow } from '../ui/ListRow';
 import {
-  PAY_METHOD_CHOOSABLE, PAY_METHOD_LABEL, PAY_METHOD_ICON, type PayMethod,
+  PAY_METHOD_CHOOSABLE, PAY_METHOD_LABEL, type PayMethod,
 } from '../../constants/enums';
 
 type Props = {
@@ -56,8 +57,7 @@ export function PayMethodSelector({
           <React.Fragment key={m}>
             {i > 0 && <Divider indent="text" />}
             <ListRow
-              icon={PAY_METHOD_ICON[m]}
-              iconColor={on ? accent : colors.textSecondary}
+              leading={<PayMethodDisc method={m} size={layout.iconCircle} color={on ? accent : colors.textSecondary} />}
               title={PAY_METHOD_LABEL[m]}
               chevron={false}
               selected={on}

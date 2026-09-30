@@ -26,6 +26,8 @@ import { ScreenHeader } from '../../../src/components/ui/ScreenHeader';
 import { usageEventsOn, setUsageEventsOn } from '../../../src/lib/usageEvents';
 import { MoneySettingsRows } from '../../../src/components/finance/settings/MoneySettingsRows';
 import { SettingsRow, settingsRowDivider } from '../../../src/components/ui/SettingsRow';
+import { ListRow } from '../../../src/components/ui/ListRow';
+import { PayMethodDisc } from '../../../src/components/finance/pay/PayMethodGlyph';
 import { IconCircle } from '../../../src/components/ui/IconCircle';
 import { decor } from '../../../src/constants/palette';
 import { freeBytes } from '../../../src/lib/deviceStorage';
@@ -33,7 +35,7 @@ import { StorageVerdict, storageVerdict, formatBytes } from '../../../src/lib/st
 import { DEV_TOOLS_ENABLED } from '../../../src/constants/devTools';
 import { useFeatureFlags } from '../../../src/components/system/FeatureFlagsProvider';
 import type { BudgetCadence } from '../../../src/db/queries/categoryBudgets';
-import { asBudgetCadence, asPayMethod, PayMethod, PAY_METHOD_ICON, PAY_METHOD_LABEL } from '../../../src/constants/enums';
+import { asBudgetCadence, asPayMethod, PayMethod, PAY_METHOD_LABEL } from '../../../src/constants/enums';
 import { useScreenData } from '../../../src/hooks/useScreenData';
 import { useServerSession } from '../../../src/hooks/useServerSession';
 import { ErrorState } from '../../../src/components/ui/ErrorState';
@@ -374,7 +376,13 @@ export default function SettingsScreen() {
             (`onPress={undefined}`, INR only), which reads as a broken row,
             not as "there's only one option." Comes back once there's a second
             currency to pick between. */}
-        <SettingsRow icon={PAY_METHOD_ICON[defaultPay]} label="Default pay method" tint={TINT.payMethod} value={PAY_METHOD_LABEL[defaultPay]} onPress={() => setShowPayMethod(true)} />
+        <ListRow
+          leading={<PayMethodDisc method={defaultPay} size={layout.iconCircle} color={TINT.payMethod} />}
+          title="Default pay method"
+          value={PAY_METHOD_LABEL[defaultPay]}
+          onPress={() => setShowPayMethod(true)}
+          accessibilityLabel="Default pay method"
+        />
         <View style={settingsRowDivider} />
         <SettingsRow icon="repeat" label="Default budget cadence" tint={TINT.cadence} value={CADENCE_LABELS[defaultCadence]} onPress={() => setShowCadence(true)} />
         <View style={settingsRowDivider} />

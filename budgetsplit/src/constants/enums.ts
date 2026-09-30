@@ -15,7 +15,6 @@
 // Type-only, so it is erased at compile time: `enums.ts` stays a pure constants
 // module with no runtime dependency on `@expo/vector-icons`, which the Node-based
 // unit tests importing it (savingsEngine, reviewFilter, …) rely on.
-import type { FeatherName } from './palette';
 
 // --- Transactions --------------------------------------------------------
 
@@ -126,17 +125,7 @@ export const PAY_METHOD_LABEL: Record<PayMethod, string> = {
   [PayMethod.Bank]: 'Bank', [PayMethod.Wallet]: 'Wallet',
   [PayMethod.Autopay]: 'Autopay', [PayMethod.Other]: 'Other',
 };
-/**
- * Feather icon per pay method — the single source for the pay-method chips.
- *
- * Feather has no bank or wallet glyph, so Bank takes `briefcase` and Wallet
- * `shopping-bag`, keeping both distinct from Card's `credit-card`.
- */
-export const PAY_METHOD_ICON: Record<PayMethod, FeatherName> = {
-  [PayMethod.Upi]: 'smartphone', [PayMethod.Card]: 'credit-card', [PayMethod.Cash]: 'dollar-sign',
-  [PayMethod.Bank]: 'briefcase', [PayMethod.Wallet]: 'shopping-bag',
-  [PayMethod.Autopay]: 'repeat', [PayMethod.Other]: 'more-horizontal',
-};
+// Each pay method's glyph lives in `components/finance/pay/PayMethodGlyph` (`W1-06`).
 
 /**
  * What a PERSON may choose. `PAY_METHOD` is what a row may STORE (`OV-28`).
