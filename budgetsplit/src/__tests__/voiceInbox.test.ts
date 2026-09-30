@@ -3,15 +3,10 @@ import {
   GROUP_HINTS,
   isGroupish,
   mentionsGroupName,
-  captureTimeFromName,
   routeVoiceDraft,
   reviewReason,
-  sortCaptures,
-  resolveCaptureTime,
   voiceFields,
   resolveVoiceCategory,
-  kindFromCaptureName,
-  CAPTURE_PREFIX,
   VOICE_TITLE_MAX_WORDS,
   VOICE_TITLE_MAX_CHARS,
 } from '../lib/voiceInbox';
@@ -65,81 +60,6 @@ describe('isGroupish', () => {
   it('keeps the hint list in sync with what it matches', () => {
     // The Shortcut matches on this same list, so every entry must actually be detectable.
     for (const hint of GROUP_HINTS) expect(isGroupish(`450 food ${hint}`)).toBe(true);
-  });
-});
-
-describe('captureTimeFromName — anchoring the parse to when you spoke', () => {
-  it('reads a millisecond epoch out of the filename', () => {
-    expect(captureTimeFromName(`${NOW}.txt`, 0)).toBe(NOW);
-    expect(captureTimeFromName(String(NOW), 0)).toBe(NOW);
-  });
-
-  it('reads a second-precision epoch too', () => {
-    const secs = Math.floor(NOW / 1000);
-    expect(captureTimeFromName(`${secs}.txt`, 0)).toBe(secs * 1000);
-  });
-
-  it('falls back rather than throwing on a name it does not understand', () => {
-    for (const name of ['', 'voice.txt', 'note-1.txt', 'abc123.txt', '.txt', '12.txt']) {
-      expect(captureTimeFromName(name, NOW)).toBe(NOW);
-    }
-  });
-
-  it('refuses an implausible timestamp', () => {
-    expect(captureTimeFromName('0000000000000.txt', NOW)).toBe(NOW);
-    expect(captureTimeFromName('99999999999999999.txt', NOW)).toBe(NOW);
-  });
-
-  it('reads the yyyyMMddHHmmss form Shortcuts can actually produce', () => {
-    // Shortcuts' Format Date has NO Unix-timestamp option — only a Custom pattern — so this
-    // is the shape a hand-built shortcut emits. Parsed as local time, matching how Shortcuts
-    // formats it.
-    expect(captureTimeFromName('20260812153000.txt', 0)).toBe(NOW);
-    // Minute and day precision too.
-    expect(captureTimeFromName('202608121530.txt', 0)).toBe(NOW);
-    expect(captureTimeFromName('20260812.txt', 0)).toBe(new Date(2026, 7, 12).getTime());
-  });
-
-  it('does not confuse a calendar stamp with an epoch', () => {
-    // 14 digits as an epoch would be the year 2286+; 12 would be 2001. Neither is a capture,
-    // so length alone separates them with no overlap.
-    expect(captureTimeFromName('20260812153000.txt', 0)).toBe(NOW);
-    expect(captureTimeFromName(`${NOW}.txt`, 0)).toBe(NOW);   // 13-digit ms still works
-  });
-
-  it('rejects a calendar stamp that is not a real date', () => {
-    for (const bad of [
-      '20260230120000',   // 30 February
-      '20261332120000',   // month 13, day 32
-      '20260812250000',   // hour 25
-      '20260812156100',   // minute 61
-      '19990101120000',   // before the app could plausibly exist
-      '21010101120000',   // after
-    ]) {
-      expect(captureTimeFromName(`${bad}.txt`, NOW)).toBe(NOW);
-    }
-  });
-
-  it('is the reason a late-night "yesterday" survives a morning drain', () => {
-    // Spoken 23:30 on the 11th; drained 09:00 on the 12th.
-    const spokeAt = new Date(2026, 7, 11, 23, 30).getTime();
-    const drainAt = new Date(2026, 7, 12, 9, 0).getTime();
-
-    const anchored = parseVoice('450 groceries yesterday', {
-      categories: CATS, nowMs: captureTimeFromName(`${spokeAt}.txt`, drainAt),
-    });
-    // Yesterday relative to the 11th is the 10th.
-    expect(new Date(anchored.dateMs!).getDate()).toBe(10);
-
-    // What it would have been if we had anchored on the drain instead — a day out.
-    const naive = parseVoice('450 groceries yesterday', { categories: CATS, nowMs: drainAt });
-    expect(new Date(naive.dateMs!).getDate()).toBe(11);
-
-    // And the same guarantee via the calendar filename, which is what the shortcut writes.
-    const viaCalendar = parseVoice('450 groceries yesterday', {
-      categories: CATS, nowMs: captureTimeFromName('20260811233000.txt', drainAt),
-    });
-    expect(new Date(viaCalendar.dateMs!).getDate()).toBe(10);
   });
 });
 
@@ -214,58 +134,6 @@ describe('reviewReason', () => {
       const waits = routeVoiceDraft(d, p, GROUPS) === VoiceDestination.Review;
       expect(reviewReason(d, p, GROUPS) !== null).toBe(waits);
     }
-  });
-});
-
-describe('resolveCaptureTime — the Shortcut needs no date actions', () => {
-  const CREATED = new Date(2026, 7, 12, 9, 15).getTime();
-  const DRAINED = new Date(2026, 7, 13, 8, 0).getTime();
-
-  it('uses the filesystem creation time when the name says nothing', () => {
-    // This is what makes a two-action shortcut possible: iOS records when the file was
-    // written, which IS when the dictation finished.
-    expect(resolveCaptureTime('Dictated Text.txt', CREATED, DRAINED)).toBe(CREATED);
-  });
-
-  it('prefers a timestamped name when there is one', () => {
-    // An explicit statement of intent, and it survives a file being copied.
-    expect(resolveCaptureTime('20260811233000.txt', CREATED, DRAINED))
-      .toBe(new Date(2026, 7, 11, 23, 30).getTime());
-  });
-
-  it('falls back to the drain time when neither source is usable', () => {
-    for (const ct of [null, undefined, 0, -1, NaN, 999, 99_999_999_999_999]) {
-      expect(resolveCaptureTime('Dictated Text.txt', ct as number | null, DRAINED)).toBe(DRAINED);
-    }
-  });
-});
-
-describe('sortCaptures — oldest first, by resolved time', () => {
-  const at = (name: string, capturedAt: number) => ({ name, capturedAt });
-
-  it('orders by time, not by name', () => {
-    // Shortcuts' own naming sorts lexicographically, which puts 10 before 2.
-    const out = sortCaptures([
-      at('Dictated Text 10.txt', 300),
-      at('Dictated Text 2.txt', 200),
-      at('Dictated Text.txt', 100),
-    ]);
-    expect(out.map(o => o.capturedAt)).toEqual([100, 200, 300]);
-  });
-
-  it('breaks an exact tie by name, so the order is never arbitrary', () => {
-    const out = sortCaptures([at('b.txt', 100), at('a.txt', 100)]);
-    expect(out.map(o => o.name)).toEqual(['a.txt', 'b.txt']);
-  });
-
-  it('does not mutate its input', () => {
-    const input = [at('b.txt', 200), at('a.txt', 100)];
-    sortCaptures(input);
-    expect(input.map(i => i.name)).toEqual(['b.txt', 'a.txt']);
-  });
-
-  it('handles an empty list', () => {
-    expect(sortCaptures([])).toEqual([]);
   });
 });
 
@@ -364,39 +232,6 @@ describe('resolveVoiceCategory — always a category that exists', () => {
  * The capture pipeline, kind by kind. Every row of the routing matrix in the plan has a case
  * here, because "silent" only earns trust if the thing it does silently is right.
  */
-describe('kindFromCaptureName — which command wrote this file', () => {
-  it('reads the prefix each command writes', () => {
-    expect(kindFromCaptureName('expense-421887.txt')).toBe('expense');
-    expect(kindFromCaptureName('income-90210.txt')).toBe('income');
-    expect(kindFromCaptureName('settle-30514.txt')).toBe('settlement');
-  });
-
-  it('treats an unprefixed capture as an expense', () => {
-    // The shortcut that shipped before prefixes existed writes bare filenames. Dropping those
-    // would silently lose captures already sitting on someone's phone.
-    expect(kindFromCaptureName('421887.txt')).toBe('expense');
-    expect(kindFromCaptureName('Dictated Text.txt')).toBe('expense');
-    expect(kindFromCaptureName('20260809153000.txt')).toBe('expense');
-  });
-
-  it('requires the delimiter, so a lookalike name cannot claim a kind', () => {
-    expect(kindFromCaptureName('incomes-1.txt')).toBe('expense');
-    expect(kindFromCaptureName('expenses-1.txt')).toBe('expense');
-    expect(kindFromCaptureName('settled.txt')).toBe('expense');
-  });
-
-  it('is case-insensitive and survives a missing extension', () => {
-    expect(kindFromCaptureName('INCOME-5.TXT')).toBe('income');
-    expect(kindFromCaptureName('settle-5')).toBe('settlement');
-  });
-
-  it('round-trips every prefix the generator writes', () => {
-    for (const [kind, prefix] of Object.entries(CAPTURE_PREFIX)) {
-      expect(kindFromCaptureName(`${prefix}-1.txt`)).toBe(kind);
-    }
-  });
-});
-
 describe('routeVoiceDraft — per kind', () => {
   const clean = parse('four fifty groceries');
   const salary = parse('fifty thousand salary');

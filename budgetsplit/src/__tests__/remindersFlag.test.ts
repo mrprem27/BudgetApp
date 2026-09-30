@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 import { openTestDb, seedGroupAndMe } from './dbHarness';
 import { setFlag } from '../lib/featureFlags';
 import { setReminderPrefs } from '../lib/reminderPrefsStore';
@@ -6,6 +7,7 @@ import * as notifications from '../lib/notifications';
 import { rescheduleReminders } from '../lib/reminders';
 import { insertTxnRows } from '../db/queries/transactions';
 
+jest.mock('expo-file-system', () => require('./__mocks__/expoFileSystem'));
 // `lib/notifications` wraps the native module; here it only records what would reach the OS.
 jest.mock('../lib/notifications', () => ({
   hasNotificationPermission: jest.fn(async () => true),
@@ -20,7 +22,7 @@ const scheduled = () =>
   (notifications.scheduleReminderAt as jest.Mock).mock.calls.length
   + (notifications.scheduleDailyReminder as jest.Mock).mock.calls.length;
 
-beforeEach(() => { store.__reset(); jest.clearAllMocks(); });
+beforeEach(() => { store.__reset(); (SecureStore as unknown as { __reset: () => void }).__reset(); jest.clearAllMocks(); });
 
 // P2-4 (docs/SPEC-BUGSCAN.md): the Reminders switch hid its Settings row and nothing else — the
 // daily nudge and the backup nudge kept firing for someone who had turned reminders off.
@@ -48,6 +50,15 @@ describe('P2-4 · the Reminders switch turns every reminder off', () => {
     expect(withRecurring).toBeGreaterThan(0);
     jest.clearAllMocks();
     await setFlag('recurring', false);
+    await rescheduleReminders(db);
+    expect(scheduled()).toBe(0);
+  });
+
+  it('drops the backup nudge while signed in — the account already keeps a copy (U-05)', async () => {
+    const db = await openTestDb();
+    await seedGroupAndMe(db);
+    await setReminderPrefs({ backup: true });
+    await SecureStore.setItemAsync('budgetsplit.session.v1', JSON.stringify({ token: 't', user: { id: 'u', email: 'a@b.c' } }));
     await rescheduleReminders(db);
     expect(scheduled()).toBe(0);
   });

@@ -17,7 +17,6 @@ import { runSavingsMaintenance } from '../src/db/queries/savings';
 import { materializeDueOccurrences } from '../src/db/queries/recurring';
 import { reapDeletedAttachments } from '../src/db/queries/transactions';
 import { deleteAttachment } from '../src/lib/attachment';
-import { drainVoiceInbox, ensureVoiceInbox } from '../src/lib/voiceDrain';
 import * as Notifications from 'expo-notifications';
 import { rescheduleReminders } from '../src/lib/reminders';
 import { routeForReminder } from '../src/lib/notificationRoutes';
@@ -103,12 +102,6 @@ export default function RootLayout() {
             // Catch-up: any recurring occurrence that came due (incl. across a missed
             // "midnight") materializes into a real editable row the moment the app loads.
             await materializeDueOccurrences(db);
-            // Phrases dictated to Siri while the app was closed. Drained here — before
-            // `setDbReady`, so nothing has mounted yet and every screen's first load already
-            // includes them, with no `refresh()` needed. Its own catch: a capture that can't be
-            // filed must never turn into the "Couldn't start BudgetSplit" screen.
-            ensureVoiceInbox();
-            await drainVoiceInbox(db).catch(() => {});
             // Scheduled goal funding runs unattended — the user set it up, and it moves
             // money *into* goals. The overspend raid no longer applies here: it only
             // *proposes*, and Plan asks before anything leaves a goal (`V2-10`). Persist

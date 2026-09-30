@@ -11,7 +11,6 @@ import { askAboutPendingPayment, recordScannedPayment } from '../../src/lib/conf
 import { askAboutPendingSettlement } from '../../src/lib/confirmSettlement';
 import { settings } from '../../src/lib/settings';
 import { currencySymbol } from '../../src/lib/money';
-import { drainVoiceInbox } from '../../src/lib/voiceDrain';
 import { foregroundMaintenanceDone } from '../../src/lib/maintenanceWrites';
 import { runSync, scheduleSync, setQueueListener, type SyncOutcome, type Vanished } from '../../src/lib/sync';
 import { pendingRestoreOffer } from '../../src/lib/restoreOffer';
@@ -110,10 +109,6 @@ function AppTabBar({ state, navigation }: { state: any; navigation: any }) {
   // Back from a UPI app after a Scan & Pay hand-off: ask once, then file it.
   // Lives here rather than in the root layout because that sits ABOVE
   // DataRefreshProvider and so cannot signal the screens to reload.
-  //
-  // The voice inbox is drained on the same signal and for the same reason. The root layout
-  // already drains at launch, but that only covers a cold start — this is what makes a
-  // phrase you said thirty seconds ago appear when you flick back from the app switcher.
   useEffect(() => {
     const sub = AppState.addEventListener('change', state => {
       if (state !== 'active') return;
@@ -130,7 +125,6 @@ function AppTabBar({ state, navigation }: { state: any; navigation: any }) {
       // remembering, and a payment that happened but never got recorded leaves the
       // balance wrong for two people.
       askAboutPendingSettlement(db).then(filed => { if (filed) refresh(); }).catch(() => {});
-      drainVoiceInbox(db).then(r => { if (r.saved + r.queued > 0) refresh(); }).catch(() => {});
       // The account's copy of everything (SPEC-SERVER.md), on every return to the
       // app; writes in between go within seconds (`scheduleSync`, below). Gated
       // inside on the ledger having been joined to this account at first sign-in,

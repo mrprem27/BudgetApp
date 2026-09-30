@@ -234,9 +234,8 @@ describe('name is required; Siri is parked out of the flow', () => {
     expect(src).not.toMatch(/Log spends by talking to Siri/);
   });
 
-  it('keeps openVoiceSetup, marked parked rather than deleted', () => {
-    expect(src).toMatch(/function openVoiceSetup/);
-    expect(src).toMatch(/Parked until Siri Intents/);
+  it('hands nothing to Shortcuts — that path is retired; App Intents replace it', () => {
+    expect(src).not.toMatch(/openVoiceSetup|VOICE_SHORTCUT_URL|voiceShortcut/);
   });
 });
 

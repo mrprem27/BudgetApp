@@ -2,7 +2,7 @@
 
 `Last verified: 2026-09-30 (§0, §1, §9–§11 and every row whose status changed; the rest as of 2026-09-07) · Guarded by: trackerIntegrity.test.ts · countClaims.test.ts · docIdGraph.test.ts`
 
-**212 items, 119 of them still open.** One row each: what it is, and where it stands.
+**218 items, 121 of them still open.** One row each: what it is, and where it stands.
 Nothing else. **This is the V1 tracker** — start at §0.
 
 **The evidence is not here.** Why each item exists, what it costs, what breaks if you touch it, and
@@ -21,15 +21,15 @@ is defined in two places.
 
 | Section | Open | Total |
 |---|---|---|
-| §1 · Ship blockers | **13** | 19 |
+| §1 · Ship blockers | **12** | 19 |
 | §2 · Complexity — `OV-` | **19** | 34 |
-| §3 · Decisions — `DQ-` | **40** | 57 |
+| §3 · Decisions — `DQ-` | **39** | 57 |
 | §4 · Walk 1 — `W1-` | **16** | 39 |
 | §5 · Sync — `SYNC-F` | **1** | 24 |
 | §6 · Debt — `D-` | **11** | 11 |
 | §7 · Accepted — `A-` | **2** | 11 |
 | §9 · Deferred from V1 — `V-` | **7** | 7 |
-| §11 · Open from the last pass, and your feedback — `U-` | **10** | 10 |
+| §11 · Open from the last pass, and your feedback — `U-` | **14** | 16 |
 
 §8 (parked scope) and §10 (built but easy to forget) carry no ids.
 
@@ -42,13 +42,12 @@ below is the plan; every line points at rows further down, where status lives.
 
 1. **Your phone pass** — `U-10` (the list for tomorrow), `B-12`, the sweep in
    `RELEASE_CHECKLIST.md` §2 and the sync checks in §3.1. Everything it finds becomes a `U-` row in §11.
-2. **Answer the open questions** — `U-01` the Insights switch · `U-03` the voice screen · `U-04`
-   Afford's layout · `U-05` the backup nudge · `U-06` Afford's icon · `OV-27` the group screen's three
-   add buttons · `V-06` cash last confirmed · `V-07` Android before or after V1.
+2. **Answer the open questions** — `U-01` the Feature Management spec · `OV-27` the group screen's
+   three add buttons · `V-06` cash last confirmed · `V-07` Android before or after V1.
 3. **Fix what 1 and 2 turn up**, then the tidy-ups `U-07` and `U-08`, and measure `U-02`.
 4. **Ship steps** — `B-19` merge to `main` · `B-07` rotate the Brevo key · `B-02` the Apple
    Developer Program (a free Apple ID already covers your own phone) · `DQ-95` Workers Paid before
-   the first sign-in that isn't you · `B-11` the voice shortcut link · `B-14` the no-enumeration
+   the first sign-in that isn't you · `B-14` the no-enumeration
    check · `B-04` / `B-05` the build env on whichever machine archives.
 5. **Before inviting anyone** — `B-08` privacy policy · `B-09` DPDP · `B-10` icon, splash,
    screenshots · `B-13` store copy and privacy answers.
@@ -59,7 +58,7 @@ below is the plan; every line points at rows further down, where status lives.
 
 ## §1 · Ship blockers — `B-`
 
-**19 items: 11 `OPEN`, 1 `DECIDE`, 1 `BLOCKED`, 6 `DONE`.** Nothing ships until every one is closed. Order of operations is in `FINDINGS.md` §1 — everything below `B-03` needs a phone.
+**19 items: 10 `OPEN`, 1 `DECIDE`, 1 `BLOCKED`, 7 `DONE`.** Nothing ships until every one is closed. Order of operations is in `FINDINGS.md` §1 — everything below `B-03` needs a phone.
 
 | | What | Status |
 |---|---|---|
@@ -69,7 +68,6 @@ below is the plan; every line points at rows further down, where status lives.
 | `B-07` | Rotate the Brevo API key | `OPEN` |
 | `B-08` | Privacy policy + App Store listing | `OPEN` |
 | `B-10` | App icon, splash, screenshots | `OPEN` |
-| `B-11` | `VOICE_SHORTCUT_URL` is `null` | `OPEN` |
 | `B-12` | Device-test Pass 4 | `OPEN` |
 | `B-13` | Paste the store copy into App Store Connect and confirm the privacy answers | `OPEN` |
 | `B-14` | Run §0a's no-enumeration diff | `OPEN` |
@@ -77,7 +75,7 @@ below is the plan; every line points at rows further down, where status lives.
 | `B-09` | India DPDP posture | `DECIDE` |
 | `B-02` | Buy the Apple Developer Program | `BLOCKED` |
 
-**Closed (6), detail in `FINDINGS.md`:** `B-03` `B-06` `B-15` `B-16` `B-17` `B-18`
+**Closed (7), detail in `FINDINGS.md`:** `B-03` `B-11` `B-06` `B-15` `B-16` `B-17` `B-18`
 
 ---
 ## §2 · Complexity and overlap — `OV-`
@@ -95,7 +93,7 @@ below is the plan; every line points at rows further down, where status lives.
 | `OV-22` | Six vocabularies over daily/weekly/monthly/yearly | `OPEN` |
 | `OV-11` | A group has three end states that get conflated | `OPEN` |
 | `OV-06` | Categories are referenced by NAME, not by id | `DECIDE` |
-| `OV-10` | backOr is used in 6 of 45 route files | `DECIDE` |
+| `OV-10` | backOr is used in 6 of 44 route files | `DECIDE` |
 | `OV-14` | E-50 is recomputed on every read, with no memo boundary | `DECIDE` |
 | `OV-15` | /personal is a stack route pretending to be a tab | `DECIDE` |
 | `OV-19` | category_budget.period AND .cadence | `DECIDE` |
@@ -111,7 +109,7 @@ below is the plan; every line points at rows further down, where status lives.
 ---
 ## §3 · Open decisions — `DQ-`
 
-**57 items: 33 `DECIDE`, 7 `BLOCKED`, 17 `DONE`.** A `DQ-` is a question only you can answer, so every unanswered one is `DECIDE` by definition. The default column is what ships if you never decide.
+**57 items: 32 `DECIDE`, 7 `BLOCKED`, 18 `DONE`.** A `DQ-` is a question only you can answer, so every unanswered one is `DECIDE` by definition. The default column is what ships if you never decide.
 
 | | What | Status | Default if never decided |
 |---|---|---|---|
@@ -135,7 +133,6 @@ below is the plan; every line points at rows further down, where status lives.
 | `DQ-19` | `PRAGMA foreign_keys` is OFF | `DECIDE` | Off |
 | `DQ-20` | Voice auto-save has no off switch | `DECIDE` | No switch |
 | `DQ-21` | `DEV_TOOLS_ENABLED = true` | `DECIDE` | It stays true and the guard keeps complaining, which is… |
-| `DQ-22` | `VOICE_SHORTCUT_URL` is `null` | `DECIDE` | Manual setup only, for a feature most people will not find |
 | `DQ-23` | `expo-file-system` legacy API | `DECIDE` | Keep using it until it breaks |
 | `DQ-29` | Partial acceptance | `DECIDE` | Binary |
 | `DQ-30` | A tracking-only group mode | `DECIDE` | No such mode |
@@ -156,7 +153,7 @@ below is the plan; every line points at rows further down, where status lives.
 | `DQ-85` | R2 object storage | `BLOCKED` | A Cloudflare dashboard opt-in that asks for a card |
 | `DQ-86` | Cloudflare Email Sending | `BLOCKED` | Workers Paid $5/mo + an owned domain |
 
-**Closed (17), detail in `FINDINGS.md`:** `DQ-07` `DQ-26` `DQ-28` `DQ-31` `DQ-32` `DQ-88` `DQ-89` `DQ-91` `DQ-93` `DQ-94` `DQ-97` `DQ-98` `DQ-99` `DQ-100` `DQ-101` `DQ-102` `DQ-103`
+**Closed (18), detail in `FINDINGS.md`:** `DQ-07` `DQ-22` `DQ-26` `DQ-28` `DQ-31` `DQ-32` `DQ-88` `DQ-89` `DQ-91` `DQ-93` `DQ-94` `DQ-97` `DQ-98` `DQ-99` `DQ-100` `DQ-101` `DQ-102` `DQ-103`
 
 ---
 ## §4 · Walk 1 — `W1-`
@@ -262,7 +259,7 @@ testing or describing the app. Where one needs action, the id says where.
 | Request money by QR (push, never a collect request) | Settings → Show my UPI QR · Add → Transfer | On, needs your UPI ID |
 | WhatsApp reminder to someone who owes you | The chat icon on their row in Friends, their page, or Upcoming | On, needs their number |
 | Voice entry | The mic on Add's amount row | On |
-| Hands-free Siri capture | A Siri shortcut, filed at launch | Half-built: its setup screen has no way in (`U-03`), the shared link is unset (`B-11`) |
+| Hands-free Siri capture | A Siri shortcut already installed opens Add with the phrase | Shortcuts setup retired 2026-09-30; App Intents replace it (§8) |
 | Itemized bill — line items, tax, tip, discount | Add → Itemize | On |
 | Receipt scan: cloud (Gemini) or on-device | Feature Management → Cloud Receipt Scanning | Cloud on |
 | Smart category, learning from your corrections | Add, as you type the note | On |
@@ -300,18 +297,23 @@ testing or describing the app. Where one needs action, the id says where.
 ---
 ## §11 · Open from the last pass, and your feedback — `U-`
 
-**10 items: 5 `OPEN`, 5 `DECIDE`.** From the 2026-09-30 pass (`SPEC-BUGSCAN.md` Pass 2); your phone-pass feedback lands here as the next ids. Evidence in `FINDINGS.md` §11.
+**16 items: 14 `OPEN`, 2 `DONE`.** From the 2026-09-30 pass (`SPEC-BUGSCAN.md` Pass 2) and your answers and feedback the same night. Evidence in `FINDINGS.md` §11.
 
 | | What | Status | Default if never decided |
 |---|---|---|---|
+| `U-01` | Feature Management, redesigned around personas and what each one needs — spec first | `OPEN` |  |
 | `U-02` | Screens reload in full on every focus — measure on the phone | `OPEN` |  |
+| `U-04` | Afford: the answer sits under the keyboard; the screen needs a real layout | `OPEN` |  |
+| `U-06` | Money's header opens Afford with a `help-circle` icon | `OPEN` |  |
 | `U-07` | Hand-rolled cards and banners where `Card` / `Banner` / `ListRow` exist | `OPEN` |  |
 | `U-08` | About 200 unused imports and locals | `OPEN` |  |
 | `U-09` | Friends: "name missing when I owe" | `OPEN` |  |
 | `U-10` | Your phone pass, and the feedback it produces | `OPEN` |  |
-| `U-01` | The Insights switch gates nothing since Insights became a tab | `DECIDE` | The switch stays and does nothing |
-| `U-03` | `/settings/voice` has no way in | `DECIDE` | Stays built and unreachable |
-| `U-04` | Afford: the answer sits under the keyboard while you type | `DECIDE` | You close the keyboard to see it |
-| `U-05` | The monthly backup nudge still fires when signed in | `DECIDE` | It keeps nudging a file backup |
-| `U-06` | Money's header opens Afford with a `help-circle` icon | `DECIDE` | It reads as Help |
+| `U-11` | Home's forecast line does not say it is a projection | `OPEN` |  |
+| `U-12` | Money Overview: Afford and Recurring appear twice; Afford should be a hero, not a row | `OPEN` |  |
+| `U-13` | Friends list reads as rows of buttons | `OPEN` |  |
+| `U-14` | UPI app picker: icons broken, names cut off | `OPEN` |  |
+| `U-15` | The group screen's top gradient is too heavy for what sits on it | `OPEN` |  |
+| `U-16` | Screens built as stacks of button rows and selection rows, not composed | `OPEN` |  |
 
+**Closed (2), detail in `FINDINGS.md`:** `U-03` `U-05`

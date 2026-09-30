@@ -2,14 +2,11 @@ import type { VoiceDraft } from './voiceParse';
 import type { TxnKind } from '../constants/enums';
 
 /**
- * Where a phrase captured *outside* the app should end up.
+ * What a spoken phrase is allowed to become: posted straight to the ledger, or sent to Review.
  *
- * The capture path is an iOS Shortcut: you dictate to Siri, the Shortcut drops the phrase into
- * a file in `Documents/voice-inbox/`, and the app turns it into something real the next time it
- * opens or comes to the foreground (`voiceDrain.ts`). The app never launches to record it.
- *
- * The filename does not have to carry anything — `resolveCaptureTime` prefers a timestamp in it
- * but falls back to the file's own creation time, which is why the Shortcut is two actions.
+ * The capture side today is a deep link into Add (`useVoiceDeepLink`); the Shortcuts file inbox
+ * that used to feed this was retired on 2026-09-30, and Siri App Intents are what replace it
+ * (TRACKER §8). These rules outlive any capture path, which is why they stay.
  *
  * This module is the decision layer, and it is pure: no filesystem, no database, no React.
  * Everything about *whether a spoken phrase is trustworthy enough to post to the ledger*
@@ -45,142 +42,6 @@ export const GROUP_HINTS = ['split', 'splitting', 'group', 'with', 'owe', 'owes'
 export function isGroupish(phrase: string): boolean {
   const words = phrase.toLowerCase().split(/[^a-z]+/).filter(Boolean);
   return words.some(w => (GROUP_HINTS as readonly string[]).includes(w));
-}
-
-/**
- * The filename prefix each kind is captured under.
- *
- * The kind comes from *which shortcut you said*, not from the words — that is the one signal
- * that is never wrong, and it is why saying "salary" into the expense command cannot silently
- * book income. The shortcut carries it in the filename because a plain text file has nowhere
- * else to put it.
- */
-export const CAPTURE_PREFIX: Record<TxnKind, string> = {
-  expense: 'expense',
-  income: 'income',
-  settlement: 'settle',
-};
-
-/**
- * Which kind a capture file holds.
- *
- * **Unprefixed means expense**, so captures written by the shortcut that shipped before this
- * existed keep filing correctly rather than being dropped or misread.
- */
-export function kindFromCaptureName(fileName: string): TxnKind {
-  const stem = fileName.replace(/\.[a-z0-9]+$/i, '').toLowerCase();
-  for (const kind of Object.keys(CAPTURE_PREFIX) as TxnKind[]) {
-    // `-` delimited so a capture named "expenses-12" can't claim the expense prefix by
-    // accident, and so the random suffix is never read as part of the name.
-    if (stem.startsWith(`${CAPTURE_PREFIX[kind]}-`)) return kind;
-  }
-  return 'expense';
-}
-
-/**
- * When the phrase was actually spoken, taken from the capture filename.
- *
- * This is load-bearing, not bookkeeping. `parseVoice` resolves relative dates ("yesterday",
- * "last Friday") against a `nowMs` we supply — so if that were the *drain* time, saying
- * "yesterday" at 11pm and opening the app the next morning would file the spend two days
- * back. The Shortcut names each file with the capture timestamp precisely so the parse can
- * be anchored to when you spoke.
- *
- * Naming the file this way is **optional** — `resolveCaptureTime` falls back to the file's own
- * creation time — so a name that isn't a timestamp returns the caller's fallback rather than
- * throwing. A mis-named capture should still become a transaction.
- */
-export function captureTimeFromName(fileName: string, fallbackMs: number): number {
-  const stem = fileName.replace(/\.[a-z0-9]+$/i, '');
-  if (!/^\d+$/.test(stem)) return fallbackMs;
-
-  // Calendar form first, because it is the one the Shortcuts app can actually produce.
-  const calendar = calendarStamp(stem);
-  if (calendar !== null) return calendar;
-
-  if (stem.length < 10 || stem.length > 16) return fallbackMs;
-  const n = Number(stem);
-  if (!Number.isFinite(n) || n <= 0) return fallbackMs;
-  // 10-digit values are seconds; 13-digit values are milliseconds.
-  const ms = stem.length <= 10 ? n * 1000 : n;
-  // Anything outside a sane window is more likely a coincidence than a date. 2001-09-09 is
-  // where 10-digit epochs begin; the upper bound is ~2286.
-  if (ms < 1_000_000_000_000 || ms > 9_999_999_999_999) return fallbackMs;
-  return ms;
-}
-
-/**
- * When the phrase was spoken, from whichever source actually knows.
- *
- * **The filesystem's own creation time is the primary answer**, because the Shortcut writes the
- * file at the moment you finish dictating — so iOS records the capture time for free, and the
- * shortcut needs no date actions at all. That removes two of its four steps and the entire
- * class of "Shortcuts couldn't convert from Text to Date" errors that comes with wiring
- * `Format Date` by hand.
- *
- * A timestamped filename still wins when there is one: it is an explicit statement of intent,
- * it keeps shortcuts built the older way working unchanged, and it survives a file being copied
- * (which resets `creationTime`).
- *
- * `creationTime` is `number | null` — not every platform reports it — which is why the drain
- * time remains the floor.
- */
-export function resolveCaptureTime(
-  fileName: string,
-  creationTimeMs: number | null | undefined,
-  fallbackMs: number,
-): number {
-  // A sentinel the filename parser can't return, so "no timestamp in the name" is detectable.
-  const NONE = -1;
-  const fromName = captureTimeFromName(fileName, NONE);
-  if (fromName !== NONE) return fromName;
-
-  if (typeof creationTimeMs === 'number' && Number.isFinite(creationTimeMs)
-      && creationTimeMs >= 1_000_000_000_000 && creationTimeMs <= 9_999_999_999_999) {
-    return creationTimeMs;
-  }
-
-  return fallbackMs;
-}
-
-/**
- * Read a `yyyyMMddHHmmss`-style filename.
- *
- * **This is the format the Shortcuts app can actually emit.** Its *Format Date* action has no
- * Unix-timestamp option — only a Custom pattern (Unicode UTS#35) — so asking a user for an
- * epoch means bolting on a "Get Time Between Dates" calculation against 1 Jan 1970. A single
- * Custom format string is one field and no extra action, so the code meets the tool where it
- * is. It also sorts correctly and is readable in the Files app, which an epoch is not.
- *
- * Length disambiguates it from an epoch with no overlap: an epoch in milliseconds is 13
- * digits, and 12 or 14 digits as an epoch would land in 2001 or in the year 2286+ — neither
- * is a capture. Accepts second, minute and day precision.
- *
- * Parsed as **local** time, because Shortcuts formats in the device's timezone.
- */
-function calendarStamp(digits: string): number | null {
-  const n = (from: number, len: number) => Number(digits.slice(from, from + len));
-  let y: number, mo: number, d: number, h = 0, mi = 0, s = 0;
-
-  if (digits.length === 14) {
-    [y, mo, d, h, mi, s] = [n(0, 4), n(4, 2), n(6, 2), n(8, 2), n(10, 2), n(12, 2)];
-  } else if (digits.length === 12) {
-    [y, mo, d, h, mi] = [n(0, 4), n(4, 2), n(6, 2), n(8, 2), n(10, 2)];
-  } else if (digits.length === 8) {
-    [y, mo, d] = [n(0, 4), n(4, 2), n(6, 2)];
-  } else {
-    return null;
-  }
-
-  // A plausible capture, not any arithmetically valid date.
-  if (y < 2000 || y > 2100) return null;
-  if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
-  if (h > 23 || mi > 59 || s > 59) return null;
-
-  const date = new Date(y, mo - 1, d, h, mi, s, 0);
-  // Rejects 30 February, which Date would silently roll into March.
-  if (date.getFullYear() !== y || date.getMonth() !== mo - 1 || date.getDate() !== d) return null;
-  return date.getTime();
 }
 
 /**
@@ -363,19 +224,4 @@ export function resolveVoiceCategory(
     return draft.category;
   }
   return categories.find(c => c.name === 'Other')?.name ?? categories[0]?.name ?? null;
-}
-
-/**
- * Oldest capture first, by resolved time rather than by name.
- *
- * Sorting on the filename alone stopped being enough once the timestamp became optional: left
- * to itself, Shortcuts names files things like `Dictated Text.txt` and `Dictated Text 2.txt`,
- * which sort lexicographically — and `Dictated Text 10.txt` would come before
- * `Dictated Text 2.txt`. Order matters because two spends said seconds apart must be filed in
- * the order they happened, so this sorts on the time each capture actually resolved to and
- * uses the name only to break exact ties.
- */
-export function sortCaptures<T extends { name: string; capturedAt: number }>(items: T[]): T[] {
-  return [...items].sort((a, b) =>
-    a.capturedAt === b.capturedAt ? a.name.localeCompare(b.name) : a.capturedAt - b.capturedAt);
 }

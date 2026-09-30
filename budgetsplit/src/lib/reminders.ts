@@ -12,6 +12,7 @@ import {
 import { formatRupees } from './money';
 import { settings } from './settings';
 import { loadFlags } from './featureFlags';
+import { getStoredSession } from './serverApi';
 import {
   type ReminderPrefs, type ReminderTime, type PlannedReminder,
   DEFAULT_RENEWAL_TIME, DEFAULT_DAILY_TIME, DEFAULT_BACKUP_TIME,
@@ -90,7 +91,9 @@ async function rebuild(db: SQLite.SQLiteDatabase): Promise<void> {
     );
   }
 
-  if (prefs.backup) {
+  // Signed in, the account already keeps a copy of everything (`DQ-93`), so a file backup
+  // nudge only adds noise (`U-05`).
+  if (prefs.backup && !(await getStoredSession())) {
     // Anchored to the last real export (reset in app/reports.tsx on success), or
     // to when the reminder was turned on if nothing's been exported yet — never
     // a fixed calendar day, so this can't nag right after a real backup.

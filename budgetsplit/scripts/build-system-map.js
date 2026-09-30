@@ -282,7 +282,7 @@ const AREAS = [
     blurb: 'Getting a transaction into the app — typed, spoken, scanned or split by item — and everything that describes it afterwards: category, receipt, note, the ledger you find it in again.',
     ent: ['E-04','E-06','E-07','E-08','E-09','E-10','E-60','E-83','E-86','E-92'],
     fl:  ['FL-04','FL-05','FL-12','FL-13','FL-14','FL-17','FL-18','FL-40','FL-41','FL-53'],
-    sc:  ['SC-07','SC-08','SC-14','SC-15','SC-16','SC-23','SC-25','SC-35'],
+    sc:  ['SC-07','SC-08','SC-14','SC-15','SC-16','SC-23','SC-25'],
     fe:  ['FE-01','FE-02','FE-03','FE-04','FE-05','FE-06','FE-07','FE-08','FE-09','FE-10','FE-38','FE-40'],
     ov:  ['OV-01','OV-06','OV-08','OV-18','OV-28','OV-34'],
     dq:  ['DQ-16','DQ-18','DQ-20','DQ-22','DQ-91'],

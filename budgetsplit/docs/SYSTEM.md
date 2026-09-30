@@ -224,7 +224,7 @@ photos never sync (`SYNC-F4`); balances never travel (`E-50`).
 
 One SQLite database, `budgetsplit.db`, opened by `SQLiteProvider` at the root. It is the single
 source of truth — there is no Redux, no React Query, no in-memory mirror. Reads go through
-`src/db/queries/` (27 modules); pure logic lives in `src/lib/` (135 modules) and touches neither
+`src/db/queries/` (27 modules); pure logic lives in `src/lib/` (132 modules) and touches neither
 React nor the database.
 
 **Foreign keys are OFF** on every connection (`applyConnectionPragmas`). Every `REFERENCES` clause
@@ -1439,23 +1439,23 @@ Surfaces.      Prompted from the tab bar on return
 Open.          OV-02 · OV-21
 ```
 
-### E-86 · voice capture — a file a Shortcut wrote
+### E-86 · voice capture — a phrase from outside the app
 
 ```
-Definition.    A dictated phrase dropped into a watched folder by an iOS
-               Shortcut, waiting to be parsed and logged.
+Definition.    A dictated phrase handed to the app from outside it. Today that
+               is a deep link into Add (`/add/quick?q=…`, useVoiceDeepLink);
+               Siri App Intents replace it (TRACKER §8).
 Is not.        · Not in-app dictation. That is the mic in Add, same parser,
                  different entry.
-               · Not installable one-tap today: VOICE_SHORTCUT_URL is null, so
-                 only the four-step manual setup works. DQ-22.
-Storage.       Filesystem `voice-inbox`. lib/voiceInbox.ts, voiceDrain.ts,
-               voiceShortcut.ts, voiceParse.ts.
-Lifecycle.     written by Shortcut → drained at cold start → parsed → E-04 or E-17
+               · No longer a file. The Shortcuts file inbox, its drain, the
+                 setup screen and the .shortcut builder were retired 2026-09-30.
+Storage.       None — it arrives as a URL. lib/voiceInbox.ts (what may post
+               itself), voiceParse.ts.
+Lifecycle.     phrase → parsed → prefilled Add, or E-17 when it needs a decision
 Sync.          No.
-Aliases.       voice capture · Siri capture · inbox file · dictation.
-Surfaces.      SC-35 · SC-07
-Open.          DQ-22 · the whole apparatus is slated for deletion when App
-               Intents land
+Aliases.       voice capture · Siri capture · dictation.
+Surfaces.      SC-07
+Open.          App Intents, behind the paid Apple account (B-02)
 ```
 
 ### E-87 · server account — an email, and what it unlocks
@@ -1814,7 +1814,7 @@ first.
 | `FE-03` | Receipt scan, cloud (Gemini via own Worker) | flag:`receiptScan`, iOS | `SC-08` | `E-83` `E-08` |
 | `FE-04` | Receipt scan, on-device (Apple Vision) | flag:`receiptScan`, iOS | `SC-08` | `E-83` |
 | `FE-05` | Voice dictation inside the form | flag:`voiceEntry` | `SC-07` | `E-04` |
-| `FE-06` | Hands-free Siri capture → watched folder → drained at launch | flag:`voiceEntry`, **partly dead** | `SC-35` | `E-86` |
+| `FE-06` | Hands-free Siri capture — a Shortcut hands the phrase to Add by deep link; the file inbox and setup screen are retired, App Intents next | flag:`voiceEntry`, **retiring** | `SC-07` | `E-86` |
 | `FE-07` | Smart category guess, and learning from your corrections | flag:`smartCategory` | `SC-07` | `E-92` `E-09` |
 | `FE-08` | Location tagging | pref `save_location`, off | `SC-07` `SC-15` | `E-04` |
 | `FE-09` | Receipt attachments, viewer, and the orphan reaper | live | `SC-07` `SC-15` `SC-27a` | `E-83` |
@@ -1930,7 +1930,7 @@ that the server could not read.
 
 `Last verified: 2026-09-01 · Guarded by: docCoverage.test.ts, deadRouteRef.test.ts, screenIdMap.test.ts, entryPointCount.test.ts`
 
-45 routes. `SC-xx` numbers are the existing `S-xx` numbers — the same screen, the same digits, so old
+44 routes. `SC-xx` numbers are the existing `S-xx` numbers — the same screen, the same digits, so old
 citations still resolve (§12). `SC-42` and `SC-43` are new: `/assets` and `/settings/sync` had no ID
 and no behaviour section anywhere before this document. `SC-44`, the sync log, was retired in S22
 with the sync it logged; its number is not reused.
@@ -2047,7 +2047,6 @@ taps are listed separately below and are not in the count.
 | `SC-30` | `/upcoming` | 1 | Read-only "what's coming". Renamed 2026-09-24 from the old reminders path (`SPEC-2026-09-FEEDBACK.md` §6) |
 | `SC-31` | `/settings/notifications` | 2 | |
 | `SC-34` | `/settings/backup` | 3 | |
-| `SC-35` | `/settings/voice` | 1 | |
 | `SC-36` | `/settings/account` | 6 | Server builds only |
 | `SC-37` | `/auth` | **0** | Deep link only, by design |
 | `SC-38` | `/settings/linked` | 2 | Own `ErrorBoundary` |
@@ -2096,7 +2095,6 @@ open. The walkthrough shows these instead of the paths.
 | `SC-32` | **Plan** → the repeat icon in the header |
 | `SC-33` | **Plan** → the question-mark icon in the header. Its only way in |
 | `SC-34` | **Settings → Backup & restore** |
-| `SC-35` | **Settings → Voice entry** |
 | `SC-36` | **Settings → Account.** Only exists in a build with a server configured |
 | `SC-37` | Tap the sign-in link in your email. **Nothing in the app opens this** |
 | `SC-38` | **Settings → Account → Linked people** |
@@ -2143,7 +2141,7 @@ nowhere to go.
 
 `lib/nav.ts` exports `backOr(router, fallback)` — `back()` if there is a stack, otherwise
 `replace(fallback)`. It exists because a deep-linked or cold-started screen has an empty stack and a
-dead ✕. **It is used in 6 of 45 route files**; the other ~40 call bare `router.back()` (`OV-10`).
+dead ✕. **It is used in 6 of 44 route files**; the other ~40 call bare `router.back()` (`OV-10`).
 Today that is only safe because nothing deep-links into those screens.
 
 Four sites were pushing a *tab* route onto the stack, which stacks a duplicate tab instead of

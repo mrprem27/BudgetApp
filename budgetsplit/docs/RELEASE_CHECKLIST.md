@@ -448,12 +448,6 @@ Needs the rebuild: npx expo prebuild --clean && npx expo run:ios
       - [ ] Denied-permission banner offers Open Settings
       - [ ] Test notification confirms it fired
 
-- [ ] **S-35 Voice entry** — `app/(system)/settings/voice.tsx`  
-      Open: **no way in since 2026-09-30** — `TRACKER.md` `U-03` decides delete or link; skip until then  
-      *Changed:* Privacy copy no longer absolute
-      - [ ] Setup steps are followable without prior context
-      - [ ] The privacy line reads honestly — it changed today
-
 - [ ] **S-27a Storage** — `app/(system)/settings/storage.tsx`  
       Open: Settings → Storage  
       *Changed:* pdf.js row removed
@@ -504,15 +498,9 @@ Needs the rebuild: npx expo prebuild --clean && npx expo run:ios
       the EMVCo spec only.
 - [ ] **`detectVoiceKind` has never seen real `en-IN` dictation.** Unit-tested
       against the shapes people say; a systematic miss (e.g. "salary") matters.
-- [ ] **Income and settle by voice** are built and have never run — no shortcut
-      has ever sent `?kind=income`.
-- [ ] **The two iCloud shortcut links on a second device.** They resolve for the
-      phone that authored them; whether a shared link's *Save File* destination
-      re-resolves elsewhere is untested.
-- [ ] **The shortcut is named `please-log`, not `Please log`** (iOS reads the
-      filename; the live link was minted from the old slugged file). Harmless if
-      Siri hears two words — verify. **Do not** change `VOICE_ONE_WAY_NAME`; a
-      hyphen cannot be spoken.
+- [ ] **Income and settle by voice** are built and have never run — nothing has
+      ever sent `?kind=income`. The Shortcuts path that would have is retired
+      (2026-09-30); App Intents will be the first to.
 - [ ] **Can the system share sheet target a WhatsApp Broadcast List?** The whole
       reminder design rests on it. If not, fall back to copy-to-clipboard.
 - [ ] **Smoke-test `expo-file-system/legacy`** on device. Callers left:
@@ -680,10 +668,6 @@ struck through, because "we decided not to, then did" is the useful half of a pa
   `openDB` applies fixes *before* `seedIfNeeded`, so a repair can complete
   against an empty DB and the broken row appear a moment later; that's why
   `fix_group_creator_roles_v2` is a new key rather than an edit to v1.
-- **Editing a shortcut invalidates its link** — Apple keeps serving the shared
-  version. Rebuild → import → re-share → replace the constant. That round trip
-  has cost four passes; check the constant is current before believing any setup
-  bug report.
 
 ---
 

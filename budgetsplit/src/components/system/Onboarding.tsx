@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, useWindowDimensions, Linking } from 'react-native';
+import { View, Text, StyleSheet, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { isSameDay } from 'date-fns';
@@ -30,8 +30,6 @@ import { SignInStage } from './onboarding/SignInStage';
 import { serverConfigured } from '../../lib/serverApi';
 import { haptic } from '../../lib/haptics';
 import { LogoAssembly } from './LogoAssembly';
-import { VOICE_SHORTCUT_URL, SHORTCUTS_APP_URL } from '../../lib/voiceShortcut';
-import { ensureVoiceInbox } from '../../lib/voiceDrain';
 
 // The persona type is owned by lib/personaDefaults, which maps it to feature flags.
 type IntentKey = OnboardingIntent;
@@ -79,27 +77,6 @@ function fmtK(v: number): string {
 export function Onboarding({ onDone }: { onDone: () => void }) {
   const insets = useSafeAreaInsets();
 
-  /**
-   * Parked until Siri Intents — see TRACKER §8.
-   *
-   * No longer called from anywhere in this file: the permissions step's Siri
-   * row is gone (`SPEC-2026-09-FEEDBACK.md` §2 O7), and Settings → Voice has its own, separate
-   * hand-off. Kept rather than deleted because the day App Intents lands is
-   * the day this step is worth a row again, and the folder-creation reasoning
-   * below is the part that would otherwise have to be re-derived.
-   *
-   * Hand off to Shortcuts so the user can install the voice command.
-   *
-   * Creates the capture folder first — Shortcuts' folder picker can only choose a folder that
-   * already exists, so without this the install appears to work and then silently never
-   * files anything. Falls back to opening the Shortcuts app when there is no install link
-   * yet; either way onboarding is left exactly as it was and "Finish setup" still commits.
-   */
-  function openVoiceSetup() {
-    ensureVoiceInbox();
-    haptic.light();
-    Linking.openURL(VOICE_SHORTCUT_URL ?? SHORTCUTS_APP_URL).catch(() => {});
-  }
   const { width, height } = useWindowDimensions();
   const bottomPad = insets.bottom + space.xl;
 
@@ -551,10 +528,8 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
               accent={colors.income}
               leading={<IconCircle icon="map-pin" size={layout.avatarSize} color={colors.settle} />}
             />
-            {/* Siri set-up is parked, not deleted — see openVoiceSetup below and
-                TRACKER §8. It used to sit here as a door out to Shortcuts once
-                the flow had shown its value; that's real estate a step this
-                early can't spend on a feature few people will use yet. */}
+            {/* Siri used to be offered here, as a door out to Shortcuts. The Shortcuts path is
+                retired; App Intents replace it (TRACKER §8), and this step is where they'd go. */}
           </View>
           {/* V2-02: without an account everything lives only on this phone, and the
               backup nudge is the one mitigation for losing it. Stated here, defaulted
