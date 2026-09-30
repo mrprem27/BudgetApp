@@ -39,6 +39,9 @@ import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { greeting, healthBandColor } from '../../src/components/finance/home/helpers';
 import { loadHomeData, loadCatchUp, PREV_LABEL, PERIOD_LABEL, TXN_COUNT_PERIOD_LABEL, TARGET_FOR_TAB, type TabKey } from '../../src/lib/homeData';
 import { Card } from '../../src/components/ui/Card';
+import { SheetModal } from '../../src/components/ui/SheetModal';
+import { ListRow } from '../../src/components/ui/ListRow';
+import { Divider } from '../../src/components/ui/Divider';
 
 // Month is the default and sits in the centre (Today · Month · Year).
 const TABS: { key: TabKey; label: string }[] = [
@@ -65,6 +68,7 @@ export default function DashboardScreen() {
   const [catExpanded, setCatExpanded] = useState(false);
   const [showHealth, setShowHealth] = useState(false);
   const [showSts, setShowSts] = useState(false);
+  const [showInbox, setShowInbox] = useState(false);
   const [hideAmounts, setHideAmounts] = useState(false);
   const [catchUpBanner, setCatchUpBanner] = useState<{ days: number; ruleCount: number } | null>(null);
 
@@ -148,10 +152,21 @@ export default function DashboardScreen() {
         titleAccessory={<StreakBadge days={streak} />}
         right={(
           <>
-            {/* Distinct icon and an amber tint: this is someone else asking for a decision, not a
-                queue of your own imports. */}
-            {approvalCount > 0 && <HeaderIconButton icon="user-check" color={colors.healthAmber} badge={approvalCount} label="Approvals waiting for you" onPress={() => router.push('/approvals')} />}
-            {reviewCount > 0 && <HeaderIconButton icon="inbox" badge={reviewCount} label="Review inbox" onPress={() => router.push('/review')} />}
+            {/* One "to do" for everything waiting on you (`U-63`): entries someone else added for
+                you to approve, and your own imports to review. They were two buttons that came
+                and went; now one, amber while someone else is waiting on you. With only one kind
+                waiting it goes straight there; with both it asks which. */}
+            {approvalCount + reviewCount > 0 && (
+              <HeaderIconButton
+                icon="inbox"
+                color={approvalCount > 0 ? colors.healthAmber : undefined}
+                badge={approvalCount + reviewCount}
+                label={`${approvalCount + reviewCount} waiting for you`}
+                onPress={() => approvalCount === 0 ? router.push('/review')
+                  : reviewCount === 0 ? router.push('/approvals')
+                  : setShowInbox(true)}
+              />
+            )}
             <HeaderIconButton icon="search" label="Search" onPress={() => router.push('/search')} />
             <HeaderIconButton icon="bell" badge={upcoming.length} label="Upcoming" onPress={() => router.push('/upcoming')} />
             <MemberAvatar
@@ -404,6 +419,26 @@ export default function DashboardScreen() {
       />
 
       <StsSheet visible={showSts} onClose={() => setShowSts(false)} sts={sts} />
+      <SheetModal visible={showInbox} onClose={() => setShowInbox(false)} title="Waiting for you" scroll={false}>
+        <Card clip>
+          <ListRow
+            icon="user-check"
+            iconColor={colors.healthAmber}
+            title="Approve entries"
+            subtitle="Added by others, for you to accept"
+            value={String(approvalCount)}
+            onPress={() => { setShowInbox(false); router.push('/approvals'); }}
+          />
+          <Divider indent="text" />
+          <ListRow
+            icon="inbox"
+            title="Review imports"
+            subtitle="From your statements and alerts"
+            value={String(reviewCount)}
+            onPress={() => { setShowInbox(false); router.push('/review'); }}
+          />
+        </Card>
+      </SheetModal>
     </View>
   );
 }

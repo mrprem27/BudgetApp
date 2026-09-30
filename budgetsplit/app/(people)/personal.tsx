@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, SectionList, Alert, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, SectionList, Alert } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
-import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { colors, type, space, radius, layout } from '../../src/theme';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
@@ -9,7 +8,8 @@ import { HeaderIconButton } from '../../src/components/ui/HeaderIconButton';
 import { TabPills } from '../../src/components/ui/TabPills';
 import { FilterBar } from '../../src/components/ui/FilterBar';
 import { rankTagsByFrequency } from '../../src/lib/tags';
-import { applyFilters, filtersActive, KIND_ANY, type KindFilter, type RangePreset } from '../../src/lib/txnFilter';
+import { applyFilters, filtersActive, KIND_ANY, RANGE_LABEL, type KindFilter, type RangePreset } from '../../src/lib/txnFilter';
+import { PersonalHero } from '../../src/components/finance/personal/PersonalHero';
 import { activityTotals } from '../../src/lib/activityTotals';
 import { singleMonthKey } from '../../src/lib/dateRange';
 import { TransactionRow } from '../../src/components/finance/TransactionRow';
@@ -31,15 +31,12 @@ import { useContentInset } from '../../src/hooks/useContentInset';
 import { useStore } from '../../src/store';
 import { groupByDate } from '../../src/lib/txnGrouping';
 import { formatCompact } from '../../src/lib/money';
-import { oweView } from '../../src/lib/owe';
-import { kindColor } from '../../src/lib/kindTheme';
 import { haptic } from '../../src/lib/haptics';
 import { buildGroupExportCsv } from '../../src/lib/groupExport';
 import { shareCsv, csvFileSlug } from '../../src/lib/shareCsv';
 import { keyboardAwareScroll } from '../../src/components/ui/KeyboardForm';
 import { RecurringTab } from '../../src/components/finance/group/RecurringTab';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
-import { Card } from '../../src/components/ui/Card';
 
 /*
  * Three tabs, the same three a group has for its own money: Activity, Budget, Recurring.
@@ -135,7 +132,20 @@ export default function PersonalScreen() {
    */
   // Search finds rows; it does not change what the card is about (`U-62`) — only the filters do.
   const narrowed = filter !== 'personal' || filtersActive({ query: '', kind, from, to, personId, tags });
-  const totals = useMemo(() => activityTotals(filtered, myId), [filtered, myId]);
+  /*
+   * The row under the hero adds up what the list shows (`U-63`). With no date chosen the list
+   * runs through all time, and an all-time "spent" answers nothing — so the row reads this month
+   * then, and says so. Choose a date and it reads exactly that.
+   */
+  const monthStart = useMemo(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1).getTime(); }, []);
+  const rowRows = useMemo(
+    () => (from == null && to == null ? filtered.filter(t => t.date >= monthStart) : filtered),
+    [filtered, from, to, monthStart],
+  );
+  const rowTotals = useMemo(() => activityTotals(rowRows, myId), [rowRows, myId]);
+  const rowLabel = from == null && to == null
+    ? (narrowed ? 'This month · filtered' : 'This month')
+    : range === 'custom' ? 'Chosen dates' : RANGE_LABEL[range];
   const clearFilters = useCallback(() => {
     setFilter('personal'); setQuery(''); setKind(KIND_ANY); setRange('any');
     setFrom(null); setTo(null); setPersonId(null); setTags([]);
@@ -187,8 +197,6 @@ export default function PersonalScreen() {
     [myId, persons, handleEditTxn, handleDelete],
   );
 
-  const net = summary.lent - summary.owe;
-
   function openBudgetEditor() {
     router.push('/budget');
   }
@@ -226,62 +234,17 @@ export default function PersonalScreen() {
         <ErrorState onRetry={reload} />
       ) : (
         <>
-          {tab === 'activity' && narrowed ? (
-            <Card style={styles.summaryCardFiltered}>
-              <View style={styles.summaryRow}>
-                <View style={styles.summaryItem}>
-                  <Text style={styles.summaryLabel}>Spent</Text>
-                  <Text style={[styles.summaryAmt, { color: kindColor('expense') }]}>{formatCompact(totals.spent)}</Text>
-                </View>
-                <View style={styles.summaryDivider} />
-                <View style={styles.summaryItem}>
-                  <Text style={styles.summaryLabel}>Income</Text>
-                  <Text style={[styles.summaryAmt, { color: kindColor('income') }]}>{formatCompact(totals.income)}</Text>
-                </View>
-                <View style={styles.summaryDivider} />
-                <View style={styles.summaryItem}>
-                  <Text style={styles.summaryLabel}>Net with others</Text>
-                  {(() => {
-                    const ov = oweView(totals.netWithOthers);
-                    return (
-                      <Text style={[styles.summaryAmt, { color: ov.color }]}>
-                        {ov.sign}{formatCompact(Math.abs(totals.netWithOthers))}
-                      </Text>
-                    );
-                  })()}
-                </View>
-                {/* Reports sits at the end of the row, not in a footer under it (`U-62`): the
-                    card keeps one height, so turning a filter on never moves the list. */}
-                <TouchableOpacity onPress={openReports} hitSlop={10} style={styles.summaryGo} accessibilityRole="button" accessibilityLabel="Open these in Reports">
-                  <Feather name="pie-chart" size={18} color={colors.accent} />
-                </TouchableOpacity>
-              </View>
-            </Card>
-          ) : (
-          /* Owe / Lent / Net summary — where you stand with everyone, today. */
-          <Card style={styles.summaryCard}>
-            <View style={styles.summaryItem}>
-              <Text style={styles.summaryLabel}>You owe</Text>
-              <Text style={[styles.summaryAmt, { color: oweView(-summary.owe).color }]}>{formatCompact(summary.owe)}</Text>
-            </View>
-            <View style={styles.summaryDivider} />
-            <View style={styles.summaryItem}>
-              <Text style={styles.summaryLabel}>You're owed</Text>
-              <Text style={[styles.summaryAmt, { color: oweView(summary.lent).color }]}>{formatCompact(summary.lent)}</Text>
-            </View>
-            <View style={styles.summaryDivider} />
-            <View style={styles.summaryItem}>
-              <Text style={styles.summaryLabel}>Net, everyone</Text>
-              {(() => {
-                const ov = oweView(net);
-                return (
-                  <Text style={[styles.summaryAmt, { color: ov.color }]}>
-                    {ov.sign}{formatCompact(Math.abs(net))}
-                  </Text>
-                );
-              })()}
-            </View>
-          </Card>
+          {me && (
+            <PersonalHero
+              name={me.name}
+              color={me.avatar_color ?? colors.accent}
+              imageUri={me.image_uri}
+              owe={summary.owe}
+              owed={summary.lent}
+              totals={rowTotals}
+              periodLabel={rowLabel}
+              onReports={openReports}
+            />
           )}
 
           {/* Was a byte-identical copy of the group screen's local tab strip, which
@@ -430,14 +393,6 @@ export default function PersonalScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   tabs: { marginHorizontal: layout.screenPaddingH, marginBottom: space.sm },
-  summaryCard: { flexDirection: 'row', alignItems: 'center', marginHorizontal: layout.screenPaddingH, marginBottom: space.md, paddingVertical: space.md },
-  summaryItem: { flex: 1, alignItems: 'center', gap: 2 },
-  summaryDivider: { width: 1, alignSelf: 'stretch', backgroundColor: colors.border, marginVertical: space.xs },
-  summaryLabel: { ...type.caption, color: colors.textMuted },
-  summaryAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 16, letterSpacing: -0.3 },
-  summaryCardFiltered: { marginHorizontal: layout.screenPaddingH, marginBottom: space.md, paddingVertical: space.md },
-  summaryRow: { flexDirection: 'row', alignItems: 'center' },
-  summaryGo: { width: 40, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center', borderLeftWidth: 1, borderLeftColor: colors.border },
 
 
   // No `gap` here: a date section's rows form ONE card, so any gap between them
