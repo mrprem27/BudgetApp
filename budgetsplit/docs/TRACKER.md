@@ -221,7 +221,7 @@ below is the plan; every line points at rows further down, where status lives.
 | `A-01` | Three red surfaces stack on every Home open | `PARKED` |
 | `A-11` | `expo-file-system` legacy API | `PARKED` |
 
-**Closed (10), detail in `FINDINGS.md`:** `A-02` `A-03` `A-04` `A-05` `A-06` `A-07` `A-08` `A-09` `A-10`
+**Closed (9), detail in `FINDINGS.md`:** `A-02` `A-03` `A-04` `A-05` `A-06` `A-07` `A-08` `A-09` `A-10`
 
 ---
 ## §8 · Parked with no id
@@ -318,4 +318,4 @@ testing or describing the app. Where one needs action, the id says where.
 | `U-23` | Choosing a group (in Add and elsewhere) needs a proper design | `OPEN` |  |
 | `U-24` | Product analytics (Mixpanel) before V1, and in the Android port | `DECIDE` | No analytics, as the privacy answers say today |
 
-**Closed (9), detail in `FINDINGS.md`:** `U-03` `U-04` `U-05` `U-06` `U-11` `U-12` `U-17` `U-21` `U-25` `U-26`
+**Closed (10), detail in `FINDINGS.md`:** `U-03` `U-04` `U-05` `U-06` `U-11` `U-12` `U-17` `U-21` `U-25` `U-26`
