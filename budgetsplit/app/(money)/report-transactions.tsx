@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { addMonths, subMonths, format } from 'date-fns';
-import { monthLabel } from '../../src/lib/dateFormat';
+import { monthLabel, shortDate } from '../../src/lib/dateFormat';
 import { colors, type, space, layout } from '../../src/theme';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { EmptyState } from '../../src/components/ui/EmptyState';
@@ -70,7 +70,11 @@ const TYPE_TABS = [
  */
 export default function ReportTransactionsScreen() {
   const router = useRouter();
-  const { month: monthParam, category } = useLocalSearchParams<{ month?: string; category?: string }>();
+  const { month: monthParam, category, from: fromParam, to: toParam } =
+    useLocalSearchParams<{ month?: string; category?: string; from?: string; to?: string }>();
+  // A custom period from Reports (`U-60`): the list covers exactly it, and the month arrows go.
+  const range = fromParam && toParam && Number.isFinite(+fromParam) && Number.isFinite(+toParam)
+    ? { from: +fromParam, to: +toParam } : undefined;
 
   // Local, so the ‹ › arrows work; seeded from the deep link.
   const [month, setMonth] = useState<Date>(() => parseMonthKey(monthParam));
@@ -83,7 +87,7 @@ export default function ReportTransactionsScreen() {
   const [sort, setSort] = useState<SortKey>('date');
   const listPad = useContentInset();
 
-  const { data, loading, error: loadError, refreshing, onRefresh, reload } = useScreenData((db) => loadReportTransactions(db, month), [monthKey]);
+  const { data, loading, error: loadError, refreshing, onRefresh, reload } = useScreenData((db) => loadReportTransactions(db, month, range), [monthKey, range?.from, range?.to]);
 
   const myId = data?.myId ?? '';
   const personalId = data?.personalId ?? null;
@@ -136,6 +140,11 @@ export default function ReportTransactionsScreen() {
         ListHeaderComponent={
           <View style={styles.head}>
             <Card padded>
+              {range ? (
+                <View style={styles.monthNav}>
+                  <Text style={styles.monthLabel}>{shortDate(new Date(range.from))} – {shortDate(new Date(range.to))}</Text>
+                </View>
+              ) : (
               <View style={styles.monthNav}>
                 <TouchableOpacity onPress={() => shiftMonth(-1)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Previous month">
                   <Feather name="chevron-left" size={20} color={colors.textSecondary} />
@@ -152,6 +161,7 @@ export default function ReportTransactionsScreen() {
                   <Feather name="chevron-right" size={20} color={isCurrentMonth ? colors.border : colors.textSecondary} />
                 </TouchableOpacity>
               </View>
+              )}
               {/* The hero. With one kind selected it's that kind's total; with "All" it
                   is two-sided, because money in and money out are not one number. */}
               {typeFilter === 'all' ? (
@@ -226,8 +236,8 @@ export default function ReportTransactionsScreen() {
               icon="inbox"
               title="No transactions"
               body={hasActiveChips || typeFilter !== 'all'
-                ? 'Nothing matches these filters this month. Clear one, or try another month.'
-                : `Nothing recorded in ${format(month, 'MMMM')}.`}
+                ? (range ? 'Nothing matches these filters in this period. Clear one.' : 'Nothing matches these filters this month. Clear one, or try another month.')
+                : range ? 'Nothing recorded in this period.' : `Nothing recorded in ${format(month, 'MMMM')}.`}
               tint={colors.textSecondary}
             />
           )

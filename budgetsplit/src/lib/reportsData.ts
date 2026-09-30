@@ -1,3 +1,4 @@
+import { previousRange, type ReportRange } from './dateRange';
 import type * as SQLite from 'expo-sqlite';
 import { startOfMonth, endOfMonth, startOfYear, endOfYear, subMonths, format } from 'date-fns';
 import { getAllGroups, getArchivedGroups, type BudgetGroup } from '../db/queries/groups';
@@ -64,7 +65,13 @@ function buildSummary(group: BudgetGroup, txns: TxnWithSplits[], meId: string): 
   return { group, income, expense, topCats };
 }
 
-export async function loadReportsData(db: SQLite.SQLiteDatabase, month: Date) {
+/**
+ * `range` (`U-60`) swaps the month for a custom period: the totals, the donut and the group cards
+ * cover exactly it, compared with the same length of time before it. The six-month trend and the
+ * budget bars are left out (empty / null) — a trend of months says nothing about an arbitrary
+ * span, and budgets are monthly limits that a span of 40 days cannot be measured against.
+ */
+export async function loadReportsData(db: SQLite.SQLiteDatabase, month: Date, range?: ReportRange) {
       /*
        * Archived groups included, so the page adds up to itself.
        *
@@ -86,14 +93,15 @@ export async function loadReportsData(db: SQLite.SQLiteDatabase, month: Date) {
       // Every figure below is my share (see `buildSummary`).
       const meId = me?.id ?? '';
 
-      const fromMs = startOfMonth(month).getTime();
-      const toMs = endOfMonth(month).getTime();
+      const fromMs = range ? range.from : startOfMonth(month).getTime();
+      const toMs = range ? range.to : endOfMonth(month).getTime();
       const yFrom = startOfYear(month).getTime();
       const yTo = endOfYear(month).getTime();
-      const pStart = startOfMonth(subMonths(month, 1)).getTime();
-      const pEnd = endOfMonth(subMonths(month, 1)).getTime();
-      // 6-month trend window (oldest → newest) ending at the selected month.
-      const trendMonths = Array.from({ length: 6 }, (_, i) => subMonths(month, 5 - i));
+      const prev = range ? previousRange(range) : null;
+      const pStart = prev ? prev.from : startOfMonth(subMonths(month, 1)).getTime();
+      const pEnd = prev ? prev.to : endOfMonth(subMonths(month, 1)).getTime();
+      // 6-month trend window (oldest → newest) ending at the selected month. None for a range.
+      const trendMonths = range ? [] : Array.from({ length: 6 }, (_, i) => subMonths(month, 5 - i));
 
       // Fire every independent read concurrently instead of awaiting each in series
       // (this loader used to do ~12 sequential round-trips). Ranges that were queried
@@ -106,7 +114,7 @@ export async function loadReportsData(db: SQLite.SQLiteDatabase, month: Date) {
               // Income/expense/topCats are per-group facts and every group gets them.
               // A budget bar is not: the Personal group's lines are My Budget, so it
               // gets the `myBudget` card below instead of a group-budget bar.
-              isGlobalBudgetGroup(g)
+              isGlobalBudgetGroup(g) || range
                 ? Promise.resolve(null)
                 : getBudgetAnalytics(db, g, { meId, now: month }),
             ]);
@@ -208,7 +216,7 @@ export async function loadReportsData(db: SQLite.SQLiteDatabase, month: Date) {
         analyticsByGroup: anMap,
         // My Budget for the selected month — the one figure the Personal group's
         // (absent) bar would otherwise have tried to be.
-        myBudget: await getMyGlobalBudgetSummary(db, meId, { now: month }),
+        myBudget: range ? null : await getMyGlobalBudgetSummary(db, meId, { now: month }),
         yearIncome: yIncome,
         yearExpense: yExpense,
         yearTopCat: topCat,
@@ -230,12 +238,12 @@ export type ReportSort = 'date' | 'amount';
  * archived groups too: their entries are in the month, and an unnamed row reads
  * as Personal.
  */
-export async function loadReportTransactions(db: SQLite.SQLiteDatabase, month: Date) {
+export async function loadReportTransactions(db: SQLite.SQLiteDatabase, month: Date, range?: ReportRange) {
   const [live, archived, me, txns, knownCats] = await Promise.all([
     getAllGroups(db),
     getArchivedGroups(db),
     getMe(db),
-    getTransactionsInRange(db, null, startOfMonth(month).getTime(), endOfMonth(month).getTime()),
+    getTransactionsInRange(db, null, range ? range.from : startOfMonth(month).getTime(), range ? range.to : endOfMonth(month).getTime()),
     // Only needed to resolve the folded "Others" filter — the category *list* is gone,
     // because the pie chart you arrived from is the category picker.
     getCategories(db, 'expense'),

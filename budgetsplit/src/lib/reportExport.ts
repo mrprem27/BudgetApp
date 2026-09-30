@@ -1,6 +1,7 @@
+import type { ReportRange } from './dateRange';
 import type * as SQLite from 'expo-sqlite';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
-import { fullDate, monthLabel } from './dateFormat';
+import { fullDate, monthLabel, shortDate } from './dateFormat';
 import { getTransactionsInRange } from '../db/queries/transactions';
 import { settlementView } from './settlementView';
 import { getMe } from '../db/queries/persons';
@@ -36,9 +37,11 @@ export async function buildReportCsv(
   db: SQLite.SQLiteDatabase,
   groups: BudgetGroup[],
   month: Date,
+  /** A custom period instead of the month (`U-60`). */
+  range?: ReportRange,
 ): Promise<string> {
-  const fromMs = startOfMonth(month).getTime();
-  const toMs = endOfMonth(month).getTime();
+  const fromMs = range ? range.from : startOfMonth(month).getTime();
+  const toMs = range ? range.to : endOfMonth(month).getTime();
 
   const me = await getMe(db);
   const meId = me?.id ?? '';
@@ -55,11 +58,12 @@ export async function buildReportHtml(
   db: SQLite.SQLiteDatabase,
   summaries: PdfSummary[],
   month: Date,
+  range?: ReportRange,
 ): Promise<string> {
   const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  const monthHeading = monthLabel(month);
-  const fromMs = startOfMonth(month).getTime();
-  const toMs = endOfMonth(month).getTime();
+  const monthHeading = range ? `${shortDate(new Date(range.from))} – ${shortDate(new Date(range.to))}` : monthLabel(month);
+  const fromMs = range ? range.from : startOfMonth(month).getTime();
+  const toMs = range ? range.to : endOfMonth(month).getTime();
 
   let body = '';
   for (const s of summaries) {

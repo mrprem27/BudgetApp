@@ -139,8 +139,14 @@ export default function PersonalScreen() {
     setFrom(null); setTo(null); setPersonId(null); setTags([]);
   }, []);
   const openReports = () => {
+    // One calendar month opens Reports on that month; any other span opens it on exactly that
+    // range (`U-60`); no date filter opens it on this month.
     const m = singleMonthKey(from, to);
-    router.push(m ? `/reports?month=${m}` : '/reports');
+    const isWholeMonth = m != null && (range === 'thisMonth' || range === 'lastMonth');
+    router.push(isWholeMonth ? `/reports?month=${m}`
+      : from != null && to != null ? `/reports?from=${from}&to=${to}`
+      : from != null ? `/reports?from=${from}&to=${Date.now()}`
+      : '/reports');
   };
 
   // Stable identities, so the filter bar and the list below do not re-render per keystroke.

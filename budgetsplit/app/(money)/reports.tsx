@@ -5,7 +5,10 @@ import {
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { parseMonthKey } from '../../src/lib/dateRange';
+import { parseMonthKey, type ReportRange } from '../../src/lib/dateRange';
+import { DateRangeSheet } from '../../src/components/ui/DateRangeSheet';
+import { Chip } from '../../src/components/ui/Chip';
+import { shortDate } from '../../src/lib/dateFormat';
 import { useScreenData } from '../../src/hooks/useScreenData';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { File, Paths } from 'expo-file-system';
@@ -41,8 +44,17 @@ export default function ReportsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   // Seeded from a deep link (`?month=yyyy-MM`) — Personal opens it on a filtered month (`U-52`).
-  const { month: monthParam } = useLocalSearchParams<{ month?: string }>();
+  const { month: monthParam, from: fromParam, to: toParam } = useLocalSearchParams<{ month?: string; from?: string; to?: string }>();
   const [month, setMonth] = useState(() => parseMonthKey(monthParam));
+  /*
+   * A month by default; a custom period when you pick one (`U-60`). The month selector stays
+   * the everyday control; "Pick dates" opens the range calendar, and the ✕ on the range goes
+   * back to months. Personal's filtered view opens straight into its range (`?from=&to=`).
+   */
+  const [range, setRange] = useState<ReportRange | null>(() =>
+    fromParam && toParam && Number.isFinite(+fromParam) && Number.isFinite(+toParam) ? { from: +fromParam, to: +toParam } : null);
+  const [rangeOpen, setRangeOpen] = useState(false);
+  const rangeText = range ? `${shortDate(new Date(range.from))} – ${shortDate(new Date(range.to))}` : null;
   const [selectedCat, setSelectedCat] = useState<string | null>(null);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const [catExpanded, setCatExpanded] = useState(false);
@@ -56,12 +68,12 @@ export default function ReportsScreen() {
   const { data, loading, stale, error, refreshing, onRefresh, reload } = useScreenData(async (db) => {
     const startedAt = Date.now();
     try {
-      return await loadReportsData(db, month);
+      return await loadReportsData(db, month, range ?? undefined);
     } finally {
       const elapsed = Date.now() - startedAt;
       if (elapsed < 450) await new Promise(r => setTimeout(r, 450 - elapsed));
     }
-  }, [month]);
+  }, [month, range?.from, range?.to]);
 
   const groups = data?.groups ?? [];
   const summaries = data?.summaries ?? [];
@@ -97,8 +109,10 @@ export default function ReportsScreen() {
   async function exportCSV() {
     setExporting(true);
     try {
-      const csv = await buildReportCsv(db, groups, month);
-      const fileName = `budgetsplit_${format(month, 'yyyy-MM')}.csv`;
+      const csv = await buildReportCsv(db, groups, month, range ?? undefined);
+      const fileName = range
+        ? `budgetsplit_${format(range.from, 'yyyy-MM-dd')}_${format(range.to, 'yyyy-MM-dd')}.csv`
+        : `budgetsplit_${format(month, 'yyyy-MM')}.csv`;
       const file = new File(Paths.cache, fileName);
       file.create({ overwrite: true });
       file.write(csv);
@@ -118,7 +132,7 @@ export default function ReportsScreen() {
   async function exportPDF() {
     setPdfExporting(true);
     try {
-      const html = await buildReportHtml(db, summaries, month);
+      const html = await buildReportHtml(db, summaries, month, range ?? undefined);
       const { uri } = await Print.printToFileAsync({ html });
       if (!(await Sharing.isAvailableAsync())) {
         Alert.alert('Saved', `Sharing isn’t available here. The PDF was saved to:\n${uri}`);
@@ -186,6 +200,13 @@ export default function ReportsScreen() {
       <ScreenHeader title="Reports" onBack={() => backOr(router, '/(tabs)')} right={exportButtons} />
       <ScrollView style={{ flex: 1 }} contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + space.lg }]} refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
 
+      {range ? (
+        <View style={styles.rangeNav}>
+          <Chip icon="calendar" label={rangeText ?? ''} selected onPress={() => setRangeOpen(true)}
+            onRemove={() => setRange(null)} accessibilityLabel={`Showing ${rangeText}. Change, or clear to go back to months`} />
+        </View>
+      ) : (
+      <>
       <View style={styles.monthNav}>
         <TouchableOpacity
           onPress={() => setMonth(m => subMonths(m, 1))}
@@ -207,6 +228,12 @@ export default function ReportsScreen() {
           <Feather name="chevron-right" size={22} color={canGoNext ? colors.textPrimary : alpha(colors.textMuted, 33)} />
         </TouchableOpacity>
       </View>
+      <TouchableOpacity style={styles.pickRange} onPress={() => setRangeOpen(true)} hitSlop={8} accessibilityRole="button">
+        <Feather name="calendar" size={13} color={colors.accent} />
+        <Text style={styles.pickRangeText}>Pick dates instead</Text>
+      </TouchableOpacity>
+      </>
+      )}
 
       {/*
         * `stale` as well as `loading`, and Reports is the ONLY screen that needs it.
@@ -233,7 +260,7 @@ export default function ReportsScreen() {
         <>
           {/* Summary totals — Spent / Earned with vs-last-month deltas (design Screen 7) */}
           {(() => {
-            const prevLabel = format(subMonths(month, 1), 'MMM');
+            const prevLabel = range ? 'before' : format(subMonths(month, 1), 'MMM');
             const delta = (cur: number, prev: number): { text: string; color: string; dir: 'up' | 'down' | 'flat' } => {
               if (prev <= 0) return { text: 'new', color: colors.textMuted, dir: 'flat' };
               const pct = Math.round(((cur - prev) / prev) * 100);
@@ -290,7 +317,7 @@ export default function ReportsScreen() {
                     total={pieTotal}
                     // Center "View →" opens the month-scoped transaction drill-down
                     // for the selected category.
-                    onOpen={(seg) => router.push(`/report-transactions?month=${format(month, 'yyyy-MM')}&category=${encodeURIComponent(seg.name)}`)}
+                    onOpen={(seg) => router.push(`/report-transactions?${range ? `from=${range.from}&to=${range.to}` : `month=${format(month, 'yyyy-MM')}`}&category=${encodeURIComponent(seg.name)}`)}
                     selectedName={selectedCat}
                   onSelect={(seg) => setSelectedCat(seg ? seg.name : null)}
                 />
@@ -339,7 +366,7 @@ export default function ReportsScreen() {
             <SectionCard
               key={s.group.id}
               title={s.group.name}
-              subtitle={s.income === 0 && s.expense === 0 ? 'Nothing this month' : `Spent ${formatCompact(s.expense)} · Received ${formatCompact(s.income)}`}
+              subtitle={s.income === 0 && s.expense === 0 ? (range ? 'Nothing in this period' : 'Nothing this month') : `Spent ${formatCompact(s.expense)} · Received ${formatCompact(s.income)}`}
               expanded={openGroups[s.group.id] ?? i === 0}
               onToggle={() => setOpenGroups(o => ({ ...o, [s.group.id]: !(o[s.group.id] ?? i === 0) }))}
             >
@@ -407,12 +434,14 @@ export default function ReportsScreen() {
               })()}
 
               {s.income === 0 && s.expense === 0 && (
-                <Text style={styles.emptyGroup}>No transactions this month</Text>
+                <Text style={styles.emptyGroup}>{range ? 'No transactions in this period' : 'No transactions this month'}</Text>
               )}
             </View>
             </SectionCard>
           ))}
 
+          {/* The year is the selected month's year; a custom range has no single one. */}
+          {!range && (<>
           <Text style={styles.sectionTitle}>{format(month, 'yyyy')} Year in Review</Text>
           <Card padded style={styles.card}>
             <View style={styles.metricRow}>
@@ -445,9 +474,17 @@ export default function ReportsScreen() {
               </Text>
             </View>
           </Card>
+          </>)}
         </>
       )}
       </ScrollView>
+      <DateRangeSheet
+        visible={rangeOpen}
+        from={range?.from ?? null}
+        to={range?.to ?? null}
+        onClose={() => setRangeOpen(false)}
+        onApply={(f, t) => { setRange({ from: f, to: t }); setRangeOpen(false); }}
+      />
     </View>
   );
 }
@@ -464,6 +501,9 @@ const styles = StyleSheet.create({
   exportBtnText: { ...type.label, color: colors.bg, fontFamily: 'Inter_600SemiBold' },
   monthNav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.bgCard, borderRadius: radius.md, padding: space.sm, borderWidth: 1, borderColor: colors.border },
   navBtn: { padding: space.xs },
+  rangeNav: { flexDirection: 'row', justifyContent: 'center' },
+  pickRange: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.xs, alignSelf: 'center', minHeight: layout.touchMin },
+  pickRangeText: { ...type.labelSemi, color: colors.accent },
   monthLabel: { ...type.subheading, color: colors.textPrimary },
   sectionTitle: { ...type.label, color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: space.sm },
   summaryRow: { flexDirection: 'row', gap: space.sm },

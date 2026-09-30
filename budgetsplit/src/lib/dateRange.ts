@@ -44,3 +44,12 @@ export function singleMonthKey(from: number | null, to: number | null): string |
   if (a.getFullYear() !== b.getFullYear() || a.getMonth() !== b.getMonth()) return null;
   return `${a.getFullYear()}-${String(a.getMonth() + 1).padStart(2, '0')}`;
 }
+
+/** A report's custom period (`U-60`): inclusive epoch-ms bounds. */
+export type ReportRange = { from: number; to: number };
+
+/** The same length of time immediately before a range — what "vs before" compares with. */
+export function previousRange(r: ReportRange): ReportRange {
+  const len = r.to - r.from;
+  return { from: r.from - len - 1, to: r.from - 1 };
+}
