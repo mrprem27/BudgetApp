@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { colors, type, space } from '../../tokens';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { Feather } from '@expo/vector-icons';
+import { colors, type, space, layout } from '../../tokens';
 import { Card } from '../../ui/Card';
 import { AmountRow } from '../../ui/AmountRow';
 import { InfoLabel } from '../../ui/InfoLabel';
@@ -8,7 +9,6 @@ import { SheetModal } from '../../ui/SheetModal';
 import { Input } from '../../ui/Input';
 import { Chip } from '../../ui/Chip';
 import { PrimaryButton } from '../../ui/PrimaryButton';
-import { SecondaryButton } from '../../ui/SecondaryButton';
 import { parseToPaise, paiseToInput } from '../../../lib/money';
 import { ASSET_KIND, ASSET_KIND_LABEL, ASSET_KIND_ICON } from '../../../constants/assets';
 import type { Asset, AssetKind } from '../../../db/queries/assets';
@@ -142,14 +142,31 @@ export function AssetSheet({
           style={styles.submit}
         />
 
+        {/* The rare, costly actions sit apart from Save as quiet rows, each saying what it does
+            (`U-45`). Both confirm before anything happens (`useAssets`). */}
         {mode === 'edit' && asset && (
-          <View style={styles.dangerRow}>
-            <SecondaryButton label="Stop counting" size="sm" onPress={() => onArchive(asset)} style={styles.dangerBtn} />
-            <SecondaryButton label="Delete" size="sm" danger onPress={() => onDelete(asset)} style={styles.dangerBtn} />
+          <View style={styles.danger}>
+            <QuietAction icon="eye-off" label="Stop counting" hint="Out of your net worth, history kept" onPress={() => onArchive(asset)} />
+            <QuietAction icon="trash-2" label="Delete" hint="Only if nothing ever moved in or out" danger onPress={() => onDelete(asset)} />
           </View>
         )}
       </>
     </SheetModal>
+  );
+}
+
+function QuietAction({ icon, label, hint, danger, onPress }: {
+  icon: React.ComponentProps<typeof Feather>['name']; label: string; hint: string; danger?: boolean; onPress: () => void;
+}) {
+  const tint = danger ? colors.expense : colors.textSecondary;
+  return (
+    <TouchableOpacity style={styles.quiet} onPress={onPress} accessibilityRole="button" accessibilityLabel={`${label}. ${hint}`}>
+      <Feather name={icon} size={16} color={tint} />
+      <View style={{ flex: 1 }}>
+        <Text style={[styles.quietLabel, { color: tint }]}>{label}</Text>
+        <Text style={styles.quietHint}>{hint}</Text>
+      </View>
+    </TouchableOpacity>
   );
 }
 
@@ -160,6 +177,8 @@ const styles = StyleSheet.create({
   amountCard: { marginTop: space.md, marginBottom: space.xs },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginBottom: space.sm },
   submit: { marginTop: space.lg },
-  dangerRow: { flexDirection: 'row', gap: space.sm, marginTop: space.sm },
-  dangerBtn: { flex: 1 },
+  danger: { marginTop: space.md, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: space.xs },
+  quiet: { flexDirection: 'row', alignItems: 'center', gap: space.smd, minHeight: layout.touchMin, paddingVertical: space.sm },
+  quietLabel: { ...type.labelSemi },
+  quietHint: { ...type.caption, color: colors.textMuted },
 });

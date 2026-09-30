@@ -511,12 +511,14 @@ off** (`dimWhenOff: false`): dimming would read as "scanning is disabled", which
 **Question:** "What can I spend, what do I own, and what am I saving for?"
 
 Three sections as `TabPills` under the header — one thing each:
-- **Overview** — *Now*: Available money (Bank / Cash / Wallet, credit); rows for *Can I afford this?* and
-  *Recurring*. *This month*: the overspend consent prompt and Coming up. The month-end forecast is **not**
-  here — it lives in Insights.
-- **Assets** — `AssetsSection`, the same component `/assets` renders: worth across assets, Move money,
-  Add asset, each asset with Move, archived ones below.
-- **Goals** — drag-rankable goals by priority, fund / new goal (every amount in `AmountRow`).
+- **Overview** — *Now*: Available money (Bank / Cash / Wallet, credit), then the *Can I afford this?*
+  card (`AffordHeroCard`, `U-46`). *This month*: the overspend consent prompt and Coming up. The
+  month-end forecast is **not** here — it lives in Insights.
+- **Assets** — `AssetsSection`, the same component `/assets` renders: a sum card, each asset a line
+  (colour dot, name, kind, worth, ›) and `= Worth`; archived ones below; **Add asset** and **Move money**
+  as one pair at the end (`U-45`). An asset's page signs movements from the asset's side, settle colour.
+- **Goals** — the same Afford card first, then drag-rankable goals by priority, fund / new goal (every
+  amount in `AmountRow`).
 
 ### States
 - **Loading:** none.

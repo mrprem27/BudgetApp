@@ -11,10 +11,12 @@ import { ErrorState } from '../../ui/ErrorState';
 import { SectionHeader } from '../../ui/SectionHeader';
 import { SkeletonCard } from '../../ui/Skeleton';
 import { SecondaryButton } from '../../ui/SecondaryButton';
+import { PrimaryButton } from '../../ui/PrimaryButton';
+import { SumLine } from '../../ui/SumLine';
 import { AssetSheet, type AssetSheetMode } from './AssetSheet';
 import { MoveMoneySheet } from './MoveMoneySheet';
 import type { useAssets } from '../../../hooks/useAssets';
-import { formatRupees, formatCompact } from '../../../lib/money';
+import { formatRupees } from '../../../lib/money';
 import { ASSET_KIND_ICON, ASSET_KIND_LABEL } from '../../../constants/assets';
 import type { Asset, MoveEndpoint } from '../../../db/queries/assets';
 
@@ -25,36 +27,21 @@ const BANK: MoveEndpoint = { kind: 'bucket', bucket: 'bank' };
  * standalone `/assets` screen are the same thing and cannot drift. Owns its sheets; the host owns the
  * scroll view and the data (`useAssets`), so pulling to refresh reloads the list.
  *
- * **What is out here is what you do often.** A row is its name and worth, tap to open it, plus one
- * shortcut — `Move`, which is Add, Take out and switching between assets in a single form. What you do
- * rarely — restate its worth, rename it, stop counting it — lives inside the asset's own page.
+ * A sum card (`U-45`): each asset a line, `= Worth` under them, tap a line to open the asset. The two
+ * actions — Add asset and Move money — sit together at the end. What you do rarely (restate its worth,
+ * rename it, stop counting it) lives inside the asset's own page.
  */
 /** `assets` comes from the host, so the host's pull-to-refresh can reload it (`a.onRefresh`). */
 export function AssetsSection({ assets: a }: { assets: ReturnType<typeof useAssets> }) {
   const router = useRouter();
   const [sheet, setSheet] = useState<{ mode: AssetSheetMode; asset?: Asset } | null>(null);
   const [move, setMove] = useState<{ from: MoveEndpoint; to: MoveEndpoint } | null>(null);
-  // Money in is the common case, so a row's Move opens as bank → this asset (⇅ flips it).
-  const moveInto = (asset: Asset) => setMove({ from: BANK, to: { kind: 'asset', id: asset.id } });
 
   if (a.error) return <ErrorState onRetry={a.reload} />;
   if (a.loading) return <><SkeletonCard height={110} /><SkeletonCard height={160} /></>;
 
   return (
     <View style={styles.wrap}>
-      <Card padded style={styles.hero}>
-        <Text style={styles.heroLabel}>Worth, across your assets</Text>
-        <Text style={styles.heroAmount}>{formatCompact(a.total)}</Text>
-        <Text style={styles.heroHint}>Counted in your net worth, never in what you can spend, these aren’t cash.</Text>
-      </Card>
-
-      <View style={styles.actions}>
-        {a.assets.length > 0 && (
-          <SecondaryButton label="Move money" icon="repeat" onPress={() => setMove({ from: BANK, to: { kind: 'asset', id: a.assets[0].id } })} style={styles.flex} />
-        )}
-        <SecondaryButton label="Add asset" icon="plus" onPress={() => setSheet({ mode: 'create' })} style={styles.flex} />
-      </View>
-
       {a.assets.length === 0 ? (
         <EmptyState
           icon="package"
@@ -64,25 +51,22 @@ export function AssetsSection({ assets: a }: { assets: ReturnType<typeof useAsse
           onAction={() => setSheet({ mode: 'create' })}
         />
       ) : (
-        <Card clip>
+        // A sum you could check by hand (`U-45`), the same shape as Money's card and Friends:
+        // each asset a line in its own colour, `= Worth` under them. Tap a line to open it.
+        <Card padded style={styles.sum}>
           {a.assets.map((asset, i) => (
-            <View key={asset.id}>
-              {i > 0 && <Divider indent="text" />}
-              <ListRow
-                variant="stacked"
-                leading={<IconCircle icon={ASSET_KIND_ICON[asset.kind]} size={layout.avatarSize} color={asset.color ?? colors.accent} />}
-                title={asset.name}
-                subtitle={ASSET_KIND_LABEL[asset.kind]}
-                value={<Text style={styles.balance}>{formatRupees(asset.balance)}</Text>}
-                // Tap opens the asset and the movements behind its balance.
-                onPress={() => router.push(`/asset/${asset.id}`)}
-                accessibilityLabel={`${asset.name}, ${formatRupees(asset.balance)}`}
-              />
-              <View style={styles.actionRow}>
-                <SecondaryButton label="Move" icon="repeat" size="sm" onPress={() => moveInto(asset)} style={styles.actionBtn} />
-              </View>
-            </View>
+            <SumLine
+              key={asset.id}
+              op={i === 0 ? '' : '+'}
+              dot={asset.color ?? colors.accent}
+              label={asset.name}
+              hint={ASSET_KIND_LABEL[asset.kind]}
+              value={asset.balance}
+              onPress={() => router.push(`/asset/${asset.id}`)}
+            />
           ))}
+          <SumLine op="=" label="Worth" value={a.total} total />
+          <Text style={styles.hint}>In your net worth, never in what you can spend.</Text>
         </Card>
       )}
 
@@ -105,6 +89,13 @@ export function AssetsSection({ assets: a }: { assets: ReturnType<typeof useAsse
           </Card>
           <Text style={styles.foot}>Tap one to start counting it again.</Text>
         </>
+      )}
+
+      {a.assets.length > 0 && (
+        <View style={styles.actions}>
+          <SecondaryButton label="Add asset" icon="plus" onPress={() => setSheet({ mode: 'create' })} style={styles.flex} />
+          <PrimaryButton label="Move money" onPress={() => setMove({ from: BANK, to: { kind: 'asset', id: a.assets[0].id } })} style={styles.flex} />
+        </View>
       )}
 
       <AssetSheet
@@ -134,13 +125,8 @@ export function AssetsSection({ assets: a }: { assets: ReturnType<typeof useAsse
 const styles = StyleSheet.create({
   wrap: { gap: space.md },
   flex: { flex: 1 },
+  sum: { gap: 6 },
+  hint: { ...type.caption, color: colors.textMuted, marginTop: space.xs },
   actions: { flexDirection: 'row', gap: space.sm },
-  hero: { alignItems: 'center', gap: space.xs },
-  heroLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
-  heroAmount: { fontFamily: 'SpaceMono_400Regular', fontSize: 32, letterSpacing: -1, color: colors.textPrimary },
-  heroHint: { ...type.caption, color: colors.textSecondary, textAlign: 'center' },
-  balance: { fontFamily: 'SpaceMono_400Regular', fontSize: 15, color: colors.textPrimary },
-  actionRow: { flexDirection: 'row', paddingHorizontal: space.md, paddingBottom: space.md },
-  actionBtn: { alignSelf: 'flex-start' },
   foot: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginTop: -space.sm },
 });

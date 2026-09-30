@@ -2,7 +2,7 @@
 
 `Last verified: 2026-09-30 (§0, §1, §9–§11 and every row whose status changed; the rest as of 2026-09-07) · Guarded by: trackerIntegrity.test.ts · countClaims.test.ts · docIdGraph.test.ts`
 
-**246 items, 119 of them still open.** One row each: what it is, and where it stands.
+**248 items, 119 of them still open.** One row each: what it is, and where it stands.
 Nothing else. **This is the V1 tracker** — start at §0.
 
 **The evidence is not here.** Why each item exists, what it costs, what breaks if you touch it, and
@@ -29,7 +29,7 @@ is defined in two places.
 | §6 · Debt — `D-` | **11** | 11 |
 | §7 · Accepted — `A-` | **2** | 11 |
 | §9 · Deferred from V1 — `V-` | **7** | 7 |
-| §11 · Open from the last pass, and your feedback — `U-` | **13** | 44 |
+| §11 · Open from the last pass, and your feedback — `U-` | **13** | 46 |
 
 §8 (parked scope) and §10 (built but easy to forget) carry no ids.
 
@@ -295,7 +295,7 @@ testing or describing the app. Where one needs action, the id says where.
 ---
 ## §11 · Open from the last pass, and your feedback — `U-`
 
-**44 items: 11 `OPEN`, 1 `BLOCKED`, 1 `PARKED`, 31 `DONE`.** From the 2026-09-30 pass (`SPEC-BUGSCAN.md` Pass 2) and your answers and feedback the same night. Evidence in `FINDINGS.md` §11.
+**46 items: 11 `OPEN`, 1 `BLOCKED`, 1 `PARKED`, 33 `DONE`.** From the 2026-09-30 pass (`SPEC-BUGSCAN.md` Pass 2) and your answers and feedback the same night. Evidence in `FINDINGS.md` §11.
 
 | | What | Status | Default if never decided |
 |---|---|---|---|
@@ -313,4 +313,4 @@ testing or describing the app. Where one needs action, the id says where.
 | `U-24` | Product analytics (Mixpanel): built, with an opt-out; needs your project token | `BLOCKED` |  |
 | `U-31` | Sorting is not right — which lists? (the money card now orders largest first) | `OPEN` |  |
 
-**Closed (31), detail in `FINDINGS.md`:** `U-01` `U-03` `U-04` `U-05` `U-06` `U-11` `U-12` `U-17` `U-21` `U-14` `U-25` `U-26` `U-27` `U-28` `U-29` `U-30` `U-32` `U-15` `U-33` `U-35` `U-36` `U-37` `U-34` `U-38` `U-39` `U-40` `U-41` `U-42` `U-43` `U-13` `U-44`
+**Closed (33), detail in `FINDINGS.md`:** `U-01` `U-03` `U-04` `U-05` `U-06` `U-11` `U-12` `U-17` `U-21` `U-14` `U-25` `U-26` `U-27` `U-28` `U-29` `U-30` `U-32` `U-15` `U-33` `U-35` `U-36` `U-37` `U-34` `U-38` `U-39` `U-40` `U-41` `U-42` `U-43` `U-13` `U-44` `U-45` `U-46`

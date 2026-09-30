@@ -1227,3 +1227,18 @@ describe('U-43 · Import shows one way in at a time', () => {
     expect(src).toMatch(/<Text style=\{styles\.intro\}>[^<]{0,90}<\/Text>/);
   });
 });
+
+describe('U-45 · an asset movement is never tinted as income or spending', () => {
+  it('the ledger row gives asset movements the settle tint', () => {
+    const src = fs.readFileSync('src/components/finance/TransactionRow.tsx', 'utf8');
+    expect(src).toMatch(/forceColor=\{txn\.asset_id && settle \? settle\.tint : undefined\}/);
+  });
+  it("the asset's own page signs from the asset's side", () => {
+    expect(fs.readFileSync('app/(money)/asset/[id].tsx', 'utf8')).toMatch(/assetNames=\{assetNames\}\s+assetSide/);
+  });
+  it('the Assets list is a sum, with no Move button per row', () => {
+    const src = fs.readFileSync('src/components/finance/plan/AssetsSection.tsx', 'utf8');
+    expect(src).toMatch(/<SumLine op="=" label="Worth"/);
+    expect(src).not.toMatch(/label="Move" /);
+  });
+});

@@ -76,6 +76,7 @@ export default function AssetDetailScreen() {
           myId={myId}
           isPersonal
           assetNames={assetNames}
+          assetSide
           onPress={() => router.push(`/txn/${item.id}`)}
         />
       </TxnCell>
@@ -128,8 +129,9 @@ export default function AssetDetailScreen() {
                 {txns.length > 0 && ` · ${txns.length} ${txns.length === 1 ? 'movement' : 'movements'}`}
               </Text>
               <View style={styles.actions}>
-                <PrimaryButton label="Move money" onPress={() => setMoving(true)} style={styles.actionBtn} />
+                {/* Primary on the right, as on the Assets list (`U-45`). */}
                 <SecondaryButton label="Update worth" onPress={() => setSheet('restate')} style={styles.actionBtn} />
+                <PrimaryButton label="Move money" onPress={() => setMoving(true)} style={styles.actionBtn} />
               </View>
             </View>
           ) : null

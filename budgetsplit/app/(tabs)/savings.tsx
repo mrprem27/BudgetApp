@@ -125,7 +125,7 @@ export default function SavingsScreen() {
         large
         right={(
           <>
-            {/* One door each (`U-12`): Recurring here, Afford as the card in the body. */}
+            {/* One door each (`U-12`): Recurring here, Afford as the card in the body (Overview and Goals, `U-46`). */}
             {flags.recurring && <HeaderIconButton icon="refresh-cw" color={colors.accent} label="Recurring" onPress={() => router.push('/plan/recurring')} />}
           </>
         )}
@@ -166,7 +166,9 @@ export default function SavingsScreen() {
           />
         )}
 
-
+        {/* Directly under your money, the question you ask of it (`U-46`). The same card leads
+            Goals, where the answer is often "save toward it". */}
+        {flags.affordCheck && <AffordHeroCard onPress={() => router.push('/afford')} />}
 
         {((overspend?.total ?? 0) > 0 || upcoming.length > 0) && <SectionHeader title="This month" />}
 

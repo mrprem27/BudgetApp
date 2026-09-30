@@ -7,9 +7,9 @@ import { PressableScale } from '../../ui/PressableScale';
 import { IconCircle } from '../../ui/IconCircle';
 
 /**
- * Money's one door to "Can I afford this?" — the question the tab exists to answer, so it is a
- * card of its own rather than a list row, and it lives here only: the header icon and the row it
- * duplicated are gone (`U-06`, `U-12`).
+ * Money's door to "Can I afford this?" — the question the tab exists to answer, so it is a card of
+ * its own rather than a list row. One component in two places: under your money on Overview, and
+ * first on Goals (`U-46`). The header icon and the row it duplicated are gone (`U-06`, `U-12`).
  */
 export function AffordHeroCard({ onPress }: { onPress: () => void }) {
   return (

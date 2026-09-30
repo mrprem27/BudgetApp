@@ -36,6 +36,11 @@ type Props = {
    * note erased the destination from every surface in the app.
    */
   assetNames?: Record<string, string>;
+  /**
+   * Sign asset movements from the asset's side (money in reads positive), for the asset's own
+   * page. Everywhere else the sign is your cash's side (`SPEC-ASSETS-UI` 2).
+   */
+  assetSide?: boolean;
 };
 
 function highlightParts(title: string, term: string): { text: string; hit: boolean }[] {
@@ -57,7 +62,7 @@ function highlightParts(title: string, term: string): { text: string; hit: boole
 
 export const TransactionRow = React.memo(function TransactionRow({
   txn, myId, onPress, onDelete, showDate = false, members, isPersonal, groupName, highlight,
-  assetNames,
+  assetNames, assetSide,
 }: Props) {
   const myShare = myShareOf(txn, myId);
   const personOf = (pid?: string) => members?.find(m => m.id === pid);
@@ -92,6 +97,7 @@ export const TransactionRow = React.memo(function TransactionRow({
     displayAmount = settle
       ? (settle.outbound ? -amount : amount)
       : (iPaid ? -amount : amount);
+    if (assetSide && txn.asset_id) displayAmount = -displayAmount;
     if (members && !isPersonal) {
       settlementTitle = iPaid
         ? `You paid ${nameOf(toId)}`
@@ -206,7 +212,9 @@ export const TransactionRow = React.memo(function TransactionRow({
       </View>
 
       <View style={styles.right}>
-        <AmountText paise={displayAmount} size="sm" />
+        {/* An asset movement is money changing shape, never income or spending, so it wears
+            the settle colour and not the sign's green or coral (`SPEC-ASSETS-UI` 1). */}
+        <AmountText paise={displayAmount} size="sm" forceColor={txn.asset_id && settle ? settle.tint : undefined} />
         {/* Lending/borrowing info below amount */}
         {attribution ? (
           <Text style={[styles.attribution, { color: attribution.color }]} numberOfLines={1}>
