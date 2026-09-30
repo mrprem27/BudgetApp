@@ -135,10 +135,13 @@ function SumLine({ op, dot, label, value, total, owed, hint, onPress }: {
 
 function Action({ icon, label, onPress }: { icon: keyof typeof Feather.glyphMap; label: string; onPress: () => void }) {
   return (
-    <PressableScale style={styles.action} onPress={onPress} accessibilityLabel={label}>
-      <Feather name={icon} size={15} color={colors.accent} />
-      <Text style={styles.actionText} numberOfLines={1}>{label}</Text>
-    </PressableScale>
+    // Flex on a plain wrapper — PressableScale styles an inner view, so flex there does nothing.
+    <View style={styles.actionCell}>
+      <PressableScale style={styles.action} onPress={onPress} accessibilityLabel={label}>
+        <Feather name={icon} size={15} color={colors.accent} />
+        <Text style={styles.actionText} numberOfLines={1}>{label}</Text>
+      </PressableScale>
+    </View>
   );
 }
 
@@ -162,8 +165,9 @@ const styles = StyleSheet.create({
   lineValue: { fontFamily: 'SpaceMono_400Regular', fontSize: 13, color: colors.textSecondary },
   totalValue: { fontSize: 15, color: colors.textPrimary },
   actions: { flexDirection: 'row', gap: space.sm },
+  actionCell: { flex: 1 },
   action: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.xs,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.xs,
     minHeight: 44, borderRadius: radius.md, backgroundColor: alpha(colors.accent, 13),
   },
   actionText: { ...type.labelSemi, color: colors.accent },

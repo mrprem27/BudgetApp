@@ -54,18 +54,23 @@ export function HomeTiles({ sts, projected, budget, obfuscate, onPressSts, onPre
 
 function Tile({ label, amount, tone, sub, onPress, a11y }: { label: string; amount: string; tone: string; sub: string; onPress: () => void; a11y: string }) {
   return (
-    <PressableScale style={styles.tile} onPress={onPress} accessibilityLabel={`${a11y}. ${amount}, ${sub}`}>
-      <Text style={styles.label} numberOfLines={1}>{label}</Text>
-      <Text style={[styles.amount, { color: tone }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{amount}</Text>
-      <Text style={styles.sub} numberOfLines={1}>{sub}</Text>
-    </PressableScale>
+    // The flex lives on a plain wrapper: `PressableScale` puts its `style` on an inner Animated.View,
+    // so `flex: 1` there never reached the row and the two tiles took their content's width (`U-30`).
+    <View style={styles.cell}>
+      <PressableScale style={styles.tile} onPress={onPress} accessibilityLabel={`${a11y}. ${amount}, ${sub}`}>
+        <Text style={styles.label} numberOfLines={1}>{label}</Text>
+        <Text style={[styles.amount, { color: tone }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{amount}</Text>
+        <Text style={styles.sub} numberOfLines={1}>{sub}</Text>
+      </PressableScale>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', gap: space.smd, marginBottom: space.md },
+  row: { flexDirection: 'row', alignItems: 'stretch', gap: space.smd, marginBottom: space.md },
+  cell: { flex: 1, minWidth: 0 },
   tile: {
-    flex: 1, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border,
+    alignSelf: 'stretch', backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border,
     padding: space.md, gap: space.xs, ...shadow.sm,
   },
   label: { ...type.caption, color: colors.textSecondary },

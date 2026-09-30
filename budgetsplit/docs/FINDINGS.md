@@ -205,6 +205,9 @@ OV-27 · Three buttons to one destination on one screen        [path-duplication
   Risk.    Low, but it is a layout change — worth confirming before doing.
   Verdict. COLLAPSE.
   Trigger. Now.
+  Closed.  2026-09-30, your call: the floating + stays; the Recurring tab's add opens Add with
+           Repeat on (`repeat=1`); the Expenses tab's only other add is its empty state, which
+           AGENTS §2 requires, so it stays.
 ```
 
 ### The seven Walk 1 found

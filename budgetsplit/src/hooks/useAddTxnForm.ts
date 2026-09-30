@@ -51,6 +51,8 @@ import { track } from '../lib/usageEvents';
 export type AddTxnParams = {
   groupId?: string; kind?: string; editId?: string; recurEditId?: string;
   from?: string; to?: string; amount?: string; note?: string; date?: string; category?: string;
+  /** `1` opens with Repeat on: a Recurring tab's add makes a recurring entry (`OV-27`). */
+  repeat?: string;
 };
 
 /**
@@ -63,6 +65,7 @@ export function useAddTxnForm(params: AddTxnParams) {
   const {
     groupId: paramGroupId, kind: paramKind, editId, recurEditId,
     from: paramFrom, to: paramTo, amount: paramAmount, note: paramNote, date: paramDate, category: paramCategory,
+    repeat: paramRepeat,
   } = params;
   const isEditing = !!editId;
   const isRecurEdit = !!recurEditId;
@@ -156,7 +159,7 @@ export function useAddTxnForm(params: AddTxnParams) {
   /** Free-form tags — the axis categories can't express (needs/wants, a trip name).
    *  Orthogonal to category: one category, any number of tags. */
   const [tags, setTags] = useState<string[]>([]);
-  const [recurEnabled, setRecurEnabled] = useState(false);
+  const [recurEnabled, setRecurEnabled] = useState(paramRepeat === '1');
   const [recurFreq, setRecurFreq] = useState<RecurFreq>('monthly');
   /**
    * Whether a due occurrence posts itself or waits to be logged.

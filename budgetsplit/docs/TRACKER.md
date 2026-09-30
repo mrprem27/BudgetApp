@@ -2,7 +2,7 @@
 
 `Last verified: 2026-09-30 (§0, §1, §9–§11 and every row whose status changed; the rest as of 2026-09-07) · Guarded by: trackerIntegrity.test.ts · countClaims.test.ts · docIdGraph.test.ts`
 
-**240 items, 123 of them still open.** One row each: what it is, and where it stands.
+**240 items, 122 of them still open.** One row each: what it is, and where it stands.
 Nothing else. **This is the V1 tracker** — start at §0.
 
 **The evidence is not here.** Why each item exists, what it costs, what breaks if you touch it, and
@@ -22,7 +22,7 @@ is defined in two places.
 | Section | Open | Total |
 |---|---|---|
 | §1 · Ship blockers | **12** | 19 |
-| §2 · Complexity — `OV-` | **19** | 34 |
+| §2 · Complexity — `OV-` | **18** | 34 |
 | §3 · Decisions — `DQ-` | **39** | 57 |
 | §4 · Walk 1 — `W1-` | **16** | 39 |
 | §5 · Sync — `SYNC-F` | **1** | 24 |
@@ -42,8 +42,7 @@ below is the plan; every line points at rows further down, where status lives.
 
 1. **Your phone pass** — `U-10` (the list for tomorrow), `B-12`, the sweep in
    `RELEASE_CHECKLIST.md` §2 and the sync checks in §3.1. Everything it finds becomes a `U-` row in §11.
-2. **Answer the open questions** — `U-01` Feature Management (`SPEC-FEATURES.md`, 4 questions left) · `OV-27` the group screen's
-   three add buttons · `V-06` cash last confirmed · `V-07` Android before or after V1.
+2. **Answer the open questions** — `U-01` Feature Management (`SPEC-FEATURES.md`, 4 questions left) · `V-06` cash last confirmed · `V-07` Android before or after V1.
 3. **Fix what 1 and 2 turn up**, then the tidy-ups `U-07` and `U-08`, and measure `U-02`.
 4. **Ship steps** — `B-19` merge to `main` · `B-07` rotate the Brevo key · `B-02` the Apple
    Developer Program (a free Apple ID already covers your own phone) · `DQ-95` Workers Paid before
@@ -80,11 +79,10 @@ below is the plan; every line points at rows further down, where status lives.
 ---
 ## §2 · Complexity and overlap — `OV-`
 
-**34 items: 8 `OPEN`, 6 `DECIDE`, 5 `PARKED`, 15 `DONE`.** Duplications, overloads and phantoms, each with a verdict. `FINDINGS.md` §2 carries the count, the blast radius and the risk for each.
+**34 items: 7 `OPEN`, 6 `DECIDE`, 5 `PARKED`, 16 `DONE`.** Duplications, overloads and phantoms, each with a verdict. `FINDINGS.md` §2 carries the count, the blast radius and the risk for each.
 
 | | What | Status |
 |---|---|---|
-| `OV-27` | Three buttons to one destination on one screen | `OPEN` |
 | `OV-01` | Nine names for one row | `OPEN` |
 | `OV-04` | Seven names over four shapes for a balance | `OPEN` |
 | `OV-05` | Person, friend, member, roster member, contact | `OPEN` |
@@ -104,7 +102,7 @@ below is the plan; every line points at rows further down, where status lives.
 | `OV-17` | The tab bar owns sync, alerts, reconciliation and snapshots | `PARKED` |
 | `OV-24` | SC-19 owns twelve sheet states | `PARKED` |
 
-**Closed (15), detail in `FINDINGS.md`:** `OV-12` `OV-09` `OV-25` `OV-28` `OV-29` `OV-30` `OV-31` `OV-32` `OV-33` `OV-34` `OV-26` `OV-03` `OV-13` `OV-21` `OV-16`
+**Closed (16), detail in `FINDINGS.md`:** `OV-27` `OV-12` `OV-09` `OV-25` `OV-28` `OV-29` `OV-30` `OV-31` `OV-32` `OV-33` `OV-34` `OV-26` `OV-03` `OV-13` `OV-21` `OV-16`
 
 ---
 ## §3 · Open decisions — `DQ-`

@@ -1148,3 +1148,38 @@ describe('U-32 · Safe to spend names the year', () => {
   });
 });
 
+describe('OV-27 · a Recurring tab adds a recurring entry', () => {
+  it('opens Add with Repeat on, from a group and from Personal', () => {
+    expect(fs.readFileSync('app/(people)/group/[id].tsx', 'utf8')).toMatch(/<RecurringTab[\s\S]*?onAdd=\{[\s\S]{0,160}?repeat=1/);
+    const personal = fs.readFileSync('app/(people)/personal.tsx', 'utf8');
+    expect(personal).toMatch(/<RecurringTab[\s\S]*?onAdd=\{\(\) => addPersonal\(true\)\}/);
+    expect(personal).toMatch(/repeat \? '&repeat=1' : ''/);
+    expect(fs.readFileSync('src/hooks/useAddTxnForm.ts', 'utf8')).toMatch(/useState\(paramRepeat === '1'\)/);
+  });
+});
+
+describe('U-30 · the two Home tiles share the row equally', () => {
+  it('puts flex on a plain wrapper, not on PressableScale\'s style', () => {
+    const src = fs.readFileSync('src/components/finance/home/HomeTiles.tsx', 'utf8');
+    expect(src).toMatch(/<View style=\{styles\.cell\}>\s*<PressableScale/);
+    expect(src).toMatch(/cell: \{ flex: 1/);
+    expect(src).not.toMatch(/tile: \{\s*flex: 1/);
+  });
+});
+
+
+describe('U-30b · flex never sits on a PressableScale style — it styles an inner view, so it cannot size the pressable', () => {
+  it('finds none', () => {
+    const files = (dir: string): string[] => fs.readdirSync(dir, { withFileTypes: true }).flatMap(e =>
+      e.isDirectory() ? files(`${dir}/${e.name}`) : /\.tsx$/.test(e.name) ? [`${dir}/${e.name}`] : []);
+    const bad: string[] = [];
+    for (const f of [...files('app'), ...files('src/components')]) {
+      const src = fs.readFileSync(f, 'utf8');
+      for (const m of src.matchAll(/<PressableScale[^>]*?style=\{\[?styles\.(\w+)/g)) {
+        const st = new RegExp(`\\n\\s+${m[1]}: \\{([^}]*)\\}`).exec(src);
+        if (st && /\bflex: 1\b/.test(st[1])) bad.push(`${f} styles.${m[1]}`);
+      }
+    }
+    expect(bad).toEqual([]);
+  });
+});

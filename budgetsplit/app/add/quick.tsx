@@ -33,7 +33,7 @@ const KIND_TABS = ADD_KIND_TABS.map(k => ({ key: k, label: ADD_KIND_LABEL[k] }))
 
 export default function QuickAddScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ groupId?: string; kind?: string; editId?: string; recurEditId?: string; from?: string; to?: string; amount?: string; note?: string; date?: string; category?: string; q?: string }>();
+  const params = useLocalSearchParams<{ groupId?: string; kind?: string; editId?: string; recurEditId?: string; from?: string; to?: string; amount?: string; note?: string; date?: string; category?: string; q?: string; repeat?: string }>();
   const f = useAddTxnForm(params);
 
   // One overlay at a time — see QuickAddSheets.

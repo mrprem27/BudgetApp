@@ -105,7 +105,8 @@ export default function PersonalScreen() {
   const sharedGroups = useMemo(() => groups.filter(g => g.is_personal !== 1), [groups]);
   const personalGroup = useMemo(() => groups.find(g => g.is_personal === 1) ?? null, [groups]);
   // One way into Add from this screen, for the button and the Recurring tab alike.
-  const addPersonal = () => { if (personalGroup) router.push(`/add/quick?groupId=${personalGroup.id}&kind=expense`); };
+  // One way into Add from here; the Recurring tab's opens with Repeat on (`OV-27`).
+  const addPersonal = (repeat = false) => { if (personalGroup) router.push(`/add/quick?groupId=${personalGroup.id}&kind=expense${repeat ? '&repeat=1' : ''}`); };
 
   // Rows span every group, so the actions read the owning group off each txn.
   const { handleDelete, handleEditTxn } = useGroupTxnActions(reload);
@@ -335,14 +336,14 @@ export default function PersonalScreen() {
               rules={recurringRules}
               skips={recurSkips}
               meId={me.id}
-              onAdd={addPersonal}
+              onAdd={() => addPersonal(true)}
               onOpenRule={(ruleId) => router.push(`/recurring/${ruleId}`)}
             />
           )}
 
           {/* Single-tap FAB — pre-fills the personal group. */}
           {personalGroup && (
-            <FAB onPress={addPersonal} aboveTabBar={false} />
+            <FAB onPress={() => addPersonal()} aboveTabBar={false} />
           )}
         </>
       )}
