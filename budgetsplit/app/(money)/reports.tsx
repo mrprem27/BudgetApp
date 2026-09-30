@@ -7,7 +7,6 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { parseMonthKey, type ReportRange } from '../../src/lib/dateRange';
 import { DateRangeSheet } from '../../src/components/ui/DateRangeSheet';
-import { Chip } from '../../src/components/ui/Chip';
 import { shortDate } from '../../src/lib/dateFormat';
 import { useScreenData } from '../../src/hooks/useScreenData';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -200,40 +199,50 @@ export default function ReportsScreen() {
       <ScreenHeader title="Reports" onBack={() => backOr(router, '/(tabs)')} right={exportButtons} />
       <ScrollView style={{ flex: 1 }} contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + space.lg }]} refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
 
-      {range ? (
-        <View style={styles.rangeNav}>
-          <Chip icon="calendar" label={rangeText ?? ''} selected onPress={() => setRangeOpen(true)}
-            onRemove={() => setRange(null)} accessibilityLabel={`Showing ${rangeText}. Change, or clear to go back to months`} />
-        </View>
-      ) : (
-      <>
+      {/* One bar for both modes, the same size and place as the month bar always was (`U-60`):
+          a date range must not move anything on this screen. In month mode the label opens the
+          range calendar (the small calendar glyph says so); in range mode the ✕ returns to months. */}
       <View style={styles.monthNav}>
+        {range ? (
+          <TouchableOpacity onPress={() => setRangeOpen(true)} accessibilityRole="button" accessibilityLabel="Change dates" style={styles.navBtn}>
+            <Feather name="calendar" size={20} color={colors.textPrimary} />
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            onPress={() => setMonth(m => subMonths(m, 1))}
+            accessibilityRole="button"
+            accessibilityLabel="Previous month"
+            style={styles.navBtn}
+          >
+            <Feather name="chevron-left" size={22} color={colors.textPrimary} />
+          </TouchableOpacity>
+        )}
         <TouchableOpacity
-          onPress={() => setMonth(m => subMonths(m, 1))}
+          onPress={() => setRangeOpen(true)}
+          style={styles.labelBtn}
           accessibilityRole="button"
-          accessibilityLabel="Previous month"
-          style={styles.navBtn}
+          accessibilityLabel={range ? `Showing ${rangeText}. Change dates` : `${monthLabel(month)}. Pick a date range`}
         >
-          <Feather name="chevron-left" size={22} color={colors.textPrimary} />
+          <Text style={styles.monthLabel} numberOfLines={1}>{range ? rangeText : monthLabel(month)}</Text>
+          {!range && <Feather name="calendar" size={13} color={colors.textMuted} />}
         </TouchableOpacity>
-        <Text style={styles.monthLabel}>{monthLabel(month)}</Text>
-        <TouchableOpacity
-          onPress={() => canGoNext && setMonth(m => addMonths(m, 1))}
-          disabled={!canGoNext}
-          accessibilityRole="button"
-          accessibilityLabel="Next month"
-          accessibilityState={{ disabled: !canGoNext }}
-          style={styles.navBtn}
-        >
-          <Feather name="chevron-right" size={22} color={canGoNext ? colors.textPrimary : alpha(colors.textMuted, 33)} />
-        </TouchableOpacity>
+        {range ? (
+          <TouchableOpacity onPress={() => setRange(null)} accessibilityRole="button" accessibilityLabel="Back to months" style={styles.navBtn}>
+            <Feather name="x" size={20} color={colors.textPrimary} />
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            onPress={() => canGoNext && setMonth(m => addMonths(m, 1))}
+            disabled={!canGoNext}
+            accessibilityRole="button"
+            accessibilityLabel="Next month"
+            accessibilityState={{ disabled: !canGoNext }}
+            style={styles.navBtn}
+          >
+            <Feather name="chevron-right" size={22} color={canGoNext ? colors.textPrimary : alpha(colors.textMuted, 33)} />
+          </TouchableOpacity>
+        )}
       </View>
-      <TouchableOpacity style={styles.pickRange} onPress={() => setRangeOpen(true)} hitSlop={8} accessibilityRole="button">
-        <Feather name="calendar" size={13} color={colors.accent} />
-        <Text style={styles.pickRangeText}>Pick dates instead</Text>
-      </TouchableOpacity>
-      </>
-      )}
 
       {/*
         * `stale` as well as `loading`, and Reports is the ONLY screen that needs it.
@@ -501,9 +510,7 @@ const styles = StyleSheet.create({
   exportBtnText: { ...type.label, color: colors.bg, fontFamily: 'Inter_600SemiBold' },
   monthNav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.bgCard, borderRadius: radius.md, padding: space.sm, borderWidth: 1, borderColor: colors.border },
   navBtn: { padding: space.xs },
-  rangeNav: { flexDirection: 'row', justifyContent: 'center' },
-  pickRange: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.xs, alignSelf: 'center', minHeight: layout.touchMin },
-  pickRangeText: { ...type.labelSemi, color: colors.accent },
+  labelBtn: { flexDirection: 'row', alignItems: 'center', gap: space.xs, flexShrink: 1 },
   monthLabel: { ...type.subheading, color: colors.textPrimary },
   sectionTitle: { ...type.label, color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: space.sm },
   summaryRow: { flexDirection: 'row', gap: space.sm },
