@@ -111,7 +111,7 @@ export function ReviewBulkSheets({
                   setKindOpen(false);
                   Alert.alert(
                     'Kind changed',
-                    `${plural(n)} set to ${TXN_KIND_LABEL[k]}. Their categories were cleared — a category belongs to one kind.`,
+                    `${plural(n)} set to ${TXN_KIND_LABEL[k]}. Their categories were cleared, a category belongs to one kind.`,
                   );
                 }}
               />

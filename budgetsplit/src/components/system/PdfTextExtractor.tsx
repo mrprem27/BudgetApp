@@ -61,7 +61,7 @@ function cdnHtml(base64: string): string {
   return `<!DOCTYPE html><html><head><meta charset="utf-8"/></head><body>
 <script src="${PDFJS_CDN}/pdf.min.js" integrity="${PDFJS_SRI['pdf.min.js']}" crossorigin="anonymous" onerror="window.__pdfLoadErr=1"></script>
 <script>${EXTRACT(base64, `
-  if (window.__pdfLoadErr || typeof pdfjsLib === 'undefined') { post('error', 'Could not load pdf.js from ${PDFJS_CDN}/pdf.min.js — it was unreachable, or failed its integrity check.'); return; }
+  if (window.__pdfLoadErr || typeof pdfjsLib === 'undefined') { post('error', 'Could not load pdf.js from ${PDFJS_CDN}/pdf.min.js, it was unreachable, or failed its integrity check.'); return; }
   pdfjsLib.GlobalWorkerOptions.workerSrc = '${PDFJS_CDN}/pdf.worker.min.js';`)}</script>
 </body></html>`;
 }

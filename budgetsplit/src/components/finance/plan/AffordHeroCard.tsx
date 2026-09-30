@@ -18,7 +18,7 @@ export function AffordHeroCard({ onPress }: { onPress: () => void }) {
         <IconCircle icon="shopping-bag" size={40} color={colors.accent} />
         <View style={styles.text}>
           <Text style={styles.title}>Can I afford this?</Text>
-          <Text style={styles.sub}>Your cash, bills and goals — before you buy</Text>
+          <Text style={styles.sub}>Your cash, bills and goals, before you buy</Text>
         </View>
       </View>
       {/* Reads like the field it opens, so the next step is obvious: type an amount. */}

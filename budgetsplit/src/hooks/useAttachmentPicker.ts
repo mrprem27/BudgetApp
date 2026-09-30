@@ -46,7 +46,7 @@ export function useAttachmentPicker({ onPicked, onOpenStorageSettings }: Opts) {
         if (u) onPicked(u);
       } catch (e) {
         if (e instanceof AttachmentStorageError) {
-          outOfSpace('Your device is low on storage. Free up space and try again — your expense will still save without the photo.');
+          outOfSpace('Your device is low on storage. Free up space and try again, your expense will still save without the photo.');
         } else {
           // Previously swallowed in silence, which made a permission or codec failure look
           // like a button that does nothing.

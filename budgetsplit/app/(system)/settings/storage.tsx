@@ -62,7 +62,7 @@ export default function StorageSettingsScreen() {
     if (receipts.count === 0) return;
     Alert.alert(
       'Delete all receipt photos?',
-      `This permanently removes ${receipts.count} photo${receipts.count === 1 ? '' : 's'} (${formatBytes(receipts.bytes)}). Every transaction stays exactly as it is — only the pictures go.`,
+      `This permanently removes ${receipts.count} photo${receipts.count === 1 ? '' : 's'} (${formatBytes(receipts.bytes)}). Every transaction stays exactly as it is, only the pictures go.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -94,7 +94,7 @@ export default function StorageSettingsScreen() {
       Alert.alert(
         removed > 0 ? 'Cache cleared' : 'Nothing to clear',
         removed > 0
-          ? `Removed ${removed} temporary file${removed === 1 ? '' : 's'}. Your data is untouched — these were copies made for sharing and importing.`
+          ? `Removed ${removed} temporary file${removed === 1 ? '' : 's'}. Your data is untouched, these were copies made for sharing and importing.`
           : 'There were no leftover export or import files.',
       );
     } catch {
@@ -137,7 +137,7 @@ export default function StorageSettingsScreen() {
               choosing that on purpose, not failing. */}
           {!allowsAttachments(verdict) && (
             <Text style={styles.note}>
-              Recording transactions always comes first — that costs a few bytes. Receipt
+              Recording transactions always comes first, that costs a few bytes. Receipt
               photos need megabytes each, so they are the first thing paused and the last
               thing to come back.
             </Text>
@@ -176,7 +176,7 @@ export default function StorageSettingsScreen() {
               disabled={busy}
             />
             <Text style={styles.note}>
-              Safe to do any time — these are temporary copies of things you shared or
+              Safe to do any time, these are temporary copies of things you shared or
               imported, not your data.
             </Text>
 

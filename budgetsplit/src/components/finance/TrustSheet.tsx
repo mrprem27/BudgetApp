@@ -68,7 +68,7 @@ export function TrustSheet({
         {scope !== null && (
           <OptionRow
             label="Follow the main setting"
-            description={`Whatever you choose for ${name} everywhere — currently “${trustStateLabel(inherited)}”.`}
+            description={`Whatever you choose for ${name} everywhere, currently “${trustStateLabel(inherited)}”.`}
             selected={value === null}
             onPress={() => pick(null)}
           />

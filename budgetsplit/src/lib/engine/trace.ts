@@ -120,7 +120,7 @@ export function affordTrace(
         value: `${formatRupees(rate)}/day`,
         detail: `Average over your ${historyDays - Math.floor(historyDays * TRIM_RATIO)} ordinary days of the last ${historyDays} (up to ${EVERYDAY_WINDOW_DAYS}): the ${Math.floor(historyDays * TRIM_RATIO)} biggest days are dropped, quiet days are kept, and recurring bills are left out because they are counted as dated bills`,
       }
-      : { label: 'Everyday spending', value: 'Not counted', detail: `Under ${EVERYDAY_MIN_DAYS} days of history — we don’t guess`, status: 'warn' },
+      : { label: 'Everyday spending', value: 'Not counted', detail: `Under ${EVERYDAY_MIN_DAYS} days of history, we don’t guess`, status: 'warn' },
     {
       label: 'Income pattern',
       value: income.consistency[0].toUpperCase() + income.consistency.slice(1),
@@ -147,7 +147,7 @@ export function affordTrace(
       amountPaise: endBefore,
     },
   ];
-  if (known.length === 0) flows.unshift({ label: 'No bills, income or dues in this window', value: '—' });
+  if (known.length === 0) flows.unshift({ label: 'No bills, income or dues in this window', value: 'None' });
 
   // ── 3. This purchase ──────────────────────────────────────────────────
   const freqLabel = purchase.recurrence ?? 'one-time';
@@ -213,7 +213,7 @@ export function affordTrace(
     const broken = months.find(m => m.unfundable);
     const sample = months[0];
     checks.push(sample?.surplusPaise == null
-      ? { label: 'Next 12 months of commitments', value: 'Skipped', detail: 'Irregular income — no monthly figure to test against', status: 'info' }
+      ? { label: 'Next 12 months of commitments', value: 'Skipped', detail: 'Irregular income, no monthly figure to test against', status: 'info' }
       : broken
         ? {
           label: 'Next 12 months of commitments',
@@ -233,7 +233,7 @@ export function affordTrace(
     checks.push({
       label: 'Money owed to you',
       value: formatRupees(r.amountPaise),
-      detail: `Would make this comfortable if repaid — usually takes ~${r.delayDays} days, so it isn’t counted`,
+      detail: `Would make this comfortable if repaid, usually takes ~${r.delayDays} days, so it isn’t counted`,
       status: 'info',
     });
   }
@@ -247,7 +247,7 @@ export function affordTrace(
     { label: 'Otherwise → Comfortable', value: !failed && !warned ? 'Yes' : 'No', status: !failed && !warned ? 'pass' : 'info' },
   ];
   if (result.verdict == null) {
-    verdict.push({ label: 'Verdict held back', value: 'Not enough data', detail: `${historyDays} of ${EVERYDAY_MIN_DAYS} days of history — ${result.explanation.missing}`, status: 'warn' });
+    verdict.push({ label: 'Verdict held back', value: 'Not enough data', detail: `${historyDays} of ${EVERYDAY_MIN_DAYS} days of history, ${result.explanation.missing}`, status: 'warn' });
   } else {
     verdict.push({ label: 'Result', value: VERDICT_LABEL[result.verdict], status: result.verdict === 'comfortable' ? 'pass' : result.verdict === 'tight' ? 'warn' : 'fail' });
   }

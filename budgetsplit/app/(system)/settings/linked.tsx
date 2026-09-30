@@ -202,7 +202,7 @@ export default function LinkedPeopleScreen() {
       `Unlink ${who}?`,
       'You both stop seeing each other’s shared details, and neither of you can add '
       + 'the other to something new.\n\n'
-      + 'Groups you are already both in carry on — leave those separately. Everything '
+      + 'Groups you are already both in carry on, leave those separately. Everything '
       + 'you have recorded stays exactly as it is.',
       [
         { text: 'Cancel', style: 'cancel' },
@@ -358,7 +358,7 @@ export default function LinkedPeopleScreen() {
                         <Text style={styles.shareLabel}>Who this is, in your people</Text>
                         <Text style={styles.shareHint}>
                           {boundName(link)
-                            ? `${boundName(link)} — entries they add can reach you, subject to whether you trust them.`
+                            ? `${boundName(link)}, entries they add can reach you, subject to whether you trust them.`
                             : 'Not matched yet. Until you say who this is, nothing they add can reach you at all.'}
                         </Text>
                       </View>
@@ -375,7 +375,7 @@ export default function LinkedPeopleScreen() {
                         <Text style={styles.shareLabel}>Show them my number</Text>
                         <Text style={styles.shareHint}>
                           {link.sharingMyPhone
-                            ? 'Shared. Turning this off stops them seeing it from now on — it can’t take back a number they already have.'
+                            ? 'Shared. Turning this off stops them seeing it from now on, it can’t take back a number they already have.'
                             : 'Off. They can’t see your number.'}
                         </Text>
                       </View>
@@ -409,7 +409,7 @@ export default function LinkedPeopleScreen() {
             />
             <Text style={styles.hint}>
               A link connects you to someone so you can share a name and, if you choose, a
-              number. No money crosses a link — your groups, balances and transactions stay
+              number. No money crosses a link, your groups, balances and transactions stay
               exactly where they are.
             </Text>
             <Text style={styles.hint}>
@@ -454,7 +454,7 @@ export default function LinkedPeopleScreen() {
       >
         <Text style={styles.hint}>
           Pick the person in your app this account belongs to. Until you do, nothing
-          they add can reach you — the app has no way to know who wrote it.
+          they add can reach you, the app has no way to know who wrote it.
         </Text>
         <Card>
           {people.map((person, i) => (

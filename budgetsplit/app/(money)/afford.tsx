@@ -47,7 +47,7 @@ const FREQUENCY_OPTS: { key: PurchaseFrequency; label: string }[] = [
 ];
 
 const VERDICT_STYLE: Record<AffordVerdict, { color: string; icon: FeatherName; title: string }> = {
-  'comfortable': { color: colors.income, icon: 'check-circle', title: 'Yes — you can afford it' },
+  'comfortable': { color: colors.income, icon: 'check-circle', title: 'Yes, you can afford it' },
   'tight': { color: colors.healthAmber, icon: 'alert-triangle', title: 'Possible, but tight' },
   'not-affordable': { color: colors.expense, icon: 'x-circle', title: 'Not right now' },
 };
@@ -184,7 +184,7 @@ export default function AffordScreen() {
                   {result.explanation.confidence !== 'high' && (
                     <Text style={styles.confidenceText}>
                       {result.explanation.confidence === 'low' ? 'Low confidence' : 'Medium confidence'}
-                      {result.explanation.missing ? ` — ${result.explanation.missing}` : ''}
+                      {result.explanation.missing ? `, ${result.explanation.missing}` : ''}
                     </Text>
                   )}
                 </>
@@ -200,7 +200,7 @@ export default function AffordScreen() {
                 accessibilityRole="button"
                 accessibilityState={{ expanded: showBreakdown }}
               >
-                <Text style={styles.disclosureText}>How we got this — full working</Text>
+                <Text style={styles.disclosureText}>How we got this, full working</Text>
                 <Feather name={showBreakdown ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} />
               </TouchableOpacity>
               {trace && (

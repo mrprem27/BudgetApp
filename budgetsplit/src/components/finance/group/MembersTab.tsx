@@ -79,7 +79,7 @@ export function MembersTab({ members, net, meId, totalSpent, settlements, person
         <View style={styles.groupBalItem}>
           <Text style={styles.groupBalLabel}>Your balance</Text>
           <Text style={[styles.groupBalAmt, { color: myNet > 0 ? colors.income : myNet < 0 ? colors.expense : colors.textMuted }]}>
-            {myNet > 0 ? `+${formatCompact(myNet)}` : myNet < 0 ? `−${formatCompact(-myNet)}` : '—'}
+            {myNet > 0 ? `+${formatCompact(myNet)}` : myNet < 0 ? `−${formatCompact(-myNet)}` : '₹0'}
           </Text>
         </View>
       </View>
@@ -146,7 +146,7 @@ export function MembersTab({ members, net, meId, totalSpent, settlements, person
                   <Text style={styles.contribName} numberOfLines={1}>{r.member.name}{r.member.is_me ? ' (me)' : ''}</Text>
                   <Text style={styles.contribPaid}>{formatCompact(r.paid)}</Text>
                   <Text style={[styles.contribDelta, { color: r.net > 0 ? colors.income : r.net < 0 ? colors.expense : colors.textMuted }]}>
-                    {r.net > 0 ? `+${formatCompact(r.net)}` : r.net < 0 ? `−${formatCompact(-r.net)}` : '—'}
+                    {r.net > 0 ? `+${formatCompact(r.net)}` : r.net < 0 ? `−${formatCompact(-r.net)}` : '₹0'}
                   </Text>
                 </View>
                 <AnimatedBar progress={r.frac} color={r.member.avatar_color} height={6} />

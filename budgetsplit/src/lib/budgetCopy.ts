@@ -31,12 +31,12 @@
 
 /** What an admin-set line means for everyone. Fact 1. */
 export const perPersonMeans =
-  'This is what each member gets, not a pot to share out — ₹10,000 of Groceries in a '
+  'This is what each member gets, not a pot to share out, ₹10,000 of Groceries in a '
   + 'flat of four is ₹10,000 each.';
 
 /** What setting your own does. Fact 2, both halves. */
 export const overrideMeans = (groupName: string): string =>
-  `Your amounts replace ${groupName}'s — only for you, only here, and only for the `
+  `Your amounts replace ${groupName}'s, only for you, only here, and only for the `
   + 'categories you fill in. Ones you leave blank keep following the group.';
 
 /** How to undo it. Stated wherever the override is offered, so it isn't a one-way door. */
@@ -55,7 +55,7 @@ export const overrideIsPrivate =
  */
 export const budgetEmptyBody = (canEditGroupDefault: boolean, groupName: string): string =>
   canEditGroupDefault
-    ? `Give a category a limit — one-time, daily, monthly or yearly. ${perPersonMeans} `
+    ? `Give a category a limit, one-time, daily, monthly or yearly. ${perPersonMeans} `
       + PERIOD_RESETS
     : `Set your own limits for this group. ${overrideMeans(groupName)} ${overrideIsPrivate}`;
 
@@ -110,7 +110,7 @@ export const budgetEditorHint = (opts: {
   overrideCount: number;
 }): string => {
   if (opts.scope === 'global') {
-    return 'Your limits across everything — personal spending and your share of every group.';
+    return 'Your limits across everything, personal spending and your share of every group.';
   }
   if (opts.level === 'personal') {
     return `${overrideMeans(opts.groupName)} ${overrideIsReversible}`;

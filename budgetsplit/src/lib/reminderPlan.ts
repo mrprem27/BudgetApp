@@ -134,7 +134,7 @@ export function planRenewalReminders<R extends RenewalRule>(
         id: `renew_${r.id}_d${d}`,
         fireAt,
         title: `${r.category} renews ${when}`,
-        body: `${formatAmount(total)} is due. Tap to review — or cancel it if you no longer use it.`,
+        body: `${formatAmount(total)} is due. Tap to review, or cancel it if you no longer use it.`,
       });
     }
   }

@@ -167,7 +167,7 @@ export default function GoalDetailScreen() {
           <View style={styles.monthlyRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.monthlySub}>Auto-sweep</Text>
-              <Text style={[styles.monthlyAmt, { color: colors.accent }]}>{monthly > 0 ? formatCompact(monthly) : '—'}</Text>
+              <Text style={[styles.monthlyAmt, { color: colors.accent }]}>{monthly > 0 ? formatCompact(monthly) : '₹0'}</Text>
             </View>
             {hasDate && (
               <>
@@ -175,7 +175,7 @@ export default function GoalDetailScreen() {
                 <View style={{ flex: 1, paddingLeft: space.sm }}>
                   <Text style={styles.monthlySub}>Needed to hit goal</Text>
                   <Text style={[styles.monthlyAmt, { color: shortfall > 0 ? colors.healthAmber : colors.income }]}>
-                    {needed > 0 ? formatCompact(needed) : '—'}
+                    {needed > 0 ? formatCompact(needed) : '₹0'}
                   </Text>
                 </View>
               </>
@@ -203,7 +203,7 @@ export default function GoalDetailScreen() {
           <View style={styles.surplusBanner}>
             <Feather name="trending-up" size={16} color={colors.healthAmber} />
             <Text style={styles.surplusText}>
-              {formatCompact(surplus)} over target — well done!
+              {formatCompact(surplus)} over target, well done!
             </Text>
             <View style={styles.surplusActions}>
               {/* `dismissTo`, not `push`: the Plan tab is already underneath this

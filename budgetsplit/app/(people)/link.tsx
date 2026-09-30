@@ -81,7 +81,7 @@ export default function LinkInviteScreen() {
         <Text style={styles.title}>Sign in to accept</Text>
         <Text style={styles.body}>
           Linking connects two accounts, so you’ll need one of your own first. It takes an
-          email and one tap — no password.
+          email and one tap, no password.
         </Text>
         <PrimaryButton label="Sign in" onPress={goAccount} style={styles.cta} />
         <SecondaryButton label="Not now" onPress={goHome} style={styles.secondary} />
@@ -95,7 +95,7 @@ export default function LinkInviteScreen() {
         <IconCircle icon="clock" size={56} iconSize={20} color={colors.accent} bg={colors.accentMuted} />
         <Text style={styles.title}>Asked to link</Text>
         <Text style={styles.body}>
-          They’ll see your name and confirm it’s you before anything connects — an invite
+          They’ll see your name and confirm it’s you before anything connects, an invite
           link can be forwarded, so the person who sent it gets the last word. Nothing is
           shared until then.
         </Text>
@@ -109,7 +109,7 @@ export default function LinkInviteScreen() {
       <View style={styles.container}>
         <IconCircle icon="check" size={56} iconSize={20} color={colors.income} />
         <Text style={styles.title}>Already linked</Text>
-        <Text style={styles.body}>You two are connected already — nothing to do.</Text>
+        <Text style={styles.body}>You two are connected already, nothing to do.</Text>
         <PrimaryButton label="Done" onPress={goHome} style={styles.cta} />
       </View>
     );

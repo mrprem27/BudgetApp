@@ -292,7 +292,7 @@ export function afford(
     verdict: explanation.suppressVerdict ? null : evalNow.verdict,
     explanation,
     headline: explanation.suppressVerdict
-      ? `Not enough data yet — ${explanation.missing}`
+      ? `Not enough data yet, ${explanation.missing}`
       : headlineFor(evalNow.verdict, evalNow.lowPointAfter),
     lowPointBefore: { amount: beforeKnown.lowPoint.amount, date: beforeKnown.lowPoint.date },
     lowPointAfter: { amount: evalNow.lowPointAfter, date: evalNow.lowPointAfterDate },

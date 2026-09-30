@@ -184,7 +184,7 @@ export default function DashboardScreen() {
         {error ? (
           <ErrorState
             title="Couldn't load your data"
-            body="Something went wrong reading your data. It's safe on your device — try again."
+            body="Something went wrong reading your data. It's safe on your device, try again."
             onRetry={() => reload()}
           />
         ) : loading ? null : (
@@ -273,7 +273,7 @@ export default function DashboardScreen() {
                           <View style={[styles.startIcon, { backgroundColor: alpha(colors.income, 13) }]}><Feather name="user-plus" size={18} color={colors.income} /></View>
                           <View style={{ flex: 1 }}>
                             <Text style={styles.startTitle}>Add people you split with</Text>
-                            <Text style={styles.startSub}>Name-only — no account needed</Text>
+                            <Text style={styles.startSub}>Name-only, no account needed</Text>
                           </View>
                           <Feather name="chevron-right" size={16} color={colors.textMuted} />
                         </TouchableOpacity>
@@ -292,7 +292,7 @@ export default function DashboardScreen() {
               <Banner
                 icon="alert-triangle"
                 tone={colors.healthAmber}
-                text={`Below a week of essentials on ${shortDate(sts.warning.date)} — ${sts.warning.label} ${formatCompact(Math.abs(sts.warning.amountPaise))}`}
+                text={`Below a week of essentials on ${shortDate(sts.warning.date)}, ${sts.warning.label} ${formatCompact(Math.abs(sts.warning.amountPaise))}`}
                 onPress={() => setShowSts(true)}
                 inset={false}
               />

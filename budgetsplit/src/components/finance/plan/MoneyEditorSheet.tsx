@@ -115,7 +115,7 @@ export function MoneyEditorSheet({
             <InfoLabel
               label="Investments and assets"
               labelStyle={styles.label}
-              info="Gold, a flat, an FD, a fund — named, so moving money in or out is a transfer and your net worth stays put."
+              info="Gold, a flat, an FD, a fund, named, so moving money in or out is a transfer and your net worth stays put."
             />
             <SecondaryButton
               label={`${formatCompact(initial.investments)} across your assets`}
@@ -139,7 +139,7 @@ export function MoneyEditorSheet({
               value={dueDay}
               onChangeText={t => setDueDay(t.replace(/[^0-9]/g, '').slice(0, 2))}
               keyboardType="number-pad"
-              placeholder="—"
+              placeholder="0"
               placeholderTextColor={colors.textMuted}
               style={styles.dueInput}
               accessibilityLabel="Card bill due day of the month"

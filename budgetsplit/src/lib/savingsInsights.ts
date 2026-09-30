@@ -69,9 +69,9 @@ export function generateInsights(
     const pct = Math.round((g.saved / g.target) * 100);
 
     if (pct >= 70) {
-      cands.push({ icon: 'trending-up', tone: 'progress', goalId: g.id, score: 62 + (g.priority === 'emergency' ? 12 : 0), text: `You're closer than you think — only ${fmt(g.remaining)} left on your ${g.name} goal.` });
+      cands.push({ icon: 'trending-up', tone: 'progress', goalId: g.id, score: 62 + (g.priority === 'emergency' ? 12 : 0), text: `You're closer than you think, only ${fmt(g.remaining)} left on your ${g.name} goal.` });
     } else if (pct >= 35) {
-      cands.push({ icon: 'zap', tone: 'achieve', goalId: g.id, score: 36, text: `You're ${pct}% of the way to your ${g.name} goal — keep going.` });
+      cands.push({ icon: 'zap', tone: 'achieve', goalId: g.id, score: 36, text: `You're ${pct}% of the way to your ${g.name} goal, keep going.` });
     }
 
     const est = estimatedCompletion(g.remaining, g.allocation, g.frequency);
@@ -86,7 +86,7 @@ export function generateInsights(
       } else if (Math.floor(s.amount / 2) >= g.remaining) {
         cands.push({ icon: 'alert-circle', tone: 'warn', goalId: g.id, score: 72, text: `Skipping half your ${s.category} spend would fully fund your ${g.name} goal.` });
       } else if (pctOfGoal >= 5) {
-        cands.push({ icon: 'bar-chart-2', tone: 'compare', goalId: g.id, score: 28 + Math.min(40, pctOfGoal), text: `You spent ${fmt(s.amount)} on ${s.category} in 30 days — that's ${pctOfGoal}% of your ${g.name} goal.` });
+        cands.push({ icon: 'bar-chart-2', tone: 'compare', goalId: g.id, score: 28 + Math.min(40, pctOfGoal), text: `You spent ${fmt(s.amount)} on ${s.category} in 30 days, that's ${pctOfGoal}% of your ${g.name} goal.` });
       }
     }
   }

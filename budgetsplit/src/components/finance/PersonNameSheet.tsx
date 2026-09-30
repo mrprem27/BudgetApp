@@ -110,7 +110,7 @@ export function PersonNameSheet({
           </TouchableOpacity>
           <Text style={[styles.hint, vpaBad && styles.hintBad]}>
             {vpaBad
-              ? "That doesn't look like a UPI ID — expected something like name@bank."
+              ? "That doesn't look like a UPI ID, expected something like name@bank."
               : 'Lets you settle up straight into their UPI app. Stays on this device.'}
           </Text>
         </>

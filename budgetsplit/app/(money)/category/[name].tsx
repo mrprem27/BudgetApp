@@ -266,7 +266,7 @@ export default function CategoryDetailScreen() {
                   ))}
                   <Text style={styles.limitNote}>
                     Per person in each group, against your spend there. Not added to your
-                    budget above — that already covers this spending.
+                    budget above, that already covers this spending.
                   </Text>
                 </Card>
               </View>

@@ -126,7 +126,7 @@ export function useAssets() {
                 Alert.alert(
                   'Keep this one',
                   'Money has moved in or out of it, and those transfers are part of your history. '
-                  + 'Stop counting it instead — the history stays and it leaves your list.',
+                  + 'Stop counting it instead, the history stays and it leaves your list.',
                 );
                 resolve(false);
                 return;

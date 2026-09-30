@@ -328,7 +328,7 @@ export default function PersonalScreen() {
                 <EmptyState
                   icon="target"
                   title="No budget yet"
-                  body="Set category limits measured against your total spending — personal plus your share of every group."
+                  body="Set category limits measured against your total spending, personal plus your share of every group."
                   tint={colors.textSecondary}
                   actionLabel="Set a budget"
                   onAction={openBudgetEditor}
@@ -374,7 +374,7 @@ export default function PersonalScreen() {
           <SettingsRow icon="download" label="Export as CSV" onPress={handleExport} />
         </View>
         <Text style={styles.personalNote}>
-          This is your private personal space — it can't be shared, archived, or have other members.
+          This is your private personal space, it can't be shared, archived, or have other members.
         </Text>
       </SheetModal>
     </View>

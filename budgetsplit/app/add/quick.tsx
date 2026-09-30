@@ -261,7 +261,7 @@ export default function QuickAddScreen() {
                 <View style={styles.formBlock}>
                   <Banner
                     icon="trending-up"
-                    text="Buying an investment isn’t spending — log it as Invest and your net worth stays put."
+                    text="Buying an investment isn’t spending, log it as Invest and your net worth stays put."
                     actionLabel="Switch to Invest"
                     onAction={() => f.onSelectKind(AddKind.Invest)}
                   />

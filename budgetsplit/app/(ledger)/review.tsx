@@ -418,7 +418,7 @@ export default function ReviewScreen() {
         <EmptyState
           icon="inbox"
           title="Nothing to review"
-          body="Import a Google Pay statement, a bank / UPI export, or a transaction-alert email (Settings → Import & review) and the transactions show up here — grouped by source — to confirm."
+          body="Import a Google Pay statement, a bank / UPI export, or a transaction-alert email (Settings → Import & review) and the transactions show up here, grouped by source, to confirm."
           actionLabel="Import transactions"
           onAction={() => router.push('/import')}
           fill

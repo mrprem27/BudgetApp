@@ -119,7 +119,7 @@ export function TotalMoneyCard({ money, byBucket, unattributed, updatedAt, onEdi
       {onMoveToInvestments && (
         <PressableScale style={styles.payBillBtn} onPress={onMoveToInvestments} accessibilityLabel="Move money">
           <Feather name="repeat" size={14} color={colors.accent} />
-          <Text style={styles.payBillText}>Move money — bank, cash or an asset</Text>
+          <Text style={styles.payBillText}>Move money, bank, cash or an asset</Text>
         </PressableScale>
       )}
 

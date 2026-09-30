@@ -21,7 +21,7 @@ type Money = Array<{ person_id?: unknown; amount?: unknown }>;
 const total = (list: unknown) => ((list ?? []) as Money).reduce((a, p) => a + (Number(p.amount) || 0), 0);
 const shape = (list: unknown) => JSON.stringify(((list ?? []) as Money)
   .map(p => [String(p.person_id), Number(p.amount) || 0]).sort());
-const day = (ms: unknown) => (typeof ms === 'number' ? format(new Date(ms), 'd MMM') : '—');
+const day = (ms: unknown) => (typeof ms === 'number' ? format(new Date(ms), 'd MMM') : 'no date');
 
 /** What changed between two versions, as short phrases. */
 export function changesBetween(prev: Record<string, unknown>, next: Record<string, unknown>): string[] {
@@ -36,7 +36,7 @@ export function changesBetween(prev: Record<string, unknown>, next: Record<strin
   }
   else if (shape(prev.payers) !== shape(next.payers)) out.push('who paid');
   if (a === b && shape(prev.splits) !== shape(next.splits)) out.push('the split');
-  if (prev.category !== next.category) out.push(`${String(prev.category ?? '—')} → ${String(next.category ?? '—')}`);
+  if (prev.category !== next.category) out.push(`${String(prev.category ?? 'None')} → ${String(next.category ?? 'None')}`);
   if (day(prev.date) !== day(next.date)) out.push(`the date to ${day(next.date)}`);
   if ((prev.note ?? null) !== (next.note ?? null)) out.push('the note');
   if (JSON.stringify(prev.tags ?? []) !== JSON.stringify(next.tags ?? [])) out.push('the tags');
@@ -76,9 +76,9 @@ export function conflictFields(yours: Record<string, unknown>, theirs: Record<st
   };
   return [
     f('Amount', s => formatRupees(total(s.payers))),
-    f('Category', s => String(s.category ?? '—')),
+    f('Category', s => String(s.category ?? 'None')),
     f('Date', s => day(s.date)),
-    f('Note', s => (typeof s.note === 'string' && s.note.trim() ? s.note : '—')),
+    f('Note', s => (typeof s.note === 'string' && s.note.trim() ? s.note : 'None')),
     f('Split', s => shape(s.splits)),
   ].map(r => (r.field === 'Split' ? { ...r, yours: r.differs ? 'Different' : 'Same', theirs: r.differs ? 'Different' : 'Same' } : r));
 }

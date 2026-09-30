@@ -35,7 +35,7 @@
 /** What trust does, as one sentence. The `and` clause is not optional — see above. */
 export const trustMeans = (name: string): string =>
   `Anything ${name} adds that only costs you a share counts straight away, without waiting for you. `
-  + 'Anything saying your own money moved — that you paid, or that they paid you — '
+  + 'Anything saying your own money moved, that you paid, or that they paid you, '
   + 'still has to be confirmed each time.';
 
 /** What NOT trusting does. The mirror, so the two read as one choice. */
@@ -100,5 +100,5 @@ export const trustAndApproveBody = (name: string, count: number): string =>
  */
 export const trustStandingNote = (): string =>
   'Even someone set to count straight away is asked first when an entry says your own '
-  + 'money moved — that you paid it, or that they paid you back. That is never a '
+  + 'money moved, that you paid it, or that they paid you back. That is never a '
   + 'question about their honesty.';

@@ -135,7 +135,7 @@ export function usePersonScreen(personId: string) {
     const ok = await confirmAsync(
       next === 'written_off' ? `Write off what ${name} owes?` : `Count ${name}'s balance again?`,
       next === 'written_off'
-        ? 'The balance stays on record and still shows here — it just stops counting as money you can rely on, so it will no longer hold off a savings raid.'
+        ? 'The balance stays on record and still shows here, it just stops counting as money you can rely on, so it will no longer hold off a savings raid.'
         : 'It will count as money coming back again.',
       next === 'written_off' ? 'Write off' : 'Count it',
     );

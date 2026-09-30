@@ -44,7 +44,7 @@ export default function SyncScreen() {
         ) : !session ? (
           <Banner
             icon="user"
-            text="Sign in first — sync is your account, on every phone you sign in on."
+            text="Sign in first, sync is your account, on every phone you sign in on."
             actionLabel="Account"
             onAction={() => router.push('/settings/account')}
           />
@@ -98,7 +98,7 @@ export default function SyncScreen() {
           itself (`DQ-97`) — restating it here was the redundant half.
         */}
         <Text style={styles.footnote}>
-          Your account's copy is stored readable, not sealed — that's what lets it check who may
+          Your account's copy is stored readable, not sealed, that's what lets it check who may
           change what in a shared group. An entry someone else adds moves none of your numbers
           until you accept it, unless you've marked them trusted.
         </Text>

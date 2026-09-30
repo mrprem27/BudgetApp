@@ -202,7 +202,7 @@ export default function GroupsScreen() {
             <Text style={[styles.groupName, isArchivedView && { color: colors.textSecondary }]} numberOfLines={1}>{item.name}</Text>
             <Text style={styles.groupSub} numberOfLines={1}>
               {isArchivedView
-                ? 'Archived — tap to restore'
+                ? 'Archived, tap to restore'
                 : item.is_personal === 1
                 ? `Everything involving you · ${formatCompact(h?.spent ?? 0)}/mo`
                 : `${h?.members ?? 0} ${(h?.members ?? 0) === 1 ? 'member' : 'members'} · ${formatCompact(h?.spent ?? 0)} this month`

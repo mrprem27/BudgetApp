@@ -161,7 +161,7 @@ export default function GroupDetailScreen() {
     const names = trustable.map(m => m.name).join(', ');
     const ok = await confirmAsync(
       `Trust everyone in ${group?.name ?? 'this group'}?`,
-      `${trustMeans(names)} This applies to them everywhere, not only here — trust is about a person, `
+      `${trustMeans(names)} This applies to them everywhere, not only here, trust is about a person, `
       + 'not a group, so anyone added later still waits for you.',
       'Trust them',
     );

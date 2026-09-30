@@ -42,7 +42,7 @@ import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvide
 function announceVanished(r: SyncOutcome | null) {
   const vanished: Vanished[] = r?.vanished ?? [];
   if (vanished.length === 0) return;
-  const kept = 'Nothing has been deleted here — everything you spent is still in your history, '
+  const kept = 'Nothing has been deleted here, everything you spent is still in your history, '
     + 'and the group has moved to Archived.';
 
   const deleted = vanished.filter(v => v.state === 'deleted').length;
@@ -177,7 +177,7 @@ function AppTabBar({ state, navigation }: { state: any; navigation: any }) {
       Alert.alert(
         'Used BudgetSplit before?',
         'If you had it on another phone, signing in with the same email brings everything back.\n\n'
-        + 'Otherwise just carry on — nothing here needs an account.',
+        + 'Otherwise just carry on, nothing here needs an account.',
         [
           { text: 'Start fresh', style: 'cancel', onPress: dismiss },
           { text: 'Sign in', onPress: () => router.push('/settings/account') },
@@ -278,7 +278,7 @@ function AppTabBar({ state, navigation }: { state: any; navigation: any }) {
       {showHint && (
         <View style={styles.hintBubble} pointerEvents="none">
           <Feather name="maximize" size={12} color={colors.accent} />
-          <Text style={styles.hintText}>Hold to scan &amp; pay a UPI QR — it records the expense for you</Text>
+          <Text style={styles.hintText}>Hold to scan &amp; pay a UPI QR, it records the expense for you</Text>
         </View>
       )}
 

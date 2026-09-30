@@ -40,7 +40,7 @@ export function RecurringTab({ rules, skips, meId, defaultSplit, monthlyTotal, n
         <EmptyState
           icon="repeat"
           title="No recurring yet"
-          body="Rent, Wi-Fi, memberships — anything you set to repeat shows up here with its monthly cost and your share."
+          body="Rent, Wi-Fi, memberships, anything you set to repeat shows up here with its monthly cost and your share."
           actionLabel="Add recurring expense"
           onAction={onAdd}
         />

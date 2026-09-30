@@ -24,9 +24,9 @@ export function asIntent(v: string | null | undefined): OnboardingIntent | null 
  */
 export const PERSONA_OPTIONS: { key: OnboardingIntent; icon: FeatherName; label: string; desc: string }[] = [
   { key: 'personal',  icon: 'pie-chart', label: 'Track my own spending', desc: 'Budgets, categories, goals, health score' },
-  { key: 'split',     icon: 'users',     label: 'Split with people',     desc: 'Trips and one-off group tabs — settle up when it ends' },
+  { key: 'split',     icon: 'users',     label: 'Split with people',     desc: 'Trips and one-off group tabs, settle up when it ends' },
   { key: 'household', icon: 'home',      label: 'Share a household',     desc: 'Rent, bills and groceries with a partner or flatmates' },
-  { key: 'both',      icon: 'layers',    label: 'Both',                  desc: 'Full experience — most popular' },
+  { key: 'both',      icon: 'layers',    label: 'Both',                  desc: 'Full experience, most popular' },
 ];
 
 /**

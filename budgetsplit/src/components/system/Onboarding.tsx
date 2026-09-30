@@ -167,7 +167,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
                   in this market either asks for a bank connection or reads your SMS,
                   and this is the one line that separates the app from both. The
                   vaguer cloud claim follows it rather than standing alone. */}
-              <Text style={styles.tagline}>Budget your money and split bills — no bank login, no sign-up, and nothing is uploaded unless you ask.</Text>
+              <Text style={styles.tagline}>Budget your money and split bills, no bank login, no sign-up, and nothing is uploaded unless you ask.</Text>
             </FadeIn>
             <FadeIn delay={HERO_REVEAL_MS + 2 * HERO_STEP_MS} style={styles.footer}>
               <PrimaryButton label="Get Started" onPress={() => setStage('welcome')} />
@@ -242,7 +242,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
           </View>
           <Text style={styles.intentNote}>
             {trims.length > 0
-              ? `This trims: ${trims.join(', ')} — each one tap away in Settings → Features.`
+              ? `This trims: ${trims.join(', ')}, each one tap away in Settings → Features.`
               : 'The full app. Trim features any time in Settings → Features.'}
           </Text>
         </StepScaffold>
@@ -357,7 +357,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
           onBack={() => setStage('income')}
           {...(stepPosition('money') ?? {})}
           title="What do you have right now?"
-          subtitle="Sets up Available Money on the Plan screen — and what's yours to spend on Home. Rough numbers are fine."
+          subtitle="Sets up Available Money on the Plan screen, and what's yours to spend on Home. Rough numbers are fine."
           footer={
             <StepFooter
               primaryLabel="Continue"
@@ -398,7 +398,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
               ))}
             </Card>
           </Collapse>
-          <Text style={styles.helpLine}>Tick only what you have — anything you skip can be added later in Plan → Your money.</Text>
+          <Text style={styles.helpLine}>Tick only what you have, anything you skip can be added later in Plan → Your money.</Text>
         </StepScaffold>
       )}
 
@@ -461,7 +461,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
             <StepFooter
               primaryLabel="Continue"
               onPrimary={() => setStage('permissions')}
-              skipLabel="Skip — I'll set it later"
+              skipLabel="Skip, I'll set it later"
               onSkip={() => { setBudgetText(''); setStage('permissions'); }}
             />
           }
@@ -486,7 +486,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
           {/* Both operands guarded: with budget 0 this rendered "that's — of your take-home". */}
           {incomeNum > 0 && budgetNum > 0 && (
             <Text style={styles.budgetPct}>
-              That&apos;s {Math.round((budgetNum / incomeNum) * 100)}% of your take-home — it shows as the pace bar on Home.
+              That&apos;s {Math.round((budgetNum / incomeNum) * 100)}% of your take-home, it shows as the pace bar on Home.
             </Text>
           )}
         </StepScaffold>
@@ -549,7 +549,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
           stageKey="summary"
           onBack={done}
           title="You're set"
-          subtitle="Here's what your answers just set up — each one is live in the app right now."
+          subtitle="Here's what your answers just set up, each one is live in the app right now."
           art={<IconCircle icon="check-circle" size={72} color={colors.income} bg={colors.bgMuted} iconSize={32} />}
           footer={
             <StepFooter

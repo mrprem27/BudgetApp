@@ -55,7 +55,7 @@ export function PassphraseSheet({ visible, onClose, mode, onSubmit, submitting, 
               size of the thing being made, so it belongs above the commit step. */}
           {extra}
           <Text style={styles.warning}>
-            This passphrase encrypts your backup. It is never stored anywhere — not on this
+            This passphrase encrypts your backup. It is never stored anywhere, not on this
             device, not by BudgetSplit. If you forget it, this backup can never be recovered
             by anyone, including you. Write it down somewhere safe.
           </Text>

@@ -31,7 +31,7 @@ export function CombineSameSheet({
       {!picked ? (
         <>
           <Text style={styles.intro}>
-            Pick the other entry for {personName} — everything they hold moves here, and the duplicate is gone.
+            Pick the other entry for {personName} , everything they hold moves here, and the duplicate is gone.
           </Text>
           <PersonPicker
             persons={candidates}

@@ -123,7 +123,7 @@ export async function replaceWithAccount(
     // unlinked self.
     await restoreAllTables(db, snapshot);
     await setLinkedUser(db, null);
-    throw new FirstSignInError('Couldn’t bring your data back. Nothing on this phone changed — try again.');
+    throw new FirstSignInError('Couldn’t bring your data back. Nothing on this phone changed, try again.');
   } finally {
     endRestore();
   }
@@ -212,7 +212,7 @@ export async function mergeIntoAccount(
     await restoreAllTables(db, snapshot);
     await setLinkedUser(db, null);
     if (e instanceof FirstSignInError) throw e;
-    throw new FirstSignInError('Couldn’t merge your data. Nothing on this phone changed — try again.');
+    throw new FirstSignInError('Couldn’t merge your data. Nothing on this phone changed, try again.');
   } finally {
     endRestore();
   }

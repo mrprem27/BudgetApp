@@ -45,8 +45,8 @@ export function useSyncInvites() {
     scheduleSync(db, () => { refresh(); load(); }, 0);
     Alert.alert(
       'Joined',
-      'The group appears as soon as the app syncs — in a few seconds if you’re online. Entries other people add show up in '
-      + 'the group straight away, but move none of your own numbers until you accept them — '
+      'The group appears as soon as the app syncs, in a few seconds if you’re online. Entries other people add show up in '
+      + 'the group straight away, but move none of your own numbers until you accept them, '
       + 'unless you have marked that person trusted.',
     );
   }

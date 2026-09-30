@@ -43,7 +43,7 @@ export function HistoryList({ items }: { items: HistoryItem[] }) {
             </View>
             <View style={[styles.content, !last && { paddingBottom: space.md }]}>
               <Text style={styles.text}>{h.text}</Text>
-              <Text style={styles.time}>{isFinite(d.getTime()) ? dateTime(d) : '—'}</Text>
+              <Text style={styles.time}>{isFinite(d.getTime()) ? dateTime(d) : 'Unknown'}</Text>
             </View>
           </View>
         );

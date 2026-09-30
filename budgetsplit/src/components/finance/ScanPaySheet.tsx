@@ -248,7 +248,7 @@ export function ScanPaySheet({
             <Text style={[styles.hint, (badCode || !!pickHint) && styles.hintBad]}>
               {pickHint ?? (badCode
                 ? 'That isn’t a UPI payment code. Try again, or pay in your bank app and add it here.'
-                : 'Point at any UPI QR — a shop’s counter code or a person’s.')}
+                : 'Point at any UPI QR, a shop’s counter code or a person’s.')}
             </Text>
             <PickQrFromPhotos onPress={handlePickFromPhotos} />
           </>
@@ -270,7 +270,7 @@ export function ScanPaySheet({
             <View style={{ flex: 1 }}>
               <Text style={styles.payeeVpaLead} numberOfLines={1}>{target.vpa}</Text>
               <Text style={styles.payeeNameSub} numberOfLines={1}>
-                {target.name ? `“${target.name}” — as written on the code` : 'No name on this code'}
+                {target.name ? `“${target.name}”, as written on the code` : 'No name on this code'}
               </Text>
             </View>
             <TouchableOpacity onPress={reset} hitSlop={10} accessibilityRole="button" accessibilityLabel="Scan a different code">
@@ -327,7 +327,7 @@ export function ScanPaySheet({
           {/* The app never learns the outcome, so it must not claim to. */}
           <Text style={styles.footnote}>
             {recordOnly
-              ? 'This shop’s code is secured, so scan it again in your UPI app. We’ll have the expense waiting in your review inbox — nothing to type.'
+              ? 'This shop’s code is secured, so scan it again in your UPI app. We’ll have the expense waiting in your review inbox, nothing to type.'
               : 'We’ll ask whether it went through when you come back.'}
           </Text>
         </>

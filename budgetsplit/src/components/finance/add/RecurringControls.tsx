@@ -153,7 +153,7 @@ export function RecurringControls({
         <Text style={styles.recurHint}>
           {mode === 'auto'
             ? 'Adds it for you on the day.'
-            : 'Reminds you, and you add it — so nothing is recorded until it actually happened.'}
+            : 'Reminds you, and you add it, so nothing is recorded until it actually happened.'}
         </Text>
       </View>
 

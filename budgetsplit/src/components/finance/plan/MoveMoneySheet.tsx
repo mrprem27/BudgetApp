@@ -92,8 +92,8 @@ export function MoveMoneySheet({
     </View>
   );
 
-  const both = `${fromPlace?.label ?? '—'} → ${toPlace?.label ?? '—'}`;
-  const info = 'Money moving between two things you own — your net worth stays exactly where it is, and it is not spending, so no budget is touched.';
+  const both = `${fromPlace?.label ?? 'Choose'} → ${toPlace?.label ?? 'Choose'}`;
+  const info = 'Money moving between two things you own, your net worth stays exactly where it is, and it is not spending, so no budget is touched.';
 
   return (
     <SheetModal visible={visible} onClose={onClose} title="Move money">

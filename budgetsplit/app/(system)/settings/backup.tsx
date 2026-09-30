@@ -120,7 +120,7 @@ export default function BackupScreen() {
     return new Promise(resolve => {
       Alert.alert(
         'Did you save it?',
-        'Keep it somewhere you will still have if this phone is lost — Files, iCloud Drive, or Google Drive.',
+        'Keep it somewhere you will still have if this phone is lost, Files, iCloud Drive, or Google Drive.',
         [
           { text: 'Not yet', style: 'cancel', onPress: () => resolve(false) },
           { text: 'Saved', onPress: () => resolve(true) },
@@ -151,7 +151,7 @@ export default function BackupScreen() {
           haptic.warning();
           Alert.alert(
             'Made by a newer version',
-            'Update BudgetSplit and try again. Your passphrase is fine — this build just can\u2019t read this file yet.',
+            'Update BudgetSplit and try again. Your passphrase is fine, this build just can\u2019t read this file yet.',
           );
           return;
         }
@@ -218,7 +218,7 @@ export default function BackupScreen() {
       Alert.alert(
         'Sign out first',
         'This phone keeps your account in sync, and restoring a file would replace what '
-        + 'the account — and everyone you share a group with — has, from a copy they were '
+        + 'the account, and everyone you share a group with, has, from a copy they were '
         + 'never part of.\n\nYour account already has everything. To use a file instead, '
         + 'sign out under Settings → Account, then restore.',
         [
@@ -274,7 +274,7 @@ export default function BackupScreen() {
           <Text style={styles.note}>
             {serverSession
               ? 'Your account already keeps everything, and a new phone gets it back when you sign in. A backup here is a file of your own, besides that: encrypted on this phone with a passphrase that never leaves it. Forget the passphrase and nobody can open the file, including us.'
-              : 'Your data lives only on this device — nothing is uploaded. Make an encrypted backup and save it to Files, iCloud Drive or Google Drive. Nothing happens automatically, and the passphrase never leaves this phone — forget it and that backup cannot be opened by anyone.'}
+              : 'Your data lives only on this device, nothing is uploaded. Make an encrypted backup and save it to Files, iCloud Drive or Google Drive. Nothing happens automatically, and the passphrase never leaves this phone, forget it and that backup cannot be opened by anyone.'}
           </Text>
           {lastBackupAt != null && (
             <Text style={styles.lastBackup}>Last backup: {dateTime(new Date(lastBackupAt))}</Text>
@@ -306,7 +306,7 @@ export default function BackupScreen() {
             and location setting live. Restoring gets your money back and leaves you
             re-choosing your preferences, and nothing on this screen admitted it. */}
         <Text style={styles.warning}>Restoring replaces ALL current data on this device. This cannot be undone.</Text>
-        <Text style={styles.warning}>Your transactions, groups and people come back. App preferences — features, reminders, default pay method — do not, and stay as they are on this phone.</Text>
+        <Text style={styles.warning}>Your transactions, groups and people come back. App preferences, features, reminders, default pay method, do not, and stay as they are on this phone.</Text>
       </View>
 
       <PassphraseSheet
@@ -332,7 +332,7 @@ export default function BackupScreen() {
               <Text style={styles.includeHint}>
                 {includePhotos
                   ? 'Receipts and profile pictures are restored too. The file will be much larger.'
-                  : 'Rows only — small file. Receipts will not come back on restore.'}
+                  : 'Rows only, small file. Receipts will not come back on restore.'}
               </Text>
             </View>
           </TouchableOpacity>

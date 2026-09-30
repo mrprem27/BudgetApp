@@ -303,7 +303,7 @@ export default function SavingsScreen() {
           <EmptyState
             icon="target"
             title="No savings goals yet"
-            body="Turn unused money into something you want — a phone, a trip, an emergency fund. Create your first goal."
+            body="Turn unused money into something you want, a phone, a trip, an emergency fund. Create your first goal."
             actionLabel="New goal"
             onAction={() => { resetNew(); setShowNew(true); }}
           />

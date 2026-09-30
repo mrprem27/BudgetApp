@@ -32,7 +32,7 @@ export function RebalanceSheet({
         {plan.partial
           // Said plainly: a partial cover still leaves the month over, and pretending
           // otherwise would be the same dishonesty the red bar was at least avoiding.
-          ? `${plan.category} is ${formatCompact(plan.overspend)} over. Only ${formatCompact(plan.covered)} can be moved from other categories — the rest stays over.`
+          ? `${plan.category} is ${formatCompact(plan.overspend)} over. Only ${formatCompact(plan.covered)} can be moved from other categories, the rest stays over.`
           : `${plan.category} is ${formatCompact(plan.overspend)} over. Cover it by trimming categories that still have room. Your total budget doesn’t change.`}
       </Text>
 

@@ -91,7 +91,7 @@ export function useApprovals() {
   async function reject(entry: PendingEntry) {
     const ok = await confirmAsync(
       `Not yours?`,
-      `This removes ${entry.authorName}'s entry from your ledger. It stays on theirs — you may want to tell them.`,
+      `This removes ${entry.authorName}'s entry from your ledger. It stays on theirs, you may want to tell them.`,
       'Not mine',
     );
     if (!ok) return;

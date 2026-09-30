@@ -53,7 +53,7 @@ export function waNumber(mobile: string): string | null {
 
 /** The message body. Plain text — WhatsApp has no formatting we can rely on. */
 export function reminderText(r: ReminderInput): string {
-  const lines = [`Hi ${r.name}, just a nudge — ${formatRupees(r.amountPaise)} is still open between us.`];
+  const lines = [`Hi ${r.name}, just a nudge, ${formatRupees(r.amountPaise)} is still open between us.`];
 
   // Name what it is for when we can. "You owe me ₹2,400" invites an argument;
   // "₹1,600 Goa Trip, ₹800 Flat" invites a payment.

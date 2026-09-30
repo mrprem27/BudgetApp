@@ -44,7 +44,7 @@ export function AssetPickerSheet({ visible, onClose, assets, value, onSelect, ac
         <EmptyState
           icon="trending-up"
           title="No assets yet"
-          body="An investment needs somewhere to land — a fund, gold, an FD. Save this and we'll start one called Investments, or set them up first in Plan → Assets."
+          body="An investment needs somewhere to land, a fund, gold, an FD. Save this and we'll start one called Investments, or set them up first in Plan → Assets."
         />
       ) : (
         <Card clip>

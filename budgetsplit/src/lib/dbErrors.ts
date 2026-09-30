@@ -76,7 +76,7 @@ export function saveFailureMessage(e: unknown): { title: string; body: string } 
   if (name === 'AssetTransferError') {
     return {
       title: 'Edit this on the Assets screen',
-      body: 'Money moved into an asset has two halves — the cash and the asset itself — '
+      body: 'Money moved into an asset has two halves, the cash and the asset itself, '
         + 'and they have to move together. Take money out, put more in, or update what '
         + 'it is worth, and both sides stay right.',
     };

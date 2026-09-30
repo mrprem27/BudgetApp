@@ -211,7 +211,7 @@ const APP_SPECS: UpiAppSpec[] = [
     // rebuild to learn, and leaving it would have kept promising a scanner that isn't there.
     // Falls back to `probe`, which lands in exactly the same place, honestly.
     payload: { name: false }, provenance: 'documented',
-    blocked: 'PhonePe only accepts payments started by registered merchants, so it will refuse this one — even if you type the amount yourself.',
+    blocked: 'PhonePe only accepts payments started by registered merchants, so it will refuse this one, even if you type the amount yourself.',
   },
   // **If Google Pay fails on device, `gpay://upi/pay` is the first thing to try.** Google's
   // own India in-app-payments guide gives `gpay://upi/pay?pa=…` verbatim and never mentions
@@ -242,7 +242,7 @@ const APP_SPECS: UpiAppSpec[] = [
     // is the counter-example to this field's old claim that a wrong scanner route costs
     // nothing. Removed; `probe` lands on the home screen.
     provenance: 'documented',
-    blocked: 'Paytm blocks payments started outside its own apps as a risk policy, so it will refuse this one — typing the amount there does not help.',
+    blocked: 'Paytm blocks payments started outside its own apps as a risk policy, so it will refuse this one, typing the amount there does not help.',
   },
   { key: UpiApp.Bhim, label: 'BHIM', prefix: 'bhim://upi/pay', probe: 'bhim://', provenance: 'unverified' },
   // Paid on a bare `pa/pn/am/cu`, then failed the moment `mode` and `tr` arrived — path
@@ -267,7 +267,7 @@ const APP_SPECS: UpiAppSpec[] = [
   {
     key: UpiApp.AmazonPay, label: 'Amazon Pay', prefix: 'amazonpay://upi/pay', probe: 'amazonpay://',
     scanPath: 'amazonpay://scan', provenance: 'device',
-    blocked: 'Amazon Pay reads the payment correctly but its own system declines anything started in another app — every attempt has failed.',
+    blocked: 'Amazon Pay reads the payment correctly but its own system declines anything started in another app, every attempt has failed.',
   },
   // **Fails ValidateAddress, and it is not our URI.** "Couldn't verify UPI ID" appeared on
   // a friend's `@kotak` handle, so it is not the self-payment confound. More decisively, the

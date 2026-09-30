@@ -7,7 +7,7 @@ export function RecurringSuggestionBanner({ count, onPress, onDismiss }: { count
   return (
     <Banner
       icon="repeat"
-      text={`${count} of these look recurring — review?`}
+      text={`${count} of these look recurring, review?`}
       onPress={onPress}
       onDismiss={onDismiss}
     />

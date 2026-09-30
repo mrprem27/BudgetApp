@@ -116,7 +116,7 @@ export function TagSheet({ visible, onClose, value, onChange, suggestions, accen
 
       {full && (
         <Text style={styles.limit}>
-          That's {TAG_MAX_COUNT} tags — remove one to add another. More than this and they
+          That's {TAG_MAX_COUNT} tags, remove one to add another. More than this and they
           stop being scannable.
         </Text>
       )}

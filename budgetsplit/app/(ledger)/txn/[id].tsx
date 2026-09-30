@@ -225,7 +225,7 @@ export default function TxnDetailScreen() {
 
         {/* Meta */}
         <View style={styles.card}>
-          <Row label="When" value={(() => { const d = new Date(txn.date); return isFinite(d.getTime()) ? dateTime(d) : '—'; })()} />
+          <Row label="When" value={(() => { const d = new Date(txn.date); return isFinite(d.getTime()) ? dateTime(d) : 'Unknown'; })()} />
           <View style={styles.divider} />
           <Row label="Group" value={groupName} />
           {txn.pay_method && (

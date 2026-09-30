@@ -38,7 +38,7 @@ export function SummaryStage({
   if (incomeNum > 0) {
     rows.push({
       icon: 'trending-up', tint: colors.income,
-      title: `Salary ${formatRupeesShort(incomeNum * 100)} — next on ${fullDate(firstPayDate)}`,
+      title: `Salary ${formatRupeesShort(incomeNum * 100)}, next on ${fullDate(firstPayDate)}`,
       where: 'Recurring · Plan',
     });
   }
@@ -59,7 +59,7 @@ export function SummaryStage({
   rows.push({
     icon: 'shield', tint: colors.income,
     title: 'Backup reminder on',
-    where: 'Settings · Backup — a file you keep',
+    where: 'Settings · Backup, a file you keep',
   });
 
   return (
@@ -82,7 +82,7 @@ export function SummaryStage({
         </Card>
       ) : (
         <Text style={styles.emptyNote}>
-          Nothing set up yet — that&apos;s fine. Everything here can be added from the app whenever you want.
+          Nothing set up yet, that&apos;s fine. Everything here can be added from the app whenever you want.
         </Text>
       )}
       {/* The one pointer to Friends, in place of the row that used to read back
@@ -94,7 +94,7 @@ export function SummaryStage({
         </Text>
       )}
       <Text style={styles.healthNote}>
-        Your money-health score unlocks as you log — the locked ring on Home shows exactly what it needs.
+        Your money-health score unlocks as you log, the locked ring on Home shows exactly what it needs.
       </Text>
     </View>
   );

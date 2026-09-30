@@ -37,7 +37,7 @@ export function SavedViewsSheet({
         <EmptyState
           icon="bookmark"
           title="No saved views"
-          body="Set a filter, a group and a payer, then “Save current view” — it comes back in one tap next time you import."
+          body="Set a filter, a group and a payer, then “Save current view”, it comes back in one tap next time you import."
         />
       ) : (
         <Card clip>

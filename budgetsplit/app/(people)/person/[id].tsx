@@ -117,13 +117,13 @@ export default function PersonScreen() {
               {/* Written off is not settled: the balance above is unchanged and still
                   shown. It has only stopped counting as money you can rely on. */}
               {receivableState === 'written_off' && (
-                <Text style={styles.writtenOff}>Written off — not counted as money coming back</Text>
+                <Text style={styles.writtenOff}>Written off, not counted as money coming back</Text>
               )}
 
               {/* Suggest, never downgrade. Judged against this person's own rhythm,
                   so a quarterly settler isn't nagged at forty days. */}
               {suggestWriteOff && (
-                <Text style={styles.stale}>Quiet for longer than usual — still expecting this back?</Text>
+                <Text style={styles.stale}>Quiet for longer than usual, still expecting this back?</Text>
               )}
 
               {/*

@@ -167,7 +167,7 @@ export function useUpiHandoff(noAppMessage: string): UpiHandoff {
       // the user was being told to go elsewhere and would not come back to check.
       Alert.alert(
         spec ? `Couldn’t open ${spec.label}` : 'Couldn’t open that app',
-        'Try another UPI app, or record it here by hand — nothing has been saved yet.',
+        'Try another UPI app, or record it here by hand, nothing has been saved yet.',
       );
       return false;
     }

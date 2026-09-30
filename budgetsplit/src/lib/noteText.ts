@@ -3,7 +3,8 @@
  * collapsed to one space. Empty or whitespace-only is `null`, so a row never shows a blank line.
  */
 export function oneLine(note: string | null | undefined): string | null {
-  const t = (note ?? '').replace(/\s+/g, ' ').trim();
+  // Older rows joined title and note with ' — '; shown with today's separator (`U-26`).
+  const t = (note ?? '').replace(/\s+/g, ' ').replace(/ — /g, ' · ').trim();
   return t || null;
 }
 

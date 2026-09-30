@@ -62,7 +62,7 @@ export function useSignOut({ onSignedOut }: { onSignedOut?: () => void | Promise
           const n = plan.count;
           if (!(await ask(
             `${n} ${n === 1 ? 'change hasn’t' : 'changes haven’t'} uploaded yet`,
-            'Signing out now removes them from this phone. Connect to the internet and try again, or sign out anyway — a copy is saved to Files first.',
+            'Signing out now removes them from this phone. Connect to the internet and try again, or sign out anyway, a copy is saved to Files first.',
             'Sign out anyway',
           ))) return;
           exportFirst = true;

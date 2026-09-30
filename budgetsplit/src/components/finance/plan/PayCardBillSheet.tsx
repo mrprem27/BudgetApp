@@ -39,7 +39,7 @@ export function PayCardBillSheet({
       </Card>
       <Text style={styles.hint}>Leaves your cash and comes off the {formatCompact(creditUsed)} card balance.</Text>
       {overpay && (
-        <Text style={styles.warn}>That&apos;s more than the current balance — the balance stops at ₹0.</Text>
+        <Text style={styles.warn}>That&apos;s more than the current balance, the balance stops at ₹0.</Text>
       )}
       <PrimaryButton
         label={paise > 0 ? `Log payment of ${formatCompact(paise)}` : 'Log payment'}

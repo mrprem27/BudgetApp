@@ -11,7 +11,7 @@ const ATTACHMENT_DIR = new Directory(Paths.document, 'attachments');
 /** Thrown when the receipt can't be saved to disk (e.g. device out of storage). */
 export class AttachmentStorageError extends Error {
   constructor() {
-    super('Could not save the receipt photo — device storage may be full.');
+    super('Could not save the receipt photo, device storage may be full.');
     this.name = 'AttachmentStorageError';
   }
 }

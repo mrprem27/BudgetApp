@@ -155,7 +155,7 @@ export function FilterBar({
       ) : (
       <Animated.View key="chips" entering={CHIPS_IN} exiting={OUT}>
       /* `flexGrow: 0`: a horizontal ScrollView in a column otherwise takes whatever height the
-         parent offers — the row that collapsed or ballooned depending on the screen. */
+         parent offers, the row that collapsed or ballooned depending on the screen. */
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}

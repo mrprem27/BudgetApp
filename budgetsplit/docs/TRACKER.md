@@ -2,7 +2,7 @@
 
 `Last verified: 2026-09-30 (§0, §1, §9–§11 and every row whose status changed; the rest as of 2026-09-07) · Guarded by: trackerIntegrity.test.ts · countClaims.test.ts · docIdGraph.test.ts`
 
-**228 items, 124 of them still open.** One row each: what it is, and where it stands.
+**228 items, 123 of them still open.** One row each: what it is, and where it stands.
 Nothing else. **This is the V1 tracker** — start at §0.
 
 **The evidence is not here.** Why each item exists, what it costs, what breaks if you touch it, and
@@ -29,7 +29,7 @@ is defined in two places.
 | §6 · Debt — `D-` | **11** | 11 |
 | §7 · Accepted — `A-` | **2** | 11 |
 | §9 · Deferred from V1 — `V-` | **7** | 7 |
-| §11 · Open from the last pass, and your feedback — `U-` | **17** | 26 |
+| §11 · Open from the last pass, and your feedback — `U-` | **16** | 26 |
 
 §8 (parked scope) and §10 (built but easy to forget) carry no ids.
 
@@ -221,7 +221,7 @@ below is the plan; every line points at rows further down, where status lives.
 | `A-01` | Three red surfaces stack on every Home open | `PARKED` |
 | `A-11` | `expo-file-system` legacy API | `PARKED` |
 
-**Closed (9), detail in `FINDINGS.md`:** `A-02` `A-03` `A-04` `A-05` `A-06` `A-07` `A-08` `A-09` `A-10`
+**Closed (10), detail in `FINDINGS.md`:** `A-02` `A-03` `A-04` `A-05` `A-06` `A-07` `A-08` `A-09` `A-10`
 
 ---
 ## §8 · Parked with no id
@@ -297,7 +297,7 @@ testing or describing the app. Where one needs action, the id says where.
 ---
 ## §11 · Open from the last pass, and your feedback — `U-`
 
-**26 items: 14 `OPEN`, 2 `DECIDE`, 1 `PARKED`, 9 `DONE`.** From the 2026-09-30 pass (`SPEC-BUGSCAN.md` Pass 2) and your answers and feedback the same night. Evidence in `FINDINGS.md` §11.
+**26 items: 13 `OPEN`, 2 `DECIDE`, 1 `PARKED`, 10 `DONE`.** From the 2026-09-30 pass (`SPEC-BUGSCAN.md` Pass 2) and your answers and feedback the same night. Evidence in `FINDINGS.md` §11.
 
 | | What | Status | Default if never decided |
 |---|---|---|---|
@@ -317,6 +317,5 @@ testing or describing the app. Where one needs action, the id says where.
 | `U-22` | The multi-person selector needs a proper design | `OPEN` |  |
 | `U-23` | Choosing a group (in Add and elsewhere) needs a proper design | `OPEN` |  |
 | `U-24` | Product analytics (Mixpanel) before V1, and in the Android port | `DECIDE` | No analytics, as the privacy answers say today |
-| `U-26` | No em dashes on screen | `OPEN` |  |
 
-**Closed (9), detail in `FINDINGS.md`:** `U-03` `U-04` `U-05` `U-06` `U-11` `U-12` `U-17` `U-21` `U-25`
+**Closed (9), detail in `FINDINGS.md`:** `U-03` `U-04` `U-05` `U-06` `U-11` `U-12` `U-17` `U-21` `U-25` `U-26`

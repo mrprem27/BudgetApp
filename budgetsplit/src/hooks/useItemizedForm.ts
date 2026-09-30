@@ -286,7 +286,7 @@ export function useItemizedForm(paramGroupId?: string, editId?: string) {
       const written = await waitForFileReady(uri);
       if (!written.exists || (written.size ?? 0) === 0) {
         setScanResult({
-          rawText: `[Pre-flight check failed] The photo wasn't fully saved before scanning (exists=${written.exists}, size=${written.size ?? 0}). This points to the copy step, not the OCR itself — try again.`,
+          rawText: `[Pre-flight check failed] The photo wasn't fully saved before scanning (exists=${written.exists}, size=${written.size ?? 0}). This points to the copy step, not the OCR itself, try again.`,
           candidates: [],
         });
         setShowScanSheet(true);
@@ -304,7 +304,7 @@ export function useItemizedForm(paramGroupId?: string, editId?: string) {
         // stale native-module bridge after a hot reload, a network/proxy error
         // on the cloud path, etc).
         const msg = scanError instanceof Error ? scanError.message : String(scanError);
-        setScanResult({ rawText: `[Scan error — this is not "no text found", the scan itself failed]\n${msg}`, candidates: [] });
+        setScanResult({ rawText: `[Scan error, this is not "no text found", the scan itself failed]\n${msg}`, candidates: [] });
       }
       setShowScanSheet(true);
     } catch (e) {

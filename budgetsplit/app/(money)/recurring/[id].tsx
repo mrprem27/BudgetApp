@@ -155,7 +155,7 @@ export default function RecurringRuleScreen() {
               value={
                 next ? fullDate(next)
                 : rule.recur_end ? fullDate(new Date(rule.recur_end))
-                : '—'
+                : 'None'
               }
             />
           </View>

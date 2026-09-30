@@ -101,7 +101,7 @@ export function AssetSheet({
               style={styles.gap}
             />
 
-            <InfoLabel label="Kind" labelStyle={styles.label} info="Only changes the icon and the label — every asset counts the same way." />
+            <InfoLabel label="Kind" labelStyle={styles.label} info="Only changes the icon and the label, every asset counts the same way." />
             <View style={styles.chips}>
               {ASSET_KIND.map(k => (
                 <Chip
@@ -121,7 +121,7 @@ export function AssetSheet({
             <Card clip style={styles.amountCard}>
               <AmountRow icon="tag" label="Worth today" value={amount} onChangeText={setAmount} />
             </Card>
-            <Text style={styles.hint}>Records what you already own — no cash moves. Use Move money for new money in.</Text>
+            <Text style={styles.hint}>Records what you already own, no cash moves. Use Move money for new money in.</Text>
           </>
         )}
 

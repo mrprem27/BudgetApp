@@ -210,7 +210,7 @@ export async function rejectTxn(db: SQLite.SQLiteDatabase, txnId: string): Promi
     await answer(db, txnId, 'rejected');
     await logAudit(db, {
       entityType: 'txn', entityId: txnId, action: 'updated',
-      summary: 'You refused a retraction — the entry stays',
+      summary: 'You refused a retraction, the entry stays',
     });
     return;
   }
@@ -278,6 +278,6 @@ export async function reopenApproval(db: SQLite.SQLiteDatabase, txnId: string): 
   await restoreTxn(db, txnId);
   await logAudit(db, {
     entityType: 'txn', entityId: txnId, action: 'updated',
-    summary: 'You took back your decision — it is waiting again',
+    summary: 'You took back your decision, it is waiting again',
   });
 }

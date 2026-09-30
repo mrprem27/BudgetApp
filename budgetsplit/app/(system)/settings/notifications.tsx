@@ -93,7 +93,7 @@ export default function NotificationsScreen() {
     } else {
       Alert.alert(
         'Couldn’t send the test',
-        'Local notifications don’t run in Expo Go — they need a development build. Reminders you set will still be scheduled.',
+        'Local notifications don’t run in Expo Go, they need a development build. Reminders you set will still be scheduled.',
       );
     }
   }
@@ -217,7 +217,7 @@ export default function NotificationsScreen() {
           </View>
         </View>
 
-        <Text style={styles.footer}>All notifications are local — no server, no push, always offline.</Text>
+        <Text style={styles.footer}>All notifications are local, no server, no push, always offline.</Text>
       </ScrollView>
       )}
 

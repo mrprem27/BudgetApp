@@ -117,8 +117,8 @@ export function AmountCalculatorSheet({ visible, onClose, amountText, onApply, a
       <Text style={styles.hint}>
         {kind === 'money'
           ? `${op === '+' ? 'Add' : 'Subtract'} an amount`
-          : op === '/' ? 'Divide by — e.g. 3 to split three ways'
-          : 'Multiply by — e.g. 1.18 to add 18% tax'}
+          : op === '/' ? 'Divide by, e.g. 3 to split three ways'
+          : 'Multiply by, e.g. 1.18 to add 18% tax'}
       </Text>
 
       <Keypad
@@ -129,7 +129,7 @@ export function AmountCalculatorSheet({ visible, onClose, amountText, onApply, a
 
       {remainder > 0 && (
         <Text style={styles.remainder}>
-          Doesn't divide evenly — {formatRupees(remainder)} left over, so the shares won't
+          Doesn't divide evenly, {formatRupees(remainder)} left over, so the shares won't
           add back to the total exactly.
         </Text>
       )}

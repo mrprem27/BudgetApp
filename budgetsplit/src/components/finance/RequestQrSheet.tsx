@@ -57,7 +57,7 @@ export function RequestQrSheet({
           body={
             vpa
               ? 'That handle doesn’t look like a UPI ID. It should read like name@bank.'
-              : 'We need your own UPI ID to make a code others can scan. Nothing leaves your phone — it only goes into the QR.'
+              : 'We need your own UPI ID to make a code others can scan. Nothing leaves your phone, it only goes into the QR.'
           }
           actionLabel={onSetUpiId ? 'Add UPI ID' : undefined}
           onAction={onSetUpiId}

@@ -39,7 +39,7 @@ export async function askAboutPendingPayment(
   const who = p.name ?? p.vpa;
   const paid = await confirmAsync(
     'Did that payment go through?',
-    `${formatRupees(p.amountPaise)} to ${who}. If it did, we'll add it to your review inbox — no typing.`,
+    `${formatRupees(p.amountPaise)} to ${who}. If it did, we'll add it to your review inbox, no typing.`,
     'Yes, add it',
   );
   if (!paid) return false;

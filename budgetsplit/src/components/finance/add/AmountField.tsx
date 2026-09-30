@@ -94,7 +94,7 @@ export function AmountField({
               icon="divide-circle"
               tint={cursor}
               onPress={onOpenCalculator!}
-              label="Adjust amount — split, tip or tax"
+              label="Adjust amount, split, tip or tax"
             />
           </View>
         )}

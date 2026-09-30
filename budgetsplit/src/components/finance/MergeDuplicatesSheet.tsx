@@ -33,7 +33,7 @@ export function MergeDuplicatesSheet({
         {duplicates.length === 1
           ? 'This entry from your phone looks like one your account already has.'
           : `${duplicates.length} entries from your phone look like ones your account already has.`}
-        {' '}Nothing was removed — pick for each one.
+        {' '}Nothing was removed, pick for each one.
       </Text>
       <ScrollView style={styles.list}>
         {duplicates.map(d => {

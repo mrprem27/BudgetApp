@@ -269,7 +269,7 @@ export async function getBudgetAnalytics(
   }
   for (const t of nearLimit.slice(0, 3)) {
     const tail = t.daysToLimit !== null && t.daysToLimit <= 10
-      ? ` — could run out in ${t.daysToLimit} day${t.daysToLimit === 1 ? '' : 's'}`
+      ? `, could run out in ${t.daysToLimit} day${t.daysToLimit === 1 ? '' : 's'}`
       : '';
     recommendations.push({
       id: `near-${t.category}`,
@@ -286,7 +286,7 @@ export async function getBudgetAnalytics(
   if (biggestDecrease && (biggestDecrease.deltaPct ?? 0) <= -15) {
     recommendations.push({
       id: 'decrease', severity: 'good', icon: 'trending-down',
-      text: `${biggestDecrease.category} is ${formatComparison(biggestDecrease.deltaPct ?? 0)} — nice.`,
+      text: `${biggestDecrease.category} is ${formatComparison(biggestDecrease.deltaPct ?? 0)}, nice.`,
     });
   }
   if (monthlyBudgetTotal > 0 && projectedMonthEnd > monthlyBudgetTotal) {
@@ -301,7 +301,7 @@ export async function getBudgetAnalytics(
       : `${overPct}% over budget`;
     recommendations.push({
       id: 'projected', severity: 'warn', icon: 'pie-chart',
-      text: `At this pace you'll spend ${formatCompact(projectedMonthEnd)} this month — ${formatCompact(overAmt)}, ${scale}.`,
+      text: `At this pace you'll spend ${formatCompact(projectedMonthEnd)} this month, ${formatCompact(overAmt)}, ${scale}.`,
     });
   }
   if (recommendations.length === 0 && totalAllocated > 0) {

@@ -34,7 +34,7 @@ export function HomeTiles({ sts, projected, budget, obfuscate, onPressSts, onPre
     <View style={styles.row}>
       <Tile
         label="Safe to spend"
-        amount={!sts ? '—' : obfuscate ? '••••' : formatCompact(sts.amount)}
+        amount={!sts ? '₹0' : obfuscate ? '••••' : formatCompact(sts.amount)}
         tone={!sts ? colors.textMuted : over ? colors.expense : colors.income}
         sub={!sts ? 'Add your money in Money' : over ? 'over-committed' : `until ${dateWithYearIfOther(sts.untilMs)}`}
         onPress={onPressSts}
@@ -42,7 +42,7 @@ export function HomeTiles({ sts, projected, budget, obfuscate, onPressSts, onPre
       />
       <Tile
         label="Month end · projected"
-        amount={f ? f.amount : '—'}
+        amount={f ? f.amount : 'Soon'}
         tone={f ? fTone : colors.textMuted}
         sub={f ? f.sub : 'after a few days of spending'}
         onPress={onPressForecast}

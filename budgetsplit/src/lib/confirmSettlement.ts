@@ -46,7 +46,7 @@ export async function askAboutPendingSettlement(
 
   const paid = await confirmAsync(
     'Did that payment go through?',
-    `${formatRupees(s.amountPaise)} to ${s.payeeName}. If it did, we'll record the settlement — no typing.`,
+    `${formatRupees(s.amountPaise)} to ${s.payeeName}. If it did, we'll record the settlement, no typing.`,
     'Yes, record it',
   );
   if (!paid) return false;

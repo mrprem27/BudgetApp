@@ -166,7 +166,7 @@ export const ReviewRowCard = React.memo(function ReviewRowCard({
             style={styles.pill}
             onPress={() => { haptic.selection(); onPatch(row.id, { direction: inbound ? 'debit' : 'credit' }); }}
             accessibilityRole="button"
-            accessibilityLabel={inbound ? 'Money in — tap to change to money out' : 'Money out — tap to change to money in'}
+            accessibilityLabel={inbound ? 'Money in, tap to change to money out' : 'Money out, tap to change to money in'}
           >
             <Feather
               name={inbound ? 'arrow-down-left' : 'arrow-up-right'}

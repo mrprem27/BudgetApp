@@ -67,7 +67,7 @@ export default function ReportsScreen() {
   const analyticsByGroup = data?.analyticsByGroup ?? {};
   const yearIncome = data?.yearIncome ?? 0;
   const yearExpense = data?.yearExpense ?? 0;
-  const yearTopCat = data?.yearTopCat ?? '—';
+  const yearTopCat = data?.yearTopCat ?? 'None';
   const biggestTxn = data?.biggestTxn ?? 0;
   const monthSpent = data?.monthSpent ?? 0;
   const monthEarned = data?.monthEarned ?? 0;

@@ -45,7 +45,7 @@ export function AssetsSection({ assets: a }: { assets: ReturnType<typeof useAsse
       <Card padded style={styles.hero}>
         <Text style={styles.heroLabel}>Worth, across your assets</Text>
         <Text style={styles.heroAmount}>{formatCompact(a.total)}</Text>
-        <Text style={styles.heroHint}>Counted in your net worth, never in what you can spend — these aren’t cash.</Text>
+        <Text style={styles.heroHint}>Counted in your net worth, never in what you can spend, these aren’t cash.</Text>
       </Card>
 
       <View style={styles.actions}>
@@ -59,7 +59,7 @@ export function AssetsSection({ assets: a }: { assets: ReturnType<typeof useAsse
         <EmptyState
           icon="package"
           title="Nothing here yet"
-          body="Gold, a flat, an FD, a fund. Name what you own and moving money in or out becomes a transfer — your net worth stays where it is."
+          body="Gold, a flat, an FD, a fund. Name what you own and moving money in or out becomes a transfer, your net worth stays where it is."
           actionLabel="Add an asset"
           onAction={() => setSheet({ mode: 'create' })}
         />

@@ -34,8 +34,8 @@ export function FirstSignInStep(props: Props) {
   // each of three buttons does to your data, on a screen where the action is
   // hard to reverse; that's the rule's own exception (a constraint a decision
   // depends on), not restated context.
-  const sentence = props.kind === 'restore' ? 'Keep the app open — this takes a moment.'
-    : props.kind === 'merge' ? 'Keep the app open — this phone’s own data goes up next.'
+  const sentence = props.kind === 'restore' ? 'Keep the app open, this takes a moment.'
+    : props.kind === 'merge' ? 'Keep the app open, this phone’s own data goes up next.'
     : (props as Extract<Props, { kind: 'ask' }>).canMerge
       ? 'So does your account. “Merge” keeps both, adding this phone’s data to your account. “Use my account” saves this phone’s data to a file in Files first, then replaces it. “Not now” signs you out and changes nothing.'
       : 'So does your account, and they can’t be merged. “Use my account” saves this phone’s data to a file in Files first, then replaces it. “Not now” signs you out and changes nothing.';

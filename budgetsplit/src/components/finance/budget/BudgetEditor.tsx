@@ -182,7 +182,7 @@ export function BudgetEditor({ scope, groupId, focusCategory }: {
               ))}
               <Text style={styles.explain}>
                 These have a budget here but are not in your category list, so they show as
-                “Others” elsewhere. Tap one to add it — the amount does not change.
+                “Others” elsewhere. Tap one to add it, the amount does not change.
               </Text>
             </SectionCard>
           )}

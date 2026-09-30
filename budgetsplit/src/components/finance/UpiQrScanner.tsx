@@ -53,7 +53,7 @@ export function UpiQrScanner({
     const res = await pickQrFromLibrary();
     if (res.status === 'ok') {
       if (!accept(res.data)) {
-        setPickHint('That’s not a personal UPI QR — shop/BharatQR codes aren’t supported.');
+        setPickHint('That’s not a personal UPI QR, shop/BharatQR codes aren’t supported.');
       }
       return;
     }
@@ -68,8 +68,8 @@ export function UpiQrScanner({
         <View style={styles.pad}>
           <Text style={styles.body}>
             {permission?.canAskAgain === false
-              ? 'Camera access is off for BudgetSplit. Turn it on in your phone’s Settings to scan a UPI QR — or just type the ID instead.'
-              : 'BudgetSplit needs the camera to read a UPI QR. Nothing is recorded or uploaded — the code is read on your device.'}
+              ? 'Camera access is off for BudgetSplit. Turn it on in your phone’s Settings to scan a UPI QR, or just type the ID instead.'
+              : 'BudgetSplit needs the camera to read a UPI QR. Nothing is recorded or uploaded, the code is read on your device.'}
           </Text>
           {permission?.canAskAgain !== false && (
             <PrimaryButton label="Allow camera" onPress={requestPermission} />
@@ -94,7 +94,7 @@ export function UpiQrScanner({
           </View>
           <Text style={[styles.hint, (badCode || !!pickHint) && styles.hintBad]}>
             {pickHint ?? (badCode
-              ? 'That’s not a personal UPI QR — shop/BharatQR codes aren’t supported. Type the ID instead.'
+              ? 'That’s not a personal UPI QR, shop/BharatQR codes aren’t supported. Type the ID instead.'
               : 'Ask them to open their UPI app’s “Receive money” QR.')}
           </Text>
           {/* Their QR usually arrives as a screenshot, not a phone held up to yours. */}

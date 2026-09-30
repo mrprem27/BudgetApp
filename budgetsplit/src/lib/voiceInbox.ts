@@ -137,20 +137,20 @@ export function reviewReason(
     // Two reasons a settlement waits, and they need different next actions, so they are not
     // collapsed: a missing person is something to supply, a known one is something to confirm.
     return draft.personId
-      ? 'Confirm the direction — tap to reverse if they paid you'
-      : 'Who did you pay? — say a name next time, or pick one here';
+      ? 'Confirm the direction, tap to reverse if they paid you'
+      : 'Who did you pay? say a name next time, or pick one here';
   }
 
   if (kind === 'income') {
     if (isGroupish(phrase) || mentionsGroupName(phrase, groupNames) || mentionsGroupName(phrase, personNames)) {
-      return 'Income is always personal — check this was heard right';
+      return 'Income is always personal, check this was heard right';
     }
     return null;
   }
 
-  if (isGroupish(phrase)) return 'Sounded like a split — pick who shares it';
-  if (mentionsGroupName(phrase, groupNames)) return 'Named a group — confirm who shares it';
-  if (mentionsGroupName(phrase, personNames)) return 'Named someone — is this a transfer or a split?';
+  if (isGroupish(phrase)) return 'Sounded like a split, pick who shares it';
+  if (mentionsGroupName(phrase, groupNames)) return 'Named a group, confirm who shares it';
+  if (mentionsGroupName(phrase, personNames)) return 'Named someone, is this a transfer or a split?';
   return null;
 }
 

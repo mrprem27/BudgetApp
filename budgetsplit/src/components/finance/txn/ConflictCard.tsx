@@ -44,7 +44,7 @@ export function ConflictCard({ yours, theirs, onKeepYours, onKeepTheirs, busy }:
       <Banner
         tone={colors.healthAmber}
         icon="git-merge"
-        text="This was changed on another phone before your change arrived. Pick the one that’s right — they won’t be mixed."
+        text="This was changed on another phone before your change arrived. Pick the one that’s right, they won’t be mixed."
       />
       {side('Yours', 'yours')}
       {side('Theirs · on the other phone', 'theirs')}

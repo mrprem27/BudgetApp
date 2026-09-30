@@ -133,14 +133,14 @@ async function saveMany(rows: PendingTxn[], label: string) {
   const ready = rows.map(r => ({ row: r, plan: planCommit(r) })).filter((x): x is { row: PendingTxn; plan: Extract<CommitPlan, { ok: true }> } => x.plan.ok);
   const skipped = rows.length - ready.length;
   if (ready.length === 0) {
-    Alert.alert('Nothing ready to save', 'These rows still need an amount — a balanced split for group expenses, or who the transfer was with for group transfers.');
+    Alert.alert('Nothing ready to save', 'These rows still need an amount, a balanced split for group expenses, or who the transfer was with for group transfers.');
     return;
   }
   const dupes = await findDuplicatesAmong(db, ready.map(({ row, plan }) => ({ groupId: plan.groupId, kind: plan.kind, category: plan.category, total: plan.total, dateMs: row.date })));
   if (dupes.length > 0 && !(await confirmDuplicates(dupes.length, ready.length))) return;
   Alert.alert(
     label,
-    `${ready.length} transaction${ready.length === 1 ? '' : 's'} will be saved${skipped > 0 ? `. ${skipped} skipped — they need an amount, a balanced split, or who the transfer was with.` : '.'}`,
+    `${ready.length} transaction${ready.length === 1 ? '' : 's'} will be saved${skipped > 0 ? `. ${skipped} skipped, they need an amount, a balanced split, or who the transfer was with.` : '.'}`,
     [
       { text: 'Cancel', style: 'cancel' },
       {

@@ -121,13 +121,13 @@ export function storageAdvice(v: StorageVerdict): StorageAdvice | null {
     case StorageVerdict.Critical:
       return {
         tone: 'warn',
-        headline: 'Receipt photos are paused — storage is nearly full',
+        headline: 'Receipt photos are paused, storage is nearly full',
         body: 'Your transactions still save normally. Photos are held back because each one needs a few megabytes, and recording the spend matters more than the picture.',
       };
     case StorageVerdict.Full:
       return {
         tone: 'bad',
-        headline: 'Storage is full — saving may fail',
+        headline: 'Storage is full, saving may fail',
         body: 'There is no room left on this device, so new transactions may not save. Free up space and anything captured by voice will be filed automatically.',
       };
   }

@@ -48,7 +48,7 @@ export default function StorageScreen() {
   function confirmLoadDemo(persona: DemoPersona, label: string) {
     Alert.alert(
       `Load “${label}”?`,
-      'This REPLACES all current data with this demo persona. Your name & avatar are kept. If you’re signed in, this phone stops syncing — sign out and back in to connect it again.',
+      'This REPLACES all current data with this demo persona. Your name & avatar are kept. If you’re signed in, this phone stops syncing, sign out and back in to connect it again.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -77,7 +77,7 @@ export default function StorageScreen() {
   function confirmReset() {
     Alert.alert(
       'Erase all data?',
-      'This permanently deletes ALL transactions, groups, people, budgets and savings, leaving an empty app. Your name & avatar are kept. If you’re signed in, your account keeps its copy — sign out and back in to restore it. This cannot be undone on this phone.',
+      'This permanently deletes ALL transactions, groups, people, budgets and savings, leaving an empty app. Your name & avatar are kept. If you’re signed in, your account keeps its copy, sign out and back in to restore it. This cannot be undone on this phone.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -166,7 +166,7 @@ export default function StorageScreen() {
             <Text style={styles.note}>
               Receipt photos are compressed on import and stored only on this device. (Scanning a
               receipt sends that one photo to a cloud OCR service to read it; the stored copy stays
-              here.) Delete them here to free up space — your transactions are kept.
+              here.) Delete them here to free up space, your transactions are kept.
             </Text>
 
             <SecondaryButton label="Delete all attachments" onPress={clearAll} disabled={count === 0} />
@@ -177,7 +177,7 @@ export default function StorageScreen() {
         <View style={styles.devSection}>
           <Text style={styles.devTitle}>TESTING</Text>
           <Text style={styles.note}>
-            Load a demo persona — each puts the app in a different state — or wipe everything back to an empty app.
+            Load a demo persona, each puts the app in a different state, or wipe everything back to an empty app.
           </Text>
           <Card clip>
             {DEMO_PERSONAS.map((p, i) => (

@@ -51,7 +51,7 @@ export function HealthSheet({ visible, onClose, result, inputs, txnCount = 0, pe
           <InfoLabel
             label="Building your score"
             labelStyle={styles.gateTitle}
-            info="Computed from your real ledger — it unlocks once there's enough data to be honest about it."
+            info="Computed from your real ledger, it unlocks once there's enough data to be honest about it."
           />
         </View>
         <Card clip>

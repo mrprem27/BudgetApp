@@ -144,7 +144,7 @@ export async function loadReportsData(db: SQLite.SQLiteDatabase, month: Date) {
         }
       }
 
-      const topCat = Object.entries(yCatMap).sort((a, b) => b[1] - a[1])[0]?.[0] ?? '—';
+      const topCat = Object.entries(yCatMap).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'None';
 
       /*
        * Spending by category for the pie, from EVERY transaction in the month.

@@ -132,9 +132,9 @@ function spendVsIncome(i: HealthInputs): HealthFactor | null {
   if (i.income90 <= 0) return null; // gate requires income *ever*; window can still be empty
   const rate = (i.income90 - i.spend90) / i.income90;
   const pct = Math.round(rate * 100);
-  if (rate >= 0.2) return F('Spending vs income', `Keeping ${pct}% of income over 90 days — healthy.`, 100, 'good');
+  if (rate >= 0.2) return F('Spending vs income', `Keeping ${pct}% of income over 90 days, healthy.`, 100, 'good');
   if (rate >= 0.1) return F('Spending vs income', `Keeping ${pct}% of income over 90 days.`, 75, 'good');
-  if (rate >= 0)   return F('Spending vs income', `Keeping only ${pct}% of income — spending nearly all of it.`, 50, 'warn');
+  if (rate >= 0)   return F('Spending vs income', `Keeping only ${pct}% of income, spending nearly all of it.`, 50, 'warn');
   return F('Spending vs income', `Spending ${formatCompact(i.spend90 - i.income90)} more than income over 90 days.`, 15, 'bad');
 }
 
@@ -158,10 +158,10 @@ function budgetPace(i: HealthInputs): HealthFactor | null {
   if (paceExpected === 0) return F('Budget pace', 'Too early in the month to gauge pace.', 80, 'neutral');
   const ratio = i.budgetSpent / paceExpected;
   const headroom = paceExpected - i.budgetSpent;
-  if (ratio <= 0.75) return F('Budget pace', `${formatCompact(Math.abs(headroom))} under pace — well ahead of budget.`, 100, 'good');
-  if (ratio <= 1.0)  return F('Budget pace', `${formatCompact(Math.abs(headroom))} under pace — on track.`, 80, 'good');
+  if (ratio <= 0.75) return F('Budget pace', `${formatCompact(Math.abs(headroom))} under pace, well ahead of budget.`, 100, 'good');
+  if (ratio <= 1.0)  return F('Budget pace', `${formatCompact(Math.abs(headroom))} under pace, on track.`, 80, 'good');
   if (ratio <= 1.2)  return F('Budget pace', `${formatCompact(-headroom)} over pace with ${i.daysInMonth - i.dayOfMonth} days left.`, 45, 'warn');
-  return F('Budget pace', `${formatCompact(-headroom)} over pace — running significantly hot.`, 10, 'bad');
+  return F('Budget pace', `${formatCompact(-headroom)} over pace, running significantly hot.`, 10, 'bad');
 }
 
 // ── Save ─────────────────────────────────────────────────────────────────────
@@ -173,11 +173,11 @@ function runway(i: HealthInputs): HealthFactor | null {
   const months = i.liquid / monthlySpend;
   const label = 'Cash runway';
   const m = months.toFixed(1).replace(/\.0$/, '');
-  if (months >= 6) return F(label, `${m} months of spending in cash — a real cushion.`, 100, 'good');
+  if (months >= 6) return F(label, `${m} months of spending in cash, a real cushion.`, 100, 'good');
   if (months >= 3) return F(label, `${m} months of spending in cash.`, 80, 'good');
-  if (months >= 1) return F(label, `${m} months of spending in cash — thin cushion.`, 55, 'warn');
+  if (months >= 1) return F(label, `${m} months of spending in cash, thin cushion.`, 55, 'warn');
   if (months > 0)  return F(label, `Less than a month of spending in cash.`, 30, 'bad');
-  return F(label, 'No cash cushion — spending would go straight to debt.', 10, 'bad');
+  return F(label, 'No cash cushion, spending would go straight to debt.', 10, 'bad');
 }
 
 /** Are this cycle's goal contributions actually happening? N/A without a rate. */
@@ -217,8 +217,8 @@ function debtLoad(i: HealthInputs): HealthFactor {
     return F(
       label,
       owedToMe > Math.max(0, i.netIOwe)
-        ? 'No card balance, and you’re owed more than you owe — clear.'
-        : 'No card balance and nothing owed — clear.',
+        ? 'No card balance, and you’re owed more than you owe, clear.'
+        : 'No card balance and nothing owed, clear.',
       100, 'good',
     );
   }
@@ -227,10 +227,10 @@ function debtLoad(i: HealthInputs): HealthFactor {
     return F(label, `Owing ${formatCompact(debt)} with no recent income logged.`, 25, 'warn');
   }
   const ratio = debt / monthlyIncome;
-  if (ratio < 0.1) return F(label, `Owing ${formatCompact(debt)} — under 10% of a month's income.`, 85, 'good');
-  if (ratio < 0.3) return F(label, `Owing ${formatCompact(debt)} — ${Math.round(ratio * 100)}% of a month's income.`, 55, 'warn');
-  if (ratio < 0.6) return F(label, `Owing ${formatCompact(debt)} — ${Math.round(ratio * 100)}% of a month's income.`, 30, 'bad');
-  return F(label, `Owing ${formatCompact(debt)} — more than half a month's income.`, 10, 'bad');
+  if (ratio < 0.1) return F(label, `Owing ${formatCompact(debt)}, under 10% of a month's income.`, 85, 'good');
+  if (ratio < 0.3) return F(label, `Owing ${formatCompact(debt)}, ${Math.round(ratio * 100)}% of a month's income.`, 55, 'warn');
+  if (ratio < 0.6) return F(label, `Owing ${formatCompact(debt)}, ${Math.round(ratio * 100)}% of a month's income.`, 30, 'bad');
+  return F(label, `Owing ${formatCompact(debt)}, more than half a month's income.`, 10, 'bad');
 }
 
 // ── Plan ─────────────────────────────────────────────────────────────────────
@@ -252,8 +252,8 @@ function plansAhead(i: HealthInputs): HealthFactor {
   const label = 'Plans ahead';
   const hasGoals = i.goalsCount > 0;
   if (i.hasBudget && hasGoals) return F(label, 'Budget set and savings goals defined.', 100, 'good');
-  if (i.hasBudget) return F(label, 'Budget set — no savings goals yet.', 60, 'neutral');
-  if (hasGoals) return F(label, 'Savings goals defined — no budget yet.', 60, 'neutral');
+  if (i.hasBudget) return F(label, 'Budget set, no savings goals yet.', 60, 'neutral');
+  if (hasGoals) return F(label, 'Savings goals defined, no budget yet.', 60, 'neutral');
   return F(label, 'No budget and no savings goals yet.', 20, 'warn');
 }
 
@@ -372,7 +372,7 @@ function buildLever(label: string, input: HealthInputs, fromScore: number): Heal
       return {
         factorLabel: label,
         title: 'Set a monthly budget',
-        detail: `Setting a budget would lift your score from ${fromScore} to ${to} — and make the pace line real.`,
+        detail: `Setting a budget would lift your score from ${fromScore} to ${to}, and make the pace line real.`,
         fromScore, toScore: to,
       };
     }

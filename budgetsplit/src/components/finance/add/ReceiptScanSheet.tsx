@@ -57,13 +57,13 @@ export function ReceiptScanSheet({
       {fellBack && (
         <View style={styles.fallbackNote}>
           <Feather name="wifi-off" size={14} color={colors.healthAmber} />
-          <Text style={styles.fallbackText}>Cloud scanning wasn’t available, so this was read on your device. Check the items below — on-device reading misses more.</Text>
+          <Text style={styles.fallbackText}>Cloud scanning wasn’t available, so this was read on your device. Check the items below, on-device reading misses more.</Text>
         </View>
       )}
       {rawText !== null && (
         <>
           <Text style={styles.label}>RAW SCAN TEXT</Text>
-          <Text style={styles.hint}>Check this against your receipt — the item guesses below are best-effort.</Text>
+          <Text style={styles.hint}>Check this against your receipt, the item guesses below are best-effort.</Text>
           <ScrollView style={styles.rawBox} nestedScrollEnabled>
             <Text style={styles.rawText} selectable>{rawText.trim() || 'No text detected.'}</Text>
           </ScrollView>
@@ -97,7 +97,7 @@ export function ReceiptScanSheet({
           />
         </>
       ) : (
-        <Text style={[styles.hint, { marginTop: space.md }]}>No items recognized — add them manually below, or try scanning again with a clearer photo.</Text>
+        <Text style={[styles.hint, { marginTop: space.md }]}>No items recognized, add them manually below, or try scanning again with a clearer photo.</Text>
       )}
     </SheetModal>
   );

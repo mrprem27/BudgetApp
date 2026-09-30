@@ -130,7 +130,7 @@ export default function AccountScreen() {
     Alert.alert(
       'Delete your account?',
       'Your email, name and phone are deleted, along with your account’s copy of '
-      + 'everything that was yours alone — your own spending, goals, budgets, and any '
+      + 'everything that was yours alone, your own spending, goals, budgets, and any '
       + 'group nobody else is in. Every signed-in device is signed out.\n\n'
       + 'Your transactions on this phone stay exactly as they are. Groups you share with '
       + 'other people carry on: your entries there are the group’s record, and stay.',
@@ -199,7 +199,7 @@ export default function AccountScreen() {
             <InfoLabel
               label="Works offline"
               labelStyle={styles.heroTitle}
-              info="No server configured — everything works offline. Keep an encrypted copy under Backup & restore."
+              info="No server configured, everything works offline. Keep an encrypted copy under Backup & restore."
             />
           </Card>
         ) : !ready ? (
@@ -277,7 +277,7 @@ export default function AccountScreen() {
                 center
                 label="Your phone number"
                 labelStyle={styles.footnote}
-                info="Never used to find you — shown only to people you've linked with."
+                info="Never used to find you, shown only to people you've linked with."
               />
             </View>
           </>
@@ -336,8 +336,8 @@ export default function AccountScreen() {
                 accessibilityLabel="About signing in"
                 info={
                   <>
-                    <Text style={[styles.note, styles.infoLine]}>Optional — stores only your email and who you're linked with, never your transactions.</Text>
-                    <Text style={[styles.noteWarn, styles.infoLine]}>Doesn't back anything up on its own — use Backup &amp; restore for that.</Text>
+                    <Text style={[styles.note, styles.infoLine]}>Optional, stores only your email and who you're linked with, never your transactions.</Text>
+                    <Text style={[styles.noteWarn, styles.infoLine]}>Doesn't back anything up on its own, use Backup &amp; restore for that.</Text>
                   </>
                 }
               />
@@ -386,7 +386,7 @@ export default function AccountScreen() {
           accessibilityLabel="Your phone number"
         />
         <Text style={styles.sheetHint}>
-          Not verified, and not a way to sign in — the email link stays that. It is shared only
+          Not verified, and not a way to sign in, the email link stays that. It is shared only
           with friends you link with, and only when you allow it. Leave it blank to remove it.
         </Text>
         <PrimaryButton label="Save" onPress={handleSavePhone} loading={savingPhone} />

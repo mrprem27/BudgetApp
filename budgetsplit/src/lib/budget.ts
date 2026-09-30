@@ -192,11 +192,11 @@ export function budgetHealth(pct: number | null): BudgetHealth {
 }
 
 /**
- * Canonical utilisation label: "75%", "1.2×" when over budget, "—" when
+ * Canonical utilisation label: "75%", "1.2×" when over budget, "No budget" when
  * unknown. One source (was copied with a glyph drift — ASCII "X" vs "×").
  */
 export function utilLabel(pct: number | null): string {
-  if (pct === null) return '—';
+  if (pct === null) return 'No budget';
   if (pct > 100) return `${(pct / 100).toFixed(1)}×`;
   return `${pct}%`;
 }

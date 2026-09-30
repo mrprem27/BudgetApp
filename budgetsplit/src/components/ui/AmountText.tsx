@@ -44,7 +44,7 @@ export function AmountText({ paise: rawPaise, size = 'md', style, forceColor, fi
 
   if (zeroDash && paise === 0) {
     return (
-      <Text style={[styleMap[size], { color: colors.textMuted }, style]} numberOfLines={1} accessibilityLabel="None">—</Text>
+      <Text style={[styleMap[size], { color: colors.textMuted }, style]} numberOfLines={1} accessibilityLabel="None">₹0</Text>
     );
   }
 

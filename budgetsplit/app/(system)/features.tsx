@@ -179,7 +179,7 @@ export default function FeaturesScreen() {
 
     Alert.alert(
       'Hide group splitting?',
-      `You have ${parts}. Hiding this removes the Groups tab and the owe/owed strip. Nothing is deleted — turn it back on any time to get everything back.`,
+      `You have ${parts}. Hiding this removes the Groups tab and the owe/owed strip. Nothing is deleted, turn it back on any time to get everything back.`,
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Hide', style: 'destructive', onPress: () => setFlag('splitting', false) },
@@ -228,18 +228,18 @@ export default function FeaturesScreen() {
     {
       title: 'Smart capture',
       items: [
-        { icon: 'mic', label: 'Voice Entry', caption: 'Say "four fifty groceries" and have it filled in — uses your keyboard\'s dictation, nothing leaves the device', value: flags.voiceEntry, onChange: v => setFlag('voiceEntry', v) },
+        { icon: 'mic', label: 'Voice Entry', caption: 'Say "four fifty groceries" and have it filled in, uses your keyboard\'s dictation, nothing leaves the device', value: flags.voiceEntry, onChange: v => setFlag('voiceEntry', v) },
         { icon: 'cpu', label: 'Smart Categories', caption: 'Auto-suggest a category as you type the note', value: flags.smartCategory, onChange: v => setFlag('smartCategory', v) },
         { icon: 'repeat', label: 'Recurring Suggestions', caption: 'Flag imported transactions that look like a recurring bill', value: flags.recurringSuggest, onChange: v => setFlag('recurringSuggest', v) },
         { icon: 'map-pin', label: 'Location Tagging', caption: 'Tag transactions with where you spent', value: saveLocation, onChange: toggleSaveLocation },
-        { icon: 'trending-up', label: 'Sweep Surplus Into Goals', caption: 'When a month ends under budget, move what is left into the goals that are short — and remember which account it came from, so taking it back returns it there', value: autoSweep, onChange: toggleAutoSweep },
+        { icon: 'trending-up', label: 'Sweep Surplus Into Goals', caption: 'When a month ends under budget, move what is left into the goals that are short, and remember which account it came from, so taking it back returns it there', value: autoSweep, onChange: toggleAutoSweep },
         { icon: 'camera', label: 'Receipt Scanning', caption: 'Read line items straight off a photographed receipt', value: flags.receiptScan, onChange: v => setFlag('receiptScan', v) },
         { icon: 'upload', label: 'Import & Review', caption: 'Bring in statements, then confirm each row before it counts', value: flags.importReview, onChange: v => setFlag('importReview', v) },
         // Availability is `receiptScan` above; this row only picks the provider.
         {
           icon: 'camera', label: 'Cloud Receipt Scanning',
           caption: cloudOcr
-            ? 'Reads receipts far more accurately. The photo is sent to a cloud OCR service for that one request — turn this off to scan on-device instead.'
+            ? 'Reads receipts far more accurately. The photo is sent to a cloud OCR service for that one request, turn this off to scan on-device instead.'
             : 'Receipts are read entirely on this device. Nothing is uploaded, but line items on cramped receipts are missed more often.',
           value: cloudOcr, onChange: toggleCloudOcr, dimWhenOff: false,
         },
@@ -254,7 +254,7 @@ export default function FeaturesScreen() {
         {/* This used to read "Off by default keeps the app clean", which stopped
             being true when the flags were reworked: everything except the streak
             now starts on, and your setup decides what you actually see. */}
-        <Text style={styles.intro}>Your setup below switches these on and off together. Change any one whenever you like — nothing is deleted either way.</Text>
+        <Text style={styles.intro}>Your setup below switches these on and off together. Change any one whenever you like, nothing is deleted either way.</Text>
 
         {/* YOUR SETUP — the persona that chose the switches below */}
         {intent && (() => {

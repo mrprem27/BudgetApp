@@ -232,7 +232,7 @@ export default function SettingsScreen() {
     // Empty clears it — the only way back out once you have set one.
     if (trimmed && !isValidVpa(trimmed)) {
       haptic.error();
-      Alert.alert('That doesn’t look like a UPI ID', 'It should read like name@bank — for example prem@okhdfcbank.');
+      Alert.alert('That doesn’t look like a UPI ID', 'It should read like name@bank, for example prem@okhdfcbank.');
       return;
     }
     await saveMyVpa(db, me.id, trimmed || null);
@@ -278,7 +278,7 @@ export default function SettingsScreen() {
           </View>
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
-          <Text style={styles.profileName}>{me?.name ?? '—'}</Text>
+          <Text style={styles.profileName}>{me?.name ?? 'You'}</Text>
           <Text style={styles.profileSub}>
             {serverSession
               ? serverSession.user.email

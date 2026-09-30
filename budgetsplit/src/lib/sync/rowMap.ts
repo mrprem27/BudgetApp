@@ -23,7 +23,7 @@ import { selfPersonId, syncIds } from './ids';
 /** `→ table.column` when it travels; `local: <why>` when it never leaves the phone. */
 export type Fate = string;
 const local = (why: string): Fate => `local: ${why}`;
-const DEAD = local('dead column — never read, never written, kept only to avoid a table rebuild');
+const DEAD = local('dead column, never read, never written, kept only to avoid a table rebuild');
 const SERVER_STAMP = '← server updated_at (the server owns when a row last changed)';
 
 export const COLUMN_FATES: Record<string, Record<string, Fate>> = {
@@ -57,7 +57,7 @@ export const COLUMN_FATES: Record<string, Record<string, Fate>> = {
     limit_monthly: DEAD,
     limit_yearly: DEAD,
     carry_over: '→ groups.carry_over',
-    is_shared: local('dead — derived from the member count instead (SYNC-F23)'),
+    is_shared: local('dead, derived from the member count instead (SYNC-F23)'),
     is_archived: '→ group_preferences.is_archived (my list, not the group)',
     is_personal: '→ groups.kind = personal',
     simplify_debt: '→ groups.simplify_debts',
@@ -138,7 +138,7 @@ export const COLUMN_FATES: Record<string, Record<string, Fate>> = {
   },
   category: {
     id: '← categories.id (derived from kind and name; nothing references it)',
-    group_id: local('always NULL — the catalog is global per user'),
+    group_id: local('always NULL, the catalog is global per user'),
     name: '→ categories.name',
     icon: '→ categories.icon',
     color: '→ categories.color',
@@ -154,7 +154,7 @@ export const COLUMN_FATES: Record<string, Record<string, Fate>> = {
     id: '← budgets.id (derived from group, category and owner)',
     group_id: '→ budgets.group_id',
     category: '→ budgets.category',
-    period: local('always \'monthly\' — superseded by cadence'),
+    period: local('always \'monthly\', superseded by cadence'),
     amount: '→ budgets.amount',
     cadence: '→ budgets.cadence',
     person_id: '→ budgets.person_id',
@@ -220,7 +220,7 @@ export const COLUMN_FATES: Record<string, Record<string, Fate>> = {
     cleared: '← disputes.withdrawn_at',
   },
   settings: {
-    key: '→ money_profiles (money.*) — every other key is device state',
+    key: '→ money_profiles (money.*), every other key is device state',
     value: '→ money_profiles (money.*)',
   },
   sync_queue: {

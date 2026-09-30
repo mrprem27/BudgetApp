@@ -117,7 +117,7 @@ async function student(db: SQLite.SQLiteDatabase): Promise<string> {
     payments: [{ personId: payer, amount: R(rupees) }],
     shares: [c.meId, kabir.id, ananya.id].map(p => ({ personId: p, amount: R(rupees / 3) })),
   });
-  await split3(kabir.id, 2_400, 20, 'Travel', 'Weekend trip — bus tickets');
+  await split3(kabir.id, 2_400, 20, 'Travel', 'Weekend trip, bus tickets');
   await split3(ananya.id, 1_200, 9, 'Groceries', 'Maggi & snacks run');
   await split3(c.meId, 900, 5, 'WiFi & Broadband', 'Room WiFi');
   await recordSettlement(db, { groupId: hostel.id, fromId: c.meId, toId: kabir.id, amount: R(300), date: daysAgo(3), payMethod: PayMethod.Upi, category: 'Repayment' });

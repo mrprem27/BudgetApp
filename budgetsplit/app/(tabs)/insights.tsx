@@ -150,7 +150,7 @@ export default function InsightsScreen() {
           <EmptyState
             icon="bar-chart-2"
             title="No insights yet"
-            body="Log a few expenses and split with a group — patterns, alerts and balances show up here."
+            body="Log a few expenses and split with a group, patterns, alerts and balances show up here."
             tint={colors.textSecondary}
             actionLabel="Add an expense"
             onAction={() => router.push('/add/quick')}

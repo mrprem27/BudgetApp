@@ -199,7 +199,7 @@ export default function FriendsScreen() {
           contentContainerStyle={styles.list}
           refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         >
-          <Text style={styles.intro}>People you split with. No account needed — names only.</Text>
+          <Text style={styles.intro}>People you split with. No account needed, names only.</Text>
 
           {/* YOU */}
           {me && (
@@ -334,7 +334,7 @@ export default function FriendsScreen() {
             <EmptyState
               icon="users"
               title="No one here yet"
-              body="Add the people you split with. A name is enough — you can connect their account later so expenses reach their phone."
+              body="Add the people you split with. A name is enough, you can connect their account later so expenses reach their phone."
               actionLabel="Add a person"
               onAction={() => { setAddName(''); setShowAdd(true); }}
             />

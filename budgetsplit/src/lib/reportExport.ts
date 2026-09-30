@@ -107,7 +107,7 @@ export async function buildReportHtml(
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8" />
         <style>
-          /* Light document — readable on white paper and when printed (dark page
+          /* Light document, readable on white paper and when printed (dark page
              backgrounds are commonly dropped by PDF viewers/printers). */
           * { box-sizing: border-box; }
           body { font-family: -apple-system, 'Inter', Helvetica, sans-serif; background: #FFFFFF; color: #1A1A1A; padding: 40px 36px; margin: 0; }

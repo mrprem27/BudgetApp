@@ -277,7 +277,7 @@ export default function ItemizedScreen() {
           )}
 
           {f.items.length === 0 && (
-            <Text style={styles.hintText}>Add each line on the bill — name, quantity and unit price.</Text>
+            <Text style={styles.hintText}>Add each line on the bill, name, quantity and unit price.</Text>
           )}
 
           <PrimaryButton label="Next: Assign items" onPress={() => f.setStep('assign')} disabled={!f.canProceedItems} style={styles.nextBtn} />

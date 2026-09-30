@@ -87,7 +87,7 @@ async function rebuild(db: SQLite.SQLiteDatabase): Promise<void> {
   if (prefs.daily) {
     await scheduleDailyReminder(
       'daily_log', prefs.dailyTime.hour, prefs.dailyTime.minute,
-      'Keep your streak going', 'Log today’s spending — it only takes a few taps.',
+      'Keep your streak going', 'Log today’s spending, it only takes a few taps.',
     );
   }
 

@@ -133,7 +133,7 @@ export function TransferBody({
         </View>
       )}
       {noBalance && (
-        <Text style={styles.hint}>No balance between them — enter any amount</Text>
+        <Text style={styles.hint}>No balance between them, enter any amount</Text>
       )}
 
       {/* Two people and an arrow between them. No FROM/TO labels: with an arrow already

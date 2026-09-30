@@ -59,7 +59,7 @@ export function UpiUriSheet({
     if (!warn) { go(); return; }
     Alert.alert(
       `Send the payment to ${label}?`,
-      `${warn}\n\nEvery attempt so far has been refused at PIN entry, which uses one of your limited daily UPI PIN attempts. Nothing is recorded here — this is a test, not a settle-up.`,
+      `${warn}\n\nEvery attempt so far has been refused at PIN entry, which uses one of your limited daily UPI PIN attempts. Nothing is recorded here, this is a test, not a settle-up.`,
       [{ text: 'Cancel', style: 'cancel' }, { text: 'Send anyway', style: 'destructive', onPress: go }],
     );
   }
@@ -104,7 +104,7 @@ export function UpiUriSheet({
                   reads as the decision it is instead of a link that lost its parameters. */}
               {!launch.filled && (
                 <Text style={styles.bare}>
-                  No payment sent — {app.blocked ?? 'this code can’t be re-emitted'}
+                  No payment sent, {app.blocked ?? 'this code can’t be re-emitted'}
                 </Text>
               )}
               {/* The retry hatch.
@@ -131,7 +131,7 @@ export function UpiUriSheet({
       )}
       <Text style={styles.footnote}>
         Tap a link to open it and see where it lands. That is the only way to confirm an app’s
-        route — none are published. Nothing here records an expense.
+        route, none are published. Nothing here records an expense.
       </Text>
     </SheetModal>
   );

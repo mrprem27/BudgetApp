@@ -95,8 +95,7 @@ export function VoiceEntrySheet({
       <View style={styles.promptRow}>
         <IconCircle icon="mic" size={layout.avatarSize} color={accent} />
         <Text style={styles.prompt}>
-          Tap the field, then the <Text style={styles.bold}>microphone on your keyboard</Text> —
-          {PROMPT[kind]}.
+          Tap the field, then the <Text style={styles.bold}>microphone on your keyboard</Text> , {PROMPT[kind]}.
         </Text>
       </View>
 
@@ -160,7 +159,7 @@ export function VoiceEntrySheet({
 
           {!usable && (
             <Text style={styles.warn}>
-              No amount in there yet — say a number, like "four fifty groceries". Everything
+              No amount in there yet, say a number, like "four fifty groceries". Everything
               else is optional.
             </Text>
           )}

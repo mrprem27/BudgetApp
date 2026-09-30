@@ -126,7 +126,7 @@ export default function EditGroupScreen() {
     Alert.alert(
       'Delete for everyone?',
       'This group closes for you and everyone in it, and nobody can add to it again.\n\n'
-      + 'Your own history is kept — what you spent still counts in the months it happened in.',
+      + 'Your own history is kept, what you spent still counts in the months it happened in.',
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Delete for everyone', style: 'destructive', onPress: async () => {
@@ -186,7 +186,7 @@ export default function EditGroupScreen() {
             Alert.alert(
               'Can’t leave',
               res.reason === 'creator'
-                ? 'You created this group, so it always keeps you — otherwise nobody could manage it. Delete it for everyone instead.'
+                ? 'You created this group, so it always keeps you, otherwise nobody could manage it. Delete it for everyone instead.'
                 : 'Please try again.',
             );
             return;

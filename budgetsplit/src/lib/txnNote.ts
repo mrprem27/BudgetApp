@@ -7,10 +7,11 @@
  * composing the same field two ways is how a transaction dictated to Siri ends up reading
  * differently from the same transaction typed in.
  *
- * The separator is an em-dash with spaces, matching every stored row written so far. Changing
- * it would make new rows inconsistent with old ones, so it is fixed here on purpose.
+ * The separator is a middle dot with spaces. It was an em dash until 2026-09-30 (`U-26`, no em
+ * dashes on screen); nothing splits on it, and rows stored with the old one are shown with the
+ * new one by `noteText.oneLine`.
  */
-export const TITLE_NOTE_SEPARATOR = ' — ';
+export const TITLE_NOTE_SEPARATOR = ' · ';
 
 /**
  * Join a title and a note for storage.

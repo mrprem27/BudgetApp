@@ -164,7 +164,7 @@ export default function ImportScreen() {
       <KeyboardForm contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + space.xl }]}>
           <Text style={styles.intro}>
             Import a Paytm or Google Pay statement, a bank / UPI export, a transaction-alert email,
-            or a BudgetSplit CSV export. Pick a file and the format is detected for you — you
+            or a BudgetSplit CSV export. Pick a file and the format is detected for you, you
             confirm every transaction in Review before anything is saved.
           </Text>
 
@@ -227,7 +227,7 @@ export default function ImportScreen() {
           {source === 'email' && (
             <Text style={styles.sourceHint}>
               Forward or copy a bank / UPI transaction-alert email (HDFC, ICICI, GPay, PhonePe…) and
-              paste it below — one alert = one transaction. You confirm it in Review.
+              paste it below, one alert = one transaction. You confirm it in Review.
             </Text>
           )}
 

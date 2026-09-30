@@ -18,12 +18,12 @@ export function LockExplainerSheet({ visible, onClose, onConfirm }: { visible: b
         <Feather name="shield" size={22} color={colors.accent} />
       </View>
       <Text style={styles.body}>
-        Protecting a goal only shields it from the automatic overspend cover — if your cash
+        Protecting a goal only shields it from the automatic overspend cover, if your cash
         goes negative, BudgetSplit won't pull from a protected goal to cover it.
       </Text>
       <Text style={styles.body}>
         It doesn't move your money anywhere else or make it inaccessible. None of your goals
-        ever hold segregated real funds — this app has no actual account separation,
+        ever hold segregated real funds, this app has no actual account separation,
         protected or not.
       </Text>
       <PrimaryButton label="Got it" onPress={onConfirm} style={styles.button} />

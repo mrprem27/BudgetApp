@@ -379,7 +379,7 @@ export function useAddTxnForm(params: AddTxnParams) {
   // Every hand-off rule — the Android/iOS split, the remembered app, the picker —
   // lives in the hook, so this path and Scan & Pay cannot drift apart again.
   const transferHandoff = useUpiHandoff(
-    'Install a UPI app like PhonePe, Google Pay, Paytm or BHIM to pay from here — or record this settlement manually.',
+    'Install a UPI app like PhonePe, Google Pay, Paytm or BHIM to pay from here, or record this settlement manually.',
   );
   // A malformed VPA yields no URI at all, so there is nothing to offer.
   const canPayTransferUpi = !!transferPayee && !!buildUpiUri(transferPayee);

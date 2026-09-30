@@ -512,7 +512,7 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
   // looks like on screen.
   await peerTxn({
     groupId: roommates.id, author: aarav.id, date: thisMonth(22),
-    category: 'Bills', note: 'Electricity — Aarav paid',
+    category: 'Bills', note: 'Electricity, Aarav paid',
     payments: [{ personId: aarav.id, amount: R(2400) }],
     shares: [{ personId: meId, amount: R(800) }, { personId: aarav.id, amount: R(800) }, { personId: priya.id, amount: R(800) }],
     pending: false,
@@ -573,7 +573,7 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
             (SELECT COUNT(*) FROM savings_goal)               AS goals`,
   );
   if (!counts || counts.txns === 0) {
-    throw new Error(`Seed wrote no transactions (txns=${counts?.txns ?? 'null'}). The DB write didn't persist — please retry; if it repeats, screenshot this.`);
+    throw new Error(`Seed wrote no transactions (txns=${counts?.txns ?? 'null'}). The DB write didn't persist, please retry; if it repeats, screenshot this.`);
   }
-  return `${counts.people} people · ${counts.groups} groups · ${counts.txns} transactions · ${counts.goals} goals — all written ✓`;
+  return `${counts.people} people · ${counts.groups} groups · ${counts.txns} transactions · ${counts.goals} goals, all written ✓`;
 }

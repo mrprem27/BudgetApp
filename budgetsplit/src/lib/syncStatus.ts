@@ -49,7 +49,7 @@ export function syncStatus(i: SyncStatusInput): SyncStatusView {
     return { state: 'syncing', text: `Syncing · ${Math.round(p * 100)}%`, tone: 'neutral', progress: p };
   }
   if (i.failure === 'signed-out') {
-    return { state: 'failed', text: 'Couldn’t sync — you’re signed out.', tone: 'error', action: { label: 'Sign in', kind: 'sign-in' } };
+    return { state: 'failed', text: 'Couldn’t sync, you’re signed out.', tone: 'error', action: { label: 'Sign in', kind: 'sign-in' } };
   }
   if (!i.linked) {
     return {
@@ -58,7 +58,7 @@ export function syncStatus(i: SyncStatusInput): SyncStatusView {
     };
   }
   if (i.failure === 'offline') {
-    return { state: 'offline', text: 'Offline — saved on this phone. It’ll upload when you’re back online.', tone: 'neutral' };
+    return { state: 'offline', text: 'Offline, saved on this phone. It’ll upload when you’re back online.', tone: 'neutral' };
   }
   if (i.failure === 'failed') {
     return { state: 'failed', text: 'Couldn’t sync.', tone: 'error', action: { label: 'Try again', kind: 'retry' } };

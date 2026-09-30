@@ -312,13 +312,13 @@ export async function decryptEnvelope(
     : openV1(envelope, passphrase);
 
   if (!text) {
-    throw new BackupWrongPassphraseError('Could not decrypt this backup — check the passphrase and try again.');
+    throw new BackupWrongPassphraseError('Could not decrypt this backup, check the passphrase and try again.');
   }
   let json: unknown;
   try {
     json = JSON.parse(text);
   } catch {
-    throw new BackupWrongPassphraseError('Could not decrypt this backup — check the passphrase and try again.');
+    throw new BackupWrongPassphraseError('Could not decrypt this backup, check the passphrase and try again.');
   }
   return validateBackupPayload(json);
 }

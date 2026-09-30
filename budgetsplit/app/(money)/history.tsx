@@ -117,7 +117,7 @@ export default function HistoryScreen() {
           ListHeaderComponent={<Text style={styles.subtitle}>Every change made to your data, in order.</Text>}
           ListEmptyComponent={
             loading ? null : (
-              <EmptyState icon="clock" title="Nothing logged yet" body="Every change you make — adding, editing, deleting, settling — is recorded here." />
+              <EmptyState icon="clock" title="Nothing logged yet" body="Every change you make, adding, editing, deleting, settling, is recorded here." />
             )
           }
           ListFooterComponent={
