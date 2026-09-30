@@ -1109,10 +1109,22 @@ describe('U-04 · Afford answers where you are typing', () => {
   });
 });
 
-describe('U-25 · no dropdown arrow on chips or pills', () => {
-  it('Chip has no chevron, and the pills that had one do not', () => {
-    for (const f of ['src/components/ui/Chip.tsx', 'src/components/finance/review/ReviewRowCard.tsx', 'src/components/finance/budget/BudgetAmountRow.tsx']) {
-      expect({ f, arrow: /chevron-down|chevron\?:/.test(fs.readFileSync(f, 'utf8')) }).toEqual({ f, arrow: false });
+describe('U-25/U-41 · a ⌄ only on chips that pick one value from a list', () => {
+  /** Category, date and pay method in Add (`U-41`); never details, filters or pills. */
+  const PICKERS = new Set(['src/components/finance/CategoryField.tsx', 'src/components/finance/add/CategoryDatePills.tsx', 'src/components/finance/add/DetailChips.tsx']);
+  const files = (dir: string): string[] => fs.readdirSync(dir, { withFileTypes: true }).flatMap(e =>
+    e.isDirectory() ? files(`${dir}/${e.name}`) : /\.tsx$/.test(e.name) ? [`${dir}/${e.name}`] : []);
+  it('sets chevron on no other chip', () => {
+    const bad: string[] = [];
+    for (const f of [...files('app'), ...files('src/components')]) {
+      if (PICKERS.has(f)) continue;
+      for (const m of fs.readFileSync(f, 'utf8').matchAll(/<Chip\b[^>]*?\bchevron\b/g)) bad.push(f + ':' + m.index);
+    }
+    expect(bad).toEqual([]);
+  });
+  it('keeps the pills that dropped it without it', () => {
+    for (const f of ['src/components/finance/review/ReviewRowCard.tsx', 'src/components/finance/budget/BudgetAmountRow.tsx', 'src/components/ui/FilterBar.tsx']) {
+      expect({ f, arrow: /chevron-down|\bchevron\b/.test(fs.readFileSync(f, 'utf8')) }).toEqual({ f, arrow: false });
     }
   });
 });
@@ -1181,5 +1193,22 @@ describe('U-30b · flex never sits on a PressableScale style — it styles an in
       }
     }
     expect(bad).toEqual([]);
+  });
+});
+
+describe('U-42 · Review picks categories from the same tile grid as Add', () => {
+  it('both render CategoryTileGrid; only the multi-select one shows checks', () => {
+    const add = fs.readFileSync('src/components/finance/CategoryPicker.tsx', 'utf8');
+    const review = fs.readFileSync('src/components/finance/review/CategoryFilterSheet.tsx', 'utf8');
+    expect(add).toMatch(/<CategoryTileGrid/);
+    expect(review).toMatch(/<CategoryTileGrid[\s\S]*?showCheck/);
+    expect(add).not.toMatch(/showCheck/);
+    expect(review).not.toMatch(/check-square/);
+  });
+});
+
+describe('U-39 · a Home tile says it opens something', () => {
+  it('carries a small arrow in its top-right', () => {
+    expect(fs.readFileSync('src/components/finance/home/HomeTiles.tsx', 'utf8')).toMatch(/<Feather name="arrow-up-right"/);
   });
 });

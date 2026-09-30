@@ -226,6 +226,11 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
   await exp('Chai & Snacks', 20, thisMonth(12));                                         // tiny-amount edge case
   await exp('Chai & Snacks', 30, thisMonth(14));
   await exp('Cab & Auto', 350, thisMonth(13), { place: 'Uber', pay: PayMethod.Upi });
+  // A daily chai for the last nine days, today included: a live ⚡ streak on Home (`U-40`).
+  for (let back = 0; back < 9; back++) {
+    const d = new Date(); d.setDate(d.getDate() - back); d.setHours(9, 30, 0, 0);
+    await exp('Chai & Snacks', 20 + ((back * 17) % 41), d.getTime(), { pay: PayMethod.Upi });
+  }
 
   // Last month — gives shifts vs this month + reports/trend depth + a big one-off.
   await exp('Rent', 22000, monthsBack(1, 2), { pay: PayMethod.Bank });

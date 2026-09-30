@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius, shadow } from '../../tokens';
 import { PressableScale } from '../../ui/PressableScale';
 import { formatCompact } from '../../../lib/money';
@@ -58,7 +59,11 @@ function Tile({ label, amount, tone, sub, onPress, a11y }: { label: string; amou
     // so `flex: 1` there never reached the row and the two tiles took their content's width (`U-30`).
     <View style={styles.cell}>
       <PressableScale style={styles.tile} onPress={onPress} accessibilityLabel={`${a11y}. ${amount}, ${sub}`}>
-        <Text style={styles.label} numberOfLines={1}>{label}</Text>
+        {/* A small ↗ top-right says the tile opens something (`U-39`). */}
+        <View style={styles.head}>
+          <Text style={styles.label} numberOfLines={1}>{label}</Text>
+          <Feather name="arrow-up-right" size={14} color={colors.textMuted} />
+        </View>
         <Text style={[styles.amount, { color: tone }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{amount}</Text>
         <Text style={styles.sub} numberOfLines={1}>{sub}</Text>
       </PressableScale>
@@ -73,7 +78,8 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch', backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border,
     padding: space.md, gap: space.xs, ...shadow.sm,
   },
-  label: { ...type.caption, color: colors.textSecondary },
+  head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.xs },
+  label: { ...type.caption, color: colors.textSecondary, flexShrink: 1 },
   amount: { fontFamily: 'SpaceMono_400Regular', fontSize: 22, letterSpacing: -0.5 },
   sub: { ...type.caption, color: colors.textMuted },
 });

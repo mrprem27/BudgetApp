@@ -236,7 +236,9 @@ export function DraggableSheet({ onClose, title, children, scroll = true, dragBo
         ) : (
           // A tap on the body (not a control) closes the keyboard, as it does
           // in the scrolling variant — a number pad has no return key.
-          <Pressable style={styles.content} onPress={Keyboard.dismiss} accessible={false}>{children}</Pressable>
+          // `flexShrink`: a list inside shrinks to the sheet's max height and scrolls, so anything
+          // below it (a filter's Apply) stays on screen instead of being pushed past the edge.
+          <Pressable style={[styles.content, styles.fixedBody]} onPress={Keyboard.dismiss} accessible={false}>{children}</Pressable>
         )}
     </Animated.View>
   );
@@ -292,4 +294,5 @@ const styles = StyleSheet.create({
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: space.sm },
   title: { ...type.subheading, color: colors.textPrimary },
   content: { gap: space.md, paddingTop: space.xs },
+  fixedBody: { flexShrink: 1 },
 });

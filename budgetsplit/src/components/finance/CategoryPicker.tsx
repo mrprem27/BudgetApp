@@ -1,13 +1,13 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, FlatList } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { colors, type, space, radius, shadow } from '../tokens';
+import { colors, type, space, radius } from '../tokens';
 import { asFeather } from '../../constants/palette';
 import { haptic } from '../../lib/haptics';
 import type { Category } from '../../db/queries/categories';
 import { IconCircle } from '../ui/IconCircle';
 import { SheetModal } from '../ui/SheetModal';
-import { SHEET_PADDING_H } from '../ui/DraggableSheet';
+import { CategoryTileGrid } from './CategoryTileGrid';
 
 type Props = {
   categories: Category[];
@@ -26,7 +26,8 @@ type Props = {
 /**
  * A tappable field showing the selected category that opens a searchable
  * bottom-sheet of all categories. Typing filters the grid; if the text matches
- * no existing category, an inline "Create" action appears.
+ * no existing category, an inline "Create" action appears. The grid itself is
+ * `CategoryTileGrid`, shared with Review's category filter (`U-42`).
  */
 export function CategoryPicker({ categories, value, onChange, onCreate, forceOpen, onClose, hideTrigger }: Props) {
   const [open, setOpen] = useState(false);
@@ -38,6 +39,10 @@ export function CategoryPicker({ categories, value, onChange, onCreate, forceOpe
     if (!q) return categories;
     return categories.filter(c => c.name.toLowerCase().includes(q));
   }, [categories, query]);
+
+  const items = useMemo(() => filtered.map(c => ({
+    key: c.id, label: c.name, icon: asFeather(c.icon, 'tag'), color: c.color ?? colors.accent,
+  })), [filtered]);
 
   const exactMatch = useMemo(
     () => categories.some(c => c.name.toLowerCase() === query.trim().toLowerCase()),
@@ -115,43 +120,16 @@ export function CategoryPicker({ categories, value, onChange, onCreate, forceOpe
               )}
             </View>
 
-            <FlatList
-              data={filtered}
-              keyExtractor={c => c.id}
-              numColumns={3}
-              columnWrapperStyle={styles.gridRow}
-              style={styles.list}
-              contentContainerStyle={styles.grid}
-              keyboardShouldPersistTaps="handled"
-              indicatorStyle="white"
-              ListHeaderComponent={
-                canCreate ? (
-                  <TouchableOpacity style={styles.createRow} onPress={create} accessibilityRole="button">
-                    <IconCircle icon="plus" size={28} iconSize={16} color={colors.accent} bg={colors.accentMuted} />
-                    <Text style={styles.createText}>Create “{query.trim()}”</Text>
-                  </TouchableOpacity>
-                ) : null
-              }
-              ListEmptyComponent={
-                !canCreate ? <Text style={styles.empty}>No matches</Text> : null
-              }
-              renderItem={({ item }) => {
-                const active = value?.id === item.id;
-                return (
-                  <TouchableOpacity
-                    style={[styles.tile, active && styles.tileActive]}
-                    onPress={() => pick(item)}
-                    accessibilityRole="button"
-                    accessibilityLabel={item.name}
-                    accessibilityState={{ selected: active }}
-                  >
-                    <IconCircle icon={asFeather(item.icon, 'tag')} size={40} color={item.color ?? colors.accent} />
-                    <Text style={[styles.tileLabel, active && styles.tileLabelActive]} numberOfLines={1}>
-                      {item.name}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              }}
+            <CategoryTileGrid
+              items={items}
+              isSelected={key => value?.id === key}
+              onToggle={key => { const c = filtered.find(x => x.id === key); if (c) pick(c); }}
+              listHeader={canCreate ? (
+                <TouchableOpacity style={styles.createRow} onPress={create} accessibilityRole="button">
+                  <IconCircle icon="plus" size={28} iconSize={16} color={colors.accent} bg={colors.accentMuted} />
+                  <Text style={styles.createText}>Create “{query.trim()}”</Text>
+                </TouchableOpacity>
+              ) : null}
             />
         </>
       </SheetModal>
@@ -188,25 +166,6 @@ const styles = StyleSheet.create({
     marginBottom: space.md,
   },
   searchInput: { flex: 1, ...type.body, color: colors.textPrimary, padding: 0 },
-  // Full-bleed to the sheet edge, with the inset moved onto the content. Inheriting the
-  // sheet's padding put the scroll indicator 24pt in, hard against the tiles; now it rides
-  // the edge and `paddingRight` keeps the tiles clear of it.
-  list: { marginHorizontal: -SHEET_PADDING_H },
-  grid: { paddingHorizontal: SHEET_PADDING_H, paddingBottom: space.md },
-  gridRow: { gap: space.sm, marginBottom: space.sm },
-  tile: {
-    flex: 1,
-    alignItems: 'center',
-    gap: space.xs,
-    paddingVertical: space.md,
-    borderRadius: radius.md,
-    backgroundColor: colors.bgMuted,
-    borderWidth: 1,
-    borderColor: 'transparent',
-  },
-  tileActive: { borderColor: colors.accent, backgroundColor: colors.accentMuted },
-  tileLabel: { ...type.caption, color: colors.textSecondary, textAlign: 'center', paddingHorizontal: 2 },
-  tileLabelActive: { color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   createRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -219,5 +178,4 @@ const styles = StyleSheet.create({
     marginBottom: space.md,
   },
   createText: { ...type.body, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
-  empty: { ...type.body, color: colors.textMuted, textAlign: 'center', paddingVertical: space.xl },
 });

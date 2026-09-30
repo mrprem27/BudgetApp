@@ -17,6 +17,12 @@ type Props = {
   onPress?: () => void;
   /** Renders a trailing ✕. Presence of this prop is what makes a chip removable. */
   onRemove?: () => void;
+  /**
+   * A trailing ⌄: this chip picks one value from a list (category, date, pay method). Only for
+   * those — a detail you add (note, tags, receipt) or a filter carries none (`U-25`, `U-41`).
+   * Never with `onRemove`: one trailing affordance.
+   */
+  chevron?: boolean;
   /** Fill the remaining width of a chip row (`flex: 1`). */
   grow?: boolean;
   /** Caps the label width; it truncates rather than pushing the row wider. */
@@ -39,7 +45,7 @@ type Props = {
  */
 export function Chip({
   label, icon, leading, selected, accent = colors.accent,
-  onPress, onRemove, grow, maxWidth, accessibilityLabel,
+  onPress, onRemove, chevron, grow, maxWidth, accessibilityLabel,
 }: Props) {
   const body = (
     <View
@@ -66,6 +72,8 @@ export function Chip({
         >
           <Feather name="x" size={14} color={selected ? accent : colors.textMuted} />
         </TouchableOpacity>
+      ) : chevron ? (
+        <Feather name="chevron-down" size={14} color={colors.textMuted} />
       ) : null}
     </View>
   );

@@ -153,7 +153,11 @@ export function TransferBody({
             accessibilityLabel={leftRole === 'from' ? 'Choose who paid' : 'Choose who received'}
           >
             <MemberAvatar name={leftPerson?.name ?? '?'} color={leftPerson?.avatar_color ?? colors.accent} size={52} imageUri={leftPerson?.image_uri} />
-            <Text style={styles.dirName} numberOfLines={1}>{nameOf(leftPerson, 'Pick')}</Text>
+            {/* A ⌄ beside the name: tapping picks who (`U-41`). */}
+            <View style={styles.dirNameRow}>
+              <Text style={styles.dirName} numberOfLines={1}>{nameOf(leftPerson, 'Pick')}</Text>
+              <Feather name="chevron-down" size={14} color={colors.textMuted} />
+            </View>
           </TouchableOpacity>
 
           <DirectionArrow reversed={reversed} onPress={reverse} label={directionLabel} disabled={!canReverse} />
@@ -165,7 +169,11 @@ export function TransferBody({
             accessibilityLabel={rightRole === 'from' ? 'Choose who paid' : 'Choose who received'}
           >
             <MemberAvatar name={rightPerson?.name ?? '?'} color={rightPerson?.avatar_color ?? colors.accent} size={52} imageUri={rightPerson?.image_uri} />
-            <Text style={styles.dirName} numberOfLines={1}>{nameOf(rightPerson, 'Pick')}</Text>
+            {/* A ⌄ beside the name: tapping picks who (`U-41`). */}
+            <View style={styles.dirNameRow}>
+              <Text style={styles.dirName} numberOfLines={1}>{nameOf(rightPerson, 'Pick')}</Text>
+              <Feather name="chevron-down" size={14} color={colors.textMuted} />
+            </View>
           </TouchableOpacity>
         </View>
 
@@ -306,7 +314,8 @@ const styles = StyleSheet.create({
   dirTile: { flex: 1, alignItems: 'center', gap: space.xs },
   dirDivider: { height: 1, backgroundColor: colors.border, marginTop: space.md, marginBottom: space.sm },
   dirSentence: { ...type.label, color: colors.textSecondary, textAlign: 'center', fontFamily: 'Inter_600SemiBold' },
-  dirName: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
+  dirNameRow: { flexDirection: 'row', alignItems: 'center', gap: 2, maxWidth: '100%' },
+  dirName: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold', flexShrink: 1 },
   arrowBtn: { width: layout.touchMin, height: layout.touchMin, alignItems: 'center', justifyContent: 'center' },
   // A bare glyph between two 52pt avatars read as a separator rather than a control, so the
   // one thing on this card you can tap looked like the one thing you couldn't. The disc is

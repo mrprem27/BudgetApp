@@ -30,6 +30,7 @@ export function CategoryField({ name, color, placeholder = 'Category', emptyIcon
       leading={name ? <IconCircle icon={asFeather(vis?.icon, 'tag')} size={22} color={tint} iconSize={13} /> : undefined}
       icon={name ? undefined : emptyIcon}
       onPress={onPress}
+      chevron
       accessibilityLabel={accessibilityLabel ?? (name ? `${placeholder}: ${name}` : `Choose ${placeholder.toLowerCase()}`)}
     />
   );

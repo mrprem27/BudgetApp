@@ -21,6 +21,7 @@ import { myShareOf, myIncomeOf } from './splitMath';
 import { getMyGlobalBudgetSummary, budgetEquivalent, type Period } from './budget';
 import { computeHealthScore, type HealthInputs, type HealthResult } from './financialHealth';
 import { monthEndFromEngine, type Forecast } from './forecast';
+import { streakFrom } from './streak';
 import { buildUpcoming, type UpcomingItem } from './upcoming';
 import { categoryVisual } from '../constants/categories';
 import type { CategoryRow } from '../components/finance/home/CategoryRankList';
@@ -141,23 +142,10 @@ export async function loadHomeData(
       }
     }
 
-    // Compute daily streak from month transactions
-    const loggedDays = new Set<string>();
-    for (const t of txns) {
-      if (t.is_deleted) continue;
-      const d = new Date(t.date);
-      if (!isFinite(d.getTime())) continue;
-      loggedDays.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
-    }
-    // Count consecutive days backwards from today
-    const today3 = new Date();
-    let s = 0;
-    for (let i = 0; i < 31; i++) {
-      const check = new Date(today3.getFullYear(), today3.getMonth(), today3.getDate() - i);
-      const key = `${check.getFullYear()}-${String(check.getMonth() + 1).padStart(2, '0')}-${String(check.getDate()).padStart(2, '0')}`;
-      if (loggedDays.has(key)) s++;
-      else break;
-    }
+    // The streak reads its own window — the last 31 days and this month — whatever tab is open.
+    const streakFromMs = Math.min(startOfMonth(new Date()).getTime(), Date.now() - 31 * 86_400_000);
+    const streakTxns = await getTransactionsInRange(db, null, streakFromMs, Date.now());
+    const { streak: s, days: loggedDays } = streakFrom(streakTxns.filter(t => !t.is_deleted).map(t => t.date), Date.now());
 
     // Prior-period spend (my share) for the hero delta.
     const prev = getPrevRange(tab);

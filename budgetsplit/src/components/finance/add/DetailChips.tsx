@@ -103,6 +103,7 @@ export function DetailChips({
           icon={isIncome ? 'download' : 'credit-card'}
           selected
           accent={accent}
+          chevron
           onPress={onOpenPayMethod}
           accessibilityLabel={isIncome ? `Landed in ${PAY_METHOD_LABEL[payMethod]}` : `Paid by ${PAY_METHOD_LABEL[payMethod]}`}
         />

@@ -82,6 +82,7 @@ export function CategoryDatePills({
         icon="calendar"
         label={`${isToday ? 'Today' : shortDate(new Date(txnDate))} · ${timeOfDay(txnDate)}`}
         maxWidth={200}
+        chevron
         onPress={onDate}
         accessibilityLabel={`When: ${isToday ? 'today' : format(new Date(txnDate), 'd MMMM yyyy')} at ${timeOfDay(txnDate)}. Change`}
       />
