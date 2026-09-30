@@ -14,6 +14,7 @@ import { TabPills } from '../../src/components/ui/TabPills';
 import { AmountText } from '../../src/components/ui/AmountText';
 import { TransactionRow } from '../../src/components/finance/TransactionRow';
 import { TxnCell } from '../../src/components/finance/TxnCell';
+import { parseMonthKey } from '../../src/lib/dateRange';
 import { useScreenData } from '../../src/hooks/useScreenData';
 import { useContentInset } from '../../src/hooks/useContentInset';
 import { loadReportTransactions, reportTransactionRows, type ReportSort as SortKey } from '../../src/lib/reportsData';
@@ -48,14 +49,6 @@ const TYPE_TABS = [
 ];
 
 
-function parseMonth(m?: string): Date {
-  const parts = (m ?? '').split('-');
-  if (parts.length === 2) {
-    const y = Number(parts[0]); const mo = Number(parts[1]);
-    if (Number.isFinite(y) && Number.isFinite(mo)) return new Date(y, mo - 1, 1);
-  }
-  return new Date();
-}
 
 /**
  * Month-scoped transaction list — the drill-down opened from a Reports pie segment.
@@ -80,7 +73,7 @@ export default function ReportTransactionsScreen() {
   const { month: monthParam, category } = useLocalSearchParams<{ month?: string; category?: string }>();
 
   // Local, so the ‹ › arrows work; seeded from the deep link.
-  const [month, setMonth] = useState<Date>(() => parseMonth(monthParam));
+  const [month, setMonth] = useState<Date>(() => parseMonthKey(monthParam));
   const monthKey = format(month, 'yyyy-MM');
   const isCurrentMonth = monthKey === format(new Date(), 'yyyy-MM');
 

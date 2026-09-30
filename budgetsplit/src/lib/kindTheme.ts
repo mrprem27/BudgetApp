@@ -1,27 +1,30 @@
 import { colors } from '../theme';
-import type { AddKind } from '../constants/enums';
+import type { AddKind, TxnKind } from '../constants/enums';
 
 /**
- * The colour that stands for a transaction kind.
+ * The one colour per kind, everywhere a kind is shown (`U-51`): expense red, income green,
+ * transfer purple. A stored row's kind is `TxnKind` (a transfer or an investment is a
+ * `settlement`); the Add screen's is `AddKind`. Both read from here, so a filter chip, a
+ * detail badge and the Add form can never disagree about what colour "expense" is.
+ */
+export function kindColor(kind: TxnKind | AddKind): string {
+  const k: string = kind;
+  if (k === 'income') return colors.income;
+  if (k === 'settlement' || k === 'transfer' || k === 'invest') return colors.settle;
+  return colors.expense;
+}
+
+/**
+ * The colour that stands for a transaction kind on the Add screen.
  *
- * This exists so the *whole* Add screen can agree with itself. The palette
- * already assigns a colour per kind (AGENTS.md §10: `income` green, `settle`
- * purple, `accent` teal for ordinary spending), but only two things on the Add
- * screen ever consulted it — the kind toggle and the amount text. Every other
- * control stayed teal, so switching to Income produced a green amount sitting in
- * a teal form. Derive this once per render and thread it through the icons,
- * chips, chevrons and the save button.
+ * This exists so the *whole* Add screen can agree with itself: derive it once per render
+ * and thread it through the icons, chips, chevrons and the save button. It is `kindColor` —
+ * expense was teal here while every ledger drew spending red, one kind in two colours
+ * (`U-51`). Invest shares `settle` with Transfer on purpose: they are the same movement in
+ * the ledger (a settlement), told apart only by where the money went.
  */
 export function kindAccent(kind: AddKind): string {
-  switch (kind) {
-    case 'income':   return colors.income;
-    // Invest shares `settle` with Transfer on purpose: they are the same movement
-    // in the ledger (a settlement), told apart only by where the money went. A
-    // fifth colour would claim a distinction the money model does not make.
-    case 'transfer':
-    case 'invest':   return colors.settle;
-    default:         return colors.accent;
-  }
+  return kindColor(kind);
 }
 
 /**
@@ -33,7 +36,7 @@ export function kindGradient(kind: AddKind): readonly [string, string] {
     case 'income':   return [colors.income, colors.healthGreen];
     case 'transfer':
     case 'invest':   return [colors.settle, colors.settle];
-    default:         return [colors.accent, colors.accentDeep];
+    default:         return [colors.expense, colors.healthRed];
   }
 }
 

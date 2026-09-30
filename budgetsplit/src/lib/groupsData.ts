@@ -169,7 +169,8 @@ export async function loadGroupHub(db: SQLite.SQLiteDatabase, id: string) {
     // Paused rules stay listed, same as the global screen: hiding them made a
     // rule paused from its own screen vanish from the tab you came back to, with
     // Resume reachable only by remembering the deep link.
-    recurringRules = (await getRecurringForGroup(db, id)).filter(r => r.recur_state !== 'ended');
+    // Stopped rules included: the Recurring tab lists them behind its own Stopped row (`U-54`).
+    recurringRules = await getRecurringForGroup(db, id);
     recurSkips = await getSkipsMap(db, recurringRules.map(r => r.id));
   }
   return { group, txns, members, me, net, catStatus, analytics, recurringRules, recurSkips, ctx, overrideCount };

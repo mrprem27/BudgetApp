@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { colors, type, space, layout } from '../../tokens';
 import { healthColor } from '../group/helpers';
 import { budgetHealth, utilLabel, type CategoryBudgetStatus } from '../../../lib/budget';
@@ -12,9 +13,11 @@ import { Card } from '../../ui/Card';
 import { Chip } from '../../ui/Chip';
 import { Divider } from '../../ui/Divider';
 import { EmptyState } from '../../ui/EmptyState';
-import { SectionHeader } from '../../ui/SectionHeader';
 import { AppRefreshControl } from '../../ui/AppRefreshControl';
 import { haptic } from '../../../lib/haptics';
+import { sectionSummary } from '../../../lib/budgetSections';
+import { InfoLabel } from '../../ui/InfoLabel';
+import { PressableScale } from '../../ui/PressableScale';
 
 /** `'all'` = no filter. The other three mirror `CategoryBudgetStatus.health`. */
 type StatusFilter = 'all' | 'over' | 'near' | 'ontrack';
@@ -79,6 +82,10 @@ export function BudgetList({
   caption, onEdit, empty, rowExtra, refreshing, onRefresh, bottomPad,
 }: Props) {
   const [filter, setFilter] = useState<StatusFilter>('all');
+  // Sections start collapsed, each header carrying its own spent / budget (`U-55`): the whole
+  // budget reads in one screen, and a section opens when you want its lines. A status filter
+  // opens every section — "3 over" must never answer with three closed headers.
+  const [open, setOpen] = useState<Record<string, boolean>>({});
 
   const counts = useMemo(() => ({
     over: rows.filter(r => r.health === 'red').length,
@@ -117,6 +124,12 @@ export function BudgetList({
   if (rows.length === 0) return scroll(empty);
 
   const health = budgetHealth(pct);
+  const shownSections = SECTION_ORDER.filter(sec => (bySection.get(sec)?.length ?? 0) > 0);
+  // A lone section stays open: one closed header and nothing else is a screen that hides its budget.
+  const forcedOpen = filter !== 'all' || shownSections.length === 1;
+  const isOpen = (sec: string) => forcedOpen || !!open[sec];
+  const allOpen = shownSections.every(isOpen);
+  const setAll = (to: boolean) => setOpen(Object.fromEntries(shownSections.map(sec => [sec, to])));
   /** Tapping the active count clears the filter, so the row is its own way out. */
   const toggle = (next: StatusFilter) => {
     haptic.selection();
@@ -130,35 +143,39 @@ export function BudgetList({
             a `space-between` row that had lost its heading, so the tab opened with
             an action above the number the action changes. */}
         <View style={styles.head}>
-          <Text style={styles.headLabel}>Your spend</Text>
+          {/* What the figure is measured against, and what it leaves out, sit behind the ⓘ
+              (`U-55`, AGENTS §14): three caption lines under the hero made the card read as a
+              paragraph. Still one tap away — yearly pools and invested money are exclusions,
+              and an exclusion nobody can find is a silent omission. */}
+          <InfoLabel
+            label="Your spend"
+            labelStyle={styles.headLabel}
+            accessibilityLabel="About this budget"
+            info={
+              <View style={styles.info}>
+                <Text style={styles.caption}>{caption}</Text>
+                {pooledCount > 0 && (
+                  <Text style={styles.caption}>
+                    Plus {formatCompact(pooledAllocated)} in {pooledCount} yearly/one-time{' '}
+                    {pooledCount === 1 ? 'budget' : 'budgets'}, not counted in this month.
+                  </Text>
+                )}
+                {invested > 0 && (
+                  <Text style={styles.caption}>{budgetInvestedCaption(formatCompact(invested))}</Text>
+                )}
+              </View>
+            }
+          />
           <Chip label="Edit" icon="edit-2" onPress={onEdit} accessibilityLabel="Edit budget" />
         </View>
 
         <View style={styles.amountRow}>
-          <Text style={[styles.spent, { color: healthColor(health) }]}>{formatCompact(spent)}</Text>
+          <Text style={[styles.spent, { color: healthColor(health) }]}>
+            {formatCompact(spent)}
+            <Text style={styles.ofBudget}> / {formatCompact(allocated)}</Text>
+          </Text>
           <Text style={[styles.pct, { color: healthColor(health) }]}>{utilLabel(pct ?? 0)}</Text>
         </View>
-
-        <Text style={styles.caption}>{caption}</Text>
-
-        {/* Yearly and one-time lines are pools, not monthly rates — a ₹24k/yr trip
-            budget is spent when the trip happens, so it is excluded from the figures
-            above. Naming it here is what keeps that an exclusion rather than a
-            silent omission from a total that looks complete. */}
-        {pooledCount > 0 && (
-          <Text style={styles.caption}>
-            plus {formatCompact(pooledAllocated)} in {pooledCount} yearly/one-time{' '}
-            {pooledCount === 1 ? 'budget' : 'budgets'}
-          </Text>
-        )}
-
-        {/* Same terms, same style, one line down: an amount that genuinely left
-            and is deliberately not in the figure above. Investing is committed,
-            spending is capped, and the two never add up into one number
-            (`DQ-26`, `IV-17`). */}
-        {invested > 0 && (
-          <Text style={styles.caption}>{budgetInvestedCaption(formatCompact(invested))}</Text>
-        )}
 
         <View style={styles.bar}>
           <BudgetBar pct={pct} health={health} height={10} />
@@ -185,16 +202,29 @@ export function BudgetList({
           onAction={() => setFilter('all')}
         />
       ) : (
-        SECTION_ORDER.map(section => {
+        <>
+        {!forcedOpen && shownSections.length > 1 && (
+          <View style={styles.toolbar}>
+            <TouchableOpacity onPress={() => setAll(!allOpen)} hitSlop={10} accessibilityRole="button">
+              <Text style={styles.toolbarText}>{allOpen ? 'Collapse all' : 'Expand all'}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        {shownSections.map(section => {
           const lines = bySection.get(section) ?? [];
-          if (lines.length === 0) return null;
+          const expanded = isOpen(section);
+          const sum = sectionSummary(lines);
           return (
-            // No `marginBottom` here and no `gap` on the container: SectionHeader
-            // owns its own vertical margins, and stacking all three put 32px above
-            // every header (AGENTS §12).
-            <View key={section}>
-              <SectionHeader title={section} />
-              <Card clip>
+            // No `gap` on the container: the header row owns its own spacing (AGENTS §12).
+            <View key={section} style={styles.section}>
+              <SectionToggle
+                title={section}
+                expanded={expanded}
+                summary={expanded ? null : sum}
+                count={lines.length}
+                onPress={forcedOpen ? undefined : () => setOpen(o => ({ ...o, [section]: !expanded }))}
+              />
+              {expanded && <Card clip>
                 {lines.map((c, i) => (
                   <View key={`${c.category}-${c.cadence}`}>
                     {i > 0 && <Divider indent="text" />}
@@ -210,12 +240,63 @@ export function BudgetList({
                     </BudgetCategoryRow>
                   </View>
                 ))}
-              </Card>
+              </Card>}
             </View>
           );
-        })
+        })}
+        </>
       )}
     </>,
+  );
+}
+
+/**
+ * A budget section's header. Collapsed, it carries the section's own spent / budget and a thin
+ * bar in its health colour, so the closed list still reads as a budget; open, the lines below
+ * say it and the header is just a name (`U-55`).
+ */
+function SectionToggle({ title, expanded, summary, count, onPress }: {
+  title: string;
+  expanded: boolean;
+  summary: ReturnType<typeof sectionSummary> | null;
+  count: number;
+  onPress?: () => void;
+}) {
+  const tint = summary ? healthColor(summary.health) : colors.textMuted;
+  const per = summary?.cadence === 'yearly' ? ' a year' : summary?.cadence === 'daily' ? ' a day' : '';
+  return (
+    <PressableScale
+      onPress={onPress}
+      disabled={!onPress}
+      style={styles.toggle}
+      accessibilityLabel={`${title}, ${count} ${count === 1 ? 'category' : 'categories'}${onPress ? `. ${expanded ? 'Collapse' : 'Expand'}` : ''}`}
+      accessibilityState={{ expanded }}
+    >
+      <View style={styles.toggleRow}>
+        {onPress && <Feather name={expanded ? 'chevron-down' : 'chevron-right'} size={16} color={colors.textMuted} />}
+        <Text style={styles.toggleTitle}>{title}</Text>
+        {summary && summary.allocated > 0 ? (
+          <Text style={[styles.toggleAmt, { color: tint }]} numberOfLines={1}>
+            {formatCompact(summary.spent)}
+            <Text style={styles.toggleOf}> / {formatCompact(summary.allocated)}{per}</Text>
+          </Text>
+        ) : !expanded ? (
+          <Text style={styles.toggleOf}>{count}</Text>
+        ) : null}
+      </View>
+      {summary && summary.allocated > 0 && (
+        <View style={styles.toggleBar}>
+          <BudgetBar pct={summary.pct} health={summary.health} height={4} />
+        </View>
+      )}
+      {summary && (summary.overCount > 0 || summary.otherCount > 0) && (
+        <Text style={styles.toggleNote}>
+          {summary.overCount > 0 && <Text style={{ color: colors.healthRed }}>{summary.overCount} over</Text>}
+          {summary.overCount > 0 && summary.otherCount > 0 ? ' · ' : ''}
+          {summary.otherCount > 0 ? `+${summary.otherCount} on another cadence` : ''}
+        </Text>
+      )}
+    </PressableScale>
   );
 }
 
@@ -247,6 +328,18 @@ const styles = StyleSheet.create({
   spent: { ...type.amountXL },
   pct: { ...type.amountSM },
   caption: { ...type.caption, color: colors.textMuted, marginTop: 2 },
+  info: { marginTop: space.xs },
+  ofBudget: { ...type.amountSM, color: colors.textMuted },
+  toolbar: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: space.sm },
+  toolbarText: { ...type.labelSemi, color: colors.accent },
+  section: { marginTop: space.sm },
+  toggle: { paddingVertical: space.sm },
+  toggleRow: { flexDirection: 'row', alignItems: 'center', gap: space.xs, minHeight: layout.touchMin },
+  toggleTitle: { ...type.sectionLabel, color: colors.textMuted, flex: 1 },
+  toggleAmt: { ...type.amountSM },
+  toggleOf: { ...type.caption, color: colors.textMuted },
+  toggleBar: { marginTop: space.xs },
+  toggleNote: { ...type.caption, color: colors.textMuted, marginTop: space.xs },
   bar: { marginTop: space.md, marginBottom: space.md },
   filters: { flexDirection: 'row', gap: space.sm, marginTop: space.md },
 });

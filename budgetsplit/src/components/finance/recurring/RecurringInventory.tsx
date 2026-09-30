@@ -1,3 +1,4 @@
+import { kindColor } from '../../../lib/kindTheme';
 import { View, Text, StyleSheet } from 'react-native';
 import { colors, type, space, layout } from '../../tokens';
 import { alpha } from '../../../theme';
@@ -73,7 +74,7 @@ export function RecurringInventory({ subs, onOpen }: { subs: Sub[]; onOpen: (id:
                       <IconCircle
                         icon={asFeather(vis?.icon, s.kind === 'income' ? 'trending-up' : 'refresh-cw')}
                         size={layout.iconCircle}
-                        color={vis?.color ?? (s.kind === 'income' ? colors.income : colors.accent)}
+                        color={vis?.color ?? kindColor(s.kind)}
                       />
                     }
                     title={s.name}

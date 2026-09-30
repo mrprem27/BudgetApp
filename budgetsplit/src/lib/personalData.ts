@@ -18,7 +18,8 @@ export async function loadPersonal(db: SQLite.SQLiteDatabase, meId: string) {
   // The Personal group's OWN rules — the same list a group's Recurring tab shows for that group.
   // (Every rule everywhere is Money → Recurring; this is not that list again.)
   const personal = groups.find(g => g.is_personal === 1);
-  const recurringRules = personal ? (await getRecurringForGroup(db, personal.id)).filter(r => r.recur_state !== 'ended') : [];
+  // Stopped rules included: the tab lists them behind its own Stopped row (`U-54`).
+  const recurringRules = personal ? await getRecurringForGroup(db, personal.id) : [];
   const recurSkips = await getSkipsMap(db, recurringRules.map(r => r.id));
   // Owe / Lent — single source of truth (netted per person).
   return { persons, activity, groups, budget, recurringRules, recurSkips, summary: { owe: exp.owe, lent: exp.owed } };

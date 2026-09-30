@@ -4,6 +4,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking, Image, M
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { dateTime, fullDate } from '../../../src/lib/dateFormat';
+import { kindColor } from '../../../src/lib/kindTheme';
 import { PAY_METHOD_LABEL } from '../../../src/constants/enums';
 import { myShareOf, myPaidOf, txnTotal } from '../../../src/lib/splitMath';
 import { settlementView } from '../../../src/lib/settlementView';
@@ -128,7 +129,7 @@ export default function TxnDetailScreen() {
     : isSettlement
     ? `/add/quick?kind=transfer&editId=${id}`
     : `/add/quick?editId=${id}&groupId=${txn.group_id}`;
-  const kindColor = isIncome ? colors.income : isSettlement ? colors.settle : colors.expense;
+  const kindTint = kindColor(txn.kind);
   const kindLabel = settle ? settle.label : isIncome ? 'Income' : 'Expense';
 
   return (
@@ -192,8 +193,8 @@ export default function TxnDetailScreen() {
           <IconCircle icon={vis.icon} size={56} color={vis.color} iconSize={24} style={styles.iconDot} />
           <Text style={styles.heroAmount}>{formatRupees(total)}</Text>
           <View style={styles.kindRow}>
-            <View style={[styles.kindBadge, { backgroundColor: alpha(kindColor, 13) }]}>
-              <Text style={[styles.kindText, { color: kindColor }]}>{kindLabel}</Text>
+            <View style={[styles.kindBadge, { backgroundColor: alpha(kindTint, 13) }]}>
+              <Text style={[styles.kindText, { color: kindTint }]}>{kindLabel}</Text>
             </View>
             {/* The asset, not the category. "Investment" said neither what happened
                 nor where the money went, and an asset movement's category is fixed

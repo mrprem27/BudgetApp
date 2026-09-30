@@ -11,6 +11,7 @@ import { colors, type, space, radius } from '../tokens';
 import { shortDate } from '../../lib/dateFormat';
 import { TXN_KIND, TXN_KIND_LABEL_PLURAL } from '../../constants/enums';
 import { tagKey } from '../../lib/tags';
+import { kindColor } from '../../lib/kindTheme';
 import {
   KIND_ANY, RANGE_LABEL, resolveRange,
   type KindFilter, type RangePreset,
@@ -114,8 +115,17 @@ export function FilterBar({
   const tagsLabel = selectedTags.length === 0 ? 'Tags'
     : selectedTags.length === 1 ? selectedTags[0] : `${selectedTags[0]} +${selectedTags.length - 1}`;
 
-  const setCount = (kindSet ? 1 : 0) + (range !== 'any' ? 1 : 0) + (person ? 1 : 0) + (selectedTags.length > 0 ? 1 : 0);
-  const clearAll = () => { onKind?.(KIND_ANY); onRange?.('any', null, null); onPerson?.(null); onTags?.([]); };
+  // Everything the row can narrow counts, and Clear all undoes all of it (`U-53`). It used to
+  // skip the search text and the screen's own choice (Personal's Show), so "Clear all" left the
+  // list still filtered and its figures still partial.
+  const groupsSet = groups.filter(g => (selected[g.key] ?? g.options[0]?.value) !== g.options[0]?.value);
+  const setCount = (search?.trim() ? 1 : 0) + groupsSet.length
+    + (kindSet ? 1 : 0) + (range !== 'any' ? 1 : 0) + (person ? 1 : 0) + (selectedTags.length > 0 ? 1 : 0);
+  const clearAll = () => {
+    onSearch?.('');
+    for (const g of groupsSet) onSelect(g.key, g.options[0]!.value);
+    onKind?.(KIND_ANY); onRange?.('any', null, null); onPerson?.(null); onTags?.([]);
+  };
 
   const toggleTag = (t: string) => {
     const has = selectedTags.some(x => tagKey(x) === tagKey(t));
@@ -177,12 +187,15 @@ export function FilterBar({
           const isDefault = value === g.options[0]?.value;
           return (
             <Chip key={g.key} label={opt?.label ?? ''} selected={!isDefault} maxWidth={180}
+              onRemove={isDefault ? undefined : () => onSelect(g.key, g.options[0]!.value)}
               onPress={() => setPicker({ kind: 'group', key: g.key })} />
           );
         })}
         {onKind && (
           <Chip icon="layers" label={kindSet ? TXN_KIND_LABEL_PLURAL[kind as typeof TXN_KIND[number]] : 'Type'}
-            selected={kindSet} onRemove={kindSet ? () => onKind(KIND_ANY) : undefined}
+            // A set type wears its kind's colour, as every ledger row does (`U-51`).
+            selected={kindSet} accent={kindSet ? kindColor(kind as typeof TXN_KIND[number]) : undefined}
+            onRemove={kindSet ? () => onKind(KIND_ANY) : undefined}
             onPress={() => setPicker({ kind: 'type' })} />
         )}
         {onRange && (
@@ -227,6 +240,8 @@ export function FilterBar({
           ))}
           {picker?.kind === 'type' && onKind && [KIND_ANY, ...TXN_KIND].map(k => (
             <OptionRow key={k} label={k === KIND_ANY ? 'Everything' : TXN_KIND_LABEL_PLURAL[k as typeof TXN_KIND[number]]}
+              accent={k === KIND_ANY ? undefined : kindColor(k as typeof TXN_KIND[number])}
+              leading={k === KIND_ANY ? undefined : <View style={[styles.kindDot, { backgroundColor: kindColor(k as typeof TXN_KIND[number]) }]} />}
               selected={(kind ?? KIND_ANY) === k} onPress={() => { onKind(k as KindFilter); close(); }} />
           ))}
           {picker?.kind === 'date' && (
@@ -294,4 +309,5 @@ const styles = StyleSheet.create({
   textBtnLabel: { ...type.labelSemi, color: colors.accent },
   list: { gap: space.sm },
   done: { marginTop: space.md },
+  kindDot: { width: 10, height: 10, borderRadius: 5 },
 });

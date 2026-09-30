@@ -22,3 +22,25 @@ export function inRange(r: DayRange, day: number): boolean {
   if (r.from == null) return false;
   return day >= r.from && day <= (r.to ?? r.from);
 }
+
+/** `'yyyy-MM'` → the first of that month, local time. Anything else → now. */
+export function parseMonthKey(m?: string | null): Date {
+  const parts = (m ?? '').split('-');
+  if (parts.length === 2) {
+    const y = Number(parts[0]); const mo = Number(parts[1]);
+    if (Number.isInteger(y) && Number.isInteger(mo) && mo >= 1 && mo <= 12) return new Date(y, mo - 1, 1);
+  }
+  return new Date();
+}
+
+/**
+ * The month a date filter covers, as `'yyyy-MM'`, when it sits inside one calendar month —
+ * so a filtered ledger can open Reports on that month. `null` when it is unbounded or spans
+ * more than one month (Reports is month by month).
+ */
+export function singleMonthKey(from: number | null, to: number | null): string | null {
+  if (from == null || to == null) return null;
+  const a = new Date(from), b = new Date(to);
+  if (a.getFullYear() !== b.getFullYear() || a.getMonth() !== b.getMonth()) return null;
+  return `${a.getFullYear()}-${String(a.getMonth() + 1).padStart(2, '0')}`;
+}

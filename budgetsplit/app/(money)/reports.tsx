@@ -4,7 +4,8 @@ import {
   Alert, ActivityIndicator,
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { parseMonthKey } from '../../src/lib/dateRange';
 import { useScreenData } from '../../src/hooks/useScreenData';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { File, Paths } from 'expo-file-system';
@@ -39,7 +40,9 @@ export default function ReportsScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [month, setMonth] = useState(() => new Date());
+  // Seeded from a deep link (`?month=yyyy-MM`) — Personal opens it on a filtered month (`U-52`).
+  const { month: monthParam } = useLocalSearchParams<{ month?: string }>();
+  const [month, setMonth] = useState(() => parseMonthKey(monthParam));
   const [selectedCat, setSelectedCat] = useState<string | null>(null);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const [catExpanded, setCatExpanded] = useState(false);

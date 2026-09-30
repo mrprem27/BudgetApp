@@ -26,6 +26,10 @@ type Props = {
  */
 export function InfoLabel({ label, labelStyle, info, center, accessibilityLabel }: Props) {
   const [open, setOpen] = useState(false);
+  // The ⓘ sits in a box one text line tall, aligned to the TOP of the label (`U-56`). Centring it
+  // on the row put it halfway down a label that wrapped, and every caller's own label style (a
+  // caption, a section label, a heading) moved it a different distance off the text it explains.
+  const line = StyleSheet.flatten([styles.label, labelStyle]).lineHeight ?? ICON;
   return (
     <View style={center && styles.center}>
       <View style={styles.row}>
@@ -33,11 +37,12 @@ export function InfoLabel({ label, labelStyle, info, center, accessibilityLabel 
         <TouchableOpacity
           onPress={() => setOpen(o => !o)}
           hitSlop={{ top: 12, bottom: 12, left: 6, right: 12 }}
+          style={[styles.icon, { height: Math.max(line, ICON) }]}
           accessibilityRole="button"
           accessibilityLabel={accessibilityLabel ?? `About ${label}`}
           accessibilityState={{ expanded: open }}
         >
-          <Feather name="info" size={14} color={open ? colors.accent : colors.textMuted} />
+          <Feather name="info" size={ICON} color={open ? colors.accent : colors.textMuted} />
         </TouchableOpacity>
       </View>
       {open && (typeof info === 'string'
@@ -47,9 +52,12 @@ export function InfoLabel({ label, labelStyle, info, center, accessibilityLabel 
   );
 }
 
+const ICON = 14;
+
 const styles = StyleSheet.create({
   center: { alignItems: 'center' },
-  row: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
+  row: { flexDirection: 'row', alignItems: 'flex-start', gap: space.xs },
+  icon: { justifyContent: 'center' },
   label: { ...type.body, color: colors.textPrimary, flexShrink: 1 },
   info: { ...type.caption, color: colors.textMuted, marginTop: 2, lineHeight: 16 },
   infoCenter: { textAlign: 'center' },

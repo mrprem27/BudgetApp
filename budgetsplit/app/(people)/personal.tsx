@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, SectionList, Alert } from 'react-native';
+import { View, Text, StyleSheet, SectionList, Alert, TouchableOpacity } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useRouter } from 'expo-router';
 import { colors, type, space, radius, layout } from '../../src/theme';
@@ -8,7 +8,9 @@ import { HeaderIconButton } from '../../src/components/ui/HeaderIconButton';
 import { TabPills } from '../../src/components/ui/TabPills';
 import { FilterBar } from '../../src/components/ui/FilterBar';
 import { rankTagsByFrequency } from '../../src/lib/tags';
-import { applyFilters, KIND_ANY, type KindFilter, type RangePreset } from '../../src/lib/txnFilter';
+import { applyFilters, filtersActive, KIND_ANY, type KindFilter, type RangePreset } from '../../src/lib/txnFilter';
+import { activityTotals } from '../../src/lib/activityTotals';
+import { singleMonthKey } from '../../src/lib/dateRange';
 import { TransactionRow } from '../../src/components/finance/TransactionRow';
 import { TxnCell } from '../../src/components/finance/TxnCell';
 import { SectionHeader } from '../../src/components/ui/SectionHeader';
@@ -29,6 +31,7 @@ import { useStore } from '../../src/store';
 import { groupByDate } from '../../src/lib/txnGrouping';
 import { formatCompact } from '../../src/lib/money';
 import { oweView } from '../../src/lib/owe';
+import { kindColor } from '../../src/lib/kindTheme';
 import { haptic } from '../../src/lib/haptics';
 import { buildGroupExportCsv } from '../../src/lib/groupExport';
 import { shareCsv, csvFileSlug } from '../../src/lib/shareCsv';
@@ -122,6 +125,24 @@ export default function PersonalScreen() {
   );
   const sections = useMemo(() => groupByDate(filtered), [filtered]);
 
+  /*
+   * The card above the list describes the list (`U-52`). Unfiltered, it is where you stand with
+   * everyone today — owe, owed, net. Once anything narrows the list (a date, a type, a person, a
+   * search, or Groups / All), it adds up exactly those rows: what you spent, what came in, and how
+   * the period moved you with other people. A card that stayed on today's balances while the list
+   * below showed last month answered a question nobody had asked.
+   */
+  const narrowed = filter !== 'personal' || filtersActive({ query, kind, from, to, personId, tags });
+  const totals = useMemo(() => activityTotals(filtered, myId), [filtered, myId]);
+  const clearFilters = useCallback(() => {
+    setFilter('personal'); setQuery(''); setKind(KIND_ANY); setRange('any');
+    setFrom(null); setTo(null); setPersonId(null); setTags([]);
+  }, []);
+  const openReports = () => {
+    const m = singleMonthKey(from, to);
+    router.push(m ? `/reports?month=${m}` : '/reports');
+  };
+
   // Stable identities, so the filter bar and the list below do not re-render per keystroke.
   const filterGroups = useMemo(() => [{
     key: 'scope',
@@ -197,7 +218,40 @@ export default function PersonalScreen() {
         <ErrorState onRetry={reload} />
       ) : (
         <>
-          {/* Owe / Lent / Net summary */}
+          {tab === 'activity' && narrowed ? (
+            <Card style={styles.summaryCardFiltered}>
+              <View style={styles.summaryRow}>
+                <View style={styles.summaryItem}>
+                  <Text style={styles.summaryLabel}>Spent</Text>
+                  <Text style={[styles.summaryAmt, { color: kindColor('expense') }]}>{formatCompact(totals.spent)}</Text>
+                </View>
+                <View style={styles.summaryDivider} />
+                <View style={styles.summaryItem}>
+                  <Text style={styles.summaryLabel}>Income</Text>
+                  <Text style={[styles.summaryAmt, { color: kindColor('income') }]}>{formatCompact(totals.income)}</Text>
+                </View>
+                <View style={styles.summaryDivider} />
+                <View style={styles.summaryItem}>
+                  <Text style={styles.summaryLabel}>Net with others</Text>
+                  {(() => {
+                    const ov = oweView(totals.netWithOthers);
+                    return (
+                      <Text style={[styles.summaryAmt, { color: ov.color }]}>
+                        {ov.sign}{formatCompact(Math.abs(totals.netWithOthers))}
+                      </Text>
+                    );
+                  })()}
+                </View>
+              </View>
+              <View style={styles.summaryFoot}>
+                <Text style={styles.summaryFootText}>For the entries below</Text>
+                <TouchableOpacity onPress={openReports} hitSlop={10} accessibilityRole="button" accessibilityLabel="Open in Reports">
+                  <Text style={styles.summaryLink}>Open in Reports ›</Text>
+                </TouchableOpacity>
+              </View>
+            </Card>
+          ) : (
+          /* Owe / Lent / Net summary — where you stand with everyone, today. */
           <Card style={styles.summaryCard}>
             <View style={styles.summaryItem}>
               <Text style={styles.summaryLabel}>You owe</Text>
@@ -221,6 +275,7 @@ export default function PersonalScreen() {
               })()}
             </View>
           </Card>
+          )}
 
           {/* Was a byte-identical copy of the group screen's local tab strip, which
               was itself a reimplementation of `TabPills`. One component now. */}
@@ -276,14 +331,13 @@ export default function PersonalScreen() {
                   <EmptyState
                     icon="inbox"
                     title="Nothing here yet"
-                    body={filter === 'personal' ? 'Your personal expenses & income will show here.' : 'No transactions match this filter.'}
+                    body={narrowed ? 'No transactions match these filters.' : 'Your personal expenses & income will show here.'}
                     tint={colors.textSecondary}
                     // A filter hiding everything and an empty ledger need different
-                    // ways out — clearing the filter, or adding the first entry.
-                    actionLabel={filter === 'personal' ? 'Add a transaction' : 'Show everything'}
-                    onAction={filter === 'personal'
-                      ? () => router.push('/add/quick')
-                      : () => setFilter('personal')}
+                    // ways out — clearing EVERY filter (it used to reset only
+                    // Personal / Groups / All), or adding the first entry.
+                    actionLabel={narrowed ? 'Clear filters' : 'Add a transaction'}
+                    onAction={narrowed ? clearFilters : () => router.push('/add/quick')}
                   />
                 )
               }
@@ -354,6 +408,8 @@ export default function PersonalScreen() {
             }}
           />
           <View style={settingsRowDivider} />
+          <SettingsRow icon="pie-chart" label="Reports" onPress={() => { setShowMenu(false); router.push('/reports'); }} />
+          <View style={settingsRowDivider} />
           <SettingsRow icon="download" label="Export as CSV" onPress={handleExport} />
         </View>
         <Text style={styles.personalNote}>
@@ -372,6 +428,15 @@ const styles = StyleSheet.create({
   summaryDivider: { width: 1, alignSelf: 'stretch', backgroundColor: colors.border, marginVertical: space.xs },
   summaryLabel: { ...type.caption, color: colors.textMuted },
   summaryAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 16, letterSpacing: -0.3 },
+  summaryCardFiltered: { marginHorizontal: layout.screenPaddingH, marginBottom: space.md, paddingVertical: space.md },
+  summaryRow: { flexDirection: 'row', alignItems: 'center' },
+  summaryFoot: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    marginTop: space.smd, paddingTop: space.sm, paddingHorizontal: space.md,
+    borderTopWidth: 1, borderTopColor: colors.border,
+  },
+  summaryFootText: { ...type.caption, color: colors.textMuted },
+  summaryLink: { ...type.labelSemi, color: colors.accent },
 
 
   // No `gap` here: a date section's rows form ONE card, so any gap between them
