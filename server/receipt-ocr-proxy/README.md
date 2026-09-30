@@ -1,7 +1,7 @@
 # receipt-ocr-proxy
 
 Thin Cloudflare Worker that proxies a receipt photo to Gemini Flash's free tier and
-returns structured line items (`{name, qty, unitPrice}[]`). It exists to hold the Gemini
+returns structured line items (`{name, qty, unitPrice}[]`, unitPrice per unit, worked out from the printed line total in `normalize.ts`). It exists to hold the Gemini
 API key server-side — the app can never safely embed a raw API key in a shipped mobile
 bundle, so this one small stateless function is the whole "backend."
 

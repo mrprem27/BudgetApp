@@ -1,6 +1,8 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import type { ParsedLineItem, ReceiptExtractor, ReceiptScanResult } from './types';
 
+const SCAN_TIMEOUT_MS = 60_000;
+
 function mimeTypeFor(uri: string): string {
   const ext = uri.split('.').pop()?.toLowerCase();
   if (ext === 'png') return 'image/png';
@@ -37,11 +39,23 @@ export const geminiExtractor: ReceiptExtractor = {
 
     const imageBase64 = await FileSystem.readAsStringAsync(imageUri, { encoding: 'base64' });
 
-    const response = await fetch(proxyUrl, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ imageBase64, mimeType: mimeTypeFor(imageUri) }),
-    });
+    // The proxy retries a busy model on a lighter one, so a slow answer is normal; a stuck one
+    // ends here and the device reader covers for it (`withDeviceFallback`).
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), SCAN_TIMEOUT_MS);
+    let response: Response;
+    try {
+      response = await fetch(proxyUrl, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ imageBase64, mimeType: mimeTypeFor(imageUri) }),
+        signal: controller.signal,
+      });
+    } catch (e) {
+      throw new Error(controller.signal.aborted ? 'Cloud scan took too long.' : `Cloud scan could not connect: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      clearTimeout(timer);
+    }
 
     if (!response.ok) {
       const detail = await response.text().catch(() => '');
