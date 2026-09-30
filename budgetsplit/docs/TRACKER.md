@@ -2,7 +2,7 @@
 
 `Last verified: 2026-09-30 (§0, §1, §9–§11 and every row whose status changed; the rest as of 2026-09-07) · Guarded by: trackerIntegrity.test.ts · countClaims.test.ts · docIdGraph.test.ts`
 
-**279 items, 106 of them still open.** One row each: what it is, and where it stands.
+**279 items, 105 of them still open.** One row each: what it is, and where it stands.
 Nothing else. **This is the V1 tracker** — start at §0.
 
 **The evidence is not here.** Why each item exists, what it costs, what breaks if you touch it, and
@@ -23,7 +23,7 @@ is defined in two places.
 |---|---|---|
 | §1 · Ship blockers | **12** | 19 |
 | §2 · Complexity — `OV-` | **11** | 34 |
-| §3 · Decisions — `DQ-` | **41** | 64 |
+| §3 · Decisions — `DQ-` | **40** | 64 |
 | §4 · Walk 1 — `W1-` | **12** | 39 |
 | §5 · Sync — `SYNC-F` | **0** | 24 |
 | §6 · Debt — `D-` | **10** | 11 |
@@ -51,8 +51,8 @@ here, one tested commit per step. Phase 5 is what only you can do.
      and no group limits; categories stay names (`DQ-16`); dead phone columns stay listed (`OV-23`).
      `OV-19` and `D-07` are phone-side table rebuilds, parked behind `OV-07`.
 2. **Server as a web app** (built and tested here; deploying needs `DQ-95`).
-   - 2a Real time: writes go to the server first when online, a live push to every member's open
-     app, queued offline as today — `DQ-108`.
+   - 2a **Done 2026-09-30** (`DQ-108`): every member's open app hears about a change within a
+     second and syncs; push notifications for a closed app wait on Apple (`DQ-80`).
    - 2b Cron and Queues: the server posts repeat entries, sends email and notifications, cleans
      up — `DQ-105`, `DQ-107`.
    - 2c The `/v1` read API a web client would use — `DQ-104`.
@@ -120,7 +120,7 @@ otherwise, except the business and legal ones in phase 5. `PARKED` rows keep the
 ---
 ## §3 · Open decisions — `DQ-`
 
-**64 items: 34 `DECIDE`, 7 `BLOCKED`, 23 `DONE`.** A `DQ-` is a question only you can answer, so every unanswered one is `DECIDE` by definition. The default column is what ships if you never decide.
+**64 items: 33 `DECIDE`, 7 `BLOCKED`, 24 `DONE`.** A `DQ-` is a question only you can answer, so every unanswered one is `DECIDE` by definition. The default column is what ships if you never decide.
 
 | | What | Status | Default if never decided |
 |---|---|---|---|
@@ -157,7 +157,6 @@ otherwise, except the business and legal ones in phase 5. `PARKED` rows keep the
 | `DQ-104` | A web client: a `/v1` read API over the server (writes through the same rules as sync), or a local-first web replica? | `DECIDE` | The `/v1` read API (`SPEC-SERVER-WEBAPP.md` §2.1) |
 | `DQ-105` | Should the server post recurring occurrences (Cron + Queue) instead of the author's phone? | `DECIDE` | Yes, after Workers Paid; phones keep posting until the server path has run a clean month |
 | `DQ-107` | Queues and Cron for email, notifications and cleanup (needs Workers Paid) | `DECIDE` | With `DQ-95`: before the first sign-in that isn't you |
-| `DQ-108` | Real time: server-first writes, and a live push to every member's open app (and a notification when closed)? | `DECIDE` | Yes — `SPEC-SERVER-WEBAPP.md` §4; needs Workers Paid |
 | `DQ-80` | Paid Apple Developer account, $99/yr | `BLOCKED` | Apple |
 | `DQ-81` | Google OAuth **CASA Tier-3** for `gmail.readonly` | `BLOCKED` | Google |
 | `DQ-82` | The GPay export format | `BLOCKED` | Google |
@@ -166,7 +165,7 @@ otherwise, except the business and legal ones in phase 5. `PARKED` rows keep the
 | `DQ-85` | R2 object storage | `BLOCKED` | A Cloudflare dashboard opt-in that asks for a card |
 | `DQ-86` | Cloudflare Email Sending | `BLOCKED` | Workers Paid $5/mo + an owned domain |
 
-**Closed (23), detail in `FINDINGS.md`:** `DQ-110` `DQ-14` `DQ-07` `DQ-22` `DQ-26` `DQ-28` `DQ-31` `DQ-32` `DQ-88` `DQ-89` `DQ-91` `DQ-93` `DQ-94` `DQ-97` `DQ-98` `DQ-99` `DQ-100` `DQ-101` `DQ-102` `DQ-103` `DQ-109` `DQ-106` `DQ-16`
+**Closed (24), detail in `FINDINGS.md`:** `DQ-110` `DQ-14` `DQ-07` `DQ-22` `DQ-26` `DQ-28` `DQ-31` `DQ-32` `DQ-88` `DQ-89` `DQ-91` `DQ-93` `DQ-94` `DQ-97` `DQ-98` `DQ-99` `DQ-100` `DQ-101` `DQ-102` `DQ-103` `DQ-109` `DQ-106` `DQ-16` `DQ-108`
 
 ---
 ## §4 · Walk 1 — `W1-`

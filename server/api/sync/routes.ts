@@ -11,6 +11,7 @@ import { PERSONAL_ENTITIES } from './entities/personal';
 import { TRANSACTION_ENTITIES } from './entities/transactions';
 import { parsePull, pull } from './pull';
 import { applyPush, ensureDevice, parsePush, type EntitySpec } from './push';
+import { fanOut, type Hubs } from '../realtime/fanout';
 
 /** Every entity a push may carry. A dispute is never pushed: rejecting an approval raises it. */
 export const ENTITIES: Record<string, EntitySpec> = {
@@ -21,14 +22,20 @@ export const ENTITIES: Record<string, EntitySpec> = {
 /** A push is at most 100 mutations; this bounds the body before parsing it. */
 const MAX_PUSH_BYTES = 2 * 1024 * 1024;
 
-/** Queries a push request spends before `applyPush`: the session (and its refresh), and the device. */
-const QUERIES_BEFORE_PUSH = 4;
+/**
+ * Queries a push request spends outside `applyPush`: the session (and its refresh), the device,
+ * and the live fan-out's one lookup afterwards.
+ */
+const QUERIES_OUTSIDE_PUSH = 5;
 
 /**
  * `/sync/push` and `/sync/pull` (SPEC-SERVER.md §3.2–3.3). Both are POST and
  * both need a session.
  */
-export async function handleSync(request: Request, env: Env, path: string): Promise<Response> {
+export async function handleSync(
+  request: Request, env: Env, path: string,
+  live?: { hubs: Hubs | null; waitUntil(p: Promise<unknown>): void },
+): Promise<Response> {
   if (request.method.toUpperCase() !== 'POST') return methodNotAllowed('POST');
   const auth = await authenticate(request, env);
   if (!auth) return unauthorized();
@@ -43,13 +50,16 @@ export async function handleSync(request: Request, env: Env, path: string): Prom
     const last = await ensureDevice(env.DB, auth.user.id, parsed.deviceId, now);
     if (last === null) return forbidden('That device is registered to another account');
 
+    const touched = new Set<string>();
     const lastMutationId = await applyPush(
-      { db: env.DB, userId: auth.user.id, deviceId: parsed.deviceId, now },
+      { db: env.DB, userId: auth.user.id, deviceId: parsed.deviceId, now, touched },
       parsed.mutations, last, ENTITIES,
       // What is left of this request's D1 queries once authentication and the
       // device check have run (`D1_QUERY_BUDGET`: 50 on Workers Free, 1000 on Paid).
-      { queryBudget: Number(env.D1_QUERY_BUDGET ?? 50) - QUERIES_BEFORE_PUSH },
+      { queryBudget: Number(env.D1_QUERY_BUDGET ?? 50) - QUERIES_OUTSIDE_PUSH },
     );
+    // Everyone whose data moved hears now, not at their next open (`DQ-108`). After the reply.
+    if (live?.hubs && touched.size > 0) live.waitUntil(fanOut(env.DB, live.hubs, touched, parsed.deviceId));
     // A receipt only. What happened to each mutation is read on the next pull.
     return json({ lastMutationId });
   }

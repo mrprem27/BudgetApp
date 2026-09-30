@@ -309,7 +309,7 @@ columns in `OV-23` and `budget_group.limit_*` (`D-07`) through the `txn` rebuild
 
 ### Phase 2 · Server as a web app (deploy needs Workers Paid, `DQ-95`)
 
-- **2a · Real time (`DQ-108`, task R).** A Durable Object per user
+- **2a · Done 2026-09-30** (see `FINDINGS.md` `DQ-108` for what was built and left). **Plan was: Real time (`DQ-108`, task R).** A Durable Object per user
   (`server/api/realtime/UserHub.ts`) holds that user's WebSockets. After `applyPush` commits, publish
   "scope X is at seq N" to every member's hub (group scope: all active members; user scope: that
   user). The phone opens one socket while in the foreground (`src/lib/sync/live.ts`) and on a

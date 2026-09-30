@@ -58,6 +58,9 @@ import { mailProvider, sendMail } from './mailer';
 import { callerIp, magicLinkAllowed, recordMagicLink } from './rateLimit';
 import { storage } from './storage';
 import { handleSync, handleHistory, eraseAccount, liveAccount } from './sync';
+import { hubsOf } from './realtime/UserHub';
+
+export { UserHub } from './realtime/UserHub';
 
 const USER_COLUMNS = 'id, email, name, phone, avatar_url, created_at, deleted_at';
 
@@ -73,9 +76,9 @@ const noStorage = () => json(
 );
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     try {
-      return await route(request, env);
+      return await route(request, env, ctx);
     } catch (err) {
       // Anything reaching here is a bug or an outage, not a client mistake —
       // answer 500 with a short detail rather than letting the runtime return
@@ -86,7 +89,7 @@ export default {
   },
 };
 
-async function route(request: Request, env: Env): Promise<Response> {
+async function route(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const url = new URL(request.url);
   // Trailing slashes are a client typo, not a distinct route.
   const path = url.pathname.replace(/\/+$/, '') || '/';
@@ -105,7 +108,15 @@ async function route(request: Request, env: Env): Promise<Response> {
   }
 
   if (path === '/sync/push' || path === '/sync/pull') {
-    return handleSync(request, env, path);
+    return handleSync(request, env, path, { hubs: hubsOf(env), waitUntil: p => ctx.waitUntil(p) });
+  }
+  // One live connection per open app (`DQ-108`): the user's hub says when to sync.
+  if (path === '/sync/live') {
+    if (request.headers.get('Upgrade') !== 'websocket') return json({ error: 'Expected a WebSocket upgrade' }, 426);
+    const auth = await authenticate(request, env);
+    if (!auth) return unauthorized();
+    if (!env.USER_HUB) return json({ error: 'Live updates are not configured on this server.' }, 503);
+    return env.USER_HUB.get(env.USER_HUB.idFromName(auth.user.id)).fetch(request);
   }
   const historyMatch = /^\/transactions\/([^/]+)\/history$/.exec(path);
   if (historyMatch) return handleHistory(request, env, decodeURIComponent(historyMatch[1]));

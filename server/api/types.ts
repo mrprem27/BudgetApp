@@ -37,6 +37,8 @@ export interface Env {
   EMAIL?: SendEmail;
   /** Set (via `wrangler secret`) to send through Brevo's free tier instead. */
   BREVO_API_KEY?: string;
+  /** One Durable Object per user holding their open app connections (`realtime/UserHub.ts`, `DQ-108`). */
+  USER_HUB?: DurableObjectNamespace<import('./realtime/UserHub').UserHub>;
   /**
    * The From address. With Brevo it is a single address verified by clicking a
    * link in that inbox; with Cloudflare it must be on an onboarded domain.

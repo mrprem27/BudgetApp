@@ -1,9 +1,13 @@
 import type * as SQLite from 'expo-sqlite';
 import { File, Paths } from 'expo-file-system';
 import { format } from 'date-fns';
+import 'react-native-get-random-values';
+import { v4 as uuid } from 'uuid';
 import {
-  getStoredSession, pullSync, pushSync, serverConfigured, ServerAuthError, ServerNotConfiguredError,
+  getStoredSession, pullSync, pushSync, serverBaseUrl, serverConfigured, ServerAuthError, ServerNotConfiguredError,
 } from '../serverApi';
+import { deviceId } from '../../db/queries/syncApply';
+import { createLive, type LiveSocket } from './live';
 import { isRestoring } from '../restoreGuard';
 import { hasPendingChanges, syncOnce, type SyncOutcome, type Transport } from './engine';
 import {
@@ -110,6 +114,52 @@ export function scheduleSync(db: SQLite.SQLiteDatabase, onChanged: () => void, d
     if (r?.changed) onChanged();
   }, delayMs);
 }
+
+// --- Live updates (`DQ-108`) -------------------------------------------------------
+
+let liveAgain = false;
+/**
+ * The server said something changed. If a sync is already running it may have pulled before the
+ * change landed, so one more runs after it; several nudges during one run still cost one more.
+ */
+async function syncFromLive(db: SQLite.SQLiteDatabase, onChanged: () => void): Promise<void> {
+  if (running) {
+    liveAgain = true;
+    while (running) await running.catch(() => {});
+    if (!liveAgain) return;
+  }
+  liveAgain = false;
+  const r = await runSync(db);
+  if (r?.changed) onChanged();
+}
+
+type RNWebSocket = new (url: string, protocols: null, options: { headers: Record<string, string> }) => LiveSocket;
+let live: ReturnType<typeof createLive> | null = null;
+
+/** Open the live connection (on launch and every foreground). Signed out, it quietly does nothing. */
+export function startLive(db: SQLite.SQLiteDatabase, onChanged: () => void): void {
+  live ??= createLive({
+    async target() {
+      const base = serverBaseUrl();
+      const session = base && serverConfigured() ? await getStoredSession() : null;
+      if (!base || !session) return null;
+      const device = await deviceId(db, uuid);
+      return { url: `${base.replace(/^http/, 'ws')}/sync/live?device=${encodeURIComponent(device)}`, token: session.token };
+    },
+    // React Native's WebSocket takes headers as a third argument; the DOM typing it is declared with does not.
+    open: (url, token) => new (WebSocket as unknown as RNWebSocket)(url, null, { headers: { Authorization: `Bearer ${token}` } }),
+    onChanged: () => { void syncFromLive(db, onChanged); },
+    setTimer: (fn, ms) => setTimeout(fn, ms),
+    clearTimer: t => clearTimeout(t as ReturnType<typeof setTimeout>),
+  });
+  live.start();
+}
+
+/** Close it in the background. */
+export function stopLive(): void { live?.stop(); }
+
+/** With a live connection a write goes up at once; without one, after the usual short wait. */
+export const syncDelayMs = (): number => (live?.isConnected() ? 300 : 2000);
 
 // --- First sign-in (SPEC-SERVER.md §4) ------------------------------------------
 

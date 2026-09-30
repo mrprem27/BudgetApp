@@ -66,7 +66,11 @@ export class Rejected extends Error {
   }
 }
 
-export type PushContext = { db: Db; userId: string; deviceId: string; now: number };
+export type PushContext = {
+  db: Db; userId: string; deviceId: string; now: number;
+  /** Every scope this push advanced, for the live fan-out (`realtime/fanout.ts`). */
+  touched?: Set<string>;
+};
 
 /**
  * When the row was created, as the phone says it — accepted on CREATE only.
@@ -89,6 +93,7 @@ export const SCOPE_SEQ = '(SELECT seq FROM sync_scopes WHERE id = ?)';
 
 /** Advance a scope's change counter. Every write does this once, in its own batch. */
 export function bumpScope(ctx: PushContext, scopeId: string): D1PreparedStatement {
+  ctx.touched?.add(scopeId);
   return ctx.db.prepare('UPDATE sync_scopes SET seq = seq + 1 WHERE id = ?').bind(scopeId);
 }
 

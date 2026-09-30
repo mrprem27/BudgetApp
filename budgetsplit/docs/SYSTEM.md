@@ -211,7 +211,7 @@ into a personal cost, and `E-54`, which converts everything into one position.
 
 | Destination | What | When | Gate |
 |---|---|---|---|
-| `server/api` (own Worker) | Email address; once signed in, a **readable** copy of the whole ledger — personal spending, groups, goals, budgets, net worth, preferences (`DQ-93`) | Sign-in, then every sync | Account + `EXPO_PUBLIC_API_URL` |
+| `server/api` (own Worker) | Email address; once signed in, a **readable** copy of the whole ledger — personal spending, groups, goals, budgets, net worth, preferences (`DQ-93`) | Sign-in, then every sync; while the app is open, one WebSocket (`/sync/live`) that carries only "something changed" (`DQ-108`) | Account + `EXPO_PUBLIC_API_URL` |
 | `server/receipt-ocr-proxy` (own Worker → Gemini) | One receipt image | Tapping Scan receipt with the cloud provider selected | `FE-03`, `ocr_provider = gemini` |
 | The user's UPI app | A `upi://pay` intent | Tapping Pay via UPI | `FE-17` |
 | WhatsApp | A drafted message, composed not sent | Tapping the reminder | `FE-20` |

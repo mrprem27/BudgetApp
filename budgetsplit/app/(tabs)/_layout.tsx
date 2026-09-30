@@ -12,7 +12,7 @@ import { askAboutPendingSettlement } from '../../src/lib/confirmSettlement';
 import { settings } from '../../src/lib/settings';
 import { currencySymbol } from '../../src/lib/money';
 import { foregroundMaintenanceDone } from '../../src/lib/maintenanceWrites';
-import { runSync, scheduleSync, setQueueListener, type SyncOutcome, type Vanished } from '../../src/lib/sync';
+import { runSync, scheduleSync, setQueueListener, startLive, stopLive, syncDelayMs, type SyncOutcome, type Vanished } from '../../src/lib/sync';
 import { pendingRestoreOffer } from '../../src/lib/restoreOffer';
 import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -144,8 +144,19 @@ function AppTabBar({ state, navigation }: { state: any; navigation: any }) {
   // queue itself, so a write reaches the server whether or not its screen called
   // refresh(); scheduleSync debounces and does nothing when the queue is empty.
   useEffect(() => {
-    setQueueListener(() => scheduleSync(db, refresh));
+    setQueueListener(() => scheduleSync(db, refresh, syncDelayMs()));
     return () => setQueueListener(null);
+  }, [db, refresh]);
+
+  // Live updates (`DQ-108`): a friend's entry arrives while the app is open, not at the next
+  // open. The connection lives only in the foreground.
+  useEffect(() => {
+    startLive(db, refresh);
+    const sub = AppState.addEventListener('change', state => {
+      if (state === 'active') startLive(db, refresh);
+      else if (state === 'background') stopLive();
+    });
+    return () => { sub.remove(); stopLive(); };
   }, [db, refresh]);
 
   /*

@@ -84,3 +84,14 @@ EMAIL_FROM = "amitbhati1008@gmail.com"
 APP_AUTH_URL = "budgetsplit:///auth"
 # Where an invite link bounces into the app (Stage B). Same three-slash rule.
 APP_LINK_URL = "budgetsplit:///link"
+
+# --- Durable Objects: live updates (DQ-108) ---
+# One UserHub per user holds that user's open app connections and says "something changed"
+# after a push touches their data. SQLite-backed, which is what the Workers Free plan allows.
+[[durable_objects.bindings]]
+name = "USER_HUB"
+class_name = "UserHub"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["UserHub"]

@@ -17,7 +17,7 @@
  */
 
 export {
-  runSync, scheduleSync, decideFirstSignInNow, uploadNow, mergeNow, canMergeNow, restoreNow,
+  runSync, scheduleSync, startLive, stopLive, syncDelayMs, decideFirstSignInNow, uploadNow, mergeNow, canMergeNow, restoreNow,
   planSignOutNow, wipeForSignOutNow, syncActivity, classifySyncError, type SyncActivity, type SyncFailure,
 } from './run';
 export type { SignOutPlan } from './signOut';
