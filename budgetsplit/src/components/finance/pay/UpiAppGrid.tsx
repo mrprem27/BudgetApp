@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { PressableScale } from '../../ui/PressableScale';
 import { UpiAppIcon } from './UpiAppIcon';
 import { handoffVerb, type PayOpts } from '../../../hooks/useUpiHandoff';
@@ -7,7 +7,7 @@ import { colors, type, space, radius } from '../../tokens';
 import type { UpiAppSpec } from '../../../lib/upiIntent';
 
 /**
- * Every installed UPI app, as tappable icons — the iOS replacement for
+ * Every installed UPI app, as a row of tappable icons — the iOS replacement for
  * `ActionSheetIOS`'s plain-text list.
  *
  * The text list could never show a real icon and read identically whether an app
@@ -28,8 +28,10 @@ export function UpiAppGrid({
   selectedKey?: string | null;
   onSelect: (app: UpiAppSpec) => void;
 }) {
+  // One row that scrolls, not a grid: every installed app used to stack into a tall block above
+  // the Pay button, and a quarter-width cell cut "Amazon Pay" and "super.money" off (`U-14`).
   return (
-    <View style={styles.grid}>
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.strip} contentContainerStyle={styles.row}>
       {apps.map(app => {
         const selected = app.key === selectedKey;
         return (
@@ -43,24 +45,25 @@ export function UpiAppGrid({
           <View style={[styles.ring, selected && styles.ringOn]}>
             <UpiAppIcon app={app} size={52} />
           </View>
-          <Text style={[styles.label, selected && styles.labelOn]} numberOfLines={1}>{app.label}</Text>
+          <Text style={[styles.label, selected && styles.labelOn]} numberOfLines={2}>{app.label}</Text>
           {(opts?.bare || app.blocked) && (
             <Text style={styles.sub} numberOfLines={1}>{handoffVerb(opts)}</Text>
           )}
         </PressableScale>
         );
       })}
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  grid: { flexDirection: 'row', flexWrap: 'wrap', rowGap: space.md, paddingBottom: space.xs },
-  cell: { width: '25%', alignItems: 'center', gap: space.xs },
+  strip: { flexGrow: 0 },
+  row: { gap: space.sm, paddingBottom: space.xs },
+  cell: { width: 72, alignItems: 'center', gap: space.xs },
   // Always 2pt, transparent when unselected, so selecting doesn't shift the grid.
   ring: { padding: 3, borderRadius: radius.lg, borderWidth: 2, borderColor: 'transparent' },
   ringOn: { borderColor: colors.accent },
-  label: { ...type.caption, color: colors.textPrimary, textAlign: 'center' },
+  label: { ...type.caption, color: colors.textPrimary, textAlign: 'center', lineHeight: 15 },
   labelOn: { color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   sub: { ...type.caption, color: colors.textMuted, fontSize: 10, textAlign: 'center' },
 });

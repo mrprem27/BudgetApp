@@ -2,7 +2,7 @@
 
 `Last verified: 2026-09-30 (§0, §1, §9–§11 and every row whose status changed; the rest as of 2026-09-07) · Guarded by: trackerIntegrity.test.ts · countClaims.test.ts · docIdGraph.test.ts`
 
-**228 items, 123 of them still open.** One row each: what it is, and where it stands.
+**228 items, 122 of them still open.** One row each: what it is, and where it stands.
 Nothing else. **This is the V1 tracker** — start at §0.
 
 **The evidence is not here.** Why each item exists, what it costs, what breaks if you touch it, and
@@ -29,7 +29,7 @@ is defined in two places.
 | §6 · Debt — `D-` | **11** | 11 |
 | §7 · Accepted — `A-` | **2** | 11 |
 | §9 · Deferred from V1 — `V-` | **7** | 7 |
-| §11 · Open from the last pass, and your feedback — `U-` | **16** | 26 |
+| §11 · Open from the last pass, and your feedback — `U-` | **15** | 26 |
 
 §8 (parked scope) and §10 (built but easy to forget) carry no ids.
 
@@ -297,7 +297,7 @@ testing or describing the app. Where one needs action, the id says where.
 ---
 ## §11 · Open from the last pass, and your feedback — `U-`
 
-**26 items: 13 `OPEN`, 2 `DECIDE`, 1 `PARKED`, 10 `DONE`.** From the 2026-09-30 pass (`SPEC-BUGSCAN.md` Pass 2) and your answers and feedback the same night. Evidence in `FINDINGS.md` §11.
+**26 items: 12 `OPEN`, 2 `DECIDE`, 1 `PARKED`, 11 `DONE`.** From the 2026-09-30 pass (`SPEC-BUGSCAN.md` Pass 2) and your answers and feedback the same night. Evidence in `FINDINGS.md` §11.
 
 | | What | Status | Default if never decided |
 |---|---|---|---|
@@ -308,7 +308,6 @@ testing or describing the app. Where one needs action, the id says where.
 | `U-09` | Friends: "name missing when I owe" | `OPEN` |  |
 | `U-10` | Your phone pass, and the feedback it produces | `OPEN` |  |
 | `U-13` | Friends list reads as rows of buttons | `OPEN` |  |
-| `U-14` | UPI app picker: icons broken, names cut off | `OPEN` |  |
 | `U-15` | The group screen's top gradient is too heavy for what sits on it | `OPEN` |  |
 | `U-16` | Screens built as stacks of button rows and selection rows, not composed | `OPEN` |  |
 | `U-18` | Take Fold as the reference for simple, calm screens — its calculator included | `OPEN` |  |
@@ -318,4 +317,4 @@ testing or describing the app. Where one needs action, the id says where.
 | `U-23` | Choosing a group (in Add and elsewhere) needs a proper design | `OPEN` |  |
 | `U-24` | Product analytics (Mixpanel) before V1, and in the Android port | `DECIDE` | No analytics, as the privacy answers say today |
 
-**Closed (10), detail in `FINDINGS.md`:** `U-03` `U-04` `U-05` `U-06` `U-11` `U-12` `U-17` `U-21` `U-25` `U-26`
+**Closed (11), detail in `FINDINGS.md`:** `U-03` `U-04` `U-05` `U-06` `U-11` `U-12` `U-17` `U-21` `U-14` `U-25` `U-26`
