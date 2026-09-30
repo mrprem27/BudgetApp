@@ -22,6 +22,9 @@ export function splitPhone(stored: string | null | undefined): PhoneParts {
   const india = /^\+91(\d{10})$/.exec(s.replace(/[\s-]/g, ''));
   if (india) return { code: '91', local: india[1] };
   if (s.startsWith('+')) return { code: '', local: s };
+  // Saved with the code but no `+` (`919876543210`): read the code rather than add a second one.
+  const bare91 = /^91([6-9]\d{9})$/.exec(s.replace(/[\s-]/g, ''));
+  if (bare91) return { code: '91', local: bare91[1] };
   return { code: DEFAULT_DIAL_CODE, local: s };
 }
 
@@ -29,6 +32,12 @@ export function splitPhone(stored: string | null | undefined): PhoneParts {
 export function joinPhone({ code, local }: PhoneParts): string {
   const rest = local.trim().replace(/^0+/, '');
   if (!rest) return '';
+  // A number pasted with its own code (`+91 98765 43210` from Contacts) keeps that code, never
+  // gains a second one.
+  if (rest.startsWith('+')) {
+    const own = splitPhone(rest);
+    return own.code ? `+${own.code} ${own.local}` : rest;
+  }
   const c = code.replace(/\D/g, '');
   return c ? `+${c} ${rest}` : rest;
 }

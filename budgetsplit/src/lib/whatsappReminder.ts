@@ -43,12 +43,15 @@ export function canRemind(net: number, mobile: string | null | undefined): boole
  *
  * The pilot is India-only, and most numbers are typed as ten digits. A ten-digit
  * number starting 6–9 (optionally with the 0 trunk prefix) is an Indian mobile by
- * the national numbering plan, so it gets 91. Anything else too short to carry a
+ * the national numbering plan, so it gets 91 — unless it was typed with a `+`, which means it
+ * already carries its own code. Anything else too short to carry a
  * country code returns null and the caller falls back to the share sheet.
  */
 export function waNumber(mobile: string): string | null {
   const digits = mobile.replace(/[^\d]/g, '');
-  const local = /^0?([6-9]\d{9})$/.exec(digits);
+  // Only a number typed without a `+` is a local one: `+65 9123 4567` is ten digits starting 9
+  // once the `+` is stripped, and prefixing 91 would message a stranger in India.
+  const local = mobile.trim().startsWith('+') ? null : /^0?([6-9]\d{9})$/.exec(digits);
   if (local) return `91${local[1]}`;
   if (digits.length < 11) return null;
   return digits;

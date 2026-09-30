@@ -86,3 +86,11 @@ describe('whatsappUrl', () => {
     expect(decodeURIComponent(url)).toContain('upi://pay');
   });
 });
+
+describe('waNumber · a number typed with + keeps its own code', () => {
+  it('never prefixes 91 to a foreign number that happens to look Indian', () => {
+    expect(waNumber('+65 9123 4567')).toBeNull();
+    expect(waNumber('+64 21 123 456')).toBeNull();
+    expect(waNumber('+65 9123 4567 8')).toBe('65912345678');
+  });
+});

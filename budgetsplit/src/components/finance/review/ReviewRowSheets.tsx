@@ -7,7 +7,7 @@ import type { Category } from '../../../db/queries/categories';
 import type { Person } from '../../../db/queries/persons';
 import type { PayMethod } from '../../../constants/enums';
 
-type Group = { id: string; name: string };
+type Group = { id: string; name: string; icon?: string; color?: string };
 
 type Props = {
   /** The row each sheet is editing, or null when that sheet is closed. */

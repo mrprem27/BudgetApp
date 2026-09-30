@@ -1,13 +1,15 @@
 import React from 'react';
 import { SheetModal } from '../../ui/SheetModal';
 import { EmptyState } from '../../ui/EmptyState';
-import { DestOption } from './DestOption';
+import { GroupGrid } from '../GroupGrid';
+import { asFeather } from '../../../constants/palette';
+import { colors } from '../../tokens';
 
 type Props = {
   visible: boolean;
   onClose: () => void;
   /** Shared, non-archived groups. No Personal row — this is "assign to a group". */
-  groups: { id: string; name: string }[];
+  groups: { id: string; name: string; icon?: string; color?: string }[];
   /** How many rows are selected, for the title. */
   count: number;
   onSelect: (groupId: string) => void;
@@ -22,7 +24,7 @@ type Props = {
  */
 export function BulkGroupSheet({ visible, onClose, groups, count, onSelect }: Props) {
   return (
-    <SheetModal visible={visible} onClose={onClose} title={`Assign ${count} to a group`} scroll={false}>
+    <SheetModal visible={visible} onClose={onClose} title={`Assign ${count} to a group`}>
       {groups.length === 0 ? (
         <EmptyState
           icon="users"
@@ -30,9 +32,12 @@ export function BulkGroupSheet({ visible, onClose, groups, count, onSelect }: Pr
           body="Create a group with someone in it and you can assign imported transactions to it in bulk."
         />
       ) : (
-        groups.map(g => (
-          <DestOption key={g.id} label={g.name} icon="users" active={false} onPress={() => onSelect(g.id)} />
-        ))
+        // The same tiles as every group chooser (`GroupGrid`, `U-23`); nothing starts selected.
+        <GroupGrid
+          items={groups.map(g => ({ id: g.id, name: g.name, icon: asFeather(g.icon ?? 'users', 'users'), color: g.color ?? colors.accent }))}
+          selectedId=""
+          onSelect={onSelect}
+        />
       )}
     </SheetModal>
   );

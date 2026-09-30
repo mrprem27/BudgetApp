@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { colors, type, space } from '../tokens';
-import { formatCompact } from '../../lib/money';
+import { formatRupeesShort } from '../../lib/money';
 
 /**
  * One line of a sum you could check by hand (`U-28`): `Bank + Cash = Spendable`, `Owed to you −
@@ -16,7 +16,9 @@ export function SumLine({ op, dot, label, value, total, color, hint, onPress }: 
   color?: string;
   hint?: string; onPress?: () => void;
 }) {
-  const shown = value < 0 ? `−${formatCompact(-value)}` : formatCompact(value);
+  // Whole rupees, not compact: `1.2L + 1.2L = 2.5L` is what rounding does to a sum meant to be
+  // checked by hand.
+  const shown = value < 0 ? `−${formatRupeesShort(-value)}` : formatRupeesShort(value);
   const body = (
     <View style={[styles.line, total && styles.totalLine]}>
       <Text style={[styles.op, total && styles.opTotal]}>{op}</Text>

@@ -1242,3 +1242,20 @@ describe('U-45 · an asset movement is never tinted as income or spending', () =
     expect(src).not.toMatch(/label="Move" /);
   });
 });
+
+describe('U-22/U-23 · one people control and one group control', () => {
+  it('every group chooser is GroupGrid', () => {
+    for (const f of ['src/components/finance/add/DestinationSheet.tsx', 'src/components/finance/review/ReviewDestSheet.tsx', 'src/components/finance/review/BulkGroupSheet.tsx']) {
+      expect(fs.readFileSync(f, 'utf8')).toMatch(/<GroupGrid/);
+    }
+    expect(fs.existsSync('src/components/finance/review/DestOption.tsx')).toBe(false);
+  });
+  it('every people chooser is PersonPicker, and it is a grid, not a row list', () => {
+    for (const f of ['src/components/finance/add/DestinationSheet.tsx', 'src/components/finance/review/CounterpartySheet.tsx', 'src/components/finance/CombineSameSheet.tsx', 'app/(people)/group/[id]/members.tsx']) {
+      expect(fs.readFileSync(f, 'utf8')).toMatch(/<PersonPicker/);
+    }
+    const src = fs.readFileSync('src/components/finance/PersonPicker.tsx', 'utf8');
+    expect(src).not.toMatch(/FlatList/);
+    expect(src).toMatch(/width: '25%'/);
+  });
+});

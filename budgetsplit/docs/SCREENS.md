@@ -397,7 +397,7 @@ Members**. A personal id never renders here — it `router.replace`s to `/person
 |---|---|---|---|
 | **Budget editor** | `group/[id]/budget.tsx` | Per-category limit + 🔘 cadence *(sheet)*; collapsible sections; **Save** → `setCategoryBudgets` (only amounts > 0). `?category=` auto-focuses and scrolls to a row. Categories load by frequency-of-use; an empty catalog self-heals via `seedGlobalCategories`. `refetchOnDataChange:false` so a mid-edit reload can't wipe unsaved amounts. | Error + retry · `EmptyState` "No categories yet" · pull-to-refresh |
 | **Edit group** | `group/[id]/edit.tsx` | `GroupForm`; **Save** diffs members (add/remove); Archive → `/groups`; Delete → `deleteGroup` (Personal can't be deleted). | Error + retry only — it's a form, deliberately no pull-to-refresh |
-| **Members** | `group/[id]/members.tsx` | Avatar tap → photo picker; rename *(sheet)*; swipe-Remove (**blocked if net ≠ 0** — "Settle up first"); **Add or create person** via `PersonPicker` (multi-select + inline create). | Error + retry · pull-to-refresh · no empty state (you are always a member) |
+| **Members** | `group/[id]/members.tsx` | Avatar tap → photo picker; rename *(sheet)*; swipe-Remove (**blocked if net ≠ 0** — "Settle up first"); **Add or create person** via `PersonPicker` (avatar grid, multi-select, + New). | Error + retry · pull-to-refresh · no empty state (you are always a member) |
 
 ---
 
@@ -2139,10 +2139,12 @@ widgets; `system/` = onboarding, gates, privacy. `ui/` never imports from `finan
 | `PressableScale` | Spring-scale tappable wrapper for cards/rows. |
 | `PrimaryButton` | Gradient primary CTA (52 px). All primary actions. |
 | `ScreenHeader` | Safe-area header (back chevron + title + right slot) for every **pushed** screen. |
+| `PhoneInput` | Country-code box (+91 default) beside the number; stores `+91 98765 43210` (`U-44`). Friend sheet, Account. |
 | `SecondaryButton` | Bordered secondary button. |
 | `SectionCard` | Card wrapper for a titled section. |
 | `SettingsRow` (+ `settingsRowDivider`) | Icon + label + value + chevron row. Settings, options menus, Review overflow. |
 | `SheetModal` | The reusable gesture-handler **bottom sheet** used everywhere. |
+| `SumLine` | One line of a hand-checkable sum (`+`, `−`, `=` column; total gets a rule). Money card, Friends, Assets. |
 | `Skeleton` / `SkeletonCard` | Skeleton loaders (Reports, Category, Goal detail, Review). |
 | `TabPills` | Segmented pill control (Home period; reused for in-screen segments). |
 | `TimePickerSheet` | Bottom-sheet time picker (Notifications, Review filter). |
@@ -2156,13 +2158,14 @@ widgets; `system/` = onboarding, gates, privacy. `ui/` never imports from `finan
 | `CategoryDonut` | SVG donut of category spend (Reports); centre label auto-shrinks. |
 | `CategoryPicker` | Searchable category grid *(sheet)* + inline create. Add flows, Review. |
 | `GoalCelebration` | Full-screen confetti at 100% goal (auto-dismiss). |
+| `GroupGrid` | Groups as tiles, two across: icon in its colour, name, who it is with; ✓ on the chosen one (`U-23`). Add's destination, Review's per-row and bulk group sheets. |
 | `GroupForm` | Create/edit group form — name, type (coloured icon tiles), members (with an inline `+` to add a new friend via `PersonNameSheet`), default split (`TabPills`). Shared by the create sheet and Edit group. |
 | `HealthSheet` | Financial-health detail sheet (ring + dimensions + factors). |
 | `InsightText` | Rich/parsed insight text with emphasis. |
 | `MemberAvatar` | Circular avatar (initials or photo), tappable for photo pick. |
 | `PayMethodSelector` | Pay-method chip row — all **7** methods (UPI/card/cash/bank/wallet/autopay/other) from `PAY_METHOD`. Shared by Add expense/income/transfer. |
 | `PersonNameSheet` | Add / rename a person *(sheet)*. Friends, group Members. |
-| `PersonPicker` | Searchable multi-select person list + inline create (Members add). |
+| `PersonPicker` | People as an avatar grid, four across, tap to tick; **+ New** and search/add when it can create (`U-22`). Members add, Add's "just with people", Same person as…, Review's "Who paid you?". |
 | `TransactionRow` | Transaction list row — title/category, amount, attribution, attachment clip, settlement avatars. |
 | `TransferBody` | Transfer/settle body — from/to people, scope, pay method, note (Quick-Add Transfer). |
 | `TrendBars` | 6-month spend bars (Reports). |
@@ -2197,7 +2200,7 @@ widgets; `system/` = onboarding, gates, privacy. `ui/` never imports from `finan
 | `add/AmountCalculatorSheet` | Sequential amount arithmetic (split / tip / tax) over integer paise. |
 | `add/ReceiptScanSheet` · `add/ScanningOverlay` | Receipt-scan result sheet and blocking progress overlay (§7.4). |
 | `review/ReviewRowCard` | One editable pending row. **Module scope is load-bearing** — see §10.2. |
-| `review/DestOption` · `review/FChip` · `review/FilterForm` · `review/SaveViewForm` · `review/RecurringSuggestionBanner` · `review/RecurringSuggestionsSheet` · `review/ReviewDestSheet` · `review/CounterpartySheet` · `review/BulkGroupSheet` · `review/ReviewOverflowSheet` · `review/SavedViewsSheet` | Review sub-views (§10.2). |
+| `review/FChip` · `review/FilterForm` · `review/SaveViewForm` · `review/RecurringSuggestionBanner` · `review/RecurringSuggestionsSheet` · `review/ReviewDestSheet` · `review/CounterpartySheet` · `review/BulkGroupSheet` · `review/ReviewOverflowSheet` · `review/SavedViewsSheet` | Review sub-views (§10.2). |
 | `system/onboarding/StepScaffold` · `StepFooter` · `StepProgress` · `StepBack` · `StepAmountField` · `MoneyRow` · `SummaryStage` | Onboarding step chrome (§1). `StepFooter` **forks** the hero's footer styling rather than sharing it. |
 | `backup/PassphraseSheet` | Passphrase create/unlock sheet (§13.3). |
 

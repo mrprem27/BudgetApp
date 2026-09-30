@@ -47,7 +47,8 @@ export function PhoneInput({ value, onChangeText, label, accessibilityLabel, sty
         </View>
         <Input
           value={parts.local}
-          onChangeText={t => update({ ...parts, local: t })}
+          // A pasted `+91 …` moves its code into the code box instead of doubling it.
+          onChangeText={t => update(t.trim().startsWith('+') && splitPhone(t).code ? splitPhone(t) : { ...parts, local: t })}
           placeholder="98765 43210"
           keyboardType="phone-pad"
           autoCapitalize="none"

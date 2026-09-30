@@ -26,7 +26,7 @@ export async function loadReview(db: SQLite.SQLiteDatabase) {
   return {
     conflicts: conflicts.map(c => c.txnId),
     pending, meId: me?.id ?? '', personalId,
-    sharedGroups: shared.map(g => ({ id: g.id, name: g.name })),
+    sharedGroups: shared.map(g => ({ id: g.id, name: g.name, icon: g.icon, color: g.color })),
     groupMembers, expenseCats, incomeCats, transferCats,
   };
 }

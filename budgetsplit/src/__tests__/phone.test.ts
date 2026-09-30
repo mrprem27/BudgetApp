@@ -28,3 +28,13 @@ describe('joinPhone', () => {
     }
   });
 });
+
+describe('no doubled code', () => {
+  it('a pasted +91 number keeps one code', () => {
+    expect(joinPhone({ code: '91', local: '+91 98765 43210' })).toBe('+91 98765 43210');
+  });
+  it('a legacy number saved with 91 but no + reads its code', () => {
+    expect(splitPhone('919876543210')).toEqual({ code: '91', local: '9876543210' });
+    expect(joinPhone(splitPhone('919876543210'))).toBe('+91 9876543210');
+  });
+});

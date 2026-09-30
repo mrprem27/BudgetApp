@@ -1,17 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { View } from 'react-native';
-import { Feather } from '@expo/vector-icons';
 import { SheetModal } from '../../ui/SheetModal';
-import { Card } from '../../ui/Card';
-import { ListRow } from '../../ui/ListRow';
-import { Divider } from '../../ui/Divider';
-import { IconCircle } from '../../ui/IconCircle';
 import { SectionHeader } from '../../ui/SectionHeader';
 import { PrimaryButton } from '../../ui/PrimaryButton';
-import { MemberAvatar } from '../MemberAvatar';
+import { PersonPicker } from '../PersonPicker';
+import { GroupGrid, type GroupTile } from '../GroupGrid';
 import { asFeather } from '../../../constants/palette';
 import { StyleSheet } from 'react-native';
-import { colors, layout, space } from '../../tokens';
+import { colors, space } from '../../tokens';
 import type { BudgetGroup } from '../../../db/queries/groups';
 
 /** Personal plus your three most-used groups sit in the first block. */
@@ -42,12 +38,11 @@ type Props = {
 };
 
 /**
- * The destination picker behind the Add screen's `ContextPill`.
+ * The destination picker behind the Add screen's header.
  *
- * Every group is listed — a sheet scrolls, so nothing is hidden — but the ones you use most come
- * first, and the top few sit in their own block so the usual answer is one glance away. Rows are full `layout.rowMinHeight`
- * so they can actually be hit — the pills this replaces were ~32pt with no
- * hitSlop, well under AGENTS.md §6.
+ * Every group is listed as a tile (`GroupGrid`, `U-23`) — a sheet scrolls, so nothing is hidden —
+ * but the ones you use most come first, and the top few sit in their own block so the usual answer
+ * is one glance away. "Just with people" below is the shared people grid (`PersonPicker`, `U-22`).
  */
 export function DestinationSheet({
   visible, onClose, groups, selectedId, onSelect,
@@ -62,32 +57,18 @@ export function DestinationSheet({
   const unchanged = picked.length === selectedPersonIds.length && picked.every(id => selectedPersonIds.includes(id));
   const names = people.filter(p => picked.includes(p.id)).map(p => p.name.split(' ')[0]);
 
+  // Counted, not stored: `is_shared` is never updated, so it read "Shared" only on groups you
+  // RECEIVED and never on ones you shared yourself. See `MEMBER_COUNT` in queries/groups.
+  const tiles = (list: BudgetGroup[]): GroupTile[] => list.map(g => ({
+    id: g.id,
+    name: g.name,
+    icon: asFeather(g.icon, 'layers'),
+    color: g.color,
+    sub: g.is_personal === 1 ? 'Only you' : (g.member_count ?? 0) > 1 ? `With ${(g.member_count ?? 1) - 1}` : undefined,
+  }));
+  const pick = (id: string) => { onClose(); if (id !== selectedId) onSelect(id); };
   const renderGroups = (list: BudgetGroup[]) => (
-    <Card clip>
-      {list.map((g, i) => {
-        const active = g.id === selectedId;
-        return (
-          <View key={g.id}>
-            {i > 0 && <Divider indent="text" />}
-            <ListRow
-              leading={<IconCircle icon={asFeather(g.icon, 'layers')} size={layout.iconCircle} color={g.color} />}
-              title={g.name}
-              // Counted, not stored: `is_shared` is never updated, so it read
-              // "Shared" only on groups you RECEIVED and never on ones you
-              // shared yourself. See `MEMBER_COUNT` in queries/groups.
-              subtitle={g.is_personal === 1
-                ? 'Only you'
-                : (g.member_count ?? 0) > 1 ? `Shared with ${(g.member_count ?? 1) - 1}` : undefined}
-              value={active ? <Feather name="check" size={18} color={accent} /> : undefined}
-              chevron={false}
-              selected={active}
-              onPress={() => { onClose(); if (!active) onSelect(g.id); }}
-              accessibilityLabel={g.name}
-            />
-          </View>
-        );
-      })}
-    </Card>
+    <GroupGrid items={tiles(list)} selectedId={selectedId} onSelect={pick} accent={accent} />
   );
 
   return (
@@ -108,25 +89,7 @@ export function DestinationSheet({
       {people.length > 0 && onSelectPeople && (
         <>
           <SectionHeader title="Or just with people" />
-          <Card clip>
-            {people.map((p, i) => {
-              const on = picked.includes(p.id);
-              return (
-                <View key={p.id}>
-                  {i > 0 && <Divider indent="text" />}
-                  <ListRow
-                    leading={<MemberAvatar name={p.name} color={p.avatar_color} size={layout.iconCircle} />}
-                    title={p.name}
-                    value={<Feather name={on ? 'check-square' : 'square'} size={20} color={on ? accent : colors.textMuted} />}
-                    chevron={false}
-                    selected={on}
-                    onPress={() => toggle(p.id)}
-                    accessibilityLabel={`Split with ${p.name}`}
-                  />
-                </View>
-              );
-            })}
-          </Card>
+          <PersonPicker persons={people} selected={picked} onToggle={toggle} />
           {picked.length > 0 && !unchanged && (
             <View style={styles.confirm}>
               <PrimaryButton

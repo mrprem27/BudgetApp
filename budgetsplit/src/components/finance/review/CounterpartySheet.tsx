@@ -1,8 +1,7 @@
 import React from 'react';
 import { SheetModal } from '../../ui/SheetModal';
 import { EmptyState } from '../../ui/EmptyState';
-import { MemberAvatar } from '../MemberAvatar';
-import { DestOption } from './DestOption';
+import { PersonPicker } from '../PersonPicker';
 import type { Person } from '../../../db/queries/persons';
 
 type Props = {
@@ -30,7 +29,6 @@ export function CounterpartySheet({ visible, onClose, members, counterparty, onS
       visible={visible}
       onClose={onClose}
       title={inbound ? 'Who paid you?' : 'Who did you pay?'}
-      scroll={false}
     >
       {members.length === 0 ? (
         // Was a bare <Text> — AGENTS.md §2: an empty state is never just text.
@@ -40,15 +38,8 @@ export function CounterpartySheet({ visible, onClose, members, counterparty, onS
           body="This group has no other members, so there's nobody to settle with. Add someone to the group first, or switch this transaction to Personal."
         />
       ) : (
-        members.map(m => (
-          <DestOption
-            key={m.id}
-            label={m.name}
-            leading={<MemberAvatar name={m.name} color={m.avatar_color} size={28} imageUri={m.image_uri} />}
-            active={counterparty === m.id}
-            onPress={() => onSelect(m.id)}
-          />
-        ))
+        // The same people grid as every people chooser (`PersonPicker`, `U-22`), one pick.
+        <PersonPicker persons={members} selected={counterparty ? [counterparty] : []} onToggle={onSelect} multi={false} />
       )}
     </SheetModal>
   );
