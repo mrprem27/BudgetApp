@@ -10,6 +10,7 @@ import {
   restateAssetBalance, moveMoney, setAssetOrder,
   AssetError, type Asset, type AssetKind, type MoveEndpoint,
 } from '../db/queries/assets';
+import { getCashPosition } from '../db/queries/savings';
 
 /**
  * Data + write handlers for the asset register.
@@ -29,8 +30,9 @@ export function useAssets() {
   const [busy, setBusy] = useState(false);
 
   const { data, loading, error, refreshing, onRefresh, reload } = useScreenData(async (database) => {
-    const [live, archived] = await Promise.all([getAssets(database), getArchivedAssets(database)]);
-    return { live, archived, total: live.reduce((s, a) => s + a.balance, 0) };
+    const [live, archived, cash] = await Promise.all([getAssets(database), getArchivedAssets(database), getCashPosition(database)]);
+    // What bank / cash / wallet hold today, so Move money can say it beside each (`U-57`).
+    return { live, archived, total: live.reduce((s, a) => s + a.balance, 0), bucketBalances: cash.byBucket };
   }, []);
 
   /** One place that reports a refusal, so no path can fail silently. */
@@ -58,6 +60,7 @@ export function useAssets() {
     assets: data?.live ?? [],
     archived: data?.archived ?? [],
     total: data?.total ?? 0,
+    bucketBalances: data?.bucketBalances,
     loading, error, refreshing, onRefresh, reload, busy,
 
     create: (input: { name: string; kind?: AssetKind; icon?: string | null; color?: string | null; balance?: number }) =>

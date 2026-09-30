@@ -30,3 +30,13 @@ export const ASSET_KIND_ICON: Record<AssetKind, FeatherName> = {
   vehicle: 'truck',
   other: 'package',
 };
+
+/** What to call one, by kind — the Name field's example, so it asks the question in your terms. */
+export const ASSET_KIND_EXAMPLE: Record<AssetKind, string> = {
+  investment: 'Mutual funds, stocks, NPS…',
+  gold: 'Gold coins, SGB, jewellery…',
+  property: 'The flat, a plot…',
+  deposit: 'HDFC FD, RD, PPF…',
+  vehicle: 'The car, the scooter…',
+  other: 'Anything else worth money',
+};

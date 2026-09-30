@@ -155,6 +155,7 @@ export default function AssetDetailScreen() {
         visible={moving}
         onClose={() => setMoving(false)}
         assets={reg.assets}
+        bucketBalances={reg.bucketBalances}
         // Money in is the common case; ⇅ flips it to taking money out.
         from={{ kind: 'bucket', bucket: 'bank' }}
         to={{ kind: 'asset', id }}

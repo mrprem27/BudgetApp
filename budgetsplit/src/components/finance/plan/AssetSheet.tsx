@@ -10,7 +10,7 @@ import { Input } from '../../ui/Input';
 import { Chip } from '../../ui/Chip';
 import { PrimaryButton } from '../../ui/PrimaryButton';
 import { parseToPaise, paiseToInput } from '../../../lib/money';
-import { ASSET_KIND, ASSET_KIND_LABEL, ASSET_KIND_ICON } from '../../../constants/assets';
+import { ASSET_KIND, ASSET_KIND_LABEL, ASSET_KIND_ICON, ASSET_KIND_EXAMPLE } from '../../../constants/assets';
 import type { Asset, AssetKind } from '../../../db/queries/assets';
 
 /**
@@ -90,18 +90,12 @@ export function AssetSheet({
   return (
     <SheetModal visible={!!state} onClose={onClose} title={TITLE[mode](asset)}>
       <>
+        {/* Kind, then name, then worth (`U-57`): what it is, what you call it, what it is worth.
+            Name used to come first with one example for every kind; picking the kind first
+            lets the Name field ask in its terms ("HDFC FD, RD, PPF…"). */}
         {namingMode && (
           <>
-            <Text style={styles.label}>Name</Text>
-            <Input
-              value={name}
-              onChangeText={setName}
-              placeholder="Gold, the flat, HDFC FD…"
-              autoCapitalize="words"
-              style={styles.gap}
-            />
-
-            <InfoLabel label="Kind" labelStyle={styles.label} info="Only changes the icon and the label, every asset counts the same way." />
+            <InfoLabel label="What is it?" labelStyle={styles.labelFirst} info="Only changes the icon and the label, every asset counts the same way." />
             <View style={styles.chips}>
               {ASSET_KIND.map(k => (
                 <Chip
@@ -113,15 +107,28 @@ export function AssetSheet({
                 />
               ))}
             </View>
+
+            <Text style={styles.label}>Name</Text>
+            <Input
+              value={name}
+              onChangeText={setName}
+              placeholder={ASSET_KIND_EXAMPLE[kind]}
+              autoCapitalize="words"
+              icon={ASSET_KIND_ICON[kind]}
+            />
           </>
         )}
 
         {mode === 'create' && (
           <>
             <Card clip style={styles.amountCard}>
-              <AmountRow icon="tag" label="Worth today" value={amount} onChangeText={setAmount} />
+              <AmountRow icon={ASSET_KIND_ICON[kind]} label="Worth today" value={amount} onChangeText={setAmount} />
             </Card>
-            <Text style={styles.hint}>Records what you already own, no cash moves. Use Move money for new money in.</Text>
+            <InfoLabel
+              label="Already yours, no cash moves"
+              labelStyle={styles.hint}
+              info="This records something you already own at what it is worth today. To put new money into it, use Move money after adding it."
+            />
           </>
         )}
 
@@ -130,7 +137,11 @@ export function AssetSheet({
             <Card clip style={styles.amountCard}>
               <AmountRow icon="tag" label="Worth now" value={amount} onChangeText={setAmount} autoFocus />
             </Card>
-            <Text style={styles.hint}>A price change: net worth moves, no cash does, nothing is added to your ledger.</Text>
+            <InfoLabel
+              label="A price change, no cash moves"
+              labelStyle={styles.hint}
+              info="Net worth moves to the new value; no cash does, and nothing is added to your ledger."
+            />
           </>
         )}
 
@@ -172,9 +183,9 @@ function QuietAction({ icon, label, hint, danger, onPress }: {
 
 const styles = StyleSheet.create({
   label: { ...type.label, color: colors.textSecondary, marginBottom: space.xs, marginTop: space.md },
-  gap: { marginBottom: space.xs },
-  hint: { ...type.caption, color: colors.textMuted, lineHeight: 18 },
-  amountCard: { marginTop: space.md, marginBottom: space.xs },
+  labelFirst: { ...type.label, color: colors.textSecondary, marginBottom: space.xs },
+  hint: { ...type.caption, color: colors.textMuted },
+  amountCard: { marginTop: space.lg, marginBottom: space.sm },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginBottom: space.sm },
   submit: { marginTop: space.lg },
   danger: { marginTop: space.md, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: space.xs },

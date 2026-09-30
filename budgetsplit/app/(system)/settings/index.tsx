@@ -37,6 +37,8 @@ import { useFeatureFlags } from '../../../src/components/system/FeatureFlagsProv
 import type { BudgetCadence } from '../../../src/db/queries/categoryBudgets';
 import { asBudgetCadence, asPayMethod, PayMethod, PAY_METHOD_LABEL } from '../../../src/constants/enums';
 import { useScreenData } from '../../../src/hooks/useScreenData';
+import { loadBadges } from '../../../src/lib/badgesData';
+import { ProfileBadges } from '../../../src/components/finance/settings/ProfileBadges';
 import { useServerSession } from '../../../src/hooks/useServerSession';
 import { ErrorState } from '../../../src/components/ui/ErrorState';
 import { Card } from '../../../src/components/ui/Card';
@@ -99,6 +101,8 @@ export default function SettingsScreen() {
   // The self-heal write is idempotent (only fires on an empty catalog), so it's
   // safe inside a loader that re-runs on focus.
   const { data, error: loadError, reload } = useScreenData(loadSettingsTab, []);
+  // What the engines have concluded about you, as badges under your name (`U-59`).
+  const { data: badges } = useScreenData((database) => loadBadges(database), []);
   const me = data?.me ?? null;
   const contactCount = data?.contactCount ?? 0;
   const categoryCount = data?.categoryCount ?? 0;
@@ -295,6 +299,8 @@ export default function SettingsScreen() {
           <Feather name="edit-2" size={16} color={colors.textMuted} />
         </Card>
       </TouchableOpacity>
+
+      <ProfileBadges badges={badges ?? []} />
 
       {/* ACCOUNT — only in a build that has a server to talk to
           (EXPO_PUBLIC_API_URL). Signing in keeps a copy of everything on the

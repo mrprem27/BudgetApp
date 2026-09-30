@@ -113,6 +113,7 @@ export function AssetsSection({ assets: a }: { assets: ReturnType<typeof useAsse
         visible={!!move}
         onClose={() => setMove(null)}
         assets={a.assets}
+        bucketBalances={a.bucketBalances}
         from={move?.from ?? BANK}
         to={move?.to ?? BANK}
         busy={a.busy}

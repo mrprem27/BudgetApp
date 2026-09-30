@@ -12,6 +12,8 @@ import { getAllRecurringRules, getSkipsMap } from '../db/queries/recurring';
 import { getMyGlobalBudgetSummary } from './budget';
 import { monthEndFromEngine, projectedAtDay, FORECAST_MIN_DAYS } from './forecast';
 import { getSafeToSpendV2 } from '../db/queries/spendPower';
+import { getFinanceSnapshot } from '../db/queries/engineSnapshot';
+import { explain } from './engine/explain';
 
 /**
  * Data assembly for the Insights screen: month-vs-last-month category shifts,
@@ -87,7 +89,27 @@ export async function loadInsightsData(
     const recurSkips = await getSkipsMap(db, recurRules.map(r => r.id));
     const committedRemaining = expandUpcoming(recurRules, meId, now.getTime(), monthEndMs, recurSkips)
       .reduce((s, o) => s + o.amount, 0);
-    const fc = monthEndFromEngine(monthSpend, dayOfMonth, daysInMonth, (await getSafeToSpendV2(db, now.getTime())).dailyRate, committedRemaining);
+    const [sts, snapshot] = await Promise.all([getSafeToSpendV2(db, now.getTime()), getFinanceSnapshot(db, now.getTime())]);
+    const fc = monthEndFromEngine(monthSpend, dayOfMonth, daysInMonth, sts.dailyRate, committedRemaining);
+    /*
+     * The money engine's own read of what is coming (`U-58`): the lowest your cash gets before
+     * the next payday, what is safe to spend on top of every known bill, and how sure it is.
+     * Home shows one figure from this; Insights is where its reasoning belongs. `explain`
+     * decides whether there is enough history to say anything at all.
+     */
+    const why = explain(snapshot);
+    const outlook = {
+      // The lowest your cash gets before payday IS the safe-to-spend figure (`safeToSpendV2`).
+      safeToSpend: sts.amount,
+      upcomingBills: -sts.upcomingBills,
+      untilMs: sts.untilMs,
+      noDip: sts.noDip,
+      dailyRate: sts.dailyRate,
+      warning: sts.warning,
+      confidence: why.confidence,
+      missing: why.missing ?? null,
+      suppressed: why.suppressVerdict,
+    };
     const projected = Math.round(fc.projected);
 
     // Month-end forecast graph (moved here from Reports): a solid "spent so far"
@@ -198,5 +220,5 @@ export async function loadInsightsData(
       .sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct))
       .slice(0, 3);
 
-    return { monthSpend, budget, projected, txnCount, shifts, whatIf, recommendations, drivers, savings, multiGroup: grps.length > 1, forecastActual, forecastProjected, projectedTotal };
+    return { monthSpend, budget, projected, txnCount, shifts, whatIf, recommendations, drivers, savings, multiGroup: grps.length > 1, forecastActual, forecastProjected, projectedTotal, outlook };
 }

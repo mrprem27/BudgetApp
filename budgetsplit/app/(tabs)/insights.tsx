@@ -33,6 +33,7 @@ import type { Insight } from '../../src/lib/savingsInsights';
 import { formatCompact, formatCompactMajor, formatAxisShort } from '../../src/lib/money';
 import { loadInsightsData } from '../../src/lib/insightsData';
 import { budgetHealth, utilLabel } from '../../src/lib/budget';
+import { shortDate } from '../../src/lib/dateFormat';
 import { plotWidth, axisSpacing } from '../../src/lib/chartAxis';
 
 function insightTint(tone: Insight['tone']): string {
@@ -92,6 +93,7 @@ export default function InsightsScreen() {
   const savings = data?.savings ?? [];
   const multiGroup = data?.multiGroup ?? false;
   const notes = (data?.recommendations ?? []).filter(r => !isDuplicateRec(r.id));
+  const outlook = data?.outlook ?? null;
 
   /**
    * Measured, not guessed. `spacing` was `Math.max(8, 300 / len)` — 300 being a
@@ -170,7 +172,7 @@ export default function InsightsScreen() {
               * by health. Three legend labels sat `space-between` above a track they
               * did not align with. `Card` + `BudgetBar` replace all of it.
               */}
-            <Card padded>
+            <Card padded style={styles.headline}>
               <View style={styles.headRow}>
                 <Text style={styles.eyebrow}>{monthLabel(today)} · {dayOfMonth} days in</Text>
                 <Badge
@@ -217,10 +219,89 @@ export default function InsightsScreen() {
                   </View>
                 </>
               )}
+
+              {/* One note for the whole screen — every projection below shares the sample. It
+                  sat centred between two cards, belonging to neither; it qualifies the figures in
+                  this card first, so it closes it, left-aligned with the text above (`U-58`). */}
+              {!loading && (
+                <SampleNote
+                  txnCount={txnCount}
+                  lowSampleHint="Projections below will sharpen as you log more."
+                  style={styles.sampleNote}
+                />
+              )}
             </Card>
 
-            {/* One note for the whole screen — every projection below shares the sample. */}
-            {!loading && <SampleNote txnCount={txnCount} lowSampleHint="Projections below will sharpen as you log more." />}
+            {/*
+              * CASH OUTLOOK — the money engine's read of what is coming (`U-58`).
+              *
+              * The same walk Home's Safe-to-Spend comes from (`getSafeToSpendV2`): today's cash,
+              * every known bill and income up to payday, and the everyday rate for the days in
+              * between. The lowest point on that walk is what is safe to spend. Home shows the
+              * one figure; this is where it explains itself — and, via `explain`, says when it
+              * does not have enough history to say anything.
+              */}
+            {outlook && (
+              <SectionCard
+                title="Cash outlook"
+                subtitle={outlook.suppressed
+                  ? 'Learning your spending'
+                  : `${formatCompact(outlook.safeToSpend)} safe to spend`}
+                icon="compass"
+                iconColor={outlook.suppressed ? colors.textSecondary : outlook.safeToSpend >= 0 ? colors.income : colors.expense}
+                expanded={open.has('outlook')}
+                onToggle={() => toggle('outlook')}
+              >
+                {outlook.suppressed ? (
+                  <Text style={[styles.pace, styles.outlookPad]}>
+                    Needs {outlook.missing ?? 'a little more history'} before it can project your cash.
+                  </Text>
+                ) : (
+                  <>
+                    <Divider indent="text" />
+                    <ListRow
+                      icon="shield"
+                      iconColor={outlook.safeToSpend >= 0 ? colors.income : colors.expense}
+                      title="Safe to spend"
+                      subtitle={outlook.noDip
+                        ? `Through ${shortDate(new Date(outlook.untilMs))}, every known bill paid`
+                        : `Your lowest point ahead, on ${shortDate(new Date(outlook.untilMs))}`}
+                      value={<Text style={[styles.outlookAmt, { color: outlook.safeToSpend >= 0 ? colors.income : colors.expense }]}>{formatCompact(outlook.safeToSpend)}</Text>}
+                      chevron={false}
+                    />
+                    {outlook.upcomingBills > 0 && (
+                      <>
+                        <Divider indent="text" />
+                        <ListRow icon="calendar" title="Bills before then" value={formatCompact(outlook.upcomingBills)} chevron={false}
+                          onPress={() => router.push('/upcoming')} />
+                      </>
+                    )}
+                    {outlook.dailyRate != null && (
+                      <>
+                        <Divider indent="text" />
+                        <ListRow icon="coffee" title="Everyday spending" value={`${formatCompact(outlook.dailyRate)}/day`} chevron={false} />
+                      </>
+                    )}
+                    {outlook.warning && (
+                      <>
+                        <Divider indent="text" />
+                        <NoteRow
+                          icon="alert-triangle"
+                          tint={colors.healthAmber}
+                          body={<Text style={[styles.noteText, { color: colors.healthAmber }]}>
+                            Runs low on {shortDate(new Date(outlook.warning.date))}, when {outlook.warning.label} ({formatCompact(outlook.warning.amountPaise)}) is due.
+                          </Text>}
+                        />
+                      </>
+                    )}
+                    <Text style={[styles.pace, styles.outlookPad]}>
+                      {outlook.confidence === 'high' ? 'High confidence' : outlook.confidence === 'medium' ? 'Medium confidence' : 'Low confidence'}
+                      {outlook.missing ? ` · sharper with ${outlook.missing}` : ''}
+                    </Text>
+                  </>
+                )}
+              </SectionCard>
+            )}
 
             {/*
               * NEEDS ATTENTION — the merge.
@@ -514,6 +595,11 @@ const styles = StyleSheet.create({
   // No `gap`: `SectionCard` carries its own `marginBottom` (§3), and stacking the
   // two is what put 32px between every card on the budget editor (§12).
   scroll: { padding: layout.screenPaddingH },
+  // The headline card spaces itself from the sections below, as every SectionCard does.
+  headline: { marginBottom: space.md },
+  sampleNote: { textAlign: 'left', marginTop: space.md, marginBottom: 0 },
+  outlookPad: { paddingHorizontal: space.md, paddingBottom: space.md, marginTop: space.sm },
+  outlookAmt: { ...type.amountSM },
 
   headRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: space.xs },
   eyebrow: { ...type.sectionLabel, color: colors.textMuted },

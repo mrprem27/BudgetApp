@@ -335,6 +335,7 @@ export default function SavingsScreen() {
         visible={showMoveInvest}
         onClose={() => setShowMoveInvest(false)}
         assets={assets}
+        bucketBalances={byBucket}
         from={{ kind: 'bucket', bucket: 'bank' }}
         to={assets[0] ? { kind: 'asset', id: assets[0].id } : { kind: 'bucket', bucket: 'cash' }}
         onMove={handleMoveMoney}

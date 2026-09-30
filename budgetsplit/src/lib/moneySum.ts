@@ -2,7 +2,7 @@
  * How your money adds up, as lines you could check by hand — one structure for Money's card
  * and for the editor behind it, so the two can never show different arithmetic:
  *
- *     Bank + Cash + Wallet (+ Not recorded where) − In goals = Spendable
+ *     Bank + Cash + Wallet (+ Paid from not set) − In goals = Spendable
  *     + Invested − Card owed = Net worth
  *
  * "In goals" is money set aside for goals: it is held back from Spendable, so without its own

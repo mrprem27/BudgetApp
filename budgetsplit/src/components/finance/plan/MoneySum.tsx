@@ -8,7 +8,7 @@ import { moneySumLines, type MoneyPlace, type MoneySumLine } from '../../../lib/
 export const MONEY_TONE = { bank: colors.accent, cash: colors.income, wallet: colors.settle, assets: colors.healthAmber } as const;
 
 const LABEL: Record<MoneySumLine['key'], string> = {
-  bank: 'Bank', cash: 'Cash', wallet: 'Wallet', unattributed: 'Not recorded where', goals: 'In goals',
+  bank: 'Bank', cash: 'Cash', wallet: 'Wallet', unattributed: 'Paid from not set', goals: 'In goals',
   spendable: 'Spendable', invested: 'Invested', card: 'Card owed', networth: 'Net worth',
 };
 
@@ -48,6 +48,8 @@ export function MoneySum({ places, unattributed, inGoals, investments, creditUse
             hint={l.key === 'invested' && assetCount ? `${assetCount} ${assetCount === 1 ? 'asset' : 'assets'}`
               : l.key === 'card' && creditLeft ? `${formatCompact(creditLeft)} left to borrow`
               : l.key === 'goals' ? 'Set aside, not spendable'
+              // Entries with no Paid from: counted in the total, never guessed into a place (`U-57`).
+              : l.key === 'unattributed' ? 'Entries with no Paid from'
               : undefined}
           />
         );
