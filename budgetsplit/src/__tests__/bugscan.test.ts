@@ -1070,7 +1070,10 @@ describe('P2-11 · a person\'s trust and write-off say so when they fail, and te
 
 describe('P2-12 · a filtered Friends list draws no divider under its last row', () => {
   it('counts the rows it draws, not every contact', () => {
-    expect(fs.readFileSync('app/(people)/friends.tsx', 'utf8')).toMatch(/i < filtered\.length - 1 && styles\.rowBorder/);
+    const src = fs.readFileSync('app/(people)/friends.tsx', 'utf8');
+    expect(src).toMatch(/last=\{i === open\.length - 1\}/);
+    expect(src).toMatch(/last=\{i === square\.length - 1\}/);
+    expect(src).toMatch(/!last && styles\.rowBorder/);
   });
 });
 

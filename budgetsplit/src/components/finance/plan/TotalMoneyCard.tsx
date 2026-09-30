@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius, shadow } from '../../tokens';
 import { alpha } from '../../../theme';
@@ -8,6 +8,7 @@ import { formatAgoCompact } from '../../../lib/time';
 import { AmountText } from '../../ui/AmountText';
 import { Badge } from '../../ui/Badge';
 import { PressableScale } from '../../ui/PressableScale';
+import { SumLine } from '../../ui/SumLine';
 import type { TotalMoney } from '../../../lib/cash';
 
 const WEEK = 7 * 24 * 60 * 60 * 1000;
@@ -91,7 +92,7 @@ export function TotalMoneyCard({ money, byBucket, unattributed, updatedAt, onEdi
         <SumLine op="+" dot={TONE.assets} label="Invested" value={money.investments} onPress={onManageAssets}
           hint={assets?.length ? `${assets.length} ${assets.length === 1 ? 'asset' : 'assets'}` : undefined} />
         {money.creditUsed > 0 && (
-          <SumLine op="−" dot={colors.expense} label="Card owed" value={money.creditUsed} owed
+          <SumLine op="−" dot={colors.expense} label="Card owed" value={money.creditUsed} color={colors.expense}
             hint={money.creditLimit > 0 ? `${formatCompact(money.creditAvailable)} left to borrow` : undefined} />
         )}
         <SumLine op="=" label="Net worth" value={money.netWorth} total />
@@ -105,32 +106,6 @@ export function TotalMoneyCard({ money, byBucket, unattributed, updatedAt, onEdi
       )}
     </View>
   );
-}
-
-/**
- * One line of the sum. The operator column is fixed-width so the numbers line up; a total line
- * (`=`) gets a rule above it and the primary weight — the arithmetic you learnt at school.
- */
-function SumLine({ op, dot, label, value, total, owed, hint, onPress }: {
-  op: '' | '+' | '−' | '='; dot?: string; label: string; value: number;
-  total?: boolean; owed?: boolean; hint?: string; onPress?: () => void;
-}) {
-  const shown = value < 0 ? `−${formatCompact(-value)}` : formatCompact(value);
-  const body = (
-    <View style={[styles.line, total && styles.totalLine]}>
-      <Text style={[styles.op, total && styles.opTotal]}>{op}</Text>
-      {!total && <View style={[styles.dot, { backgroundColor: dot ?? 'transparent' }]} />}
-      <View style={styles.lineText}>
-        <Text style={[styles.lineLabel, total && styles.totalLabel]} numberOfLines={1}>{label}</Text>
-        {hint ? <Text style={styles.hint} numberOfLines={1}>{hint}</Text> : null}
-      </View>
-      <Text style={[styles.lineValue, total && styles.totalValue, (owed || value < 0) && { color: colors.expense }]}>{shown}</Text>
-      {onPress ? <Feather name="chevron-right" size={14} color={colors.textMuted} /> : null}
-    </View>
-  );
-  return onPress
-    ? <TouchableOpacity onPress={onPress} accessibilityRole="button" accessibilityLabel={`${label}, ${shown}`}>{body}</TouchableOpacity>
-    : body;
 }
 
 function Action({ icon, label, onPress }: { icon: keyof typeof Feather.glyphMap; label: string; onPress: () => void }) {
@@ -153,17 +128,6 @@ const styles = StyleSheet.create({
   warn: { ...type.caption, color: colors.expense, marginTop: space.xs },
   bar: { flexDirection: 'row', height: 8, borderRadius: 4, overflow: 'hidden', gap: 2 },
   sum: { gap: 6 },
-  line: { flexDirection: 'row', alignItems: 'center', gap: space.sm, minHeight: 24 },
-  totalLine: { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: space.sm, marginTop: 2 },
-  op: { width: 12, fontFamily: 'SpaceMono_400Regular', fontSize: 14, color: colors.textMuted, textAlign: 'center' },
-  opTotal: { color: colors.textPrimary },
-  dot: { width: 8, height: 8, borderRadius: 4 },
-  lineText: { flex: 1 },
-  lineLabel: { ...type.body, color: colors.textSecondary },
-  totalLabel: { color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
-  hint: { ...type.caption, color: colors.textMuted },
-  lineValue: { fontFamily: 'SpaceMono_400Regular', fontSize: 13, color: colors.textSecondary },
-  totalValue: { fontSize: 15, color: colors.textPrimary },
   actions: { flexDirection: 'row', gap: space.sm },
   actionCell: { flex: 1 },
   action: {

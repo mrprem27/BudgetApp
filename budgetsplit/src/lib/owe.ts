@@ -100,3 +100,16 @@ export function headerBalance(myNet: number): { direction: 'owe' | 'owed' | 'set
     amount: ov.amount,
   };
 }
+
+/**
+ * A ledger of people (`U-13`): open balances first — who owes you, largest first, then whom you
+ * owe, largest first — and everyone square after, in the order given.
+ */
+export function ledgerOrder<T>(people: T[], netOf: (p: T) => number): { open: T[]; square: T[] } {
+  const open = people.filter(p => netOf(p) !== 0).sort((a, b) => {
+    const x = netOf(a), y = netOf(b);
+    if ((x > 0) !== (y > 0)) return x > 0 ? -1 : 1;
+    return Math.abs(y) - Math.abs(x);
+  });
+  return { open, square: people.filter(p => netOf(p) === 0) };
+}

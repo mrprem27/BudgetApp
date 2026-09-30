@@ -21,11 +21,15 @@ describe('waNumber', () => {
     expect(waNumber('+91-98765-43210')).toBe('919876543210');
   });
 
-  it('refuses a number with no country code rather than guessing one', () => {
-    // Silently prepending 91 would send a stranger a message about money. Ten
-    // digits is exactly the common Indian case, so this is the likely path, not
-    // an edge case.
-    expect(waNumber('9876543210')).toBeNull();
+  it('reads a ten-digit Indian mobile as +91, so the chat opens directly', () => {
+    expect(waNumber('9876543210')).toBe('919876543210');
+    expect(waNumber('98765 43210')).toBe('919876543210');
+    expect(waNumber('09876543210')).toBe('919876543210');
+  });
+
+  it('refuses a short number that is not an Indian mobile rather than guessing', () => {
+    expect(waNumber('5876543210')).toBeNull();
+    expect(waNumber('12345')).toBeNull();
     expect(waNumber('')).toBeNull();
   });
 });
@@ -70,7 +74,7 @@ describe('whatsappUrl', () => {
   it('returns null when the number is unusable, so the caller can fall back', () => {
     // Not an error — a share sheet still works, and losing the reminder over a
     // missing country code would be worse than letting the user pick the app.
-    expect(whatsappUrl('9876543210', 'hi')).toBeNull();
+    expect(whatsappUrl('12345', 'hi')).toBeNull();
   });
 
   /** It is a message, never a collect request — NPCI banned P2P collect outright. */

@@ -4,7 +4,7 @@ import {
   type Person,
 } from '../db/queries/persons';
 import { recordSentRequest, pendingInvitesByPerson } from '../db/queries/friendRequests';
-import { getFriendBalances, type FriendBalance } from '../db/queries/balances';
+import { getFriendBalances, summarizeExposure, type FriendBalance } from '../db/queries/balances';
 import { sendFriendRequest, listFriendRequests, serverConfigured, getStoredSession } from './serverApi';
 import { pickAndSaveAvatar } from './avatar';
 import { deleteAttachment } from './attachment';
@@ -32,7 +32,7 @@ export async function loadFriends(db: SQLite.SQLiteDatabase, meId: string | unde
   ]);
   const balances: Record<string, FriendBalance> = {};
   for (const b of bals) balances[b.personId] = b;
-  return { people: all.filter(p => !p.is_me), balances, invited };
+  return { people: all.filter(p => !p.is_me), balances, invited, exposure: summarizeExposure(bals) };
 }
 
 /** A new friend, with their number when one was typed — captured now, not via a long-press nobody discovers. */

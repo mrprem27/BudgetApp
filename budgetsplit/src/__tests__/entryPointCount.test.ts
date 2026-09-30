@@ -9,7 +9,7 @@ import { callSitesFor, doc } from './helpers/systemDoc';
  * already forced three real decompositions. Lower it when you consolidate an entry
  * point; never raise it.
  */
-const ADD_QUICK_CEILING = 24;
+const ADD_QUICK_CEILING = 23;
 
 describe('/add/quick entry points', () => {
   it(`stay at or under ${ADD_QUICK_CEILING}`, () => {

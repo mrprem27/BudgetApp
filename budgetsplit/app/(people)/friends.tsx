@@ -3,28 +3,23 @@ import { View, Text, StyleSheet, TouchableOpacity, Alert, TextInput } from 'reac
 import { useSQLiteContext } from 'expo-sqlite';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { colors, type, space, radius, layout, shadow, alpha } from '../../src/theme';
+import { colors, type, space, radius, layout, shadow } from '../../src/theme';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { HeaderIconButton } from '../../src/components/ui/HeaderIconButton';
 import { ErrorState } from '../../src/components/ui/ErrorState';
 import { KeyboardForm } from '../../src/components/ui/KeyboardForm';
 import { AppRefreshControl } from '../../src/components/ui/AppRefreshControl';
 import { EmptyState } from '../../src/components/ui/EmptyState';
-import { SheetModal } from '../../src/components/ui/SheetModal';
-import { Input } from '../../src/components/ui/Input';
-import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
+import { SumLine } from '../../src/components/ui/SumLine';
+import { AmountText } from '../../src/components/ui/AmountText';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
-import type { FriendBalance } from '../../src/db/queries/balances';
 import { loadFriends, deletePerson, replacePersonPhoto, addFriend, saveFriendDetails, inviteFriendByEmail } from '../../src/lib/personWrites';
 import { AVATAR_COLORS } from '../../src/constants/categories';
-import { formatCompact } from '../../src/lib/money';
-import { oweView } from '../../src/lib/owe';
+import { oweView, ledgerOrder } from '../../src/lib/owe';
 import { refusalReason } from '../../src/lib/personCopy';
 import { haptic } from '../../src/lib/haptics';
 import type { Person } from '../../src/db/queries/persons';
 import { useScreenData } from '../../src/hooks/useScreenData';
-import { useReminder } from '../../src/hooks/useReminder';
-import { canRemind } from '../../src/lib/whatsappReminder';
 import { useStore } from '../../src/store';
 import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
 import { PersonNameSheet } from '../../src/components/finance/PersonNameSheet';
@@ -32,7 +27,6 @@ import { PersonNameSheet } from '../../src/components/finance/PersonNameSheet';
 export default function FriendsScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
-  const remind = useReminder();
   const me = useStore((s) => s.me);
   const { refresh } = useDataRefresh();
   const [renamePerson, setRenamePerson] = useState<Person | null>(null);
@@ -49,9 +43,24 @@ export default function FriendsScreen() {
   const people = data?.people ?? [];
   const balances = data?.balances ?? {};
   const invited = data?.invited ?? new Map<string, string>();
+  const exposure = data?.exposure;
 
   const q = query.trim().toLowerCase();
   const filtered = q ? people.filter(p => p.name.toLowerCase().includes(q)) : people;
+  const { open, square } = ledgerOrder(filtered, p => balances[p.id]?.net ?? 0);
+
+  /**
+   * Groups and connection, one quiet line. Two connection states only: waiting, or
+   * connected. It must NEVER say anything derived from whether that address has an
+   * account, or the enumeration oracle is back in the client.
+   */
+  function captionFor(p: Person, groupCount: number): string {
+    const parts: string[] = [];
+    if (groupCount > 0) parts.push(`${groupCount} ${groupCount === 1 ? 'group' : 'groups'}`);
+    if (p.remote_uid) parts.push('Connected');
+    else if (invited.has(p.id)) parts.push('Invited, waiting');
+    return parts.join(' · ');
+  }
 
   async function changePhoto(p: Person) {
     if (await replacePersonPhoto(db, p)) {
@@ -197,136 +206,91 @@ export default function FriendsScreen() {
           contentContainerStyle={styles.list}
           refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         >
-          <Text style={styles.intro}>People you split with. No account needed, names only.</Text>
-
-          {/* YOU */}
-          {me && (
-            <>
-              <Text style={styles.sectionLabel}>YOU</Text>
-              <View style={[styles.card, styles.youCard]}>
-                <MemberAvatar name={me.name} color={me.avatar_color} size={46} imageUri={me.image_uri} onPress={() => changePhoto(me)} />
-                <TouchableOpacity style={{ flex: 1 }} onPress={() => openRename(me)} accessibilityRole="button" accessibilityLabel="Rename yourself">
-                  <Text style={styles.name}>{me.name}<Text style={styles.youTag}> (you)</Text></Text>
-                  {me.email ? <Text style={styles.subMuted}>{me.email}</Text> : <Text style={styles.subMuted}>Tap to rename</Text>}
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => openRename(me)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Edit your name">
-                  <Feather name="edit-2" size={15} color={colors.textMuted} />
-                </TouchableOpacity>
-              </View>
-            </>
+          {/*
+            * A ledger, not a stack of button rows (`U-13`): the sum first, then who is open,
+            * largest first, then everyone square. Settle up and Remind live on the person's
+            * own screen, one tap away, so no row carries buttons competing with its balance.
+            */}
+          {exposure && (exposure.owed > 0 || exposure.owe > 0) && (
+            <View style={[styles.card, styles.sumCard]}>
+              <SumLine op="" label="Owed to you" value={exposure.owed} color={colors.income}
+                hint={peopleCount(exposure.owedPeople)} />
+              <SumLine op="−" label="You owe" value={exposure.owe} color={exposure.owe > 0 ? colors.expense : undefined}
+                hint={peopleCount(exposure.owePeople)} />
+              <SumLine op="=" label="Net" value={exposure.net} total />
+            </View>
           )}
 
-          {/* CONTACTS */}
-          {people.length > 0 && (
-            <>
-              <Text style={styles.sectionLabel}>CONTACTS · {people.length}</Text>
-              {people.length > 4 && (
-                <View style={styles.searchRow}>
-                  <Feather name="search" size={16} color={colors.textMuted} />
-                  <TextInput
-                    style={styles.searchInput}
-                    value={query}
-                    onChangeText={setQuery}
-                    placeholder="Search people…"
-                    placeholderTextColor={colors.textMuted}
-                    autoCorrect={false}
-                    accessibilityLabel="Search people"
-                  />
-                  {query.length > 0 && (
-                    <TouchableOpacity onPress={() => setQuery('')} hitSlop={8} accessibilityRole="button" accessibilityLabel="Clear search">
-                      <Feather name="x" size={16} color={colors.textMuted} />
-                    </TouchableOpacity>
-                  )}
-                </View>
+          {people.length > 4 && (
+            <View style={styles.searchRow}>
+              <Feather name="search" size={16} color={colors.textMuted} />
+              <TextInput
+                style={styles.searchInput}
+                value={query}
+                onChangeText={setQuery}
+                placeholder="Search people…"
+                placeholderTextColor={colors.textMuted}
+                autoCorrect={false}
+                accessibilityLabel="Search people"
+              />
+              {query.length > 0 && (
+                <TouchableOpacity onPress={() => setQuery('')} hitSlop={8} accessibilityRole="button" accessibilityLabel="Clear search">
+                  <Feather name="x" size={16} color={colors.textMuted} />
+                </TouchableOpacity>
               )}
+            </View>
+          )}
+
+          {/*
+            * One line, not an empty state. §2 is about EMPTY DATA; this is a filtered
+            * view of data that exists, and the filter is one field away.
+            */}
+          {people.length > 0 && filtered.length === 0 && !loading && (
+            <View style={styles.noMatchRow}>
+              <Text style={styles.noMatch}>No people match “{query}”.</Text>
+              <TouchableOpacity onPress={() => setQuery('')} hitSlop={10} accessibilityRole="button">
+                <Text style={styles.noMatchClear}>Clear</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {open.length > 0 && (
+            <View style={styles.card}>
+              {open.map((p, i) => {
+                const bal = balances[p.id];
+                const ov = oweView(bal?.net ?? 0);
+                return (
+                  <FriendRow key={p.id} person={p} last={i === open.length - 1}
+                    caption={captionFor(p, bal?.groupCount ?? 0)}
+                    onOpen={() => router.push(`/person/${p.id}`)} onRename={() => openRename(p)} onPhoto={() => changePhoto(p)}
+                    right={
+                      <View style={styles.amountCol}>
+                        <AmountText paise={ov.amount} size="md" compact forceColor={ov.color} />
+                        <Text style={styles.amountLabel}>{ov.label}</Text>
+                      </View>
+                    }
+                  />
+                );
+              })}
+            </View>
+          )}
+
+          {square.length > 0 && (
+            <>
+              <Text style={styles.sectionLabel}>ALL SQUARE · {square.length}</Text>
               <View style={styles.card}>
-                {/*
-                  * One line, not an empty state. §2 is about EMPTY DATA — a
-                  * 64pt icon circle, a title, a body and a PrimaryButton, ~200pt
-                  * in all. This is a filtered view of data that exists, and the
-                  * filter is one field away; a full empty state for a transient
-                  * search miss is louder than the thing it interrupts.
-                  */}
-                {filtered.length === 0 && !loading && (
-                  <View style={styles.noMatchRow}>
-                    <Text style={styles.noMatch}>No people match “{query}”.</Text>
-                    <TouchableOpacity onPress={() => setQuery('')} hitSlop={10} accessibilityRole="button">
-                      <Text style={styles.noMatchClear}>Clear</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-                {filtered.map((p, i) => {
-                  const bal = balances[p.id];
-                  const net = bal?.net ?? 0;
-                  const groupCount = bal?.groupCount ?? 0;
-                  return (
-                    <View key={p.id} style={[styles.row, i < filtered.length - 1 && styles.rowBorder]}>
-                      <MemberAvatar name={p.name} color={p.avatar_color} size={46} imageUri={p.image_uri} onPress={() => changePhoto(p)} />
-                      {/* Tap opens what you've shared; rename moves to long-press, the
-                          app's existing secondary-action gesture. Renaming a contact is
-                          rare, and it was occupying the row's primary tap while there was
-                          nowhere at all to see why a balance is what it is. */}
-                      <TouchableOpacity
-                        style={{ flex: 1 }}
-                        onPress={() => router.push(`/person/${p.id}`)}
-                        onLongPress={() => openRename(p)}
-                        accessibilityRole="button"
-                        accessibilityLabel={`${p.name}. Long press to rename`}
-                      >
-                        <Text style={styles.name}>{p.name}</Text>
-                        <View style={styles.chipRow}>
-                          {(() => {
-                            const ov = oweView(net);
-                            const settled = ov.direction === 'settled';
-                            return (
-                              <View style={[styles.balChip, { backgroundColor: settled ? colors.bgMuted : alpha(ov.color, 10) }]}>
-                                <Text style={[styles.balChipText, { color: settled ? colors.textSecondary : ov.color }]}>
-                                  {settled ? ov.label : `${ov.label} ${formatCompact(ov.amount)}`}
-                                </Text>
-                              </View>
-                            );
-                          })()}
-                          {groupCount > 0 && <Text style={styles.groupsCount}>{groupCount} {groupCount === 1 ? 'group' : 'groups'}</Text>}
-                          {/*
-                            Two states only: waiting, or connected. It must NEVER
-                            say anything derived from whether that address has an
-                            account — "not on BudgetSplit yet" would put the
-                            enumeration oracle back in the client, after the API
-                            deliberately declined to be one.
-                          */}
-                          {p.remote_uid
-                            ? <Text style={styles.inviteChip}>Connected</Text>
-                            : invited.has(p.id)
-                              ? <Text style={styles.inviteChip}>Invited · waiting</Text>
-                              : null}
-                        </View>
-                      </TouchableOpacity>
-                      {canRemind(net, p.mobile) && (
-                        <TouchableOpacity style={styles.settlePill} onPress={() => remind(p, net)} accessibilityRole="button" accessibilityLabel={`Remind ${p.name} on WhatsApp`}>
-                          <Feather name="message-circle" size={14} color={colors.accent} />
-                        </TouchableOpacity>
-                      )}
-                      {net !== 0 && (
-                        <TouchableOpacity style={styles.settlePill} onPress={() => router.push(`/add/quick?kind=transfer&to=${p.id}`)} accessibilityRole="button" accessibilityLabel={`Settle with ${p.name}`}>
-                          <Text style={styles.settlePillText}>Settle</Text>
-                        </TouchableOpacity>
-                      )}
-                    </View>
-                  );
-                })}
+                {square.map((p, i) => (
+                  <FriendRow key={p.id} person={p} last={i === square.length - 1} quiet
+                    caption={captionFor(p, balances[p.id]?.groupCount ?? 0)}
+                    onOpen={() => router.push(`/person/${p.id}`)} onRename={() => openRename(p)} onPhoto={() => changePhoto(p)} />
+                ))}
               </View>
             </>
           )}
 
           {/*
-            * A real empty state, per §2 — this screen had none at all. With no
-            * contacts the CONTACTS block above is gated off entirely, so a new
-            * user saw their own row and then blank space. `EmptyState` was even
-            * imported here and never rendered.
-            *
-            * The dashed tile is hidden in that case rather than shown alongside:
-            * the empty state carries the same action, and two add affordances one
-            * above the other is worse than the blank was.
+            * A real empty state, per §2. The footer link below is hidden with it: the
+            * empty state carries the same action.
             */}
           {people.length === 0 && !loading && (
             <EmptyState
@@ -338,15 +302,11 @@ export default function FriendsScreen() {
             />
           )}
 
-          {/* Add a person — dashed tile */}
           {people.length > 0 && (
-          <TouchableOpacity style={styles.addTile} onPress={() => { setAddName(''); setShowAdd(true); }} accessibilityRole="button" accessibilityLabel="Add a person">
-            <View style={styles.addTileCircle}><Feather name="plus" size={18} color={colors.accent} /></View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.addTileTitle}>Add a person</Text>
-              <Text style={styles.addTileSub}>Just a name is enough to start splitting</Text>
-            </View>
-          </TouchableOpacity>
+            <TouchableOpacity style={styles.addLink} onPress={() => { setAddName(''); setShowAdd(true); }} accessibilityRole="button" accessibilityLabel="Add a person">
+              <Feather name="plus" size={16} color={colors.accent} />
+              <Text style={styles.addLinkText}>Add a person</Text>
+            </TouchableOpacity>
           )}
         </KeyboardForm>
       )}
@@ -383,34 +343,59 @@ export default function FriendsScreen() {
   );
 }
 
+function peopleCount(n: number): string | undefined {
+  return n > 0 ? `${n} ${n === 1 ? 'person' : 'people'}` : undefined;
+}
+
+/**
+ * One person. Tap opens what you've shared (Settle up and Remind are there); long-press
+ * renames, the app's secondary-action gesture; the avatar changes their photo. A `quiet`
+ * row is someone you're square with: smaller, and nothing on the right.
+ */
+function FriendRow({ person, caption, right, quiet, last, onOpen, onRename, onPhoto }: {
+  person: Person; caption: string; right?: React.ReactNode; quiet?: boolean; last: boolean;
+  onOpen: () => void; onRename: () => void; onPhoto: () => void;
+}) {
+  return (
+    <View style={[styles.row, quiet && styles.rowQuiet, !last && styles.rowBorder]}>
+      <MemberAvatar name={person.name} color={person.avatar_color} size={quiet ? 32 : 40} imageUri={person.image_uri} onPress={onPhoto} />
+      <TouchableOpacity
+        style={styles.rowMain}
+        onPress={onOpen}
+        onLongPress={onRename}
+        accessibilityRole="button"
+        accessibilityLabel={`${person.name}. Long press to rename`}
+      >
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.name, quiet && styles.nameQuiet]} numberOfLines={1}>{person.name}</Text>
+          {caption ? <Text style={styles.caption} numberOfLines={1}>{caption}</Text> : null}
+        </View>
+        {right}
+      </TouchableOpacity>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   list: { padding: layout.screenPaddingH, paddingBottom: space.lg },
-  intro: { ...type.label, color: colors.textMuted, lineHeight: 19, marginBottom: space.md },
   sectionLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, fontFamily: 'Inter_600SemiBold', marginBottom: space.sm, marginTop: space.sm },
-  searchRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.bgInput, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, height: 44, marginBottom: space.sm },
+  searchRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.bgInput, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, height: 44, marginBottom: space.md },
   searchInput: { flex: 1, ...type.body, color: colors.textPrimary, padding: 0 },
   noMatchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, paddingVertical: space.lg },
   noMatch: { ...type.body, color: colors.textMuted },
   noMatchClear: { ...type.body, color: colors.accent },
   card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden', marginBottom: space.md, ...shadow.sm },
-  youCard: { flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.md },
-  youTag: { ...type.caption, color: colors.accent },
+  sumCard: { padding: space.md, gap: 6, marginBottom: space.lg },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md, paddingHorizontal: space.md, minHeight: 56 },
+  rowQuiet: { paddingVertical: space.sm, minHeight: 48 },
   rowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
+  rowMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.md },
   name: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
-  subMuted: { ...type.caption, color: colors.textMuted, marginTop: 2 },
-  chipRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.xs, flexWrap: 'wrap' },
-  balChip: { borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
-  balChipText: { ...type.caption, fontSize: 10, fontFamily: 'Inter_600SemiBold' },
-  groupsCount: { ...type.caption, fontSize: 10, color: colors.textMuted },
-  inviteChip: { ...type.caption, fontSize: 10, color: colors.textMuted },
-  settlePill: { paddingHorizontal: space.md, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.accentMuted },
-  settlePillText: { ...type.caption, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
-  addPill: { flexDirection: 'row', alignItems: 'center', gap: space.xs, backgroundColor: colors.accent, borderRadius: radius.pill, paddingHorizontal: 12, paddingVertical: 6 },
-  addPillText: { ...type.label, color: colors.bg, fontFamily: 'Inter_600SemiBold' },
-  addTile: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.accentMuted, borderRadius: radius.lg, borderWidth: 1.5, borderColor: colors.accent, borderStyle: 'dashed', padding: space.md },
-  addTileCircle: { width: 46, height: 46, borderRadius: 23, borderWidth: 1.5, borderColor: colors.accent, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
-  addTileTitle: { ...type.body, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
-  addTileSub: { ...type.caption, color: colors.textMuted, marginTop: 2 },
+  nameQuiet: { fontFamily: 'Inter_400Regular', color: colors.textSecondary },
+  caption: { ...type.caption, color: colors.textMuted, marginTop: 2 },
+  amountCol: { alignItems: 'flex-end' },
+  amountLabel: { ...type.caption, color: colors.textMuted, marginTop: 2 },
+  addLink: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.xs, paddingVertical: space.md, minHeight: 44 },
+  addLinkText: { ...type.body, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
 });

@@ -2298,11 +2298,11 @@ Problems.    DQ-01 — what monetisation would even be is genuinely undecided, a
              this entry is here so the answer is not accidentally "the flags".
 ```
 
-### FL-04 · Add an expense — 24 entry points, 11 params
+### FL-04 · Add an expense — 23 entry points, 11 params
 
 ```
 Trigger.     "I spent money."
-Entry.       24 in-app call sites, plus 3 external. The full list:
+Entry.       23 in-app call sites, plus 3 external. The full list:
              .E1  tab-bar FAB                        (tabs)/_layout.tsx:350
              .E2  Home banner CTA                     (tabs)/index.tsx:117
              .E3  Home empty-state CTA                (tabs)/index.tsx:258
@@ -2318,15 +2318,14 @@ Entry.       24 in-app call sites, plus 3 external. The full list:
              .E13 Personal empty CTA                  personal.tsx:304
              .E14 person Settle                       person/[id].tsx:235
              .E15 person Add expense                  person/[id].tsx:248
-             .E16 friends Settle                      friends.tsx:338
-             .E17 upcoming "Log payment"              upcoming.tsx:81
-             .E18 recurring list add                  plan/recurring.tsx:157
-             .E19 rule action → log this one          hooks/useRecurringActions.ts:73
-             .E20 insights CTA                        insights.tsx:143
-             .E21 reports CTA                         reports.tsx:325
-             .E22 afford "Log it" / "Buy anyway"      afford.tsx:380
-             .E23 category detail add                 category/[name].tsx:383
-             .E24 txn detail → Edit                   txn/[id].tsx:126
+             .E16 upcoming "Log payment"              upcoming.tsx:81
+             .E17 recurring list add                  plan/recurring.tsx:157
+             .E18 rule action → log this one          hooks/useRecurringActions.ts:73
+             .E19 insights CTA                        insights.tsx:143
+             .E20 reports CTA                         reports.tsx:325
+             .E21 afford "Log it" / "Buy anyway"      afford.tsx:380
+             .E22 category detail add                 category/[name].tsx:383
+             .E23 txn detail → Edit                   txn/[id].tsx:126
              .X1  daily_log notification   .X2 Siri VOICE_DEEP_LINK   .X3 deep link
 Pre.         A group exists (the launch invariant guarantees the personal one).
              flags.splitting gates the Transfer kind only (AX-04).

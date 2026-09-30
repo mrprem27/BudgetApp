@@ -1,4 +1,4 @@
-import { oweView, settleDirection } from '../lib/owe';
+import { oweView, settleDirection, ledgerOrder } from '../lib/owe';
 import { colors } from '../theme';
 import { summarizeExposure } from '../db/queries/balances';
 import type { FriendBalance } from '../db/queries/balances';
@@ -82,5 +82,21 @@ describe('summarizeExposure', () => {
   it('is all-zero when everyone is settled', () => {
     const exp = summarizeExposure([fb('a', 0), fb('b', 0)]);
     expect(exp).toMatchObject({ owe: 0, owed: 0, net: 0, owePeople: 0, owedPeople: 0 });
+  });
+});
+
+describe('ledgerOrder', () => {
+  it('puts who owes you first, then whom you owe, largest first; square last in given order', () => {
+    const people = [
+      { n: 'A', net: 0 }, { n: 'B', net: -500 }, { n: 'C', net: 200 },
+      { n: 'D', net: 900 }, { n: 'E', net: -2000 }, { n: 'F', net: 0 },
+    ];
+    const { open, square } = ledgerOrder(people, p => p.net);
+    expect(open.map(p => p.n)).toEqual(['D', 'C', 'E', 'B']);
+    expect(square.map(p => p.n)).toEqual(['A', 'F']);
+  });
+
+  it('handles nobody', () => {
+    expect(ledgerOrder([], () => 0)).toEqual({ open: [], square: [] });
   });
 });

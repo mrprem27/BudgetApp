@@ -35,19 +35,22 @@ export function canRemind(net: number, mobile: string | null | undefined): boole
 }
 
 /**
- * Phone → the digits `wa.me` needs: no `+`, no spaces, no punctuation.
+ * Phone → the digits `wa.me` needs: country code first, no `+`, no punctuation.
  *
  * Numbers are stored exactly as typed, on purpose — `friends.tsx` says so: they
  * are dialled by a human, never used as a key. So normalising happens here, at the
  * one moment a machine has to read one, and never writes back.
  *
- * Returns null rather than guessing a country code. A 10-digit Indian number with
- * no prefix is ambiguous to `wa.me`, and silently prepending 91 would send someone
- * else's phone a message about money.
+ * The pilot is India-only, and most numbers are typed as ten digits. A ten-digit
+ * number starting 6–9 (optionally with the 0 trunk prefix) is an Indian mobile by
+ * the national numbering plan, so it gets 91. Anything else too short to carry a
+ * country code returns null and the caller falls back to the share sheet.
  */
 export function waNumber(mobile: string): string | null {
   const digits = mobile.replace(/[^\d]/g, '');
-  if (digits.length < 11) return null;   // needs a country code to be unambiguous
+  const local = /^0?([6-9]\d{9})$/.exec(digits);
+  if (local) return `91${local[1]}`;
+  if (digits.length < 11) return null;
   return digits;
 }
 
