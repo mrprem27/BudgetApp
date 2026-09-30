@@ -23,6 +23,7 @@ import { insertGoal, fundGoal, withdrawFromGoal, reorderGoals } from './queries/
 import { insertPending } from './queries/pending';
 import { seedGlobalCategories } from './seedCategories';
 import { setMoneyProfile, clearMoneyProfile } from './queries/moneyProfile';
+import { SEED_DEFAULT_ACCOUNTS_SQL } from './queries/accountSql';
 import { insertAsset } from './queries/assets';
 import { RecurFreq, PayMethod } from '../constants/enums';
 
@@ -47,6 +48,8 @@ const ALL_TABLES = [
   // leaving it behind meant a wiped app still reported Rs 1,50,000 of net worth
   // with nothing on any screen to attribute it to. `seedWipe.test.ts` caught it.
   'asset',
+  // Openings and the card limit live on accounts now (`U-68`); the defaults are re-seeded below.
+  'account',
 ];
 
 /** Delete every row from every data table (settings/feature-flags + the global
@@ -71,6 +74,7 @@ export async function wipeAllData(db: SQLite.SQLiteDatabase): Promise<void> {
   // Self-heal: guarantee the global catalog exists (idempotent) so categories
   // always resolve after a wipe, even on an older DB that once wiped them.
   await seedGlobalCategories(db);
+  await db.execAsync(SEED_DEFAULT_ACCOUNTS_SQL);
 }
 
 /** Re-seed only the base "me" + Personal group + categories (empty-state baseline). */

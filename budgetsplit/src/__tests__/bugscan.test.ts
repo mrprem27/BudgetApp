@@ -780,7 +780,7 @@ describe('C1 · the card due day is asked, stored, read by the engine and synced
   const { setMoneyProfile, getMoneyProfile } = jest.requireActual('../db/queries/moneyProfile') as typeof import('../db/queries/moneyProfile');
   const { getFinanceSnapshot } = jest.requireActual('../db/queries/engineSnapshot') as typeof import('../db/queries/engineSnapshot');
   const { asDueDay } = jest.requireActual('../lib/cash') as typeof import('../lib/cash');
-  const { MONEY_KEYS, moneyProfileToServer, serverToMoneySettings } = jest.requireActual('../lib/sync/rowMap') as typeof import('../lib/sync/rowMap');
+  const { accountToServer, serverToAccount } = jest.requireActual('../lib/sync/rowMap') as typeof import('../lib/sync/rowMap');
 
   const setup = () => {
     const db = createTestDb();
@@ -793,21 +793,21 @@ describe('C1 · the card due day is asked, stored, read by the engine and synced
     expect([asDueDay(20), asDueDay('5'), asDueDay(0), asDueDay(45), asDueDay(''), asDueDay(null)]).toEqual([20, 5, null, null, null, null]);
   });
 
-  it('a saved day reaches the engine, and clearing it stores 0 (not set)', async () => {
+  it('a saved day reaches the engine, and clearing it clears the card account', async () => {
     const db = setup();
     await setMoneyProfile(db as never, { creditLimit: 5_000_000, creditUsed: 100_000, cardDueDay: 20 });
     expect((await getMoneyProfile(db as never)).cardDueDay).toBe(20);
     expect((await getFinanceSnapshot(db as never)).cash.cardDueDay).toBe(20);
     await setMoneyProfile(db as never, { cardDueDay: null });
     expect((await getMoneyProfile(db as never)).cardDueDay).toBeNull();
-    expect(db.raw.prepare("SELECT value FROM settings WHERE key = 'money.card_due_day'").get()).toEqual({ value: '0' });
+    expect(db.raw.prepare("SELECT due_day FROM account WHERE id = 'default:card'").get()).toEqual({ due_day: null });
   });
 
-  it('travels in the money profile row, both ways', () => {
-    expect(MONEY_KEYS['money.card_due_day']).toBe('card_due_day');
-    const out = moneyProfileToServer({ 'money.card_due_day': '20', 'money.credit_limit': '5000000' }, { userId: 'u1' } as never);
-    expect(out?.data).toMatchObject({ card_due_day: 20 });
-    expect(serverToMoneySettings({ card_due_day: 20 })['money.card_due_day']).toBe('20');
+  it('travels on the card account, both ways (U-68)', () => {
+    const ctx = { userId: 'u1' } as never;
+    const out = accountToServer({ id: 'default:card', kind: 'card', due_day: 20, credit_limit: 5000000 }, ctx);
+    expect(out.data).toMatchObject({ due_day: 20, credit_limit: 5000000 });
+    expect(serverToAccount({ id: out.entityId, ...out.data }, ctx)).toMatchObject({ id: 'default:card', due_day: 20 });
   });
 });
 

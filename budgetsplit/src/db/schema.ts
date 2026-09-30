@@ -3,6 +3,7 @@ import 'react-native-get-random-values';
 
 import { CATEGORY_SECTIONS, INCOME_SECTIONS, TRANSFER_SECTIONS } from '../constants/categories';
 import { seedGlobalCategories } from './seedCategories';
+import { SEED_DEFAULT_ACCOUNTS_SQL } from './queries/accountSql';
 
 /**
  * Exported so tests can build the REAL schema instead of a hand-written subset —
@@ -905,11 +906,44 @@ export const LAUNCH_INVARIANTS: string[] = [
    * Each statement is idempotent on its own (INSERT OR IGNORE; only NULL ids are filled), so no
    * BEGIN is needed. A peer's entry is left alone: their accounts are not mine to name.
    */
-  `INSERT OR IGNORE INTO account (id, name, kind, is_default, sort_order, created_at, updated_at) VALUES
-     ('default:bank', 'Bank', 'bank', 1, 0, 0, 0),
-     ('default:cash', 'Cash', 'cash', 1, 1, 0, 0),
-     ('default:wallet', 'Wallet', 'wallet', 1, 2, 0, 0),
-     ('default:card', 'Credit card', 'card', 1, 3, 0, 0)`,
+  SEED_DEFAULT_ACCOUNTS_SQL,
+  /*
+   * `U-68` 1a.1: the opening balances, card limit and due day move from `money.*` keys onto the
+   * default accounts. An invariant for the asset conversion's reason (a restored old backup puts
+   * the keys back), and one BEGIN/COMMIT for the same one: added to the account but not deleted
+   * would add them again next launch. Deleting the keys is the idempotence.
+   *
+   * The legacy read is kept: `money.opening_cash` alone, with no bank or wallet key, was the one
+   * "all my money" figure and means BANK (see `getMoneyProfile`'s history).
+   * The touched accounts are queued so a signed-in phone sends them.
+   */
+  `BEGIN;
+   DROP TABLE IF EXISTS temp.legacy_money;
+   CREATE TEMP TABLE legacy_money AS
+     SELECT key, CAST(value AS INTEGER) AS v FROM settings
+      WHERE key IN ('money.opening_cash','money.opening_bank','money.opening_wallet','money.credit_limit','money.card_due_day');
+   INSERT OR REPLACE INTO sync_queue (local_table, local_id, op, snapshot, queued_at, sent_ids)
+     SELECT 'account', id, 'upsert', NULL, CAST(strftime('%s','now') AS INTEGER) * 1000, NULL
+       FROM account WHERE is_default = 1 AND EXISTS (SELECT 1 FROM legacy_money WHERE v <> 0);
+   UPDATE account SET
+       opening_balance = opening_balance + CASE kind
+         WHEN 'bank' THEN COALESCE((SELECT v FROM legacy_money WHERE key = 'money.opening_bank'), 0)
+           + CASE WHEN NOT EXISTS (SELECT 1 FROM legacy_money WHERE key IN ('money.opening_bank','money.opening_wallet'))
+                  THEN COALESCE((SELECT v FROM legacy_money WHERE key = 'money.opening_cash'), 0) ELSE 0 END
+         WHEN 'cash' THEN CASE WHEN EXISTS (SELECT 1 FROM legacy_money WHERE key IN ('money.opening_bank','money.opening_wallet'))
+                  THEN COALESCE((SELECT v FROM legacy_money WHERE key = 'money.opening_cash'), 0) ELSE 0 END
+         WHEN 'wallet' THEN COALESCE((SELECT v FROM legacy_money WHERE key = 'money.opening_wallet'), 0)
+         ELSE 0 END,
+       credit_limit = CASE WHEN kind = 'card' AND (SELECT v FROM legacy_money WHERE key = 'money.credit_limit') > 0
+         THEN (SELECT v FROM legacy_money WHERE key = 'money.credit_limit') ELSE credit_limit END,
+       due_day = CASE WHEN kind = 'card' AND (SELECT v FROM legacy_money WHERE key = 'money.card_due_day') BETWEEN 1 AND 31
+         THEN (SELECT v FROM legacy_money WHERE key = 'money.card_due_day') ELSE due_day END,
+       updated_at = CAST(strftime('%s','now') AS INTEGER) * 1000
+     WHERE is_default = 1 AND EXISTS (SELECT 1 FROM legacy_money WHERE v <> 0);
+   DELETE FROM settings
+     WHERE key IN ('money.opening_cash','money.opening_bank','money.opening_wallet','money.credit_limit','money.card_due_day');
+   DROP TABLE legacy_money;
+   COMMIT;`,
   `UPDATE txn SET account_id = 'default:' || pay_method
      WHERE account_id IS NULL AND author_person_id IS NULL AND pay_method IN ('bank','cash','wallet','card')`,
   `UPDATE pending_txn SET account_id = 'default:' || pay_method

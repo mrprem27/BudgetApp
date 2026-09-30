@@ -1,5 +1,5 @@
 import { insertAsset, getAssetById, moveMoney, AssetError } from '../db/queries/assets';
-import { getMoneyProfile } from '../db/queries/moneyProfile';
+import { getMoneyProfile, setMoneyProfile } from '../db/queries/moneyProfile';
 import { getCashPosition } from '../db/queries/savings';
 import { getTransactionsInRange } from '../db/queries/transactions';
 import { createTestDb, addPerson, addGroup, addMember, asDb } from './helpers/testDb';
@@ -17,7 +17,7 @@ async function setup() {
   const me = addPerson(db, 'Me', true);
   const personal = addGroup(db, 'Personal', true);
   addMember(db, personal, me);
-  await db.runAsync("INSERT INTO settings (key, value) VALUES ('money.opening_bank', ?)", [String(OPENING)]);
+  await setMoneyProfile(asDb(db), { openingBank: OPENING });
   return { db };
 }
 

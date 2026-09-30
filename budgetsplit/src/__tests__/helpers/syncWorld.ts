@@ -70,7 +70,8 @@ export async function usedPhone(meId = 'local-me'): Promise<Db> {
   const db = await freshPhone(meId);
   const g = `personal-${meId}`;
   addSimpleExpense(db, { groupId: g, personId: meId, amount: 45000, date: Date.now() - 86_400_000 });
-  db.raw.prepare("INSERT INTO settings (key, value) VALUES ('money.opening_cash', '5000000')").run();
+  db.raw.prepare("UPDATE account SET opening_balance = 5000000, updated_at = 1 WHERE id = 'default:bank'").run();
+  db.raw.prepare("INSERT INTO settings (key, value) VALUES ('money.credit_used', '40000')").run();
   return db;
 }
 

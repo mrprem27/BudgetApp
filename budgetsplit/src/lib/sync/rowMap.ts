@@ -509,15 +509,13 @@ export function serverToBudget(b: Row): Row {
 // Money profile (settings money.*) and preferences
 // ---------------------------------------------------------------------------
 
-/** settings key → money_profiles column. `money.investments` is derived from assets and never travels. */
+/**
+ * settings key → money_profiles column. `money.investments` is derived from assets and never travels;
+ * openings, the card limit and due day are on `accounts` (`U-68`).
+ */
 export const MONEY_KEYS: Record<string, string> = {
-  'money.opening_cash': 'opening_cash',
-  'money.opening_bank': 'opening_bank',
-  'money.opening_wallet': 'opening_wallet',
-  'money.credit_limit': 'credit_limit',
   'money.credit_used': 'credit_used',
   'money.card_baseline_at': 'card_baseline_at',
-  'money.card_due_day': 'card_due_day',
   'money.updated_at': 'stated_at',
 };
 

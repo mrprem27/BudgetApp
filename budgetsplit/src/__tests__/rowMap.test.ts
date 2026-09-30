@@ -205,10 +205,12 @@ describe('round trips through the real push and pull', () => {
 
   it('the money profile comes back; an unset balance reads as 0, exactly as the phone reads it', async () => {
     const db = await server();
-    const settings = { 'money.opening_cash': '150000', 'money.opening_bank': '2500000', 'money.credit_used': '40000', 'money.updated_at': String(T0 - 60), 'money.card_baseline_at': String(T0 - 61) };
+    const settings = { 'money.updated_at': String(T0 - 60), 'money.card_baseline_at': String(T0 - 61) };
     await send(db, [moneyProfileToServer(settings, ctx)!]);
     expect(serverToMoneySettings(rowsOf(await pulled(db), 'money_profiles')[0]))
-      .toEqual({ ...settings, 'money.opening_wallet': '0', 'money.credit_limit': '0', 'money.card_due_day': '0' });
+      .toEqual({ ...settings, 'money.credit_used': '0' });
+    // Openings, the card limit and due day are on accounts now (U-68), never on the profile.
+    expect(moneyProfileToServer({ 'money.opening_bank': '2500000', 'money.card_due_day': '20' }, ctx)).toBeNull();
     expect(moneyProfileToServer({ 'money.investments': '99' }, ctx)).toBeNull();   // derived from assets; never travels
   });
 

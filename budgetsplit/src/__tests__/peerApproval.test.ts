@@ -1,3 +1,4 @@
+import { setMoneyProfile } from '../db/queries/moneyProfile';
 import {
   approveTxn, rejectTxn, reopenApproval, getPendingApprovalCount, getPendingApprovals, getApproval, disputesFor,
 } from '../db/queries/approval';
@@ -52,7 +53,7 @@ async function setup(opts: { trusted?: boolean } = {}) {
   addMember(db, flat, me);
   addMember(db, flat, aarav);
 
-  await db.runAsync(`INSERT INTO settings (key, value) VALUES ('money.opening_cash', ?)`, ['5000000']);
+  await setMoneyProfile(asDb(db), { openingBank: 5000000 });
   return { db, me, aarav, flat, personal };
 }
 

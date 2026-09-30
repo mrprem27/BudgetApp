@@ -514,10 +514,9 @@ CREATE TABLE savings_transactions (
 CREATE INDEX idx_savings_transactions_pull ON savings_transactions(scope_id, seq);
 CREATE INDEX idx_savings_transactions_goal ON savings_transactions(goal_id, date);
 
--- The opening money position: one typed row instead of `money.*` settings keys.
--- There is deliberately NO investments column — that figure is derived from
--- assets and must stay derived (AGENTS.md §12). Openings are unconstrained in
--- sign: an overdrawn account is a real starting position.
+-- The card balance as last stated, one row per user. The openings, card limit and due day are
+-- on `accounts` (U-68); there is deliberately NO investments column -- that figure is derived
+-- from assets and must stay derived (AGENTS.md §12).
 CREATE TABLE money_profiles (
   id                TEXT PRIMARY KEY,
   scope_id          TEXT NOT NULL REFERENCES sync_scopes(id),
@@ -529,14 +528,8 @@ CREATE TABLE money_profiles (
   updated_by        TEXT NOT NULL REFERENCES users(id),
   deleted_at        INTEGER,
   user_id           TEXT NOT NULL UNIQUE REFERENCES users(id),
-  opening_bank      INTEGER NOT NULL DEFAULT 0,
-  opening_cash      INTEGER NOT NULL DEFAULT 0,
-  opening_wallet    INTEGER NOT NULL DEFAULT 0,
-  credit_limit      INTEGER NOT NULL DEFAULT 0,
   credit_used       INTEGER NOT NULL DEFAULT 0,
   card_baseline_at  INTEGER,
-  -- Day of the month the card bill is due; 0 = not set. The phone's forecast dates the repayment on it.
-  card_due_day      INTEGER NOT NULL DEFAULT 0 CHECK (card_due_day BETWEEN 0 AND 31),
   -- When the user last stated these figures ("updated 3 days ago" on the card).
   -- The phone's own time, not the upload's: an offline edit is not newer for
   -- having reached the server later.

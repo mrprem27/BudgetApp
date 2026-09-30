@@ -1,12 +1,13 @@
 import * as SQLite from 'expo-sqlite';
 import { asDueDay, type MoneyProfile } from '../../lib/cash';
 import { getAssetsTotal } from './assets';
+import { setDefaultAccountTotal, setDefaultCardDueDay, type AccountKind } from './accountSql';
 import { MONEY_PROFILE_ID, queueUpsert } from './syncQueue';
 
 /**
- * The user's real-money inputs for the Plan screen's "Total Money": starting cash
- * and credit (limit + used). Stored in the SQLite `settings` KV table (all values
- * integer paise) so financial truth stays in the DB alongside txns.
+ * The user's real-money inputs for the Plan screen's "Total Money". The openings, card limit and
+ * due day live on the accounts (`U-68`): each figure here is the total over that kind. What is
+ * left in the `settings` KV table (integer paise) is the card balance and its two stamps.
  *
  * `investments` is the exception and is NOT stored here — it is derived from the
  * asset register on every read (see the field below). The key survives in `KEYS`
@@ -14,20 +15,10 @@ import { MONEY_PROFILE_ID, queueUpsert } from './syncQueue';
  * find; nothing consumes it.
  */
 const KEYS = {
-  // Cash-in-hand from here on. Historically it meant "all my money" — see the
-  // fallback in `getMoneyProfile`, which is what keeps old data and old backups
-  // reading correctly.
-  openingCash: 'money.opening_cash',
-  openingBank: 'money.opening_bank',
-  openingWallet: 'money.opening_wallet',
   investments: 'money.investments',
-  creditLimit: 'money.credit_limit',
   creditUsed: 'money.credit_used',
   updatedAt: 'money.updated_at',
   cardBaselineAt: 'money.card_baseline_at',
-  // Day of the month the card bill is due, 1–31; 0 = not set (a number, not a missing key, so
-  // clearing it syncs too). The engine dates the card repayment on it.
-  cardDueDay: 'money.card_due_day',
 } as const;
 
 /**
@@ -64,30 +55,23 @@ export async function getMoneyProfile(db: SQLite.SQLiteDatabase): Promise<MoneyP
   const map: Record<string, string> = {};
   for (const r of rows) map[r.key] = r.value;
   const num = (k: string) => (map[k] !== undefined ? Number(map[k]) : null);
-  /*
-   * The legacy read, and it is not optional.
-   *
-   * Before buckets there was one figure, and `MoneyEditorSheet` labelled it "Money
-   * in your bank + wallet right now" — so it was already a blend, and **bank** is
-   * the honest majority reading of it. Treating it as cash-in-hand would drain the
-   * bank bucket on the user's first bank expense.
-   *
-   * Why a fallback rather than a migration: `money.*` lives in the `settings` KV
-   * table, and `settings` is in BACKUP_TABLES. A backup written before this ships
-   * carries only `opening_cash`. Restored into a build that reinterpreted the key
-   * with no fallback, the user's entire opening position would read as ₹0 with
-   * nothing on screen to explain it. Same pattern as `cardBaselineAt` below.
-   *
-   * Self-healing: the first save through the editor writes all three keys, and
-   * this branch is never taken again on that device.
-   */
-  const hasBuckets = map[KEYS.openingBank] !== undefined || map[KEYS.openingWallet] !== undefined;
-  const legacyOpening = Number(map[KEYS.openingCash]) || 0;
-
+  // Archived accounts count: archiving hides an account from pickers, and its entries still
+  // count in the flows, so its opening must too.
+  const acc = await db.getFirstAsync<{
+    bank: number | null; cash: number | null; wallet: number | null; limit: number | null; due: number | null;
+  }>(
+    `SELECT SUM(CASE WHEN kind = 'bank' THEN opening_balance END) AS bank,
+            SUM(CASE WHEN kind = 'cash' THEN opening_balance END) AS cash,
+            SUM(CASE WHEN kind = 'wallet' THEN opening_balance END) AS wallet,
+            SUM(CASE WHEN kind = 'card' THEN credit_limit END) AS "limit",
+            (SELECT due_day FROM account WHERE kind = 'card' AND due_day BETWEEN 1 AND 31
+              ORDER BY is_default DESC, sort_order LIMIT 1) AS due
+       FROM account`,
+  );
   return {
-    openingCash: hasBuckets ? Number(map[KEYS.openingCash]) || 0 : 0,
-    openingBank: hasBuckets ? Number(map[KEYS.openingBank]) || 0 : legacyOpening,
-    openingWallet: Number(map[KEYS.openingWallet]) || 0,
+    openingCash: acc?.cash ?? 0,
+    openingBank: acc?.bank ?? 0,
+    openingWallet: acc?.wallet ?? 0,
     /*
      * DERIVED from the asset register, not stored.
      *
@@ -105,14 +89,14 @@ export async function getMoneyProfile(db: SQLite.SQLiteDatabase): Promise<MoneyP
      * from somewhere that can be itemised.
      */
     investments: await getAssetsTotal(db),
-    creditLimit: Number(map[KEYS.creditLimit]) || 0,
+    creditLimit: acc?.limit ?? 0,
     creditUsed: Number(map[KEYS.creditUsed]) || 0,
     updatedAt: num(KEYS.updatedAt),
     // Falls back to `updatedAt` for profiles written before the split, where the one stamp
     // meant both. No migration needed: the fallback IS the old behaviour, and the first
     // credit edit after this ships writes the dedicated key.
     cardBaselineAt: num(KEYS.cardBaselineAt) ?? num(KEYS.updatedAt),
-    cardDueDay: asDueDay(map[KEYS.cardDueDay]),
+    cardDueDay: asDueDay(acc?.due),
   };
 }
 
@@ -157,14 +141,27 @@ export async function setMoneyProfileRows(
   db: SQLite.SQLiteDatabase,
   partial: MoneyProfileWrite,
 ): Promise<void> {
+  const accountWrites: Array<[AccountKind, 'opening_balance' | 'credit_limit', number | undefined]> = [
+    ['bank', 'opening_balance', partial.openingBank],
+    ['cash', 'opening_balance', partial.openingCash],
+    ['wallet', 'opening_balance', partial.openingWallet],
+    ['card', 'credit_limit', partial.creditLimit],
+  ];
+  let accounts = false;
+  for (const [kind, column, value] of accountWrites) {
+    if (value === undefined) continue;
+    await setDefaultAccountTotal(db, kind, column, value);
+    await queueUpsert(db, 'account', `default:${kind}`);
+    accounts = true;
+  }
+  if (partial.cardDueDay !== undefined) {
+    await setDefaultCardDueDay(db, asDueDay(partial.cardDueDay));
+    await queueUpsert(db, 'account', 'default:card');
+    accounts = true;
+  }
   const entries: [string, number][] = [];
-  if (partial.openingBank !== undefined) entries.push([KEYS.openingBank, Math.round(partial.openingBank)]);
-  if (partial.openingCash !== undefined) entries.push([KEYS.openingCash, Math.round(partial.openingCash)]);
-  if (partial.openingWallet !== undefined) entries.push([KEYS.openingWallet, Math.round(partial.openingWallet)]);
-  if (partial.creditLimit !== undefined) entries.push([KEYS.creditLimit, Math.round(partial.creditLimit)]);
   if (partial.creditUsed !== undefined) entries.push([KEYS.creditUsed, Math.round(partial.creditUsed)]);
-  if (partial.cardDueDay !== undefined) entries.push([KEYS.cardDueDay, asDueDay(partial.cardDueDay) ?? 0]);
-  if (entries.length === 0) return;
+  if (entries.length === 0 && !accounts) return;
   entries.push([KEYS.updatedAt, Date.now()]);
   // Only a write that restates the card balance may move the window that balance is
   // measured from.

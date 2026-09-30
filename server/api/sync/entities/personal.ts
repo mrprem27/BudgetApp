@@ -73,7 +73,7 @@ export const PERSONAL_ENTITIES: Record<string, EntitySpec> = {
   },
   money_profiles: {
     table: 'money_profiles', money: true,
-    columns: ['opening_bank', 'opening_cash', 'opening_wallet', 'credit_limit', 'credit_used', 'card_baseline_at', 'card_due_day', 'stated_at'],
+    columns: ['credit_used', 'card_baseline_at', 'stated_at'],
     // One per user.
     id: userId => syncIds.moneyProfile(userId),
   },

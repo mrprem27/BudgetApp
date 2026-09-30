@@ -1,3 +1,4 @@
+import { setMoneyProfile } from '../db/queries/moneyProfile';
 import { moneySumLines, openingFor } from '../lib/moneySum';
 import { getCashPosition, fundGoal, insertGoal } from '../db/queries/savings';
 import { payCardBill } from '../db/queries/spendPower';
@@ -34,8 +35,7 @@ describe('the sum matches the real Spendable', () => {
     const me = addPerson(db, 'Me', true);
     const g = addGroup(db, 'Personal', true);
     addMember(db, g, me);
-    await db.runAsync("INSERT INTO settings (key, value) VALUES ('money.opening_bank', '1000000')");
-    await db.runAsync("INSERT INTO settings (key, value) VALUES ('money.opening_cash', '50000')");
+    await setMoneyProfile(asDb(db), { openingBank: 1000000, openingCash: 50000 });
     addTxn(db, { groupId: g, kind: 'expense', date: 1, category: 'Food', payments: [{ personId: me, amount: 30000 }], shares: [{ personId: me, amount: 30000 }] });
     addTxn(db, { groupId: g, kind: 'income', date: 2, category: 'Salary', payments: [{ personId: me, amount: 200000 }] });
     const goal = await insertGoal(asDb(db), { name: 'Trip', target: 500000, priority: 'want' });

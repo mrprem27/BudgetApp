@@ -153,7 +153,7 @@ describe('restore preserves decisions, not just rows', () => {
     // ran the fix would mark it done and skip it forever.
     const source = createTestDb();
     await source.runAsync("INSERT INTO settings (key, value) VALUES ('fix_income_category_kind_v1', '1')");
-    await source.runAsync("INSERT INTO settings (key, value) VALUES ('money.opening_cash', '250000')");
+    await source.runAsync("INSERT INTO settings (key, value) VALUES ('money.credit_used', '250000')");
     const snapshot = await readAllTables(asDb(source));
 
     const fresh = createTestDb();
@@ -163,10 +163,10 @@ describe('restore preserves decisions, not just rows', () => {
       "SELECT value FROM settings WHERE key = 'fix_income_category_kind_v1'",
     );
     expect(marker).toBeNull();
-    // ...while real user data in the same table survives. `money.*` is opening
-    // cash and the card baseline — dropping it would silently reset net worth.
+    // ...while real user data in the same table survives. `money.*` is the card
+    // balance and its baseline — dropping it would silently reset net worth.
     const cash = await fresh.getFirstAsync<{ value: string }>(
-      "SELECT value FROM settings WHERE key = 'money.opening_cash'",
+      "SELECT value FROM settings WHERE key = 'money.credit_used'",
     );
     expect(cash?.value).toBe('250000');
   });

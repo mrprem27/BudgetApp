@@ -37,6 +37,10 @@ function makeDb(): DatabaseSync {
     );
     CREATE TABLE txn (id TEXT PRIMARY KEY, group_id TEXT, category TEXT NOT NULL, pay_method TEXT, account_id TEXT, author_person_id TEXT);
     CREATE TABLE pending_txn (id TEXT PRIMARY KEY, pay_method TEXT, account_id TEXT);
+    CREATE TABLE sync_queue (
+      queue_id INTEGER PRIMARY KEY AUTOINCREMENT, local_table TEXT NOT NULL, local_id TEXT NOT NULL,
+      op TEXT NOT NULL, snapshot TEXT, queued_at INTEGER NOT NULL, sent_ids TEXT, UNIQUE (local_table, local_id)
+    );
     CREATE TABLE account (
       id TEXT PRIMARY KEY, name TEXT NOT NULL, kind TEXT NOT NULL, opening_balance INTEGER NOT NULL DEFAULT 0,
       credit_limit INTEGER, due_day INTEGER, is_default INTEGER NOT NULL DEFAULT 0, is_archived INTEGER NOT NULL DEFAULT 0,

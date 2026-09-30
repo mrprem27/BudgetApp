@@ -1,3 +1,4 @@
+import { setMoneyProfile } from '../db/queries/moneyProfile';
 import { proposeOverspendRaid, getCashPosition } from '../db/queries/savings';
 import { getMyExposure } from '../db/queries/balances';
 import { createTestDb, addPerson, addGroup, addMember, addTxn, asDb, type TestDb } from './helpers/testDb';
@@ -29,7 +30,7 @@ describe('proposeOverspendRaid — receivables', () => {
     const g = addGroup(db, 'Flat', false);
     for (const p of [me, a, b, c]) addMember(db, g, p);
 
-    await db.runAsync(`INSERT INTO settings (key, value) VALUES ('money.opening_cash', ?)`, ['1100000']);
+    await setMoneyProfile(asDb(db), { openingBank: 1100000 });
     await db.runAsync(
       `INSERT INTO savings_goal (id, name, target, priority, allocation, frequency, locked, is_archived, sort_order, created_at)
        VALUES ('goal-phone', 'Phone', 5000000, 'want', 0, 'none', 0, 0, 0, 0)`,
