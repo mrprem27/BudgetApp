@@ -17,6 +17,8 @@ export type TxnDetailData = {
    * erased it. `groupName` above is loaded exactly this way, for the same reason.
    */
   assetName: string | null;
+  /** Paid from / Landed in: the account's name for my entries (`U-68`), the kind for a peer's. */
+  paidFrom: string | null;
   isPersonal: boolean;
   history: AuditLog[];
   items: LineItem[];

@@ -19,7 +19,7 @@ type Form = ReturnType<typeof useAddTxnForm>;
  */
 function destinationOf(f: Form): { label: string; sheet: QuickAddSheet; a11y: string } {
   if (f.kind === AddKind.Income) {
-    const where = PAY_METHOD_LABEL[f.payMethod];
+    const where = f.paidFromLabel;
     return { label: `Lands in ${where}`, sheet: 'payMethod', a11y: `Income lands in ${where}. Change` };
   }
 

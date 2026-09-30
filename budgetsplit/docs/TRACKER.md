@@ -322,7 +322,7 @@ testing or describing the app. Where one needs action, the id says where.
 | `U-19` | The PDF is poor — fix later | `PARKED` |  |
 | `U-20` | Spacing is uneven in many places | `OPEN` |  |
 | `U-24` | Product analytics (Mixpanel): built, with an opt-out; needs your project token | `BLOCKED` |  |
-| `U-68` | Named accounts: the entity, backfill and sync are in; money math and the UI move onto it next | `OPEN` |  |
+| `U-68` | Named accounts: built (balances, Accounts screen, Paid from picks one); waits on the phone check | `OPEN` |  |
 | `U-69` | Split by items stays its own screen, tidied: input structure, copy, spacing, alignment and a proper grid | `OPEN` |  |
 | `U-31` | Sorting is not right — which lists? (the money card now orders largest first) | `OPEN` |  |
 

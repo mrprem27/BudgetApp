@@ -9,11 +9,13 @@ import { ListRow } from '../ui/ListRow';
 import {
   PAY_METHOD, PAY_METHOD_LABEL, PAY_METHOD_HINT, type PayMethod,
 } from '../../constants/enums';
+import { accountsToChoose, chosenAccountId, type AccountChoice } from '../../lib/paidFrom';
 
 type Props = {
   /** `''` selects nothing — an imported Review row may carry no pay-method cue. */
   value: PayMethod | '';
-  onChange: (m: PayMethod) => void;
+  /** `accountId` is set when the row picked is one of several accounts of that kind (`U-68`). */
+  onChange: (m: PayMethod, accountId?: string) => void;
   /** Accent colour for the selected row (defaults to the app accent). */
   accent?: string;
   /**
@@ -22,6 +24,9 @@ type Props = {
    * "by card". Defaults to everything a person may pick.
    */
   options?: readonly PayMethod[];
+  /** Live accounts; omitted, the picker offers kinds only. */
+  accounts?: readonly AccountChoice[];
+  accountId?: string | null;
 };
 
 /**
@@ -46,27 +51,34 @@ type Props = {
  * exactly one place.
  */
 export function PayMethodSelector({
-  value, onChange, accent = colors.accent, options = PAY_METHOD,
+  value, onChange, accent = colors.accent, options = PAY_METHOD, accounts = [], accountId,
 }: Props) {
+  // A kind with several accounts lists them by name; one account per kind reads as before (`U-68`).
+  type Row = { key: string; method: PayMethod; title: string; subtitle?: string; on: boolean; id?: string };
+  const rows = options.flatMap((m): Row[] => {
+    const several = accountsToChoose(accounts, m);
+    if (several.length === 0) {
+      return [{ key: m, method: m, title: PAY_METHOD_LABEL[m], subtitle: PAY_METHOD_HINT[m], on: value === m }];
+    }
+    const chosen = value === m ? chosenAccountId(accounts, m, accountId) : undefined;
+    return several.map(a => ({ key: a.id, method: m, title: a.name, subtitle: PAY_METHOD_LABEL[m], on: chosen === a.id, id: a.id }));
+  });
   return (
     <Card clip>
-      {options.map((m, i) => {
-        const on = value === m;
-        return (
-          <React.Fragment key={m}>
-            {i > 0 && <Divider indent="text" />}
-            <ListRow
-              leading={<PayMethodDisc method={m} size={layout.iconCircle} color={on ? accent : colors.textSecondary} />}
-              title={PAY_METHOD_LABEL[m]}
-              subtitle={PAY_METHOD_HINT[m]}
-              chevron={false}
-              selected={on}
-              value={on ? <Feather name="check" size={18} color={accent} /> : undefined}
-              onPress={() => { haptic.selection(); onChange(m); }}
-            />
-          </React.Fragment>
-        );
-      })}
+      {rows.map((r, i) => (
+        <React.Fragment key={r.key}>
+          {i > 0 && <Divider indent="text" />}
+          <ListRow
+            leading={<PayMethodDisc method={r.method} size={layout.iconCircle} color={r.on ? accent : colors.textSecondary} />}
+            title={r.title}
+            subtitle={r.subtitle}
+            chevron={false}
+            selected={r.on}
+            value={r.on ? <Feather name="check" size={18} color={accent} /> : undefined}
+            onPress={() => { haptic.selection(); onChange(r.method, r.id); }}
+          />
+        </React.Fragment>
+      ))}
     </Card>
   );
 }

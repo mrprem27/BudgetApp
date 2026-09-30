@@ -236,6 +236,8 @@ export function txnInputFromPlan(row: PendingTxn, plan: Extract<CommitPlan, { ok
     category: plan.category,
     note: row.description,
     payMethod: plan.payMethod,
+    // Kept only while it is of the committed kind (`alignAccount`), else that kind's default.
+    accountId: row.account_id ?? undefined,
     payments: plan.payments ?? [{ personId: plan.payer, amount: plan.total }],
     shares: plan.shares,
     // Where it came from, carried through the commit. Dropping it recorded every

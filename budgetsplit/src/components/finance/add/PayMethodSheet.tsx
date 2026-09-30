@@ -5,13 +5,17 @@ import { PayMethodSelector } from '../PayMethodSelector';
 import { space } from '../../tokens';
 import { INCOME_LANDING, type PayMethod } from '../../../constants/enums';
 import type { AddKind } from '../../../constants/enums';
+import type { AccountChoice } from '../../../lib/paidFrom';
 
 type Props = {
   visible: boolean;
   onClose: () => void;
   /** `''` = unset. Add always has a default; an imported Review row need not. */
   value: PayMethod | '';
-  onChange: (m: PayMethod) => void;
+  onChange: (m: PayMethod, accountId?: string) => void;
+  /** Named accounts to choose between (`U-68`). */
+  accounts?: readonly AccountChoice[];
+  accountId?: string | null;
   /** Tint for the selected tile — the Add screen passes its kind colour. */
   accent?: string;
   /** Income asks "where did it land?" and offers only the arrival methods. */
@@ -34,13 +38,15 @@ type Props = {
  * sheet beside it used `colors.settle` — one screen, two "selected" colours in adjacent
  * sheets.
  */
-export function PayMethodSheet({ visible, onClose, value, onChange, accent, kind, onClear }: Props) {
+export function PayMethodSheet({ visible, onClose, value, onChange, accent, kind, onClear, accounts, accountId }: Props) {
   const income = kind === 'income';
   return (
     <SheetModal visible={visible} onClose={onClose} title={income ? 'Where did it land?' : 'Where did it come from?'}>
       <PayMethodSelector
         value={value}
-        onChange={(m) => { onChange(m); onClose(); }}
+        onChange={(m, id) => { onChange(m, id); onClose(); }}
+        accounts={accounts}
+        accountId={accountId}
         accent={accent}
         options={income ? INCOME_LANDING : undefined}
       />

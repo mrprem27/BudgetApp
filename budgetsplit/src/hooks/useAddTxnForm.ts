@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Alert } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useRouter } from 'expo-router';
@@ -34,6 +34,8 @@ import { useDataRefresh } from '../components/system/DataRefreshProvider';
 import { useToast } from '../components/system/Toast';
 import { getSafeToSpendV2 } from '../db/queries/spendPower';
 import { getAssets, transferToAsset, defaultInvestmentAsset, type Asset } from '../db/queries/assets';
+import { listAccounts } from '../db/queries/accounts';
+import { paidFromLabel, type AccountChoice } from '../lib/paidFrom';
 import { setPendingSettlement } from '../lib/pendingSettlement';
 import { useStore } from '../store';
 import { useLocationCapture } from './useLocationCapture';
@@ -115,6 +117,11 @@ export function useAddTxnForm(params: AddTxnParams) {
   const [transferScope, setTransferScope] = useState<TransferScope>(TRANSFER_SCOPE_ALL);
   const [transferScopes, setTransferScopes] = useState<TransferScopes | null>(null);
   const [payMethod, setPayMethod] = useState<PayMethod>(PayMethod.Bank);  // Seeded from the user's default in the settings effect below.
+  // Which account of that kind (`U-68`). Stale after the kind changes is harmless: the write keeps
+  // it only while it is of the entry's kind (`alignAccount`), else the kind's default.
+  const [accountId, setAccountId] = useState<string | undefined>(undefined);
+  const [accounts, setAccounts] = useState<AccountChoice[]>([]);
+  const setPaidFrom = useCallback((m: PayMethod, id?: string) => { setPayMethod(m); setAccountId(id); }, []);
   const [transferNote, setTransferNote] = useState('');
   /**
    * Where an Invest entry lands, and the assets it can choose from.
@@ -231,6 +238,7 @@ export function useAddTxnForm(params: AddTxnParams) {
       // Fire-and-forget: the destination row renders from the selected group, so
       // it doesn't wait on this — only the sheet's ordering does.
       getGroupsByRecentUse(db).then(setPickerGroups).catch(() => {});
+      listAccounts(db).then(setAccounts).catch(() => {});
       const savedCur = await settings.defaultCurrency();
       if (savedCur) setCurrency(savedCur as CurrencyCode);
       // The user's usual pay method seeds a NEW entry only. An edit hydrates the
@@ -254,6 +262,7 @@ export function useAddTxnForm(params: AddTxnParams) {
           // Income's pay method means "where did it land?", so an income row with
           // no stored value must fall back to the landing default, not to UPI.
           setPayMethod(txn.pay_method ?? (txn.kind === 'income' ? INCOME_LANDING_DEFAULT : PayMethod.Bank));
+          setAccountId(txn.account_id ?? undefined);
           // Hydrated for EVERY load, not just a recurring one. This sat inside the
           // `recurEditId` branch below, so opening a normal transaction to edit it
           // left `tags` empty — and `handleSave` passes that straight to
@@ -647,7 +656,7 @@ export function useAddTxnForm(params: AddTxnParams) {
         const savedId = await updateTxn(db, {
           id: editId!, groupId: transferScope === TRANSFER_SCOPE_ALL ? selectedGroupId : transferScope,
           kind: 'settlement', date: txnDate, category: transferCategory,
-          note: transferFullNote, payMethod, tags,
+          note: transferFullNote, payMethod, accountId, tags,
           payments: [{ personId: transferFromId, amount: total }],
           shares: [{ personId: transferToId, amount: total }],
         });
@@ -668,7 +677,7 @@ export function useAddTxnForm(params: AddTxnParams) {
       for (const [i, p] of finalPlans.entries()) {
         await recordSettlement(db, {
           groupId: p.groupId, fromId: p.from, toId: p.to, amount: p.amount,
-          date: txnDate, note: transferFullNote, payMethod, category: transferCategory,
+          date: txnDate, note: transferFullNote, payMethod, accountId, category: transferCategory,
           tags,
           // The receipt goes on the FIRST plan only. Settling "all groups" writes one
           // settlement per group, and two rows pointing at the same file would let
@@ -798,7 +807,7 @@ export function useAddTxnForm(params: AddTxnParams) {
       if (isEditing) {
         const savedId = await updateTxn(db, {
           id: editId!, groupId: selectedGroupId, kind, date: txnDate,
-          category: selectedCategory!.name, note: composedNote, payMethod, tags,
+          category: selectedCategory!.name, note: composedNote, payMethod, accountId, tags,
           attachmentUri, payments: finalPayments, shares: finalShares,
         });
         // Replacing or removing the receipt must unlink the old file, or it
@@ -819,7 +828,7 @@ export function useAddTxnForm(params: AddTxnParams) {
         // saved when nothing at all had been written.
         const splitId = await splitRecurringSeries(db, recurEditId!, {
           groupId: selectedGroupId, kind, entryMode: 'quick',
-          date: txnDate, category: selectedCategory!.name, note: composedNote, payMethod,
+          date: txnDate, category: selectedCategory!.name, note: composedNote, payMethod, accountId,
           // Tags and the receipt are part of the rule the user is editing; omitting
           // them here silently stripped both from the series on every "this & future".
           tags,
@@ -875,7 +884,7 @@ export function useAddTxnForm(params: AddTxnParams) {
       const commit = async () => {
         const newId = await insertTxn(db, {
           groupId: selectedGroupId, kind, entryMode: 'quick', date: txnDate,
-          category: selectedCategory!.name, note: composedNote, payMethod, tags,
+          category: selectedCategory!.name, note: composedNote, payMethod, accountId, tags,
           attachmentUri: attachmentUri ?? undefined,
           recurFreq: recurEnabled ? recurNorm.freq : undefined,
           recurInterval: recurEnabled ? recurNorm.interval : undefined,
@@ -962,7 +971,8 @@ export function useAddTxnForm(params: AddTxnParams) {
     assets, investAssetId, setInvestAssetId,
     transferFrom, transferTo, transferPayee, transferHandoff, canPayTransferUpi, canRequestTransferQr,
     transferHandoffHooks,
-    payMethod, setPayMethod,
+    payMethod, setPayMethod, accountId, accounts, setPaidFrom,
+    paidFromLabel: paidFromLabel(accounts, payMethod, accountId),
     // recurring
     recurEnabled, setRecurEnabled,
     recurMode, setRecurMode, recurFreq, setRecurFreq, recurInterval, setRecurInterval,

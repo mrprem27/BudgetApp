@@ -38,6 +38,8 @@ type Props = {
 
   /** Where the money came from (`U-49`). */
   payMethod: PayMethod;
+  /** The account's name when there are several of that kind (`paidFromLabel`); else the kind. */
+  payLabel?: string;
   onOpenPayMethod: () => void;
   /** Income reads the same field as "landed in" rather than "paid from". */
   isIncome?: boolean;
@@ -79,7 +81,7 @@ export function DetailChips({
   attachmentUri, onOpenAttachment, onClearAttachment,
   tags = [], onOpenTags,
   place, capturingLoc, onCaptureLocation, onClearLocation,
-  payMethod, onOpenPayMethod, isIncome,
+  payMethod, payLabel = PAY_METHOD_LABEL[payMethod], onOpenPayMethod, isIncome,
   onSplitByItems,
   recurEnabled, recurFreq, recurInterval, onOpenRecurring,
 }: Props) {
@@ -102,13 +104,13 @@ export function DetailChips({
             income the same field means the opposite direction: where it landed.
             "From Bank", not "Bank": the chip names the question as well as the answer. */}
         <Chip
-          label={`${isIncome ? 'Into' : 'From'} ${PAY_METHOD_LABEL[payMethod]}`}
+          label={`${isIncome ? 'Into' : 'From'} ${payLabel}`}
           icon={isIncome ? 'download' : 'credit-card'}
           selected
           accent={accent}
           chevron
           onPress={onOpenPayMethod}
-          accessibilityLabel={isIncome ? `Landed in ${PAY_METHOD_LABEL[payMethod]}` : `Paid from ${PAY_METHOD_LABEL[payMethod]}`}
+          accessibilityLabel={isIncome ? `Landed in ${payLabel}` : `Paid from ${payLabel}`}
         />
 
         {/* No Time chip. It lives inside the date sheet now, and the date chip's

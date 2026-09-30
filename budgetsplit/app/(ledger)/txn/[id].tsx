@@ -5,7 +5,6 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { dateTime, fullDate } from '../../../src/lib/dateFormat';
 import { kindColor } from '../../../src/lib/kindTheme';
-import { PAY_METHOD_LABEL } from '../../../src/constants/enums';
 import { myShareOf, myPaidOf, txnTotal } from '../../../src/lib/splitMath';
 import { settlementView } from '../../../src/lib/settlementView';
 import { colors, type, space, radius, layout, alpha } from '../../../src/theme';
@@ -37,7 +36,7 @@ export default function TxnDetailScreen() {
   const { width: winW, height: winH } = useWindowDimensions();
 
   const {
-    txn, members, me, groupName, assetName, isPersonal, history, items, parentRule, author, disputes,
+    txn, members, me, groupName, assetName, paidFrom, isPersonal, history, items, parentRule, author, disputes,
     loading, error, reload,
     showAttachment, setShowAttachment,
     chooseReceiptSource, removeReceipt, onDelete,
@@ -226,10 +225,10 @@ export default function TxnDetailScreen() {
           <Row label="When" value={(() => { const d = new Date(txn.date); return isFinite(d.getTime()) ? dateTime(d) : 'Unknown'; })()} />
           <View style={styles.divider} />
           <Row label="Group" value={groupName} />
-          {txn.pay_method && (
+          {paidFrom && (
             <>
               <View style={styles.divider} />
-              <Row label={txn.kind === 'income' ? 'Landed in' : 'Paid from'} value={PAY_METHOD_LABEL[txn.pay_method]} />
+              <Row label={txn.kind === 'income' ? 'Landed in' : 'Paid from'} value={paidFrom} />
             </>
           )}
           {/*

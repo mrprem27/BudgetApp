@@ -16,6 +16,9 @@ import { getAuditLog } from '../db/queries/audit';
 import { useToast } from '../components/system/Toast';
 import { useDataRefresh } from '../components/system/DataRefreshProvider';
 import { getAssetById } from '../db/queries/assets';
+import { listAccounts } from '../db/queries/accounts';
+import { accountName } from '../lib/paidFrom';
+import { PAY_METHOD_LABEL } from '../constants/enums';
 import { useScreenData } from './useScreenData';
 import type { TxnDetailData } from '../lib/txnDetail';
 
@@ -34,15 +37,16 @@ export function useTxnDetail(id: string) {
   const { data, loading, error, reload } = useScreenData(async (database): Promise<TxnDetailData> => {
     const t = await getTxnById(database, id);
     if (!t) {
-      return { txn: null, members: [], me: null, groupName: '', assetName: null, isPersonal: false, history: [], items: [], parentRule: null, author: null, disputes: [] };
+      return { txn: null, members: [], me: null, groupName: '', assetName: null, paidFrom: null, isPersonal: false, history: [], items: [], parentRule: null, author: null, disputes: [] };
     }
-    const [grp, mems, meRow, hist, li, disputes] = await Promise.all([
+    const [grp, mems, meRow, hist, li, disputes, accounts] = await Promise.all([
       getGroupById(database, t.group_id),
       getGroupMembers(database, t.group_id),
       getMe(database),
       getAuditLog(database, { entityId: id }),
       t.entry_mode === 'itemized' ? getLineItems(database, id) : Promise.resolve([]),
       disputesFor(database, id),
+      listAccounts(database),
     ]);
     const parentRule = t.parent_recur_id ? await getTxnById(database, t.parent_recur_id) : null;
     // Only for a row that touched the register; every other row skips the read.
@@ -55,6 +59,9 @@ export function useTxnDetail(id: string) {
       me: meRow,
       groupName: grp?.name ?? '',
       assetName: asset?.name ?? null,
+      // A peer's entry names no account of mine, so it reads as the kind.
+      paidFrom: !t.pay_method ? null : t.author_person_id ? PAY_METHOD_LABEL[t.pay_method]
+        : accountName(accounts, t.pay_method, t.account_id),
       isPersonal: grp?.is_personal === 1,
       history: hist,
       items: li,
@@ -69,6 +76,7 @@ export function useTxnDetail(id: string) {
   const me = data?.me ?? null;
   const groupName = data?.groupName ?? '';
   const assetName = data?.assetName ?? null;
+  const paidFrom = data?.paidFrom ?? null;
   const isPersonal = data?.isPersonal ?? false;
   const history = data?.history ?? [];
   const items = data?.items ?? [];
@@ -172,7 +180,7 @@ export function useTxnDetail(id: string) {
   }
 
   return {
-    txn, members, me, groupName, assetName, isPersonal, history, items, parentRule, author,
+    txn, members, me, groupName, assetName, paidFrom, isPersonal, history, items, parentRule, author,
     disputes: data?.disputes ?? [],
     loading, error, reload,
     showAttachment, setShowAttachment,

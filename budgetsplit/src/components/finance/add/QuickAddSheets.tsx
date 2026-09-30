@@ -123,7 +123,9 @@ export function QuickAddSheets({
         visible={open === 'payMethod'}
         onClose={onClose}
         value={f.payMethod}
-        onChange={f.setPayMethod}
+        onChange={f.setPaidFrom}
+        accounts={f.accounts}
+        accountId={f.accountId}
         accent={accent}
         kind={f.kind}
       />
