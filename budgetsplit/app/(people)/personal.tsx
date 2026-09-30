@@ -144,9 +144,10 @@ export default function PersonalScreen() {
     [filtered, from, to, monthStart],
   );
   const rowTotals = useMemo(() => activityTotals(rowRows, myId), [rowRows, myId]);
-  const rowLabel = from == null && to == null
-    ? (narrowed ? 'This month · filtered' : 'This month')
-    : range === 'custom' ? 'Chosen dates' : RANGE_LABEL[range];
+  // Which filters are on, counted, so the row says why its numbers changed ("This month · 2 filters").
+  const filterCount = (filter !== 'personal' ? 1 : 0) + (kind !== KIND_ANY ? 1 : 0) + (personId ? 1 : 0) + tags.length;
+  const period = from == null && to == null ? 'This month' : range === 'custom' ? 'Chosen dates' : RANGE_LABEL[range];
+  const rowLabel = filterCount > 0 ? `${period} · ${filterCount} ${filterCount === 1 ? 'filter' : 'filters'}` : period;
   const clearFilters = useCallback(() => {
     setFilter('personal'); setQuery(''); setKind(KIND_ANY); setRange('any');
     setFrom(null); setTo(null); setPersonId(null); setTags([]);

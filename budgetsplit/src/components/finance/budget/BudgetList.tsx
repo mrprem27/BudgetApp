@@ -10,6 +10,7 @@ import { categorySection, SECTION_ORDER } from '../../../constants/categories';
 import { BudgetBar } from '../BudgetBar';
 import { BudgetCategoryRow } from '../BudgetCategoryRow';
 import { Card } from '../../ui/Card';
+import { SectionCard } from '../../ui/SectionCard';
 import { Chip } from '../../ui/Chip';
 import { Divider } from '../../ui/Divider';
 import { EmptyState } from '../../ui/EmptyState';
@@ -17,7 +18,6 @@ import { AppRefreshControl } from '../../ui/AppRefreshControl';
 import { haptic } from '../../../lib/haptics';
 import { sectionSummary } from '../../../lib/budgetSections';
 import { InfoLabel } from '../../ui/InfoLabel';
-import { PressableScale } from '../../ui/PressableScale';
 
 /** `'all'` = no filter. The other three mirror `CategoryBudgetStatus.health`. */
 type StatusFilter = 'all' | 'over' | 'near' | 'ontrack';
@@ -186,6 +186,10 @@ export function BudgetList({
           <CountChip count={counts.near} label="near limit" tint={colors.healthAmber} active={filter === 'near'} onPress={() => toggle('near')} />
           <CountChip count={counts.ontrack} label="on track" tint={colors.income} active={filter === 'ontrack'} onPress={() => toggle('ontrack')} />
         </View>
+        {/* Inside the card it acts on, not floating between the card and the boxes. */}
+        {!forcedOpen && shownSections.length > 1 && (
+          <ExpandAll open={allOpen} onPress={() => setAll(!allOpen)} />
+        )}
       </Card>
 
       {visible.length === 0 ? (
@@ -201,45 +205,48 @@ export function BudgetList({
         />
       ) : (
         <>
-        {!forcedOpen && shownSections.length > 1 && (
-          <View style={styles.toolbar}>
-            <TouchableOpacity onPress={() => setAll(!allOpen)} hitSlop={10} accessibilityRole="button">
-              <Text style={styles.toolbarText}>{allOpen ? 'Collapse all' : 'Expand all'}</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+        {/* Each section is a box, like the budget editor's (`SectionCard`): its header carries the
+            section's own spent / budget and bar, so a closed box still reads as a budget. */}
         {shownSections.map(section => {
           const lines = bySection.get(section) ?? [];
           const expanded = isOpen(section);
           const sum = sectionSummary(lines);
+          const per = sum.cadence === 'yearly' ? ' a year' : sum.cadence === 'daily' ? ' a day' : '';
+          const note = [
+            sum.overCount > 0 ? `${sum.overCount} over` : null,
+            sum.otherCount > 0 ? `+${sum.otherCount} on another cadence` : null,
+          ].filter(Boolean).join(' · ');
           return (
-            // No `gap` on the container: the header row owns its own spacing (AGENTS §12).
-            <View key={section} style={styles.section}>
-              <SectionToggle
-                title={section}
-                expanded={expanded}
-                summary={expanded ? null : sum}
-                count={lines.length}
-                onPress={forcedOpen ? undefined : () => setOpen(o => ({ ...o, [section]: !expanded }))}
-              />
-              {expanded && <Card clip>
-                {lines.map((c, i) => (
-                  <View key={`${c.category}-${c.cadence}`}>
-                    {i > 0 && <Divider indent="text" />}
-                    <BudgetCategoryRow
-                      category={c.category}
-                      cadence={c.cadence}
-                      spent={c.spent}
-                      allocated={c.allocated}
-                      pct={c.pct}
-                      health={c.health}
-                    >
-                      {rowExtra?.(c)}
-                    </BudgetCategoryRow>
-                  </View>
-                ))}
-              </Card>}
-            </View>
+            <SectionCard
+              key={section}
+              title={section}
+              subtitle={note || `${lines.length} ${lines.length === 1 ? 'category' : 'categories'}`}
+              right={sum.allocated > 0 ? (
+                <Text style={[styles.boxAmt, { color: healthColor(sum.health) }]} numberOfLines={1}>
+                  {formatCompact(sum.spent)}
+                  <Text style={styles.boxOf}> / {formatCompact(sum.allocated)}{per}</Text>
+                </Text>
+              ) : undefined}
+              below={sum.allocated > 0 ? <BudgetBar pct={sum.pct} health={sum.health} height={4} /> : undefined}
+              expanded={expanded}
+              onToggle={forcedOpen ? undefined : () => setOpen(o => ({ ...o, [section]: !expanded }))}
+            >
+              {lines.map(c => (
+                <View key={`${c.category}-${c.cadence}`}>
+                  <Divider indent="text" />
+                  <BudgetCategoryRow
+                    category={c.category}
+                    cadence={c.cadence}
+                    spent={c.spent}
+                    allocated={c.allocated}
+                    pct={c.pct}
+                    health={c.health}
+                  >
+                    {rowExtra?.(c)}
+                  </BudgetCategoryRow>
+                </View>
+              ))}
+            </SectionCard>
           );
         })}
         </>
@@ -248,53 +255,13 @@ export function BudgetList({
   );
 }
 
-/**
- * A budget section's header. Collapsed, it carries the section's own spent / budget and a thin
- * bar in its health colour, so the closed list still reads as a budget; open, the lines below
- * say it and the header is just a name (`U-55`).
- */
-function SectionToggle({ title, expanded, summary, count, onPress }: {
-  title: string;
-  expanded: boolean;
-  summary: ReturnType<typeof sectionSummary> | null;
-  count: number;
-  onPress?: () => void;
-}) {
-  const tint = summary ? healthColor(summary.health) : colors.textMuted;
-  const per = summary?.cadence === 'yearly' ? ' a year' : summary?.cadence === 'daily' ? ' a day' : '';
+/** Expand or collapse every box, from inside the top card (Budget and Recurring alike). */
+export function ExpandAll({ open, onPress }: { open: boolean; onPress: () => void }) {
   return (
-    <PressableScale
-      onPress={onPress}
-      disabled={!onPress}
-      style={styles.toggle}
-      accessibilityLabel={`${title}, ${count} ${count === 1 ? 'category' : 'categories'}${onPress ? `. ${expanded ? 'Collapse' : 'Expand'}` : ''}`}
-      accessibilityState={{ expanded }}
-    >
-      <View style={styles.toggleRow}>
-        {onPress && <Feather name={expanded ? 'chevron-down' : 'chevron-right'} size={16} color={colors.textMuted} />}
-        <Text style={styles.toggleTitle}>{title}</Text>
-        {summary && summary.allocated > 0 ? (
-          <Text style={[styles.toggleAmt, { color: tint }]} numberOfLines={1}>
-            {formatCompact(summary.spent)}
-            <Text style={styles.toggleOf}> / {formatCompact(summary.allocated)}{per}</Text>
-          </Text>
-        ) : !expanded ? (
-          <Text style={styles.toggleOf}>{count}</Text>
-        ) : null}
-      </View>
-      {summary && summary.allocated > 0 && (
-        <View style={styles.toggleBar}>
-          <BudgetBar pct={summary.pct} health={summary.health} height={4} />
-        </View>
-      )}
-      {summary && (summary.overCount > 0 || summary.otherCount > 0) && (
-        <Text style={styles.toggleNote}>
-          {summary.overCount > 0 && <Text style={{ color: colors.healthRed }}>{summary.overCount} over</Text>}
-          {summary.overCount > 0 && summary.otherCount > 0 ? ' · ' : ''}
-          {summary.otherCount > 0 ? `+${summary.otherCount} on another cadence` : ''}
-        </Text>
-      )}
-    </PressableScale>
+    <TouchableOpacity style={styles.expandAll} onPress={onPress} hitSlop={10} accessibilityRole="button">
+      <Feather name={open ? 'chevrons-up' : 'chevrons-down'} size={14} color={colors.accent} />
+      <Text style={styles.expandAllText}>{open ? 'Collapse all' : 'Expand all'}</Text>
+    </TouchableOpacity>
   );
 }
 
@@ -319,7 +286,7 @@ function CountChip({ count, label, tint, active, onPress }: {
 
 const styles = StyleSheet.create({
   content: { paddingHorizontal: layout.screenPaddingH, paddingTop: space.xs },
-  overview: { marginBottom: space.sm },
+  overview: { marginBottom: space.md },
   head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: space.sm },
   headLabel: { ...type.sectionLabel, color: colors.textMuted },
   amountRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
@@ -328,16 +295,10 @@ const styles = StyleSheet.create({
   caption: { ...type.caption, color: colors.textMuted, marginTop: 2 },
   info: { marginTop: space.xs },
   ofBudget: { ...type.amountSM, color: colors.textMuted },
-  toolbar: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: space.sm },
-  toolbarText: { ...type.labelSemi, color: colors.accent },
-  section: { marginTop: space.sm },
-  toggle: { paddingVertical: space.sm },
-  toggleRow: { flexDirection: 'row', alignItems: 'center', gap: space.xs, minHeight: layout.touchMin },
-  toggleTitle: { ...type.sectionLabel, color: colors.textMuted, flex: 1 },
-  toggleAmt: { ...type.amountSM },
-  toggleOf: { ...type.caption, color: colors.textMuted },
-  toggleBar: { marginTop: space.xs },
-  toggleNote: { ...type.caption, color: colors.textMuted, marginTop: space.xs },
+  expandAll: { flexDirection: 'row', alignItems: 'center', gap: space.xs, alignSelf: 'flex-end', marginTop: space.smd },
+  expandAllText: { ...type.labelSemi, color: colors.accent },
+  boxAmt: { ...type.amountSM },
+  boxOf: { ...type.caption, color: colors.textMuted },
   bar: { marginTop: space.sm },
   filters: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs, marginTop: space.smd },
 });

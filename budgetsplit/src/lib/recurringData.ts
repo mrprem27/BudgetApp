@@ -25,7 +25,7 @@ export async function loadRecurringRule(db: SQLite.SQLiteDatabase, id: string) {
 }
 
 /** One row of the Recurring inventory. */
-export type RecurringSub = { id: string; groupId: string; name: string; category: string; kind: TxnKind; amount: number; freq: RecurFreq; interval: number | null; nextMs: number | null; paused: boolean };
+export type RecurringSub = { id: string; groupId: string; name: string; category: string; kind: TxnKind; amount: number; freq: RecurFreq; interval: number | null; nextMs: number | null; paused: boolean; createdAt: number };
 
 /**
  * The recurring inventory — one row per rule, in every group that still has me.
@@ -97,10 +97,25 @@ export function toRecurringSubs(
     // advertise a charge that will not happen.
     nextMs: t.recur_state === 'paused' ? null : nextUnskippedOccurrence(t, now, skips?.get(t.id)),
     paused: t.recur_state === 'paused',
+    createdAt: t.created_at,
   }));
   // Paused rules sink below the live ones: they are here to be found and
   // resumed, not to lead a list of what is about to be charged.
   list.sort((a, b) =>
     Number(a.paused) - Number(b.paused) || (a.nextMs ?? Infinity) - (b.nextMs ?? Infinity));
   return list;
+}
+
+export type RecurringSort = 'next' | 'newest' | 'amount';
+
+/**
+ * Search and sort a rule list: by name or category, then Next due (the default order: live rules
+ * by next charge, paused below), Newest (when the rule was made) or Amount (largest first).
+ */
+export function findRecurring(subs: readonly RecurringSub[], query: string, sort: RecurringSort): RecurringSub[] {
+  const q = query.trim().toLowerCase();
+  const hit = q ? subs.filter(s => s.name.toLowerCase().includes(q) || s.category.toLowerCase().includes(q)) : [...subs];
+  if (sort === 'newest') return hit.sort((a, b) => b.createdAt - a.createdAt);
+  if (sort === 'amount') return hit.sort((a, b) => b.amount - a.amount);
+  return hit;
 }

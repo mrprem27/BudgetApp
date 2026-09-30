@@ -33,6 +33,7 @@ export function SectionCard({
   icon,
   iconColor = colors.accent,
   right,
+  below,
   expanded,
   onToggle,
   children,
@@ -46,29 +47,36 @@ export function SectionCard({
   iconColor?: string;
   /** Optional node before the chevron (e.g. a count badge). */
   right?: React.ReactNode;
+  /** Under the header row, still part of the header (a budget section's bar). */
+  below?: React.ReactNode;
   expanded: boolean;
-  onToggle: () => void;
+  /** Omitted: the card is always open and its header is not a button. */
+  onToggle?: () => void;
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
 }) {
   return (
     <Card clip style={[styles.card, style]}>
       <TouchableOpacity
-        style={styles.header}
+        style={styles.headerWrap}
         onPress={onToggle}
+        disabled={!onToggle}
         accessibilityRole="button"
         accessibilityLabel={subtitle ? `${title}, ${subtitle}` : title}
         accessibilityState={{ expanded }}
       >
-        {icon && (
-          <IconCircle icon={icon} size={layout.iconCircle} color={iconColor} bg={colors.accentMuted} />
-        )}
-        <View style={{ flex: 1 }}>
-          <Text style={styles.title}>{title}</Text>
-          {!!subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
+        <View style={styles.header}>
+          {icon && (
+            <IconCircle icon={icon} size={layout.iconCircle} color={iconColor} bg={colors.accentMuted} />
+          )}
+          <View style={{ flex: 1 }}>
+            <Text style={styles.title}>{title}</Text>
+            {!!subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
+          </View>
+          {right}
+          {onToggle && <Feather name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textMuted} />}
         </View>
-        {right}
-        <Feather name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textMuted} />
+        {below}
       </TouchableOpacity>
 
       <Collapse visible={expanded}>{children}</Collapse>
@@ -80,12 +88,13 @@ const styles = StyleSheet.create({
   // The surface itself now comes from `Card` (AGENTS.md §3); only the spacing
   // this component adds on top of it lives here.
   card: { marginBottom: space.md },
+  headerWrap: { padding: space.md, gap: space.sm },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.md,
-    padding: space.md,
-    minHeight: layout.rowMinHeight,
+    // With the wrap's padding the header stays 64pt, as before `below` existed.
+    minHeight: layout.iconCircle,
   },
   title: { ...type.bodySemi, color: colors.textPrimary },
   subtitle: { ...type.caption, color: colors.textSecondary, marginTop: 2 },

@@ -1,15 +1,15 @@
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { colors, type, space, layout } from '../../../src/theme';
 import { ScreenHeader } from '../../../src/components/ui/ScreenHeader';
 import { EmptyState } from '../../../src/components/ui/EmptyState';
 import { ErrorState } from '../../../src/components/ui/ErrorState';
 import { AppRefreshControl } from '../../../src/components/ui/AppRefreshControl';
-import { RecurringInventory } from '../../../src/components/finance/recurring/RecurringInventory';
+import { RecurringBrowser } from '../../../src/components/finance/recurring/RecurringBrowser';
+import { KeyboardForm } from '../../../src/components/ui/KeyboardForm';
 import { useScreenData } from '../../../src/hooks/useScreenData';
 import { useContentInset } from '../../../src/hooks/useContentInset';
 import { loadRecurringInventory, loadStoppedRecurring } from '../../../src/lib/recurringData';
-import { StoppedRecurring } from '../../../src/components/finance/recurring/StoppedRecurring';
 import { backOr } from '../../../src/lib/nav';
 
 /**
@@ -42,27 +42,29 @@ export default function RecurringScreen() {
   return (
     <View style={styles.container}>
       <ScreenHeader title="Recurring" onBack={() => backOr(router, '/(tabs)/savings')} />
-      <ScrollView
+      {/* `KeyboardForm`: the list has a search box above its results (AGENTS §6b). */}
+      <KeyboardForm
         contentContainerStyle={[styles.scroll, { paddingBottom: bottomPad }]}
         refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-        {!loading && subs.length === 0 ? (
-          <EmptyState
-            icon="refresh-cw"
-            title="No recurring items yet"
-            body="Mark an expense as Recurring (monthly Netflix, rent, gym…) when you add it, and it'll show here with its monthly cost and next charge."
-            actionLabel="Add a recurring expense"
-            onAction={() => router.push('/add/quick?kind=expense')}
+        {!loading && (
+          <RecurringBrowser
+            active={subs}
+            stopped={stopped}
+            onOpen={id => router.push(`/recurring/${id}`)}
+            empty={
+              <EmptyState
+                icon="refresh-cw"
+                title="No recurring items yet"
+                body="Mark an expense as Recurring (monthly Netflix, rent, gym…) when you add it, and it'll show here with its monthly cost and next charge."
+                actionLabel="Add a recurring expense"
+                onAction={() => router.push('/add/quick?kind=expense')}
+              />
+            }
           />
-        ) : subs.length > 0 ? (
-          <>
-            <RecurringInventory subs={subs} onOpen={id => router.push(`/recurring/${id}`)} />
-            <Text style={styles.footHint}>Tap a row to edit, pause or stop it.</Text>
-          </>
-        ) : null}
-        {/* Stopped rules were listed nowhere across groups; they sit behind one row here (`U-62`). */}
-        {!loading && <StoppedRecurring stopped={stopped} onOpen={id => router.push(`/recurring/${id}`)} />}
-      </ScrollView>
+        )}
+        {!loading && subs.length > 0 && <Text style={styles.footHint}>Tap a row to edit, pause or stop it.</Text>}
+      </KeyboardForm>
     </View>
   );
 }

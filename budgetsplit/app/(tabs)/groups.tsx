@@ -37,9 +37,15 @@ import type { BudgetGroup } from '../../src/db/queries/groups';
 import { HeaderIconButton } from '../../src/components/ui/HeaderIconButton';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { Card } from '../../src/components/ui/Card';
+import { Input } from '../../src/components/ui/Input';
+import { keyboardAwareScroll } from '../../src/components/ui/KeyboardForm';
 import { useContentInset } from '../../src/hooks/useContentInset';
 
 
+
+/** The search box appears once there are this many groups in the list. */
+const SEARCH_FROM = 5;
+const groupsScroll = keyboardAwareScroll();
 
 export default function GroupsScreen() {
   const db = useSQLiteContext();
@@ -76,6 +82,8 @@ export default function GroupsScreen() {
   const [addPersonName, setAddPersonName] = useState('');
   const [defaultSplit, setDefaultSplit] = useState<SplitMode>('equal');
   const [viewMode, setViewMode] = useState<'active' | 'archived'>('active');
+  // Search by name, once there are enough groups to need it.
+  const [query, setQuery] = useState('');
   const swipeableRefs = useRef<Map<string, Swipeable>>(new Map());
 
   // Everything the screen needs besides the groups list itself: archived groups,
@@ -241,6 +249,10 @@ export default function GroupsScreen() {
   // `groupsView.test.ts` is what keeps `ListEmptyComponent` from going unreachable
   // again.
   const { active: activeGroups, showEmptyPrompt } = groupsTabView(groups);
+  const listed = viewMode === 'active' ? activeGroups : archived;
+  const showSearch = listed.length >= SEARCH_FROM;
+  const q = query.trim().toLowerCase();
+  const shownGroups = q ? listed.filter(g => g.name.toLowerCase().includes(q)) : listed;
 
   function renderBalances() {
     const activeFriends = friends.filter(f => f.net !== 0);
@@ -318,7 +330,9 @@ export default function GroupsScreen() {
       ) : (
         <>
       <FlatList
-          data={viewMode === 'active' ? activeGroups : archived}
+          data={shownGroups}
+          // A search box above its results (AGENTS §6b).
+          renderScrollComponent={groupsScroll}
           keyExtractor={g => g.id}
           renderItem={renderGroup}
           contentContainerStyle={[styles.list, { paddingBottom: bottomPad }]}
@@ -326,7 +340,15 @@ export default function GroupsScreen() {
           maxToRenderPerBatch={8}
           windowSize={9}
           refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-          ListHeaderComponent={viewMode === 'active' ? <Text style={[styles.balListLabel, { marginTop: 0 }]}>My groups</Text> : null}
+          ListHeaderComponent={
+            <>
+              {showSearch && (
+                <Input value={query} onChangeText={setQuery} placeholder="Search groups" icon="search"
+                  autoCapitalize="none" autoCorrect={false} accessibilityLabel="Search groups" style={styles.search} />
+              )}
+              {viewMode === 'active' && <Text style={[styles.balListLabel, { marginTop: 0 }]}>My groups</Text>}
+            </>
+          }
           ListFooterComponent={
             viewMode === 'active' ? (
               <>
@@ -349,7 +371,9 @@ export default function GroupsScreen() {
           }
           ItemSeparatorComponent={() => <View style={{ height: space.sm }} />}
           ListEmptyComponent={
-            loading ? null : viewMode === 'active' ? (
+            loading ? null : q ? (
+              <Text style={styles.noMatch}>No group matches “{query.trim()}”.</Text>
+            ) : viewMode === 'active' ? (
               <EmptyState
                 icon="users"
                 title="No groups yet"
@@ -414,6 +438,8 @@ const STRIPE_W = 4;
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   list: { padding: layout.screenPaddingH },
+  search: { marginBottom: space.md },
+  noMatch: { ...type.body, color: colors.textMuted, textAlign: 'center', paddingVertical: space.lg },
   balancesWrap: { marginBottom: space.sm },
   balListLabel: { ...type.label, color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: space.lg, marginBottom: space.sm },
   balList: { paddingHorizontal: space.md },

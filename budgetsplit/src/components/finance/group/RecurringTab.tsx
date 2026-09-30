@@ -1,11 +1,10 @@
 import { useMemo } from 'react';
-import { StyleSheet, ScrollView } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { space, layout } from '../../tokens';
 import { useContentInset } from '../../../hooks/useContentInset';
-import { EmptyState } from '../../ui/EmptyState';
 import { AppRefreshControl } from '../../ui/AppRefreshControl';
-import { RecurringInventory } from '../recurring/RecurringInventory';
-import { StoppedRecurring } from '../recurring/StoppedRecurring';
+import { KeyboardForm } from '../../ui/KeyboardForm';
+import { RecurringBrowser, NoRecurring } from '../recurring/RecurringBrowser';
 import { toRecurringSubs } from '../../../lib/recurringData';
 import type { TxnWithSplits } from '../../../db/queries/transactions';
 
@@ -31,8 +30,7 @@ type Props = {
  * way to do the same thing. The empty state keeps its button — an empty screen needs a way out
  * (AGENTS §2).
  *
- * Stopped rules sit behind one row at the end, like archived groups: out of the way of what is
- * still charging, but one tap from being found (`U-54`).
+ * Search, sort and the Stopped view come from `RecurringBrowser`, shared with Money's screen.
  */
 export function RecurringTab({ rules, skips, meId, onAdd, onOpenRule, refreshing, onRefresh }: Props) {
   const bottomPad = useContentInset({ fab: true });
@@ -48,24 +46,13 @@ export function RecurringTab({ rules, skips, meId, onAdd, onOpenRule, refreshing
     [rules, skips, meId],
   );
   return (
-    <ScrollView
+    // `KeyboardForm`: the list has a search box above its results (AGENTS §6b).
+    <KeyboardForm
       contentContainerStyle={[styles.listContent, { paddingBottom: bottomPad }]}
       refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
     >
-      {subs.length === 0 ? (
-        <EmptyState
-          icon="repeat"
-          title="No recurring yet"
-          body="Rent, Wi-Fi, memberships, anything you set to repeat shows up here with its monthly cost and your share."
-          actionLabel="Add recurring expense"
-          onAction={onAdd}
-        />
-      ) : (
-        <RecurringInventory subs={subs} onOpen={onOpenRule} />
-      )}
-
-      <StoppedRecurring stopped={stopped} onOpen={onOpenRule} />
-    </ScrollView>
+      <RecurringBrowser active={subs} stopped={stopped} onOpen={onOpenRule} empty={<NoRecurring onAdd={onAdd} />} />
+    </KeyboardForm>
   );
 }
 

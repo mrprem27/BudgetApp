@@ -26,7 +26,7 @@ export function PersonalHero({ name, color, imageUri, owe, owed, totals, periodL
   owe: number;
   owed: number;
   totals: ActivityTotals;
-  /** What the row covers — "This month", "Filtered". */
+  /** What the row covers — "This month", "This month · 2 filters". */
   periodLabel: string;
   onReports: () => void;
 }) {
@@ -64,7 +64,8 @@ export function PersonalHero({ name, color, imageUri, owe, owed, totals, periodL
             <View style={styles.divider} />
             <Stat label="Income" value={formatCompact(totals.income)} tint={kindColor('income')} />
             <View style={styles.divider} />
-            <Stat label="With others" value={`${nv.sign}${formatCompact(Math.abs(totals.netWithOthers))}`} tint={nv.color} />
+            {/* Net with friends over the period: what they paid for you minus what you paid for them. */}
+            <Stat label="Friends" value={`${nv.sign}${formatCompact(Math.abs(totals.netWithOthers))}`} tint={nv.color} />
           </View>
         </View>
         <TouchableOpacity onPress={onReports} style={styles.go} hitSlop={6} accessibilityRole="button" accessibilityLabel="Open these in Reports">
