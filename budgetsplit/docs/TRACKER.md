@@ -2,7 +2,7 @@
 
 `Last verified: 2026-09-30 (§0, §1, §9–§11 and every row whose status changed; the rest as of 2026-09-07) · Guarded by: trackerIntegrity.test.ts · countClaims.test.ts · docIdGraph.test.ts`
 
-**279 items, 96 of them still open.** One row each: what it is, and where it stands.
+**279 items, 95 of them still open.** One row each: what it is, and where it stands.
 Nothing else. **This is the V1 tracker** — start at §0.
 
 **The evidence is not here.** Why each item exists, what it costs, what breaks if you touch it, and
@@ -26,7 +26,7 @@ is defined in two places.
 | §3 · Decisions — `DQ-` | **36** | 64 |
 | §4 · Walk 1 — `W1-` | **12** | 39 |
 | §5 · Sync — `SYNC-F` | **0** | 24 |
-| §6 · Debt — `D-` | **8** | 11 |
+| §6 · Debt — `D-` | **7** | 11 |
 | §7 · Accepted — `A-` | **1** | 11 |
 | §9 · Deferred from V1 — `V-` | **7** | 7 |
 | §11 · Open from the last pass, and your feedback — `U-` | **10** | 70 |
@@ -69,6 +69,29 @@ here, one tested commit per step. Phase 5 is what only you can do.
    - Release: `B-19`, `B-14`, `B-04`, `B-05`, `B-08`, `B-09` / `DQ-05`, `B-10`, `B-13`; `B-01` is
      for the public App Store.
    - Business: `DQ-01`, `DQ-03`, `DQ-04`.
+
+### §0a · Ready to test, module by module (checked 2026-09-30)
+
+The eight modules are the system map's areas (`scripts/build-system-map.js`). "Ready" means the
+code is built, every test is green (2,930), the JS bundle builds for iOS and Android, and anything
+it needs on a server is deployed. What is left in each is a decision whose default ships, or waits
+on something outside the repo; none of it stops a phone test.
+
+| Module | Built and green | Server | Left, and why it does not block testing | Ready to test |
+|---|---|---|---|---|
+| Recording money | ✅ Add, itemize (`U-69` grid), voice, receipt scan (Gemini proxy fixed, `U-70`), Paid from picks an account (`U-68`) | Receipt proxy deployed | `DQ-20` voice auto-save switch (default: none), `OV-08` parked | ✅ |
+| Splitting and settling | ✅ Groups, splits, settle up, approvals, trust; live updates (`DQ-108`) | Sync + live hub deployed | UPI checks on devices (`D-01`–`D-03`, `DQ-84`); decisions with defaults | ✅ (UPI hand-offs need your phones) |
+| Budgets and insight | ✅ Budgets, Reports, Insights, Home (one red alarm, `DQ-12`) | — | `DQ-02` name (default kept); `OV-07`/`OV-19` parked | ✅ |
+| Savings and assets | ✅ Goals, assets, Move money, accounts (`SC-48`), card bill bank → card (`DQ-109`) | Syncs | `DQ-15`/`DQ-24`/`DQ-27`/`DQ-87` defaults | ✅ |
+| Recurring and reminders | ✅ Rules, Upcoming, reminders | Server posting waits on Paid (`DQ-105`) | Phones post their own rules, as today | ✅ |
+| Importing and review | ✅ Paste, Paytm, Review inbox | — | Gmail, GPay format, AA: outside the repo (`DQ-81`–`DQ-83`) | ✅ |
+| Accounts, sync and backup | ✅ Sign-in, sync, live updates, backup, `/v1` reads, nightly cleanup | API deployed on a fresh database (2026-09-30) | Workers Paid before other people sign in (`DQ-95`); Brevo key rotation (`B-07`) | ✅ |
+| The app itself | ✅ Onboarding, settings, Help (`DQ-17`), every back button (`OV-10`) | — | Dev tools stay on for the pilot (`DQ-21`/`B-01`) | ✅ |
+
+**To test on a phone:** build from `ios/` in Xcode (or `npx expo run:ios --device`); `.env` already
+points at the live API and receipt proxy. Without the paid Apple account (`B-02`) a free Apple ID
+installs for 7 days at a time. Android has no native project yet (`V-07`). Then `U-10`: your pass,
+and every remark becomes a `U-` row.
 
 **The remaining `DECIDE` rows close on their default** (the last column in §3) unless you say
 otherwise, except the business and legal ones in phase 5. `PARKED` rows keep their trigger.
@@ -197,7 +220,7 @@ otherwise, except the business and legal ones in phase 5. `PARKED` rows keep the
 ---
 ## §6 · Open debt — `D-`
 
-**11 items: 3 `OPEN`, 1 `DECIDE`, 4 `PARKED`, 3 `DONE`.** Real, evidenced, not blocking the pilot. **Verify a bullet against the tree before acting on it, and delete it the moment it lands.**
+**11 items: 3 `OPEN`, 1 `DECIDE`, 3 `PARKED`, 4 `DONE`.** Real, evidenced, not blocking the pilot. **Verify a bullet against the tree before acting on it, and delete it the moment it lands.**
 
 | | What | Status |
 |---|---|---|
@@ -207,10 +230,9 @@ otherwise, except the business and legal ones in phase 5. `PARKED` rows keep the
 | `D-06` | Transfer has no `DetailChips` | `DECIDE` |
 | `D-07` | `budget_group.limit_daily/monthly/yearly` still exist as columns | `PARKED` |
 | `D-08` | The sweep has to know *where from*, and give it back to the same place | `PARKED` |
-| `D-09` | Named accounts as entities | `PARKED` |
 | `D-12` | Import restructure (remainder) | `PARKED` |
 
-**Closed (3), detail in `FINDINGS.md`:** `D-10` `D-04` `D-05`
+**Closed (4), detail in `FINDINGS.md`:** `D-10` `D-04` `D-05` `D-09`
 
 ---
 ## §7 · Known and accepted — `A-`
