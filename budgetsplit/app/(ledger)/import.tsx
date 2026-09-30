@@ -18,6 +18,8 @@ import { queueImportedRows } from '../../src/lib/importCommit';
 import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
 import { haptic } from '../../src/lib/haptics';
 import { IconCircle } from '../../src/components/ui/IconCircle';
+import { TabPills } from '../../src/components/ui/TabPills';
+import { PressableScale } from '../../src/components/ui/PressableScale';
 
 const SAMPLE = '2026-06-01, Swiggy order, -450\n2026-06-02, Salary, 85000\n2026-06-03, Uber, -220';
 
@@ -27,6 +29,7 @@ export default function ImportScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { refresh } = useDataRefresh();
+  const [mode, setMode] = useState<'file' | 'paste'>('file');
   const [source, setSource] = useState<PasteSource>('gpay');
   const [text, setText] = useState('');
   const [parsed, setParsed] = useState<DetectedParse | null>(null);
@@ -61,7 +64,7 @@ export default function ImportScreen() {
       haptic.warning();
       Alert.alert(
         'No transactions in that file',
-        `${name} was read as a ${d.format.toLowerCase()}, but no transactions matched. If it isn't one of the supported exports, paste its text below instead.`,
+        `${name} was read as a ${d.format.toLowerCase()}, but no transactions matched. If it isn't one of the supported exports, copy its text and use Paste text instead.`,
       );
       return;
     }
@@ -162,102 +165,84 @@ export default function ImportScreen() {
     <View style={styles.container}>
       <ScreenHeader title="Import transactions" onBack={() => router.back()} />
       <KeyboardForm contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + space.xl }]}>
-          <Text style={styles.intro}>
-            Import a Paytm or Google Pay statement, a bank / UPI export, a transaction-alert email,
-            or a BudgetSplit CSV export. Pick a file and the format is detected for you, you
-            confirm every transaction in Review before anything is saved.
-          </Text>
+          {/* One line, one way in at a time (`U-43`): this was a paragraph, then a file button,
+              then a paste form with its own chips and hints, all on screen at once. */}
+          <Text style={styles.intro}>Everything you bring in waits in Review until you confirm it.</Text>
 
-          <TouchableOpacity style={styles.fileBtn} onPress={handlePickFile} disabled={extracting} accessibilityRole="button" accessibilityLabel="Choose a PDF, Excel, CSV or text file">
-            <Feather name={extracting ? 'loader' : 'upload'} size={18} color={colors.accent} />
-            <Text style={styles.fileBtnText}>{extracting ? 'Reading PDF…' : 'Choose a file'}</Text>
-          </TouchableOpacity>
-          <Text style={styles.fileHint}>PDF · Excel (.xlsx) · CSV · text</Text>
+          <TabPills
+            tabs={[{ key: 'file', label: 'From a file' }, { key: 'paste', label: 'Paste text' }]}
+            active={mode}
+            onChange={k => { setMode(k as 'file' | 'paste'); clearResult(); }}
+          />
 
           {/* Off-screen pdf.js extractor — mounted only while reading a PDF. */}
           {pdfBase64 && <PdfTextExtractor base64={pdfBase64} onText={onPdfText} onError={onPdfError} />}
 
-          {/* What the picked file turned out to be. No format question is asked —
-              detection already answered it. */}
-          {fileName && parsed && result && result.rows.length > 0 && (
-            <View style={styles.fileCard}>
-              <IconCircle icon="check" size={32} iconSize={16} color={colors.income} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.fileCardTitle} numberOfLines={1}>{parsed.format}</Text>
-                <Text style={styles.fileCardMeta} numberOfLines={1}>
-                  {result.rows.length} transaction{result.rows.length === 1 ? '' : 's'} found
+          {mode === 'file' ? (
+            fileName && parsed && result && result.rows.length > 0 ? (
+              // What the picked file turned out to be. No format question is asked —
+              // detection already answered it.
+              <View style={styles.fileCard}>
+                <IconCircle icon="check" size={40} iconSize={18} color={colors.income} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.fileCardTitle} numberOfLines={1}>{result.rows.length} transaction{result.rows.length === 1 ? '' : 's'} found</Text>
+                  <Text style={styles.fileCardMeta} numberOfLines={1}>
+                    {parsed.format}{result.skipped > 0 ? ` · ${result.skipped} line${result.skipped === 1 ? '' : 's'} skipped` : ''}
+                  </Text>
+                  <Text style={styles.fileCardName} numberOfLines={1}>{fileName}</Text>
+                </View>
+                <TouchableOpacity onPress={clearResult} hitSlop={10} accessibilityRole="button" accessibilityLabel="Clear the picked file">
+                  <Feather name="x" size={18} color={colors.textMuted} />
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <PressableScale style={styles.dropZone} onPress={handlePickFile} disabled={extracting} accessibilityLabel="Choose a PDF, Excel, CSV or text file">
+                <IconCircle icon={extracting ? 'loader' : 'upload'} size={56} iconSize={24} color={colors.accent} bg={colors.accentMuted} />
+                <Text style={styles.dropTitle}>{extracting ? 'Reading PDF…' : 'Choose a file'}</Text>
+                <Text style={styles.dropSub}>Paytm, Google Pay, bank or UPI statements · PDF, Excel, CSV</Text>
+              </PressableScale>
+            )
+          ) : (
+            <>
+              {/* Only consulted for pasted text no detector claims. */}
+              <TabPills
+                tabs={[{ key: 'gpay', label: 'Google Pay' }, { key: 'other', label: 'Bank / UPI' }, { key: 'email', label: 'Email alert' }]}
+                active={source}
+                onChange={k => { setSource(k as PasteSource); clearResult(); }}
+                size="sm"
+              />
+              <Text style={styles.sourceHint}>
+                {source === 'gpay' ? 'Open the statement PDF, select all, copy, paste below.'
+                  : source === 'email' ? 'One alert email is one transaction.'
+                  : 'One transaction per line: date, description, amount.'}
+              </Text>
+              <TextInput
+                style={styles.input}
+                value={text}
+                onChangeText={(t) => { setText(t); clearResult(); }}
+                placeholder={`Paste here, e.g.\n${SAMPLE}`}
+                placeholderTextColor={colors.textMuted}
+                multiline
+                textAlignVertical="top"
+                autoCorrect={false}
+                accessibilityLabel="Statement text"
+              />
+              {result && (
+                <Text style={[styles.result, result.rows.length === 0 && { color: colors.expense }]}>
+                  {result.rows.length > 0
+                    ? `${parsed!.format} · ${result.rows.length} transaction${result.rows.length === 1 ? '' : 's'} found`
+                    : 'No transactions found in that text'}
                   {result.skipped > 0 ? ` · ${result.skipped} line${result.skipped === 1 ? '' : 's'} skipped` : ''}
                 </Text>
-                <Text style={styles.fileCardName} numberOfLines={1}>{fileName}</Text>
-              </View>
-              <TouchableOpacity
-                onPress={clearResult}
-                hitSlop={10}
-                accessibilityRole="button"
-                accessibilityLabel="Clear the picked file"
-              >
-                <Feather name="x" size={18} color={colors.textMuted} />
-              </TouchableOpacity>
-            </View>
-          )}
-
-          <Text style={styles.orHint}>or paste the statement text</Text>
-
-          {/* Source picker — only consulted for pasted text no detector claims. */}
-          <Text style={styles.sourceLabel}>PASTED TEXT SOURCE</Text>
-          <View style={styles.sourceRow}>
-            {([['gpay', 'Google Pay'], ['other', 'Bank / UPI (CSV)'], ['email', 'Email alert']] as const).map(([key, label]) => (
-              <TouchableOpacity
-                key={key}
-                style={[styles.sourceChip, source === key && styles.sourceChipOn]}
-                onPress={() => { haptic.selection(); setSource(key); clearResult(); }}
-                accessibilityRole="button"
-                accessibilityState={{ selected: source === key }}
-              >
-                <Text style={[styles.sourceChipText, source === key && styles.sourceChipTextOn]}>{label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-          {source === 'gpay' && (
-            <Text style={styles.sourceHint}>
-              Open your Google Pay statement PDF → Select All → Copy → paste below. (Picking the PDF
-              directly works too when its text is readable.)
-            </Text>
-          )}
-          {source === 'email' && (
-            <Text style={styles.sourceHint}>
-              Forward or copy a bank / UPI transaction-alert email (HDFC, ICICI, GPay, PhonePe…) and
-              paste it below, one alert = one transaction. You confirm it in Review.
-            </Text>
-          )}
-
-          <TextInput
-            style={styles.input}
-            value={text}
-            onChangeText={(t) => { setText(t); clearResult(); }}
-            placeholder={`Paste here, e.g.\n${SAMPLE}`}
-            placeholderTextColor={colors.textMuted}
-            multiline
-            textAlignVertical="top"
-            autoCorrect={false}
-            accessibilityLabel="Statement text"
-          />
-
-          {/* Pasted-text outcome. A picked file reports in its own card above. */}
-          {result && !fileName && (
-            <Text style={styles.result}>
-              {result.rows.length > 0
-                ? `${parsed!.format} · found ${result.rows.length} transaction${result.rows.length === 1 ? '' : 's'}`
-                : 'No transactions found'}
-              {result.skipped > 0 ? ` · ${result.skipped} line${result.skipped === 1 ? '' : 's'} skipped` : ''}
-            </Text>
+              )}
+            </>
           )}
 
           {result && result.rows.length > 0 ? (
-            <PrimaryButton label={`Add ${result.rows.length} to review`} onPress={handleAdd} loading={saving} style={{ marginTop: space.md }} />
-          ) : (
-            <PrimaryButton label="Parse" onPress={handleParse} disabled={!text.trim()} style={{ marginTop: space.md }} />
-          )}
+            <PrimaryButton label={`Add ${result.rows.length} to review`} onPress={handleAdd} loading={saving} />
+          ) : mode === 'paste' ? (
+            <PrimaryButton label="Find transactions" onPress={handleParse} disabled={!text.trim()} />
+          ) : null}
         </KeyboardForm>
     </View>
   );
@@ -265,31 +250,28 @@ export default function ImportScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  scroll: { padding: layout.screenPaddingH },
-  intro: { ...type.body, color: colors.textSecondary, marginBottom: space.md, lineHeight: 20 },
-  sourceLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8, fontFamily: 'Inter_600SemiBold', marginBottom: space.xs },
-  sourceRow: { flexDirection: 'row', gap: space.sm, marginBottom: space.sm },
-  sourceChip: { flex: 1, alignItems: 'center', paddingVertical: space.smd, borderRadius: radius.md, backgroundColor: colors.bgMuted, borderWidth: 1, borderColor: 'transparent' },
-  sourceChipOn: { backgroundColor: colors.accentMuted, borderColor: colors.accent },
-  sourceChipText: { ...type.label, color: colors.textSecondary },
-  sourceChipTextOn: { color: colors.accent, fontFamily: 'Inter_600SemiBold' },
-  sourceHint: { ...type.caption, color: colors.textMuted, marginBottom: space.md, lineHeight: 16 },
-  fileBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, paddingVertical: space.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.accent, backgroundColor: colors.accentMuted },
-  fileBtnText: { ...type.body, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
-  fileHint: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginTop: space.xs },
+  scroll: { padding: layout.screenPaddingH, gap: space.md },
+  intro: { ...type.caption, color: colors.textSecondary },
+  sourceHint: { ...type.caption, color: colors.textMuted },
+  dropZone: {
+    alignItems: 'center', gap: space.sm, paddingVertical: space.xl, paddingHorizontal: space.lg,
+    borderRadius: radius.lg, borderWidth: 1.5, borderStyle: 'dashed', borderColor: alpha(colors.accent, 40),
+    backgroundColor: colors.bgCard,
+  },
+  dropTitle: { ...type.subheading, color: colors.textPrimary },
+  dropSub: { ...type.caption, color: colors.textMuted, textAlign: 'center' },
   fileCard: {
-    flexDirection: 'row', alignItems: 'center', gap: space.md, marginTop: space.md,
+    flexDirection: 'row', alignItems: 'center', gap: space.md,
     padding: space.md, borderRadius: radius.lg, backgroundColor: colors.bgCard,
     borderWidth: 1, borderColor: alpha(colors.income, 33),
   },
   fileCardTitle: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   fileCardMeta: { ...type.caption, color: colors.income, marginTop: 1 },
   fileCardName: { ...type.caption, color: colors.textMuted, marginTop: 1 },
-  orHint: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginVertical: space.md },
   input: {
     ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput,
     borderRadius: radius.md, borderWidth: 1, borderColor: colors.border,
-    padding: space.md, minHeight: 200, fontFamily: 'SpaceMono_400Regular', fontSize: 13,
+    padding: space.md, minHeight: 180, fontFamily: 'SpaceMono_400Regular', fontSize: 13,
   },
-  result: { ...type.label, color: colors.textSecondary, marginTop: space.md },
+  result: { ...type.label, color: colors.textSecondary },
 });

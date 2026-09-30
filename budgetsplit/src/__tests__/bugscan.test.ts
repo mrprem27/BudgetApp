@@ -1212,3 +1212,15 @@ describe('U-39 · a Home tile says it opens something', () => {
     expect(fs.readFileSync('src/components/finance/home/HomeTiles.tsx', 'utf8')).toMatch(/<Feather name="arrow-up-right"/);
   });
 });
+
+describe('U-43 · Import shows one way in at a time', () => {
+  const src = fs.readFileSync('app/(ledger)/import.tsx', 'utf8');
+  it('switches File / Paste with a segmented control, and the paste source is one too', () => {
+    expect(src).toMatch(/<TabPills\s+tabs=\{\[\{ key: 'file'/);
+    expect(src).toMatch(/<TabPills\s+tabs=\{\[\{ key: 'gpay'/);
+    expect(src).not.toMatch(/styles\.sourceChip/);
+  });
+  it('says what it does in one line', () => {
+    expect(src).toMatch(/<Text style=\{styles\.intro\}>[^<]{0,90}<\/Text>/);
+  });
+});
