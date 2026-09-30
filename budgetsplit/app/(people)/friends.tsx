@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Alert, TextInput } from 'reac
 import { useSQLiteContext } from 'expo-sqlite';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { colors, type, space, radius, layout, shadow } from '../../src/theme';
+import { colors, type, space, radius, layout } from '../../src/theme';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { HeaderIconButton } from '../../src/components/ui/HeaderIconButton';
 import { ErrorState } from '../../src/components/ui/ErrorState';
@@ -23,6 +23,7 @@ import { useScreenData } from '../../src/hooks/useScreenData';
 import { useStore } from '../../src/store';
 import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
 import { PersonNameSheet } from '../../src/components/finance/PersonNameSheet';
+import { Card } from '../../src/components/ui/Card';
 
 export default function FriendsScreen() {
   const db = useSQLiteContext();
@@ -212,13 +213,13 @@ export default function FriendsScreen() {
             * own screen, one tap away, so no row carries buttons competing with its balance.
             */}
           {exposure && (exposure.owed > 0 || exposure.owe > 0) && (
-            <View style={[styles.card, styles.sumCard]}>
+            <Card clip style={[styles.card, styles.sumCard]}>
               <SumLine op="" label="Owed to you" value={exposure.owed} color={colors.income}
                 hint={peopleCount(exposure.owedPeople)} />
               <SumLine op="−" label="You owe" value={exposure.owe} color={exposure.owe > 0 ? colors.expense : undefined}
                 hint={peopleCount(exposure.owePeople)} />
               <SumLine op="=" label="Net with friends" value={exposure.net} total />
-            </View>
+            </Card>
           )}
 
           {people.length > 4 && (
@@ -255,7 +256,7 @@ export default function FriendsScreen() {
           )}
 
           {open.length > 0 && (
-            <View style={styles.card}>
+            <Card clip style={styles.card}>
               {open.map((p, i) => {
                 const bal = balances[p.id];
                 const ov = oweView(bal?.net ?? 0);
@@ -272,19 +273,19 @@ export default function FriendsScreen() {
                   />
                 );
               })}
-            </View>
+            </Card>
           )}
 
           {square.length > 0 && (
             <>
               <Text style={styles.sectionLabel}>ALL SQUARE · {square.length}</Text>
-              <View style={styles.card}>
+              <Card clip style={styles.card}>
                 {square.map((p, i) => (
                   <FriendRow key={p.id} person={p} last={i === square.length - 1} quiet
                     caption={captionFor(p, balances[p.id]?.groupCount ?? 0)}
                     onOpen={() => router.push(`/person/${p.id}`)} onRename={() => openRename(p)} onPhoto={() => changePhoto(p)} />
                 ))}
-              </View>
+              </Card>
             </>
           )}
 
@@ -385,7 +386,7 @@ const styles = StyleSheet.create({
   noMatchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, paddingVertical: space.lg },
   noMatch: { ...type.body, color: colors.textMuted },
   noMatchClear: { ...type.body, color: colors.accent },
-  card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden', marginBottom: space.md, ...shadow.sm },
+  card: { marginBottom: space.md },
   sumCard: { padding: space.md, gap: 6, marginBottom: space.lg },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md, paddingHorizontal: space.md, minHeight: 56 },
   rowQuiet: { paddingVertical: space.sm, minHeight: 48 },

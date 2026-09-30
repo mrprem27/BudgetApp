@@ -10,6 +10,7 @@ import { Badge } from '../../ui/Badge';
 import { PressableScale } from '../../ui/PressableScale';
 import { SumLine } from '../../ui/SumLine';
 import type { TotalMoney } from '../../../lib/cash';
+import { Card } from '../../ui/Card';
 
 const WEEK = 7 * 24 * 60 * 60 * 1000;
 const MONTH = 30 * 24 * 60 * 60 * 1000;
@@ -64,7 +65,7 @@ export function TotalMoneyCard({ money, byBucket, unattributed, updatedAt, onEdi
     .sort((a, b) => b.v - a.v);
 
   return (
-    <View style={styles.card}>
+    <Card padded style={styles.card}>
       <PressableScale onPress={onEdit} accessibilityLabel="Available money, tap to edit">
         <View style={styles.headRow}>
           <Text style={styles.eyebrow}>Available money</Text>
@@ -104,7 +105,7 @@ export function TotalMoneyCard({ money, byBucket, unattributed, updatedAt, onEdi
           {money.creditUsed > 0 && onPayCardBill && <Action icon="credit-card" label="Card bill paid" onPress={onPayCardBill} />}
         </View>
       )}
-    </View>
+    </Card>
   );
 }
 
@@ -121,7 +122,7 @@ function Action({ icon, label, onPress }: { icon: keyof typeof Feather.glyphMap;
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, gap: space.md, ...shadow.md },
+  card: { gap: space.md, ...shadow.md },
   headRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: space.xs },
   headRight: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   eyebrow: { ...type.label, color: colors.textSecondary },

@@ -6,7 +6,7 @@ import { Feather } from '@expo/vector-icons';
 import { isSameDay } from 'date-fns';
 import { shortDate, timeOfDay } from '../../src/lib/dateFormat';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, type, space, radius, layout, shadow } from '../../src/theme';
+import { colors, type, space, layout } from '../../src/theme';
 import { EmptyState } from '../../src/components/ui/EmptyState';
 import { ErrorState } from '../../src/components/ui/ErrorState';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
@@ -14,6 +14,7 @@ import { AppRefreshControl } from '../../src/components/ui/AppRefreshControl';
 import { formatCompact } from '../../src/lib/money';
 import type { AuditAction } from '../../src/constants/enums';
 import { loadHistory, historySections, auditEntryView, type HistorySection } from '../../src/lib/historyData';
+import { Card } from '../../src/components/ui/Card';
 
 const PAGE_SIZE = 30;
 
@@ -40,7 +41,7 @@ const SectionCard = React.memo(function SectionCard({ section }: { section: Hist
   return (
     <View>
       <Text style={styles.sectionLabel}>{section.title}</Text>
-      <View style={styles.card}>
+      <Card clip style={styles.card}>
         {section.data.map((item, i) => {
           const dotColor = DOT_COLOR[item.action] ?? colors.accent;
           const { label, sign, tone } = auditEntryView(item);
@@ -74,7 +75,7 @@ const SectionCard = React.memo(function SectionCard({ section }: { section: Hist
             </View>
           );
         })}
-      </View>
+      </Card>
     </View>
   );
 });
@@ -138,7 +139,7 @@ const styles = StyleSheet.create({
   scroll: { paddingHorizontal: layout.screenPaddingH, paddingTop: space.xs },
   subtitle: { fontSize: 13, color: colors.textMuted, marginBottom: space.md, lineHeight: 18 },
   sectionLabel: { fontSize: 10, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, fontFamily: 'Inter_600SemiBold', marginBottom: space.sm, marginTop: space.xs },
-  card: { backgroundColor: colors.bgCard, borderRadius: 14, borderWidth: 1, borderColor: colors.border, marginBottom: 10, overflow: 'hidden', ...shadow.sm },
+  card: { marginBottom: 10 },
   entry: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingHorizontal: 14, paddingVertical: 12 },
   entryBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
   entryDot: { width: 8, height: 8, borderRadius: 4, flexShrink: 0, marginTop: 5 },

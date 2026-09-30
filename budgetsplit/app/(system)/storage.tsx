@@ -4,7 +4,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useScreenData } from '../../src/hooks/useScreenData';
 import { Feather } from '@expo/vector-icons';
-import { colors, type, space, radius, layout, shadow } from '../../src/theme';
+import { colors, type, space, radius, layout } from '../../src/theme';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { Banner } from '../../src/components/ui/Banner';
 import { ErrorState } from '../../src/components/ui/ErrorState';
@@ -157,11 +157,11 @@ export default function StorageScreen() {
           />
         ) : (
           <>
-            <View style={styles.card}>
+            <Card style={styles.card}>
               <IconCircle icon="paperclip" size={56} iconSize={20} color={colors.accent} bg={colors.accentMuted} style={styles.iconCircle} />
               <Text style={styles.amount}>{formatBytes(bytes)}</Text>
               <Text style={styles.sub}>{count} receipt {count === 1 ? 'photo' : 'photos'} stored on this device</Text>
-            </View>
+            </Card>
 
             <Text style={styles.note}>
               Receipt photos are compressed on import and stored only on this device. (Scanning a
@@ -212,7 +212,7 @@ export default function StorageScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   content: { padding: layout.screenPaddingH, gap: space.lg },
-  card: { alignItems: 'center', gap: space.xs, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.xl, ...shadow.sm },
+  card: { alignItems: 'center', gap: space.xs, padding: space.xl },
   iconCircle: { marginBottom: space.xs  },
   amount: { ...type.title, color: colors.textPrimary },
   sub: { ...type.body, color: colors.textSecondary, textAlign: 'center' },

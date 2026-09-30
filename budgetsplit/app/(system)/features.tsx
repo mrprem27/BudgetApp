@@ -7,7 +7,7 @@ import { Feather } from '@expo/vector-icons';
 import { settings } from '../../src/lib/settings';
 import { splittingFootprint } from '../../src/lib/groupsData';
 import { formatRupees } from '../../src/lib/money';
-import { colors, type, space, radius, layout, shadow, alpha } from '../../src/theme';
+import { colors, type, space, radius, layout, alpha } from '../../src/theme';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 import { SheetModal } from '../../src/components/ui/SheetModal';
@@ -18,6 +18,7 @@ import { applyLevel, LEVEL_OPTIONS, type Level } from '../../src/lib/levels';
 import { OptionRow } from '../../src/components/ui/OptionRow';
 import { applyPersona, asIntent, PERSONA_OPTIONS, type OnboardingIntent } from '../../src/lib/personaDefaults';
 import { haptic } from '../../src/lib/haptics';
+import { Card } from '../../src/components/ui/Card';
 
 // The pillar is always on — the app's reason to exist. It shows a "Core" badge
 // instead of a toggle so users understand they can't switch off the basics.
@@ -288,7 +289,7 @@ export default function FeaturesScreen() {
           return (
             <>
               <Text style={styles.sectionTitle}>Your setup</Text>
-              <View style={styles.card}>
+              <Card style={styles.card}>
                 <TouchableOpacity style={styles.row} onPress={() => setPickerOpen(true)} accessibilityRole="button" accessibilityLabel="Change my setup">
                   <IconCircle icon={opt?.icon ?? 'layers'} size={32} color={colors.accent} />
                   <View style={{ flex: 1 }}>
@@ -307,14 +308,14 @@ export default function FeaturesScreen() {
                   </View>
                   <Feather name="chevron-right" size={18} color={colors.textMuted} />
                 </TouchableOpacity>
-              </View>
+              </Card>
             </>
           );
         })()}
 
         {/* ALWAYS ON — the three pillars, no toggle */}
         <Text style={styles.sectionTitle}>Always on</Text>
-        <View style={styles.card}>
+        <Card style={styles.card}>
           {CORES.map((c, i) => (
             <View key={c.label}>
               {i > 0 && <View style={styles.divider} />}
@@ -332,13 +333,13 @@ export default function FeaturesScreen() {
               </View>
             </View>
           ))}
-        </View>
+        </Card>
 
         {/* OPTIONAL MODULES — grouped into sections */}
         {MODULE_SECTIONS.map(section => (
           <View key={section.title}>
             <Text style={styles.sectionTitle}>{section.title}</Text>
-            <View style={styles.card}>
+            <Card style={styles.card}>
               {section.items.map((m, i) => (
                 <View key={m.label}>
                   {i > 0 && <View style={styles.divider} />}
@@ -352,7 +353,7 @@ export default function FeaturesScreen() {
                   </View>
                 </View>
               ))}
-            </View>
+            </Card>
           </View>
         ))}
 
@@ -368,7 +369,7 @@ export default function FeaturesScreen() {
       </SheetModal>
 
       <SheetModal visible={pickerOpen} onClose={() => setPickerOpen(false)} title="What are you using BudgetSplit for?">
-        <View style={styles.card}>
+        <Card style={styles.card}>
           {PERSONA_OPTIONS.map((o, i) => (
             <View key={o.key}>
               {i > 0 && <View style={styles.divider} />}
@@ -382,7 +383,7 @@ export default function FeaturesScreen() {
               </TouchableOpacity>
             </View>
           ))}
-        </View>
+        </Card>
       </SheetModal>
     </View>
   );
@@ -394,7 +395,7 @@ const styles = StyleSheet.create({
   scroll: { padding: layout.screenPaddingH, paddingBottom: space.lg, gap: space.xs },
   intro: { ...type.body, color: colors.textSecondary, marginBottom: space.sm, lineHeight: 20 },
   sectionTitle: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, fontFamily: 'Inter_600SemiBold', marginTop: space.md, marginBottom: space.xs, marginLeft: space.xs },
-  card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, ...shadow.sm },
+  card: { paddingHorizontal: space.md },
   divider: { height: 1, backgroundColor: colors.border, marginLeft: space.xl + space.md },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.smd, minHeight: 56 },
   rowOff: { opacity: 0.7 },

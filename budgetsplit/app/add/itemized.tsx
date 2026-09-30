@@ -7,7 +7,7 @@ import {
 import { KeyboardForm, keyboardAwareScroll } from '../../src/components/ui/KeyboardForm';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { colors, type, space, radius, layout, shadow, alpha } from '../../src/theme';
+import { colors, type, space, radius, layout, alpha } from '../../src/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { formatRupees, parseToPaise } from '../../src/lib/money';
 import { computeItemSubtotal, splitItemBase, type Adjustment } from '../../src/lib/itemized';
@@ -26,6 +26,7 @@ import { PAY_METHOD_LABEL, AddKind } from '../../src/constants/enums';
 import { haptic } from '../../src/lib/haptics';
 import { useItemizedForm, ITEMIZED_STEPS, ADJUSTMENT_LABELS } from '../../src/hooks/useItemizedForm';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
+import { Card } from '../../src/components/ui/Card';
 
 /**
  * Itemized-bill wizard (items → assign → payers → review). All state and
@@ -67,7 +68,7 @@ export default function ItemizedScreen() {
       </View>
 
       {/* TOTAL preview card */}
-      <View style={styles.totalCard}>
+      <Card padded style={styles.totalCard}>
         <View style={styles.totalCardLeft}>
           <Text style={styles.totalCardLabel}>TOTAL</Text>
           <Text style={styles.totalCardAmount} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{formatRupees(f.total)}</Text>
@@ -81,7 +82,7 @@ export default function ItemizedScreen() {
             </View>
           )}
         </View>
-      </View>
+      </Card>
 
       {/* STEP 1: ITEMS */}
       {f.step === 'items' && (
@@ -162,7 +163,7 @@ export default function ItemizedScreen() {
           {f.items.length > 0 && (
             <>
               <Text style={styles.sectionLabel}>LINE ITEMS</Text>
-              <View style={styles.card}>
+              <Card style={styles.card}>
                 {f.items.map((item, idx) => {
                   const editing = f.editingId === item.id;
                   return (
@@ -226,12 +227,12 @@ export default function ItemizedScreen() {
                   </View>
                   );
                 })}
-              </View>
+              </Card>
             </>
           )}
 
           {f.items.length > 0 && (
-            <View style={styles.card}>
+            <Card style={styles.card}>
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Subtotal</Text>
                 <Text style={styles.summaryVal}>{formatRupees(f.subtotal)}</Text>
@@ -259,7 +260,7 @@ export default function ItemizedScreen() {
                 <Text style={styles.summaryTotalLabel}>Total</Text>
                 <Text style={styles.summaryTotalVal}>{formatRupees(f.total)}</Text>
               </View>
-            </View>
+            </Card>
           )}
 
           {f.items.length > 0 && (
@@ -299,7 +300,7 @@ export default function ItemizedScreen() {
             </TouchableOpacity>
           }
           renderItem={({ item }) => (
-            <View style={styles.assignItem}>
+            <Card clip>
               <TouchableOpacity style={styles.assignItemHeader} onPress={() => f.setExpandedItem(f.expandedItem === item.id ? null : item.id)}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
@@ -337,12 +338,12 @@ export default function ItemizedScreen() {
                   </View>
                 );
               })()}
-            </View>
+            </Card>
           )}
           ItemSeparatorComponent={() => <View style={styles.sep} />}
           ListFooterComponent={
             <>
-              <View style={styles.card}>
+              <Card style={styles.card}>
                 {f.members.map((m, i) => (
                   <View key={m.id} style={[styles.perPersonRow, i < f.members.length - 1 && styles.rowBorder]}>
                     <MemberAvatar name={m.name} color={m.avatar_color} size={32} imageUri={m.image_uri} />
@@ -350,7 +351,7 @@ export default function ItemizedScreen() {
                     <Text style={styles.perPersonAmount}>{formatRupees(f.perPerson[m.id] ?? 0)}</Text>
                   </View>
                 ))}
-              </View>
+              </Card>
               {f.unassignedTotal !== 0 && (
                 <View style={styles.unassignedBanner}>
                   <View style={styles.unassignedBannerRow}>
@@ -382,7 +383,7 @@ export default function ItemizedScreen() {
       {f.step === 'payers' && (
         <KeyboardForm contentContainerStyle={styles.scroll}>
           <Text style={styles.fieldLabel}>Who paid? Must equal total {formatRupees(f.total)}</Text>
-          <View style={styles.card}>
+          <Card style={styles.card}>
             {f.members.map((m, i) => (
               <View key={m.id} style={[styles.payerRow, i < f.members.length - 1 && styles.rowBorder]}>
                 <MemberAvatar name={m.name} color={m.avatar_color} size={36} imageUri={m.image_uri} />
@@ -400,7 +401,7 @@ export default function ItemizedScreen() {
                 </View>
               </View>
             ))}
-          </View>
+          </Card>
           <Text style={[styles.remainderText, { color: f.paymentRemainder === 0 ? colors.income : colors.expense }]}>
             {f.paymentRemainder === 0 ? 'Balanced' : f.paymentRemainder > 0 ? `${formatRupees(f.paymentRemainder)} remaining` : `${formatRupees(-f.paymentRemainder)} over`}
           </Text>
@@ -478,7 +479,7 @@ export default function ItemizedScreen() {
           </View>
 
           <Text style={[styles.fieldLabel, { marginTop: space.md }]}>Paid by</Text>
-          <View style={styles.card}>
+          <Card style={styles.card}>
             {f.payments.map((p, i) => {
               const m = f.members.find(m => m.id === p.personId);
               return m ? (
@@ -489,7 +490,7 @@ export default function ItemizedScreen() {
                 </View>
               ) : null;
             })}
-          </View>
+          </Card>
 
           <View style={styles.navRow}>
             <TouchableOpacity onPress={() => f.setStep('payers')} style={styles.backBtn} accessibilityRole="button">
@@ -569,7 +570,7 @@ const styles = StyleSheet.create({
   dots: { flexDirection: 'row', gap: 6, paddingHorizontal: layout.screenPaddingH, marginBottom: space.sm },
   dot: { flex: 1, height: 3, borderRadius: 2, backgroundColor: colors.bgMuted },
   dotActive: { backgroundColor: colors.accent },
-  totalCard: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginHorizontal: layout.screenPaddingH, marginBottom: space.sm, padding: space.md, backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border, borderRadius: 14 },
+  totalCard: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginHorizontal: layout.screenPaddingH, marginBottom: space.sm },
   totalCardLeft: { flexShrink: 1 },
   totalCardLabel: { ...type.caption, color: colors.textMuted, letterSpacing: 0.5 },
   totalCardAmount: { fontFamily: 'SpaceMono_400Regular', fontSize: 28, color: colors.textPrimary, marginTop: 2 },
@@ -594,7 +595,7 @@ const styles = StyleSheet.create({
   addBtn: { width: 48, height: 44, backgroundColor: colors.accent, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   addBtnDisabled: { opacity: 0.4 },
 
-  card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, ...shadow.sm },
+  card: { paddingHorizontal: space.md },
   rowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
   itemRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md },
   itemName: { ...type.body, color: colors.textPrimary },
@@ -625,7 +626,6 @@ const styles = StyleSheet.create({
 
   splitRestBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, padding: space.md, borderRadius: radius.md, backgroundColor: colors.accentMuted, marginBottom: space.md },
   splitRestText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
-  assignItem: { backgroundColor: colors.bgCard, borderRadius: radius.lg, overflow: 'hidden', borderWidth: 1, borderColor: colors.border, ...shadow.sm },
   assignItemHeader: { flexDirection: 'row', alignItems: 'center', padding: space.md },
   unassignedTag: { ...type.caption, color: colors.expense, backgroundColor: alpha(colors.expense, 13), paddingHorizontal: space.sm, paddingVertical: 3, borderRadius: radius.pill },
   splitBody: { paddingHorizontal: space.md, paddingBottom: space.md, gap: space.sm },

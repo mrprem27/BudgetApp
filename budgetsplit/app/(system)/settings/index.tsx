@@ -9,7 +9,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { settings } from '../../../src/lib/settings';
-import { colors, type, space, radius, layout, shadow } from '../../../src/theme';
+import { colors, type, space, radius, layout } from '../../../src/theme';
 import { haptic } from '../../../src/lib/haptics';
 import { loadSettingsTab, saveMyName, saveMyVpa } from '../../../src/lib/settingsData';
 import { replacePersonPhoto } from '../../../src/lib/personWrites';
@@ -38,6 +38,7 @@ import { asBudgetCadence, asPayMethod, PayMethod, PAY_METHOD_ICON, PAY_METHOD_LA
 import { useScreenData } from '../../../src/hooks/useScreenData';
 import { useServerSession } from '../../../src/hooks/useServerSession';
 import { ErrorState } from '../../../src/components/ui/ErrorState';
+import { Card } from '../../../src/components/ui/Card';
 
 const CADENCE_LABELS: Record<BudgetCadence, string> = { daily: 'Daily', monthly: 'Monthly', yearly: 'Yearly' };
 const CADENCE_KEYS: BudgetCadence[] = ['daily', 'monthly', 'yearly'];
@@ -261,35 +262,37 @@ export default function SettingsScreen() {
       )}
 
       {/* Profile card — hero */}
-      <TouchableOpacity style={styles.profileCard} onPress={() => { setNameText(me?.name ?? ''); setShowName(true); }} accessibilityRole="button" accessibilityLabel="Edit profile">
-        <TouchableOpacity
-          onPress={me ? async () => {
-            try {
-              if (await replacePersonPhoto(db, me)) { haptic.success(); await reload(); refresh(); }
-            } catch { haptic.error(); }
-          } : undefined}
-          accessibilityLabel="Change avatar"
-          hitSlop={4}
-        >
-          <MemberAvatar
-            name={me?.name ?? '?'}
-            color={me?.avatar_color ?? colors.accent}
-            size={56}
-            imageUri={me?.image_uri}
-          />
-          <View style={styles.cameraBadge} pointerEvents="none">
-            <Feather name="camera" size={10} color={colors.bg} />
+      <TouchableOpacity style={styles.profileTap} onPress={() => { setNameText(me?.name ?? ''); setShowName(true); }} accessibilityRole="button" accessibilityLabel="Edit profile">
+        <Card padded style={styles.profileCard}>
+          <TouchableOpacity
+            onPress={me ? async () => {
+              try {
+                if (await replacePersonPhoto(db, me)) { haptic.success(); await reload(); refresh(); }
+              } catch { haptic.error(); }
+            } : undefined}
+            accessibilityLabel="Change avatar"
+            hitSlop={4}
+          >
+            <MemberAvatar
+              name={me?.name ?? '?'}
+              color={me?.avatar_color ?? colors.accent}
+              size={56}
+              imageUri={me?.image_uri}
+            />
+            <View style={styles.cameraBadge} pointerEvents="none">
+              <Feather name="camera" size={10} color={colors.bg} />
+            </View>
+          </TouchableOpacity>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.profileName}>{me?.name ?? 'You'}</Text>
+            <Text style={styles.profileSub}>
+              {serverSession
+                ? serverSession.user.email
+                : serverSessionConfigured ? 'On this phone · sign in to link with people' : 'On this phone · no account needed'}
+            </Text>
           </View>
-        </TouchableOpacity>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.profileName}>{me?.name ?? 'You'}</Text>
-          <Text style={styles.profileSub}>
-            {serverSession
-              ? serverSession.user.email
-              : serverSessionConfigured ? 'On this phone · sign in to link with people' : 'On this phone · no account needed'}
-          </Text>
-        </View>
-        <Feather name="edit-2" size={16} color={colors.textMuted} />
+          <Feather name="edit-2" size={16} color={colors.textMuted} />
+        </Card>
       </TouchableOpacity>
 
       {/* ACCOUNT — only in a build that has a server to talk to
@@ -299,7 +302,7 @@ export default function SettingsScreen() {
       {serverSessionConfigured && (
         <>
           <Text style={[styles.sectionTitle, sectionTop(true)]}>Account</Text>
-          <View style={styles.card}>
+          <Card clip>
             <SettingsRow
               icon={serverSession ? 'user-check' : 'cloud'}
               label={serverSession ? 'Account' : 'Sign in'}
@@ -307,7 +310,7 @@ export default function SettingsScreen() {
               value={serverSession ? serverSession.user.email : 'Keep a copy on your account'}
               onPress={() => { router.push('/settings/account'); }}
             />
-          </View>
+          </Card>
         </>
       )}
 
@@ -317,7 +320,7 @@ export default function SettingsScreen() {
       {flags.upiSettle && (
         <>
           <Text style={[styles.sectionTitle, sectionTop(!serverSessionConfigured)]}>Getting paid</Text>
-          <View style={styles.card}>
+          <Card clip>
             <SettingsRow
               icon="credit-card"
               label="Your UPI ID"
@@ -333,13 +336,13 @@ export default function SettingsScreen() {
               value="Any UPI app"
               onPress={() => setShowMyQr(true)}
             />
-          </View>
+          </Card>
         </>
       )}
 
       {/* MANAGE */}
       <Text style={[styles.sectionTitle, sectionTop(!serverSessionConfigured && !flags.upiSettle)]}>Manage</Text>
-      <View style={styles.card}>
+      <Card clip>
         <SettingsRow
           icon="users"
           label="Friends"
@@ -363,11 +366,11 @@ export default function SettingsScreen() {
           value={budgetMonthly > 0 ? `${formatCompact(budgetMonthly)}/mo` : 'Not set'}
           onPress={() => router.push('/budget')}
         />
-      </View>
+      </Card>
 
       {/* PREFERENCES */}
       <Text style={styles.sectionTitle}>Preferences</Text>
-      <View style={styles.card}>
+      <Card clip>
         {/* `B-101`/`DQ-101`: Currency dropped — it was never tappable
             (`onPress={undefined}`, INR only), which reads as a broken row,
             not as "there's only one option." Comes back once there's a second
@@ -385,11 +388,11 @@ export default function SettingsScreen() {
           <View style={settingsRowDivider} />
           <SettingsRow icon="bell" label="Notifications & Reminders" tint={TINT.notifications} value="Bills · daily log" onPress={() => { router.push('/settings/notifications'); }} />
         </>)}
-      </View>
+      </Card>
 
       {/* SECURITY */}
       <Text style={styles.sectionTitle}>Security</Text>
-      <View style={styles.card}>
+      <Card clip>
         {/* Under Security, not under People: this is the answer to "who can write
             to my numbers", which is a question about exposure rather than about
             contacts. It was previously answerable only one person at a time. */}
@@ -405,11 +408,11 @@ export default function SettingsScreen() {
         <View style={settingsRowDivider} />
         {/* Which screens and actions get used, never amounts, names or notes (`U-24`). */}
         <ToggleRow icon="bar-chart" tint={TINT.hideAmounts} label="Share anonymous usage" value={usageOn} onValueChange={(v) => { setUsageOn(v); setUsageEventsOn(v).catch(() => {}); }} />
-      </View>
+      </Card>
 
       {/* YOUR DATA */}
       <Text style={styles.sectionTitle}>Your data</Text>
-      <View style={styles.card}>
+      <Card clip>
         {/* Each row carries its own trailing divider so a hidden row leaves no seam. */}
         {/* `B-101` follow-up: Import and Review inbox were two rows for one pipeline.
             One row, routed by state — unconfirmed rows waiting means the useful thing
@@ -440,23 +443,23 @@ export default function SettingsScreen() {
         />
         <View style={settingsRowDivider} />
         <SettingsRow icon="clock" label="Audit log" tint={TINT.audit} onPress={() => { router.push('/history'); }} />
-      </View>
+      </Card>
 
       {/* HELP — split from data: "where are my numbers" and "how does this work"
           are different questions, and seven rows under one heading hid both. */}
       <Text style={styles.sectionTitle}>Help</Text>
-      <View style={styles.card}>
+      <Card clip>
         <SettingsRow icon="help-circle" label="Help & Feedback" tint={TINT.help} onPress={() => { router.push('/help'); }} />
         <View style={settingsRowDivider} />
         <SettingsRow icon="play-circle" label="Replay welcome tour" tint={TINT.tour} onPress={async () => { await settings.clearOnboardingDone(); haptic.light(); Alert.alert('Welcome tour reset', 'Fully close and reopen BudgetSplit to see the intro again.'); }} />
-      </View>
+      </Card>
 
       {/* About — tap version 7× to open the developer storage screen. Gated on
           DEV_TOOLS_ENABLED, not __DEV__: that screen can replace or erase the
           user's entire dataset, and it is deliberately reachable in pilot builds
           for now. One constant closes every entry point — see constants/devTools. */}
       <Text style={styles.sectionTitle}>About</Text>
-      <View style={styles.card}>
+      <Card clip>
         <TouchableOpacity
           onPress={() => {
             if (!DEV_TOOLS_ENABLED) return;
@@ -476,7 +479,7 @@ export default function SettingsScreen() {
           <Text style={styles.aboutSub}>Receipt scanning uses a cloud OCR service</Text>
           {DEV_TOOLS_ENABLED && <Text style={styles.aboutHint}>Tap version 7× to unlock storage</Text>}
         </TouchableOpacity>
-      </View>
+      </Card>
 
       <SheetModal visible={showName} onClose={() => setShowName(false)} title="Your name">
         <Input value={nameText} onChangeText={setNameText} placeholder="Your name" autoFocus maxLength={30} autoCapitalize="words" returnKeyType="done" onSubmitEditing={saveName} style={styles.nameInputGap} />
@@ -553,8 +556,8 @@ const styles = StyleSheet.create({
   header: { marginBottom: space.sm },
   title: { ...type.title, color: colors.textPrimary },
   sectionTitle: { ...type.label, color: colors.textSecondary, marginBottom: space.sm, marginTop: 20, textTransform: 'uppercase', letterSpacing: 0.5 },
-  card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden', ...shadow.sm },
-  profileCard: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, marginBottom: space.lg, ...shadow.sm },
+  profileTap: { marginBottom: space.lg },
+  profileCard: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   profileName: { fontSize: 17, fontFamily: 'Inter_600SemiBold', color: colors.textPrimary },
   profileSub: { fontSize: 13, fontFamily: 'Inter_400Regular', color: colors.textMuted, marginTop: 2 },
   cameraBadge: { position: 'absolute', right: -2, bottom: -2, width: 18, height: 18, borderRadius: 9, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.bgCard },

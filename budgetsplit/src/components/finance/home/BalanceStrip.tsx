@@ -1,7 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { colors, type, space, radius, shadow } from '../../tokens';
+import { colors, type, space, radius } from '../../tokens';
 import { formatCompact } from '../../../lib/money';
+import { Card } from '../../ui/Card';
 
 type Props = {
   /** Paise I owe others (>=0). */
@@ -17,7 +18,7 @@ type Props = {
  */
 export function BalanceStrip({ oweTotal, owedTotal, onSettle }: Props) {
   return (
-    <View style={styles.card}>
+    <Card padded style={styles.card}>
       <View style={styles.half}>
         <Text style={styles.label}>You owe</Text>
         <Text style={[styles.amount, { color: colors.expense }]}>{formatCompact(oweTotal)}</Text>
@@ -30,12 +31,12 @@ export function BalanceStrip({ oweTotal, owedTotal, onSettle }: Props) {
       <TouchableOpacity onPress={onSettle} style={styles.settleBtn} accessibilityRole="button" accessibilityLabel="Settle up">
         <Text style={styles.settleText}>Settle →</Text>
       </TouchableOpacity>
-    </View>
+    </Card>
   );
 }
 
 const styles = StyleSheet.create({
-  card: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, marginBottom: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm },
+  card: { flexDirection: 'row', alignItems: 'center', marginBottom: space.md },
   half: { flex: 1 },
   label: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: space.xs },
   amount: { fontFamily: 'SpaceMono_400Regular', fontSize: 20, letterSpacing: -0.5 },

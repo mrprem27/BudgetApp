@@ -7,7 +7,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as Sharing from 'expo-sharing';
 import { File, Paths } from 'expo-file-system';
 import { dateTime } from '../../../src/lib/dateFormat';
-import { colors, type, space, radius, layout, shadow } from '../../../src/theme';
+import { colors, type, space, layout } from '../../../src/theme';
 import { ScreenHeader } from '../../../src/components/ui/ScreenHeader';
 import { SettingsRow, settingsRowDivider } from '../../../src/components/ui/SettingsRow';
 import { IconCircle } from '../../../src/components/ui/IconCircle';
@@ -23,6 +23,7 @@ import {
 import { readBackupTables, readBackupPhotos, restoreBackup, isLinkedToAccount } from '../../../src/lib/backupOps';
 import { useServerSession } from '../../../src/hooks/useServerSession';
 import { beginRestore, endRestore } from '../../../src/lib/restoreGuard';
+import { Card } from '../../../src/components/ui/Card';
 
 export default function BackupScreen() {
   const db = useSQLiteContext();
@@ -269,7 +270,7 @@ export default function BackupScreen() {
     <View style={styles.container}>
       <ScreenHeader title="Backup & restore" onBack={() => router.back()} />
       <View style={styles.content}>
-        <View style={styles.card}>
+        <Card style={styles.card}>
           <IconCircle icon="shield" size={56} iconSize={20} color={colors.accent} bg={colors.accentMuted} style={styles.iconCircle} />
           <Text style={styles.note}>
             {serverSession
@@ -279,9 +280,9 @@ export default function BackupScreen() {
           {lastBackupAt != null && (
             <Text style={styles.lastBackup}>Last backup: {dateTime(new Date(lastBackupAt))}</Text>
           )}
-        </View>
+        </Card>
 
-        <View style={styles.settingsCard}>
+        <Card>
           <SettingsRow
             icon="upload-cloud"
             label="Create backup"
@@ -297,7 +298,7 @@ export default function BackupScreen() {
             onPress={busy ? undefined : handlePickRestoreFile}
             right={restoring ? <ActivityIndicator size="small" color={colors.accent} /> : undefined}
           />
-        </View>
+        </Card>
 
         {/* Two separate facts, and the second one has never been said anywhere
             (`OV-13`). A backup carries the SQLite tables — including the `settings`
@@ -358,10 +359,9 @@ const styles = StyleSheet.create({
   includeHint: { ...type.caption, color: colors.textMuted, lineHeight: 16, marginTop: 2 },
   container: { flex: 1, backgroundColor: colors.bg },
   content: { padding: layout.screenPaddingH, gap: space.lg },
-  card: { alignItems: 'center', gap: space.sm, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.xl, ...shadow.sm },
+  card: { alignItems: 'center', gap: space.sm, padding: space.xl },
   iconCircle: { marginBottom: space.xs },
   note: { ...type.body, color: colors.textSecondary, textAlign: 'center', lineHeight: 20 },
   lastBackup: { ...type.caption, color: colors.textMuted, marginTop: space.xs },
-  settingsCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, ...shadow.sm },
   warning: { ...type.caption, color: colors.textMuted, textAlign: 'center', lineHeight: 18 },
 });

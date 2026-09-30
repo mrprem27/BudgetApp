@@ -5,7 +5,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import * as Notifications from 'expo-notifications';
 import { useScreenData } from '../../../src/hooks/useScreenData';
 import { Feather } from '@expo/vector-icons';
-import { colors, type, space, radius, layout, shadow, alpha } from '../../../src/theme';
+import { colors, type, space, radius, layout, alpha } from '../../../src/theme';
 import { ScreenHeader } from '../../../src/components/ui/ScreenHeader';
 import { ErrorState } from '../../../src/components/ui/ErrorState';
 import {
@@ -16,6 +16,7 @@ import { sendTestReminder } from '../../../src/lib/notifications';
 import { TimePickerSheet } from '../../../src/components/ui/TimePickerSheet';
 import { settings } from '../../../src/lib/settings';
 import { haptic } from '../../../src/lib/haptics';
+import { Card } from '../../../src/components/ui/Card';
 
 type PermStatus = 'granted' | 'denied' | 'undetermined';
 
@@ -132,7 +133,7 @@ export default function NotificationsScreen() {
 
         {/* Reminders — every reminder setting lives here */}
         <Text style={styles.sectionLabel}>REMINDERS</Text>
-        <View style={styles.card}>
+        <Card clip>
           {/* Reminders for upcoming charges */}
           <View style={styles.typeRow}>
             <Feather name="calendar" size={20} color={colors.accent} style={styles.typeIcon} />
@@ -194,11 +195,11 @@ export default function NotificationsScreen() {
             </View>
             <Toggle on={!!prefs?.backup} onPress={() => toggle('backup')} label="Back up your data" />
           </View>
-        </View>
+        </Card>
 
         {/* Test notification */}
         <Text style={styles.sectionLabel}>TEST</Text>
-        <View style={styles.card}>
+        <Card clip>
           <View style={styles.testRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.typeLabel}>Send a test notification</Text>
@@ -215,7 +216,7 @@ export default function NotificationsScreen() {
               </Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </Card>
 
         <Text style={styles.footer}>All notifications are local, no server, no push, always offline.</Text>
       </ScrollView>
@@ -244,7 +245,6 @@ const styles = StyleSheet.create({
   deniedCta: { backgroundColor: alpha(colors.expense, 13), borderWidth: 1, borderColor: colors.expense, borderRadius: radius.sm, paddingHorizontal: space.md, paddingVertical: space.sm, alignSelf: 'flex-start' },
   deniedCtaText: { ...type.label, color: colors.expense, fontFamily: 'Inter_600SemiBold' },
   sectionLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, fontWeight: '700', marginTop: space.md, marginBottom: space.xs },
-  card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden', ...shadow.sm },
   typeRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, padding: space.md },
   typeRowBorder: { borderTopWidth: 1, borderTopColor: colors.border },
   typeIcon: { width: 32, textAlign: 'center', flexShrink: 0 },

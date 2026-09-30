@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-nati
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import { colors, type, space, radius, layout, shadow } from '../../src/theme';
+import { colors, type, space, radius, layout } from '../../src/theme';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { EmptyState } from '../../src/components/ui/EmptyState';
 import { ErrorState } from '../../src/components/ui/ErrorState';
@@ -16,6 +16,7 @@ import { formatCompact } from '../../src/lib/money';
 import { oweView } from '../../src/lib/owe';
 import { canRemind } from '../../src/lib/whatsappReminder';
 import { useReminder } from '../../src/hooks/useReminder';
+import { Card } from '../../src/components/ui/Card';
 
 
 export default function UpcomingScreen() {
@@ -70,7 +71,7 @@ export default function UpcomingScreen() {
         {settles.length > 0 && (
           <>
             <Text style={[styles.secLabel, styles.secLabelSettle]}>SETTLE UP · {settles.length}</Text>
-            <View style={styles.card}>
+            <Card>
               {settles.map((s, i) => {
                 const net = s.iOwe ? -s.amount : s.amount;
                 const ov = oweView(net);
@@ -102,7 +103,7 @@ export default function UpcomingScreen() {
                   </View>
                 );
               })}
-            </View>
+            </Card>
           </>
         )}
 
@@ -126,7 +127,6 @@ const styles = StyleSheet.create({
   scroll: { padding: layout.screenPaddingH, gap: space.sm },
   secLabel: { fontSize: 10, color: colors.healthAmber, textTransform: 'uppercase', letterSpacing: 1, fontFamily: 'Inter_600SemiBold', marginBottom: space.sm, marginTop: space.xs },
   secLabelSettle: { color: colors.settle, marginTop: space.md },
-  card: { backgroundColor: colors.bgCard, borderRadius: 14, borderWidth: 1, borderColor: colors.border, ...shadow.sm },
   row: { flexDirection: 'row', alignItems: 'flex-start', gap: space.md, padding: space.md },
   rowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
   rowTitle: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold', flexShrink: 1 },

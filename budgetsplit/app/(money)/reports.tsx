@@ -37,6 +37,7 @@ import { AppRefreshControl } from '../../src/components/ui/AppRefreshControl';
 import { loadReportsData } from '../../src/lib/reportsData';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 import { backOr } from '../../src/lib/nav';
+import { Card } from '../../src/components/ui/Card';
 
 export default function ReportsScreen() {
   const db = useSQLiteContext();
@@ -251,22 +252,22 @@ export default function ReportsScreen() {
             const de = earnedDelta(monthEarned, prevEarned);
             return (
               <View style={styles.summaryRow}>
-                <View style={styles.summaryCard}>
+                <Card padded style={styles.summaryCard}>
                   <Text style={styles.summaryLabel}>SPENT</Text>
                   <Text style={styles.summaryValue}>{formatCompact(monthSpent)}</Text>
                   <View style={styles.summaryDeltaRow}>
                     {ds.dir !== 'flat' && <Feather name={ds.dir === 'up' ? 'arrow-up' : 'arrow-down'} size={10} color={ds.color} />}
                     <Text style={[styles.summaryDelta, { color: ds.color }]}>{ds.text}</Text>
                   </View>
-                </View>
-                <View style={styles.summaryCard}>
+                </Card>
+                <Card padded style={styles.summaryCard}>
                   <Text style={styles.summaryLabel}>EARNED</Text>
                   <Text style={[styles.summaryValue, { color: colors.income }]}>{formatCompact(monthEarned)}</Text>
                   <View style={styles.summaryDeltaRow}>
                     {de.dir !== 'flat' && <Feather name={de.dir === 'up' ? 'arrow-up' : 'arrow-down'} size={10} color={de.color} />}
                     <Text style={[styles.summaryDelta, { color: de.color }]}>{de.text}</Text>
                   </View>
-                </View>
+                </Card>
               </View>
             );
           })()}
@@ -285,7 +286,7 @@ export default function ReportsScreen() {
                 onPressCategory={(name) => setSelectedCat(c => (c === name ? null : name))}
               />
 
-              <View style={styles.card}>
+              <Card padded style={styles.card}>
                 <CategoryDonut
                     data={pieData}
                     total={pieTotal}
@@ -311,7 +312,7 @@ export default function ReportsScreen() {
                     <TrendBars values={trendValues} labels={trendLabels} color={trendColor} />
                   </View>
                 )}
-              </View>
+              </Card>
             </>
           )}
 
@@ -415,7 +416,7 @@ export default function ReportsScreen() {
           ))}
 
           <Text style={styles.sectionTitle}>{format(month, 'yyyy')} Year in Review</Text>
-          <View style={styles.card}>
+          <Card padded style={styles.card}>
             <View style={styles.metricRow}>
               <View style={styles.metric}>
                 <Text style={styles.metricLabel}>Income</Text>
@@ -445,7 +446,7 @@ export default function ReportsScreen() {
                 {formatCompact(biggestTxn)}
               </Text>
             </View>
-          </View>
+          </Card>
         </>
       )}
       </ScrollView>
@@ -468,12 +469,12 @@ const styles = StyleSheet.create({
   monthLabel: { ...type.subheading, color: colors.textPrimary },
   sectionTitle: { ...type.label, color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: space.sm },
   summaryRow: { flexDirection: 'row', gap: space.sm },
-  summaryCard: { flex: 1, backgroundColor: colors.bgCard, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: space.md },
+  summaryCard: { flex: 1 },
   summaryLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8, fontFamily: 'Inter_600SemiBold', marginBottom: 6 },
   summaryValue: { fontFamily: 'SpaceMono_400Regular', fontSize: 22, color: colors.textPrimary, letterSpacing: -1, marginBottom: 3 },
   summaryDeltaRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   summaryDelta: { ...type.caption, fontFamily: 'Inter_600SemiBold' },
-  card: { backgroundColor: colors.bgCard, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: space.md, gap: space.sm },
+  card: { gap: space.sm },
   groupBody: { paddingHorizontal: space.md, paddingBottom: space.md, gap: space.sm },
   chartTitle: { ...type.label, color: colors.textSecondary, marginBottom: space.sm },
   trendBlock: { marginTop: space.md, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: space.md },

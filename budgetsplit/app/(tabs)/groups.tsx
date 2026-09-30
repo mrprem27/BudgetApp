@@ -38,6 +38,7 @@ import { GroupForm, GROUP_TYPES } from '../../src/components/finance/GroupForm';
 import type { BudgetGroup } from '../../src/db/queries/groups';
 import { HeaderIconButton } from '../../src/components/ui/HeaderIconButton';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
+import { Card } from '../../src/components/ui/Card';
 
 
 
@@ -251,7 +252,7 @@ export default function GroupsScreen() {
     return (
       <View style={styles.balancesWrap}>
         <Text style={styles.balListLabel}>Friends</Text>
-        <View style={styles.balList}>
+        <Card style={styles.balList}>
           {activeFriends.map((f, i) => (
             <View
               key={f.personId}
@@ -286,7 +287,7 @@ export default function GroupsScreen() {
               </TouchableOpacity>
             </View>
           ))}
-        </View>
+        </Card>
       </View>
     );
   }
@@ -420,7 +421,7 @@ const styles = StyleSheet.create({
   list: { padding: layout.screenPaddingH },
   balancesWrap: { marginBottom: space.sm },
   balListLabel: { ...type.label, color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: space.lg, marginBottom: space.sm },
-  balList: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, ...shadow.sm },
+  balList: { paddingHorizontal: space.md },
   balRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.smd },
   balRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
   balName: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },

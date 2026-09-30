@@ -39,6 +39,7 @@ import { HeaderIconButton } from '../../src/components/ui/HeaderIconButton';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { greeting, healthBandColor } from '../../src/components/finance/home/helpers';
 import { loadHomeData, loadCatchUp, PREV_LABEL, PERIOD_LABEL, TXN_COUNT_PERIOD_LABEL, TARGET_FOR_TAB, type TabKey } from '../../src/lib/homeData';
+import { Card } from '../../src/components/ui/Card';
 
 // Month is the default and sits in the centre (Today · Month · Year).
 const TABS: { key: TabKey; label: string }[] = [
@@ -231,7 +232,7 @@ export default function DashboardScreen() {
                     `art` keeps the ₹0 in the money face, which says more about an
                     empty ledger than any glyph could — and is why this was
                     hand-rolled in the first place. */}
-                <View style={styles.emptyHero}>
+                <Card style={styles.emptyHero}>
                   <EmptyState
                     art={<View style={styles.emptyHeroTile}><Text style={styles.emptyHeroZero}>₹0</Text></View>}
                     icon="inbox"
@@ -240,7 +241,7 @@ export default function DashboardScreen() {
                     actionLabel="Log first expense"
                     onAction={() => router.push('/add/quick?kind=expense')}
                   />
-                </View>
+                </Card>
 
                 {/* Only what's genuinely still missing. Onboarding can set a
                     budget — re-offering that to the user who just did it is why
@@ -255,33 +256,39 @@ export default function DashboardScreen() {
                     <Text style={styles.getStartedLabel}>GET STARTED</Text>
                     <View style={{ gap: space.sm }}>
                       {showBudgetTile && (
-                        <TouchableOpacity style={styles.startTile} onPress={() => router.push('/budget')} accessibilityRole="button">
-                          <View style={[styles.startIcon, { backgroundColor: alpha(colors.healthAmber, 13) }]}><Feather name="target" size={18} color={colors.healthAmber} /></View>
-                          <View style={{ flex: 1 }}>
-                            <Text style={styles.startTitle}>Set a monthly budget</Text>
-                            <Text style={styles.startSub}>Know your limits before you hit them</Text>
-                          </View>
-                          <Feather name="chevron-right" size={16} color={colors.textMuted} />
+                        <TouchableOpacity onPress={() => router.push('/budget')} accessibilityRole="button">
+                          <Card padded style={styles.startTile}>
+                            <View style={[styles.startIcon, { backgroundColor: alpha(colors.healthAmber, 13) }]}><Feather name="target" size={18} color={colors.healthAmber} /></View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.startTitle}>Set a monthly budget</Text>
+                              <Text style={styles.startSub}>Know your limits before you hit them</Text>
+                            </View>
+                            <Feather name="chevron-right" size={16} color={colors.textMuted} />
+                          </Card>
                         </TouchableOpacity>
                       )}
                       {showGroupTile && (
-                        <TouchableOpacity style={styles.startTile} onPress={() => router.navigate('/groups')} accessibilityRole="button">
-                          <View style={[styles.startIcon, { backgroundColor: alpha(colors.settle, 13) }]}><Feather name="users" size={18} color={colors.settle} /></View>
-                          <View style={{ flex: 1 }}>
-                            <Text style={styles.startTitle}>Create a group</Text>
-                            <Text style={styles.startSub}>Flatmates, trips, or any shared tab</Text>
-                          </View>
-                          <Feather name="chevron-right" size={16} color={colors.textMuted} />
+                        <TouchableOpacity onPress={() => router.navigate('/groups')} accessibilityRole="button">
+                          <Card padded style={styles.startTile}>
+                            <View style={[styles.startIcon, { backgroundColor: alpha(colors.settle, 13) }]}><Feather name="users" size={18} color={colors.settle} /></View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.startTitle}>Create a group</Text>
+                              <Text style={styles.startSub}>Flatmates, trips, or any shared tab</Text>
+                            </View>
+                            <Feather name="chevron-right" size={16} color={colors.textMuted} />
+                          </Card>
                         </TouchableOpacity>
                       )}
                       {showPeopleTile && (
-                        <TouchableOpacity style={styles.startTile} onPress={() => router.push('/friends')} accessibilityRole="button">
-                          <View style={[styles.startIcon, { backgroundColor: alpha(colors.income, 13) }]}><Feather name="user-plus" size={18} color={colors.income} /></View>
-                          <View style={{ flex: 1 }}>
-                            <Text style={styles.startTitle}>Add people you split with</Text>
-                            <Text style={styles.startSub}>Name-only, no account needed</Text>
-                          </View>
-                          <Feather name="chevron-right" size={16} color={colors.textMuted} />
+                        <TouchableOpacity onPress={() => router.push('/friends')} accessibilityRole="button">
+                          <Card padded style={styles.startTile}>
+                            <View style={[styles.startIcon, { backgroundColor: alpha(colors.income, 13) }]}><Feather name="user-plus" size={18} color={colors.income} /></View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.startTitle}>Add people you split with</Text>
+                              <Text style={styles.startSub}>Name-only, no account needed</Text>
+                            </View>
+                            <Feather name="chevron-right" size={16} color={colors.textMuted} />
+                          </Card>
                         </TouchableOpacity>
                       )}
                     </View>
@@ -409,11 +416,11 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: space.lg },
   // Dedicated first-run empty home (design Screen 6)
   // Chrome only: `EmptyState` owns the padding and the alignment inside it.
-  emptyHero: { backgroundColor: colors.bgCard, borderRadius: 20, marginBottom: space.md, borderWidth: 1, borderColor: colors.border },
+  emptyHero: { marginBottom: space.md },
   emptyHeroTile: { width: 72, height: 72, borderRadius: 20, backgroundColor: colors.accentMuted, borderWidth: 1.5, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', marginBottom: space.md },
   emptyHeroZero: { fontFamily: 'SpaceMono_400Regular', fontSize: 26, color: colors.accent, letterSpacing: -1 },
   getStartedLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, fontFamily: 'Inter_600SemiBold', marginBottom: space.sm },
-  startTile: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.bgCard, borderRadius: 14, padding: space.md, borderWidth: 1, borderColor: colors.border },
+  startTile: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   startIcon: { width: 40, height: 40, borderRadius: 11, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   startTitle: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   startSub: { ...type.caption, color: colors.textMuted, marginTop: 2 },

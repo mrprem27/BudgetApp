@@ -6,7 +6,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useScreenData } from '../../../../src/hooks/useScreenData';
 
 import { Feather } from '@expo/vector-icons';
-import { colors, type, space, radius, layout, shadow } from '../../../../src/theme';
+import { colors, type, space, radius, layout } from '../../../../src/theme';
 import { AVATAR_COLORS } from '../../../../src/constants/categories';
 import { loadGroupMembers, addPersonToPool, addMemberToGroup, removeMemberFromGroup, setMemberRole, updatePersonName } from '../../../../src/lib/groupsData';
 import { replacePersonPhoto } from '../../../../src/lib/personWrites';
@@ -27,6 +27,7 @@ import type { Person } from '../../../../src/db/queries/persons';
 import { IconCircle } from '../../../../src/components/ui/IconCircle';
 import { PersonNameSheet } from '../../../../src/components/finance/PersonNameSheet';
 import { isAdmin, canRemoveMember, canChangeRole } from '../../../../src/lib/permissions';
+import { Card } from '../../../../src/components/ui/Card';
 
 export default function MembersScreen() {
   const { id: groupId } = useLocalSearchParams<{ id: string }>();
@@ -204,16 +205,18 @@ export default function MembersScreen() {
             could never succeed. */}
         {mayManage && (
           <View style={styles.addButtons}>
-            <TouchableOpacity style={styles.addBtn} onPress={() => { setPendingIds([]); setShowAdd(true); }} accessibilityRole="button">
-              <IconCircle icon="user-plus" size={36} iconSize={16} color={colors.accent} bg={colors.accentMuted} />
-              <Text style={styles.addBtnText}>Add or create person</Text>
-              <Feather name="chevron-right" size={16} color={colors.textMuted} />
+            <TouchableOpacity onPress={() => { setPendingIds([]); setShowAdd(true); }} accessibilityRole="button">
+              <Card padded style={styles.addBtn}>
+                <IconCircle icon="user-plus" size={36} iconSize={16} color={colors.accent} bg={colors.accentMuted} />
+                <Text style={styles.addBtnText}>Add or create person</Text>
+                <Feather name="chevron-right" size={16} color={colors.textMuted} />
+              </Card>
             </TouchableOpacity>
           </View>
         )}
 
         {members.length > 0 && (
-          <View style={styles.membersCard}>
+          <Card clip style={styles.membersCard}>
             {members.map((item, index) => {
               const renderRightActions = () => (
                 <TouchableOpacity
@@ -298,7 +301,7 @@ export default function MembersScreen() {
                 </Swipeable>
               );
             })}
-          </View>
+          </Card>
         )}
 
         {/*
@@ -348,15 +351,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   list: { padding: layout.screenPaddingH, paddingBottom: space.lg },
 
-  membersCard: {
-    backgroundColor: colors.bgCard,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: 'hidden',
-    ...shadow.sm,
-    marginBottom: space.md,
-  },
+  membersCard: { marginBottom: space.md },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md, paddingHorizontal: space.md, minHeight: 52, backgroundColor: colors.bgCard },
   rowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, minWidth: 0 },
@@ -375,12 +370,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.md,
-    padding: space.md,
-    borderRadius: radius.lg,
-    backgroundColor: colors.bgCard,
-    borderWidth: 1,
-    borderColor: colors.border,
-    ...shadow.sm,
   },
   addBtnText: { ...type.body, color: colors.textPrimary, flex: 1 },
 });

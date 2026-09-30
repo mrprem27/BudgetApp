@@ -2,11 +2,12 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { colors, type, space, radius, layout, shadow, alpha } from '../../src/theme';
+import { colors, type, space, layout, alpha } from '../../src/theme';
 import { decor } from '../../src/constants/palette';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { IconCircle } from '../../src/components/ui/IconCircle';
 import { helpBullets } from '../../src/lib/helpBullets';
+import { Card } from '../../src/components/ui/Card';
 
 type Item = { icon: keyof typeof Feather.glyphMap; color: string; title: string; body: string };
 type Section = { title: string; illustration: { icons: Array<{ name: keyof typeof Feather.glyphMap; bg: string; color: string }> }; items: Item[] };
@@ -273,7 +274,7 @@ export default function HelpScreen() {
               </TouchableOpacity>
 
               {isExpanded && (
-                <View style={styles.card}>
+                <Card style={styles.card}>
                   {section.items.map((item, i) => {
                     const isItemOpen = openItem === item.title;
                     return (
@@ -293,7 +294,7 @@ export default function HelpScreen() {
                       </View>
                     );
                   })}
-                </View>
+                </Card>
               )}
             </View>
           );
@@ -310,7 +311,7 @@ const styles = StyleSheet.create({
   illustrationRow: { flexDirection: 'row', marginRight: space.xs },
   illustrationDot: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginRight: -6 },
   sectionTitle: { ...type.subheading, color: colors.textPrimary, flex: 1 },
-  card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, ...shadow.sm },
+  card: { paddingHorizontal: space.md },
   rowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.smd },
   rowTitle: { ...type.body, color: colors.textPrimary, flex: 1 },

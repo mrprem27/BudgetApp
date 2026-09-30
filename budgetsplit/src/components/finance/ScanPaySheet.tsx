@@ -19,6 +19,7 @@ import { haptic } from '../../lib/haptics';
 import { getCurrentPlaceIfPermitted, type CapturedPlace } from '../../lib/location';
 import { categoryForMcc } from '../../lib/mcc';
 import { alpha } from '../../theme';
+import { Card } from '../ui/Card';
 
 /**
  * Scan a UPI QR, enter the amount, hand off to a UPI app — and remember the payment
@@ -255,7 +256,7 @@ export function ScanPaySheet({
         )
       ) : (
         <>
-          <View style={styles.payeeCard}>
+          <Card padded style={styles.payeeCard}>
             <View style={styles.payeeIcon}>
               <Feather name={target.kind === 'merchant' ? 'shopping-bag' : 'user'} size={16} color={colors.accent} />
             </View>
@@ -276,7 +277,7 @@ export function ScanPaySheet({
             <TouchableOpacity onPress={reset} hitSlop={10} accessibilityRole="button" accessibilityLabel="Scan a different code">
               <Feather name="refresh-cw" size={16} color={colors.textMuted} />
             </TouchableOpacity>
-          </View>
+          </Card>
 
           {amountFixed ? (
             <View style={styles.fixedRow}>
@@ -353,7 +354,7 @@ const styles = StyleSheet.create({
   reticle: { position: 'absolute', top: 40, left: 60, right: 60, bottom: 40, borderWidth: 2, borderColor: colors.accent, borderRadius: radius.md },
   hint: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginBottom: space.md, lineHeight: 16 },
   hintBad: { color: colors.expense },
-  payeeCard: { flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, marginBottom: space.md },
+  payeeCard: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginBottom: space.md },
   payeeIcon: { width: 32, height: 32, borderRadius: radius.lg, backgroundColor: alpha(colors.accent, 13), alignItems: 'center', justifyContent: 'center' },
   payeeVpaLead: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   payeeNameSub: { ...type.caption, color: colors.textMuted, marginTop: 1 },

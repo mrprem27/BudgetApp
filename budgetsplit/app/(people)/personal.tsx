@@ -4,7 +4,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { colors, type, space, radius, layout, shadow, alpha } from '../../src/theme';
+import { colors, type, space, radius, layout } from '../../src/theme';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { HeaderIconButton } from '../../src/components/ui/HeaderIconButton';
 import { TabPills } from '../../src/components/ui/TabPills';
@@ -37,6 +37,7 @@ import { shareCsv, csvFileSlug } from '../../src/lib/shareCsv';
 import { keyboardAwareScroll } from '../../src/components/ui/KeyboardForm';
 import { RecurringTab } from '../../src/components/finance/group/RecurringTab';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
+import { Card } from '../../src/components/ui/Card';
 
 /*
  * Three tabs, the same three a group has for its own money: Activity, Budget, Recurring.
@@ -204,7 +205,7 @@ export default function PersonalScreen() {
       ) : (
         <>
           {/* Owe / Lent / Net summary */}
-          <View style={styles.summaryCard}>
+          <Card style={styles.summaryCard}>
             <View style={styles.summaryItem}>
               <Text style={styles.summaryLabel}>You owe</Text>
               <Text style={[styles.summaryAmt, { color: oweView(-summary.owe).color }]}>{formatCompact(summary.owe)}</Text>
@@ -226,7 +227,7 @@ export default function PersonalScreen() {
                 );
               })()}
             </View>
-          </View>
+          </Card>
 
           {/* Was a byte-identical copy of the group screen's local tab strip, which
               was itself a reimplementation of `TabPills`. One component now. */}
@@ -373,7 +374,7 @@ export default function PersonalScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   tabs: { marginHorizontal: layout.screenPaddingH, marginBottom: space.sm },
-  summaryCard: { flexDirection: 'row', alignItems: 'center', marginHorizontal: layout.screenPaddingH, marginBottom: space.md, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingVertical: space.md, ...shadow.sm },
+  summaryCard: { flexDirection: 'row', alignItems: 'center', marginHorizontal: layout.screenPaddingH, marginBottom: space.md, paddingVertical: space.md },
   summaryItem: { flex: 1, alignItems: 'center', gap: 2 },
   summaryDivider: { width: 1, alignSelf: 'stretch', backgroundColor: colors.border, marginVertical: space.xs },
   summaryLabel: { ...type.caption, color: colors.textMuted },

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { monthShort } from '../../../lib/dateFormat';
-import { colors, type, space, radius, shadow, layout } from '../../tokens';
+import { colors, type, space, radius, layout } from '../../tokens';
 import { useContentInset } from '../../../hooks/useContentInset';
 import { formatCompact } from '../../../lib/money';
 import { oweView } from '../../../lib/owe';
@@ -70,7 +70,7 @@ export function MembersTab({ members, net, meId, totalSpent, settlements, person
         refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
       {/* GROUP BALANCES summary */}
-      <View style={styles.groupBalCard}>
+      <Card style={styles.groupBalCard}>
         <View style={styles.groupBalItem}>
           <Text style={styles.groupBalLabel}>Total spent</Text>
           <Text style={styles.groupBalAmt}>{formatCompact(totalSpent)}</Text>
@@ -82,29 +82,33 @@ export function MembersTab({ members, net, meId, totalSpent, settlements, person
             {myNet > 0 ? `+${formatCompact(myNet)}` : myNet < 0 ? `−${formatCompact(-myNet)}` : '₹0'}
           </Text>
         </View>
-      </View>
+      </Card>
 
       {/* First, and always visible (the list below is collapsed by default): adding someone is what
           you open this tab to do. */}
-      <TouchableOpacity style={[styles.card, styles.addMemberRow]} onPress={onInvite} accessibilityRole="button" accessibilityLabel="Add member">
-        <IconCircle icon="user-plus" size={layout.iconCircle} color={colors.accent} />
-        <Text style={[styles.memberName, { color: colors.accent, flex: 1 }]}>Add member</Text>
-        <Feather name="plus" size={layout.headerIcon} color={colors.accent} />
-      </TouchableOpacity>
+      <Card clip style={styles.card}>
+        <TouchableOpacity style={styles.addMemberRow} onPress={onInvite} accessibilityRole="button" accessibilityLabel="Add member">
+          <IconCircle icon="user-plus" size={layout.iconCircle} color={colors.accent} />
+          <Text style={[styles.memberName, { color: colors.accent, flex: 1 }]}>Add member</Text>
+          <Feather name="plus" size={layout.headerIcon} color={colors.accent} />
+        </TouchableOpacity>
+      </Card>
 
       {/* Member list — collapsed by default */}
-      <TouchableOpacity
-        style={styles.membersHeader}
-        onPress={() => setMembersExpanded(e => !e)}
-        accessibilityRole="button"
-        accessibilityLabel={`${members.length} members, ${membersExpanded ? 'collapse' : 'expand'}`}
-      >
-        <AvatarStack people={members} size={24} max={5} ringColor={colors.bg} />
-        <Text style={styles.membersHeaderText}>{members.length} member{members.length > 1 ? 's' : ''}</Text>
-        <Feather name={membersExpanded ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textMuted} />
-      </TouchableOpacity>
+      <Card style={styles.membersHeaderCard}>
+        <TouchableOpacity
+          style={styles.membersHeader}
+          onPress={() => setMembersExpanded(e => !e)}
+          accessibilityRole="button"
+          accessibilityLabel={`${members.length} members, ${membersExpanded ? 'collapse' : 'expand'}`}
+        >
+          <AvatarStack people={members} size={24} max={5} ringColor={colors.bg} />
+          <Text style={styles.membersHeaderText}>{members.length} member{members.length > 1 ? 's' : ''}</Text>
+          <Feather name={membersExpanded ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textMuted} />
+        </TouchableOpacity>
+      </Card>
       {membersExpanded && (
-        <View style={styles.card}>
+        <Card clip style={styles.card}>
           {members.map((m, mi) => {
             const v = net[m.id] ?? 0;
             const ov = oweView(v);
@@ -129,7 +133,7 @@ export function MembersTab({ members, net, meId, totalSpent, settlements, person
               </View>
             );
           })}
-        </View>
+        </Card>
       )}
 
       {/* WHO PAID WHAT — each member's share of the spend, and their distance from an
@@ -168,7 +172,7 @@ export function MembersTab({ members, net, meId, totalSpent, settlements, person
         </TouchableOpacity>
       )}
 
-      <View style={styles.toggleRow}>
+      <Card padded style={styles.toggleRow}>
         <View style={{ flex: 1 }}>
           <Text style={styles.toggleTitle}>Simplify debts</Text>
           <Text style={styles.toggleSub}>{simplifyOn ? 'Fewest possible payments' : 'Show every direct debt'}</Text>
@@ -180,12 +184,12 @@ export function MembersTab({ members, net, meId, totalSpent, settlements, person
           thumbColor={colors.textPrimary}
           accessibilityLabel="Simplify debts"
         />
-      </View>
+      </Card>
 
       {settlements.length > 0 ? (
         <>
           <SectionHeader title={`${settlements.length} payment${settlements.length > 1 ? 's' : ''} to settle`} />
-          <View style={styles.card}>
+          <Card clip style={styles.card}>
             {settlements.map((s, i) => {
               const fromPerson = personMap.get(s.from);
               const toPerson = personMap.get(s.to);
@@ -196,7 +200,7 @@ export function MembersTab({ members, net, meId, totalSpent, settlements, person
                 </View>
               );
             })}
-          </View>
+          </Card>
         </>
       ) : (
         <EmptyState icon="check-circle" title="All settled up" body={`No outstanding balances in ${groupName}.`} tint={colors.income} />
@@ -207,14 +211,15 @@ export function MembersTab({ members, net, meId, totalSpent, settlements, person
 
 const styles = StyleSheet.create({
   listContent: { paddingHorizontal: layout.screenPaddingH, paddingTop: space.xs, gap: space.sm },
-  groupBalCard: { flexDirection: 'row', backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, marginBottom: space.md, ...shadow.sm },
+  groupBalCard: { flexDirection: 'row', marginBottom: space.md },
   groupBalItem: { flex: 1, alignItems: 'center', paddingVertical: space.md, gap: 3 },
   groupBalDivider: { width: 1, backgroundColor: colors.border, marginVertical: space.sm },
   groupBalLabel: { ...type.caption, color: colors.textMuted },
   groupBalAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 18, color: colors.textPrimary },
-  membersHeader: { flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingVertical: space.smd, paddingHorizontal: space.md, marginBottom: space.sm },
+  membersHeaderCard: { marginBottom: space.sm },
+  membersHeader: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.smd, paddingHorizontal: space.md },
   membersHeaderText: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold', flex: 1 },
-  card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden', ...shadow.sm, marginBottom: space.md },
+  card: { marginBottom: space.md },
   rowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
   addMemberRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.smd, paddingHorizontal: space.md, minHeight: layout.rowMinHeight },
   memberRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md, paddingHorizontal: space.md },
@@ -232,7 +237,7 @@ const styles = StyleSheet.create({
   contribFoot: { ...type.caption, color: colors.textMuted, marginTop: space.md },
   inviteBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, borderWidth: 1.5, borderColor: colors.border, borderStyle: 'dashed', borderRadius: radius.lg, paddingVertical: space.md, marginBottom: space.md },
   inviteBtnText: { ...type.body, color: colors.accent },
-  toggleRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, marginBottom: space.md, ...shadow.sm },
+  toggleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: space.md },
   toggleTitle: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   toggleSub: { ...type.caption, color: colors.textMuted, marginTop: 2 },
   balanceRowWrap: { paddingHorizontal: space.md },

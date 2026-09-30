@@ -8,7 +8,7 @@ import { dateTime, fullDate } from '../../../src/lib/dateFormat';
 import { PAY_METHOD_LABEL } from '../../../src/constants/enums';
 import { myShareOf, myPaidOf, txnTotal } from '../../../src/lib/splitMath';
 import { settlementView } from '../../../src/lib/settlementView';
-import { colors, type, space, radius, layout, shadow, alpha } from '../../../src/theme';
+import { colors, type, space, radius, layout, alpha } from '../../../src/theme';
 import { ScreenHeader } from '../../../src/components/ui/ScreenHeader';
 import { HeaderIconButton } from '../../../src/components/ui/HeaderIconButton';
 import { Banner } from '../../../src/components/ui/Banner';
@@ -30,6 +30,7 @@ import { useTxnSyncState } from '../../../src/hooks/useTxnSyncState';
 import { ConflictCard } from '../../../src/components/finance/txn/ConflictCard';
 import { HistoryList } from '../../../src/components/finance/txn/HistoryList';
 import { refusalText } from '../../../src/lib/txnHistory';
+import { Card } from '../../../src/components/ui/Card';
 
 
 export default function TxnDetailScreen() {
@@ -223,7 +224,7 @@ export default function TxnDetailScreen() {
         </View>
 
         {/* Meta */}
-        <View style={styles.card}>
+        <Card style={styles.card}>
           <Row label="When" value={(() => { const d = new Date(txn.date); return isFinite(d.getTime()) ? dateTime(d) : 'Unknown'; })()} />
           <View style={styles.divider} />
           <Row label="Group" value={groupName} />
@@ -284,7 +285,7 @@ export default function TxnDetailScreen() {
               </TouchableOpacity>
             </>
           )}
-        </View>
+        </Card>
 
         {/* Receipt — preview when present, attach CTA otherwise. Not for settlements. */}
         {!isSettlement && (
@@ -298,33 +299,34 @@ export default function TxnDetailScreen() {
                 "Receipt attached" over a blank square, which is the one thing it
                 must not do: it is the only signal that the receipt still exists. */}
             <TouchableOpacity
-              style={styles.attachCard}
               onPress={() => { if (!attachmentMissing) setShowAttachment(true); }}
               disabled={attachmentMissing}
               accessibilityLabel={attachmentMissing ? 'Receipt file is missing' : 'View receipt'}
             >
-              {attachmentMissing ? (
-                <View style={[styles.attachThumb, styles.attachThumbGone]}>
-                  <Feather name="image" size={16} color={colors.textMuted} />
+              <Card padded style={styles.attachCard}>
+                {attachmentMissing ? (
+                  <View style={[styles.attachThumb, styles.attachThumbGone]}>
+                    <Feather name="image" size={16} color={colors.textMuted} />
+                  </View>
+                ) : (
+                  <Image
+                    source={{ uri: txn.attachment_uri }}
+                    style={styles.attachThumb}
+                    onError={() => setAttachmentMissing(true)}
+                  />
+                )}
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.attachLabel}>
+                    {attachmentMissing ? 'Receipt photo missing' : 'Receipt attached'}
+                  </Text>
+                  <Text style={styles.attachHint}>
+                    {attachmentMissing
+                      ? 'The file is no longer on this device. Attach it again below.'
+                      : 'Tap to view full size'}
+                  </Text>
                 </View>
-              ) : (
-                <Image
-                  source={{ uri: txn.attachment_uri }}
-                  style={styles.attachThumb}
-                  onError={() => setAttachmentMissing(true)}
-                />
-              )}
-              <View style={{ flex: 1 }}>
-                <Text style={styles.attachLabel}>
-                  {attachmentMissing ? 'Receipt photo missing' : 'Receipt attached'}
-                </Text>
-                <Text style={styles.attachHint}>
-                  {attachmentMissing
-                    ? 'The file is no longer on this device. Attach it again below.'
-                    : 'Tap to view full size'}
-                </Text>
-              </View>
-              {!attachmentMissing && <Feather name="maximize-2" size={16} color={colors.textMuted} />}
+                {!attachmentMissing && <Feather name="maximize-2" size={16} color={colors.textMuted} />}
+              </Card>
             </TouchableOpacity>
             <View style={styles.receiptActions}>
               <TouchableOpacity style={styles.receiptBtn} onPress={chooseReceiptSource} accessibilityRole="button">
@@ -359,7 +361,7 @@ export default function TxnDetailScreen() {
             const to = txn.shares[0];
             if (!from || !to) return null;
             return (
-              <View style={styles.card}>
+              <Card style={styles.card}>
                 <View style={styles.settleFlow}>
                   <MemberAvatar name={nameOf(from.personId)} color={colorOf(from.personId)} size={30} imageUri={imageOf(from.personId)} />
                   <Text style={styles.settleName} numberOfLines={1}>{nameOf(from.personId)}</Text>
@@ -368,7 +370,7 @@ export default function TxnDetailScreen() {
                   <Text style={styles.settleName} numberOfLines={1}>{nameOf(to.personId)}</Text>
                   <Text style={styles.settleAmt}>{formatRupees(from.amount)}</Text>
                 </View>
-              </View>
+              </Card>
             );
           }
 
@@ -385,7 +387,7 @@ export default function TxnDetailScreen() {
             .sort((a, b) => a.net - b.net);
 
           return (
-            <View style={styles.card}>
+            <Card style={styles.card}>
               {paidRows.map(([id, amt]) => (
                 <View key={`paid-${id}`} style={styles.splitPaidRow}>
                   <MemberAvatar name={nameOf(id)} color={colorOf(id)} size={30} imageUri={imageOf(id)} />
@@ -404,7 +406,7 @@ export default function TxnDetailScreen() {
                   <Text style={styles.splitOweAmt}>{formatRupees(-o.net)}</Text>
                 </View>
               ))}
-            </View>
+            </Card>
           );
         })()}
 
@@ -412,14 +414,14 @@ export default function TxnDetailScreen() {
         {isItemized && items.length > 0 && (
           <>
             <Text style={styles.sectionLabel}>Items</Text>
-            <View style={styles.card}>
+            <Card style={styles.card}>
               {items.map((it, i) => (
                 <View key={it.id} style={[styles.personRow, i < items.length - 1 && styles.divider]}>
                   <Text style={styles.personName} numberOfLines={1}>{it.qty > 1 ? `${it.qty} × ` : ''}{it.name}</Text>
                   <Text style={styles.personAmt}>{formatRupees(it.qty * it.unit_price)}</Text>
                 </View>
               ))}
-            </View>
+            </Card>
             <Text style={styles.itemHint}>Tap the edit icon to change items, splits or who paid.</Text>
           </>
         )}
@@ -489,7 +491,7 @@ const styles = StyleSheet.create({
   heroNote: { ...type.body, color: colors.textPrimary, textAlign: 'center', marginTop: space.xs },
   tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginTop: space.md, justifyContent: 'center' },
   heroCashLine: { ...type.caption, color: colors.textSecondary, textAlign: 'center', marginTop: space.sm },
-  card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, ...shadow.sm },
+  card: { paddingHorizontal: space.md },
   divider: { borderBottomWidth: 1, borderBottomColor: colors.border },
   metaRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.md, paddingVertical: space.md },
   metaLabel: { ...type.label, color: colors.textSecondary },
@@ -522,7 +524,7 @@ const styles = StyleSheet.create({
   deleteText: { ...type.body, color: colors.expense, fontFamily: 'Inter_600SemiBold' },
 
   receiptLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, fontWeight: '700', marginTop: space.xs },
-  attachCard: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, ...shadow.sm },
+  attachCard: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   attachThumb: { width: 56, height: 56, borderRadius: radius.sm, backgroundColor: colors.bgMuted },
   attachThumbGone: { alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border },
   attachLabel: { ...type.body, color: colors.textPrimary },

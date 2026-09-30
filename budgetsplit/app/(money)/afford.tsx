@@ -212,7 +212,7 @@ export default function AffordScreen() {
               {trace && (
                 <View style={styles.traceWrap}>
                   {trace.sections.map((section, si) => (
-                    <View key={section.key} style={styles.breakdownCard}>
+                    <Card key={section.key} style={styles.breakdownCard}>
                       <Text style={styles.sectionTitle}>{si + 1}. {section.title}</Text>
                       {section.lines.map((line, i) => (
                         <React.Fragment key={i}>
@@ -220,7 +220,7 @@ export default function AffordScreen() {
                           <TraceRow line={line} />
                         </React.Fragment>
                       ))}
-                    </View>
+                    </Card>
                   ))}
                 </View>
               )}
@@ -320,7 +320,7 @@ const styles = StyleSheet.create({
   traceWrap: { gap: space.sm },
   sectionTitle: { ...type.labelSemi, color: colors.textPrimary, paddingTop: space.md, paddingBottom: space.xs },
   statusIcon: { alignSelf: 'flex-start', marginTop: 3 },
-  breakdownCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md },
+  breakdownCard: { paddingHorizontal: space.md },
   breakdownDivider: { height: 1, backgroundColor: colors.border },
   breakdownRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: space.sm, gap: space.sm },
   breakdownLabel: { ...type.body, color: colors.textSecondary },

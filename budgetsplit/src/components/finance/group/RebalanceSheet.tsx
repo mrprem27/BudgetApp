@@ -6,6 +6,7 @@ import { PrimaryButton } from '../../ui/PrimaryButton';
 import { formatCompact } from '../../../lib/money';
 import type { RebalancePlan } from '../../../lib/rebalance';
 import { alpha } from '../../../theme';
+import { Card } from '../../ui/Card';
 
 /**
  * "Re-plan the rest of this month" (`V2-07`).
@@ -37,7 +38,7 @@ export function RebalanceSheet({
       </Text>
 
       <Text style={styles.label}>WHAT MOVES</Text>
-      <View style={styles.card}>
+      <Card style={styles.card}>
         {plan.donors.map((d, i) => (
           <View key={d.category} style={[styles.row, i > 0 && styles.rowDivided]}>
             <Text style={styles.rowLabel} numberOfLines={1}>{d.category}</Text>
@@ -50,7 +51,7 @@ export function RebalanceSheet({
           <Text style={[styles.rowLabel, styles.gainLabel]} numberOfLines={1}>{plan.category}</Text>
           <Text style={styles.rowFrom}>+{formatCompact(plan.covered)}</Text>
         </View>
-      </View>
+      </Card>
 
       <PrimaryButton label={applying ? 'Applying…' : 'Apply re-plan'} onPress={onApply} disabled={applying} />
     </SheetModal>
@@ -60,7 +61,7 @@ export function RebalanceSheet({
 const styles = StyleSheet.create({
   intro: { ...type.body, color: colors.textSecondary, lineHeight: 20, marginBottom: space.md },
   label: { ...type.label, color: colors.textSecondary, marginBottom: space.sm },
-  card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, marginBottom: space.lg },
+  card: { paddingHorizontal: space.md, marginBottom: space.lg },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.smd, minHeight: 48 },
   rowDivided: { borderTopWidth: 1, borderTopColor: colors.border },
   rowLabel: { ...type.body, color: colors.textPrimary, flex: 1 },

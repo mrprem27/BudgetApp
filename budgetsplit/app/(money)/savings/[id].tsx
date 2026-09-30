@@ -126,7 +126,7 @@ export default function GoalDetailScreen() {
       <ScreenHeader title={goal.name} onBack={() => router.back()} />
       <ScrollView contentContainerStyle={styles.scroll} refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
         {/* Hero — progress ring + amounts */}
-        <View style={styles.heroCard}>
+        <Card style={styles.heroCard}>
           <View style={styles.ringWrap}>
             <Svg width={120} height={120} viewBox="0 0 120 120" style={styles.ring}>
               <Circle cx={60} cy={60} r={50} stroke={colors.border} strokeWidth={8} fill="none" />
@@ -159,10 +159,10 @@ export default function GoalDetailScreen() {
             <AmountTile label="Remaining" value={formatCompact(p.remaining)} tint={colors.textSecondary} />
             <AmountTile label="Goal" value={formatCompact(p.target)} tint={colors.textPrimary} />
           </View>
-        </View>
+        </Card>
 
         {/* Monthly contribution */}
-        <View style={styles.monthlyCard}>
+        <Card padded>
           <Text style={styles.sectionLabel}>MONTHLY CONTRIBUTION</Text>
           <View style={styles.monthlyRow}>
             <View style={{ flex: 1 }}>
@@ -196,7 +196,7 @@ export default function GoalDetailScreen() {
           ) : (
             <Text style={styles.monthlyHint}>Set a target date in Adjust to see how much to save each month.</Text>
           )}
-        </View>
+        </Card>
 
         {/* Overfunded nudge */}
         {isOverfunded && (
@@ -222,7 +222,7 @@ export default function GoalDetailScreen() {
         {/* History */}
         <Text style={styles.sectionTitle}>Recent</Text>
         {history.length > 0 ? (
-          <View style={styles.histCard}>
+          <Card style={styles.histCard}>
             {history.map((h, i) => {
               const m = KIND_META[h.kind];
               return (
@@ -240,7 +240,7 @@ export default function GoalDetailScreen() {
                 </View>
               );
             })}
-          </View>
+          </Card>
         ) : (
           <EmptyState icon="inbox" title="No contributions yet" body="Add funds to start filling this goal." tint={colors.textSecondary} />
         )}
@@ -414,7 +414,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: layout.screenPaddingH, gap: space.md, paddingBottom: space.lg },
 
-  heroCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.lg, alignItems: 'center', ...shadow.md },
+  heroCard: { padding: space.lg, alignItems: 'center', ...shadow.md },
   ringWrap: { width: 120, height: 120, marginBottom: space.md, alignItems: 'center', justifyContent: 'center' },
   ring: { transform: [{ rotate: '-90deg' }] },
   ringCenter: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
@@ -428,7 +428,6 @@ const styles = StyleSheet.create({
   amtTileValue: { fontFamily: 'SpaceMono_400Regular', fontSize: 16, letterSpacing: -0.5, marginBottom: 2 },
   amtTileLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.6, fontSize: 10 },
 
-  monthlyCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, ...shadow.sm },
   sectionLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, fontFamily: 'Inter_600SemiBold', marginBottom: space.sm },
   monthlyRow: { flexDirection: 'row', alignItems: 'flex-start' },
   monthlySub: { ...type.caption, color: colors.textMuted, marginBottom: space.xs },
@@ -448,7 +447,7 @@ const styles = StyleSheet.create({
   deadlineHint: { ...type.caption, color: colors.textMuted, marginTop: space.xs },
 
   sectionTitle: { ...type.label, color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: space.sm },
-  histCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md, ...shadow.sm },
+  histCard: { paddingHorizontal: space.md },
   histRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md },
   histBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
   histIcon: { width: 32, height: 32, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center' },

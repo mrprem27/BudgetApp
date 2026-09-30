@@ -5,6 +5,7 @@ import { colors, type, space, radius } from '../tokens';
 import { SheetModal } from '../ui/SheetModal';
 import { upiLaunchUrl, buildUpiUri, GENERIC_UPI_APP, type UpiAppSpec, type UpiRequest, type UpiLaunchOpts } from '../../lib/upiIntent';
 import { alpha } from '../../theme';
+import { Card } from '../ui/Card';
 
 /**
  * Exactly what we would send each installed UPI app, for a payment about to be made.
@@ -75,7 +76,7 @@ export function UpiUriSheet({
       ) : (
         <ScrollView style={styles.list} keyboardShouldPersistTaps="handled">
           {rows.map(({ app, launch }) => (
-            <View key={app.key} style={styles.card}>
+            <Card key={app.key} padded style={styles.card}>
               <View style={styles.head}>
                 <Text style={styles.name}>{app.label}</Text>
                 <View style={[styles.tag, TAG_STYLE[app.provenance]]}>
@@ -125,7 +126,7 @@ export function UpiUriSheet({
                   </TouchableOpacity>
                 </View>
               )}
-            </View>
+            </Card>
           ))}
         </ScrollView>
       )}
@@ -168,10 +169,7 @@ const TAG_TEXT: Record<UpiAppSpec['provenance'], { color: string }> = {
 const styles = StyleSheet.create({
   list: { maxHeight: 420 },
   empty: { ...type.body, color: colors.textSecondary, paddingBottom: space.md },
-  card: {
-    backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1,
-    borderColor: colors.border, padding: space.md, marginBottom: space.sm,
-  },
+  card: { marginBottom: space.sm },
   head: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginBottom: space.xs },
   name: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
   tag: { paddingHorizontal: space.sm, paddingVertical: 2, borderRadius: radius.sm, flex: 1, alignSelf: 'flex-start' },

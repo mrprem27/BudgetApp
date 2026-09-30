@@ -2,10 +2,11 @@ import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { Feather } from '@expo/vector-icons';
-import { colors, type, space, radius, shadow, alpha } from '../../tokens';
+import { colors, type, space, shadow, alpha } from '../../tokens';
 import { AmountText } from '../../ui/AmountText';
 import { formatCompact } from '../../../lib/money';
 import { usageText } from '../../../lib/budgetCopy';
+import { Card } from '../../ui/Card';
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
@@ -148,7 +149,7 @@ export function HeroCard({
   const showDelta = !obfuscate && prevSpending > 0 && !settling;
 
   return (
-    <View style={styles.card}>
+    <Card style={styles.card}>
       {/* Gated score: an empty muted ring that opens the unlock checklist —
           the activation loop, not a fake number. */}
       {!showRing && healthLocked && (
@@ -280,7 +281,7 @@ export function HeroCard({
           </Text>
         )}
       </View>
-    </View>
+    </Card>
   );
 }
 
@@ -321,7 +322,7 @@ function PaceLeft({ onPress, color, label, a11y }: {
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.lg, marginBottom: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.md, position: 'relative' },
+  card: { padding: space.lg, marginBottom: space.md, ...shadow.md, position: 'relative' },
   label: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: space.xs, fontFamily: 'Inter_600SemiBold' },
   // Reserve the right gutter so the label/number never slide under the ring.
   gutter: { paddingRight: RING + space.sm },

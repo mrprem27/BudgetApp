@@ -6,7 +6,7 @@ import { KeyboardForm } from '../../src/components/ui/KeyboardForm';
 import { useRouter } from 'expo-router';
 import { useScreenData } from '../../src/hooks/useScreenData';
 import { Feather } from '@expo/vector-icons';
-import { colors, type, space, radius, layout, shadow, alpha } from '../../src/theme';
+import { colors, type, space, radius, layout, alpha } from '../../src/theme';
 import { CATEGORY_KIND, type CategoryKind } from '../../src/constants/enums';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { ErrorState } from '../../src/components/ui/ErrorState';
@@ -26,6 +26,7 @@ import {
 import type { Category } from '../../src/db/queries/categories';
 import { AppRefreshControl } from '../../src/components/ui/AppRefreshControl';
 import { SectionCard } from '../../src/components/ui/SectionCard';
+import { Card } from '../../src/components/ui/Card';
 
 
 
@@ -307,7 +308,7 @@ export default function CategoriesScreen() {
             (from imports, renames, or a co-member). They count as "Others" until
             you adopt them. */}
         {uncategorized.length > 0 && (
-          <View style={styles.sectionCard}>
+          <Card clip>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Uncategorized</Text>
               <View style={styles.countBadge}>
@@ -344,7 +345,7 @@ export default function CategoriesScreen() {
                 );
               })}
             </View>
-          </View>
+          </Card>
         )}
       </KeyboardForm>
       )}
@@ -360,7 +361,6 @@ const styles = StyleSheet.create({
   kindPillActive: { backgroundColor: colors.accent },
   kindPillText: { ...type.label, color: colors.textSecondary, fontFamily: 'Inter_600SemiBold' },
   kindPillTextActive: { color: colors.bg },
-  sectionCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden', ...shadow.sm },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', padding: space.md },
   sectionTitle: { ...type.subheading, color: colors.textPrimary, flex: 1 },
   countBadge: { backgroundColor: colors.accentMuted, borderRadius: radius.pill, paddingHorizontal: space.sm, paddingVertical: 2, minWidth: 24, alignItems: 'center' },

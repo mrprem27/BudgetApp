@@ -1,9 +1,10 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
-import { colors, type, space, radius, shadow } from '../../tokens';
+import { colors, type, space, radius } from '../../tokens';
 import { categoryVisual } from '../../../constants/categories';
 import { formatCompact } from '../../../lib/money';
 import { IconCircle } from '../../ui/IconCircle';
+import { Card } from '../../ui/Card';
 
 export type CategoryRow = { name: string; paise: number };
 
@@ -64,7 +65,7 @@ export function CategoryRankList({ rows, total, topN = 3, loading = false, expan
   return (
     <View>
       <Text style={styles.sectionLabel}>WHERE IT WENT</Text>
-      <View style={styles.card}>
+      <Card padded style={styles.card}>
         {displayRows.map((row, i) => {
           if (loading) {
             return (
@@ -121,14 +122,14 @@ export function CategoryRankList({ rows, total, topN = 3, loading = false, expan
             </TouchableOpacity>
           )}
         </View>
-      </View>
+      </Card>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   sectionLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: space.sm, fontFamily: 'Inter_600SemiBold' },
-  card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: space.md, marginBottom: space.md, borderWidth: 1, borderColor: colors.border, ...shadow.sm, gap: space.md },
+  card: { marginBottom: space.md, gap: space.md },
   // Fixed height — must match placeholderRow so the card never resizes between a
   // filled period and an empty/partial one (the icon is 28, comfortably inside 32).
   // 32, deliberately. This is a DENSE breakdown list, not a settings row — raising

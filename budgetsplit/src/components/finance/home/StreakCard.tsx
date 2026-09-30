@@ -1,7 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { colors, type, space, radius, shadow } from '../../../theme';
+import { colors, type, space } from '../../../theme';
+import { Card } from '../../ui/Card';
 
 interface Props {
   streak: number;
@@ -16,7 +17,7 @@ export function StreakCard({ streak, daysInMonth, loggedDays }: Props) {
   const mo = now.getMonth();
 
   return (
-    <View style={styles.card}>
+    <Card padded style={styles.card}>
       <Text style={styles.label}>TRACKING STREAK</Text>
       <View style={styles.inner}>
         <View style={styles.badge}>
@@ -42,20 +43,12 @@ export function StreakCard({ streak, daysInMonth, loggedDays }: Props) {
           </View>
         </View>
       </View>
-    </View>
+    </Card>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    backgroundColor: colors.bgCard,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: space.md,
-    marginBottom: space.md,
-    ...shadow.sm,
-  },
+  card: { marginBottom: space.md },
   label: {
     ...type.caption,
     color: colors.textMuted,
