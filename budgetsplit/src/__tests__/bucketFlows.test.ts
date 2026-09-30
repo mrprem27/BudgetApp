@@ -18,7 +18,7 @@ function db() {
   const d = new DatabaseSync(':memory:');
   d.exec(`
     CREATE TABLE txn (id TEXT PRIMARY KEY, kind TEXT, pay_method TEXT, date INTEGER,
-                      is_deleted INTEGER DEFAULT 0, recur_freq TEXT);
+                      is_deleted INTEGER DEFAULT 0, recur_freq TEXT, account_id TEXT, to_account_id TEXT);
     CREATE TABLE txn_payment (txn_id TEXT, person_id TEXT, amount INTEGER);
     CREATE TABLE txn_share   (txn_id TEXT, person_id TEXT, amount INTEGER);
     CREATE TABLE txn_approval (txn_id TEXT PRIMARY KEY, state TEXT, created_at INTEGER, decided_at INTEGER, landed_pay_method TEXT);
@@ -97,9 +97,15 @@ describe('From decides the place (U-48, U-49)', () => {
     add(d, 'b', 'expense', 'wallet', 300);
     expect(flows(d)).toEqual({ wallet: -300 });
   });
-  it('paying the card bill comes out of the bank', () => {
+  it('paying the card bill comes out of the bank it was paid from', () => {
     const d = db();
-    add(d, 'c', 'settlement', 'card', 3000);
+    add(d, 'c', 'settlement', 'bank', 3000);
+    d.prepare("UPDATE txn SET to_account_id = 'default:card' WHERE id = 'c'").run();
     expect(flows(d)).toEqual({ bank: -3000 });
+  });
+  it('a transfer to a friend paid by card is card spending, not a card bill (DQ-109)', () => {
+    const d = db();
+    add(d, 'f', 'settlement', 'card', 3000);
+    expect(flows(d)).toEqual({});
   });
 });

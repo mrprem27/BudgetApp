@@ -118,7 +118,7 @@ describe('computeTotalMoney', () => {
   it('a card-bill payment brings creditUsed down between Plan edits', () => {
     const txns = [
       { kind: 'expense',    pay_method: 'card', date: 10, payments: [{ personId: ME, amount: 10000 }], shares: [{ personId: ME, amount: 10000 }] },
-      { kind: 'settlement', pay_method: 'card', date: 20, payments: [{ personId: ME, amount: 6000 }], shares: [] },
+      { kind: 'settlement', pay_method: 'bank', to_account_id: 'default:card', date: 20, payments: [{ personId: ME, amount: 6000 }], shares: [] },
     ];
     const pos = computeCash(txns, ME, 0, 50000);
     const tm = computeTotalMoney(pos, profile({ creditLimit: 100000, creditUsed: 0 }));
@@ -128,7 +128,7 @@ describe('computeTotalMoney', () => {
 
   it('a repayment larger than post-baseline spend reduces the stated balance itself', () => {
     const txns = [
-      { kind: 'settlement', pay_method: 'card', date: 20, payments: [{ personId: ME, amount: 6000 }], shares: [] },
+      { kind: 'settlement', pay_method: 'bank', to_account_id: 'default:card', date: 20, payments: [{ personId: ME, amount: 6000 }], shares: [] },
     ];
     const pos = computeCash(txns, ME, 0, 50000);
     // Stated balance ₹80 minus ₹60 repayment → ₹20 left on the card.

@@ -58,6 +58,8 @@ export type Txn = {
    * after every write, so the two can never disagree.
    */
   account_id: string | null;
+  /** A card-bill payment: the card it went into; the money left `account_id` (`DQ-109`). */
+  to_account_id: string | null;
   /**
    * The named asset a transfer moved money into or out of. NULL on every other
    * row — which is every row that existed before the asset register.
@@ -312,6 +314,8 @@ export type InsertTxnInput = {
   payMethod?: PayMethod;
   /** Which account of that kind (`U-68`); omitted means the kind's default (`alignAccount`). */
   accountId?: string;
+  /** A card-bill payment: the card it went into (`DQ-109`). */
+  toAccountId?: string;
   /**
    * The named asset this transfer moved money into or out of, so the row can be
    * traced back to it — which is what lets an asset be deleted only when nothing
@@ -376,8 +380,8 @@ export async function insertTxnRows(
     await db.runAsync(
       `INSERT INTO txn
          (id,group_id,kind,entry_mode,date,category,note,attachment_uri,tags,
-          recur_freq,recur_interval,recur_end,recur_mode,tz,lat,lng,place_label,pay_method,account_id,currency,source,asset_id,is_deleted,created_at,updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?)`,
+          recur_freq,recur_interval,recur_end,recur_mode,tz,lat,lng,place_label,pay_method,account_id,to_account_id,currency,source,asset_id,is_deleted,created_at,updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?)`,
       [
         id, input.groupId, input.kind, input.entryMode, input.date,
         input.category, input.note ?? null, input.attachmentUri ?? null,
@@ -387,6 +391,7 @@ export async function insertTxnRows(
         localTz(), input.lat ?? null, input.lng ?? null, input.placeLabel ?? null,
         input.payMethod ?? null,
         input.accountId ?? null,
+        input.toAccountId ?? null,
         input.currency ?? null,
         input.source ?? null,
         input.assetId ?? null,

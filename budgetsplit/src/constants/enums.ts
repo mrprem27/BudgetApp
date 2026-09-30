@@ -182,19 +182,16 @@ export function assetOf(pm: PayMethod | string | null | undefined): AssetBucket 
   }
 }
 
-/** A card-bill payment: a settlement whose From is the card being repaid (`payCardBill`). */
-export function isCardRepayment(t: { kind?: string | null; pay_method?: string | null }): boolean {
-  return t.kind === 'settlement' && t.pay_method === PayMethod.Card;
+/** A card-bill payment: a settlement into a card account of mine (`payCardBill`, `DQ-109`). */
+export function isCardRepayment(t: { kind?: string | null; to_account_id?: string | null }): boolean {
+  return t.kind === 'settlement' && !!t.to_account_id;
 }
 
 /**
- * The place a row's money actually moved from. Its From, except a card-bill payment: that row's
- * `pay_method` names the card it repays, and the money for it leaves the bank. Mirrored in SQL by
- * `EFFECTIVE_FROM_SQL` (`cashQuery.ts`); `cashSql.test.ts` and `bucketFlows.test.ts` fail if the
- * two drift.
+ * The place a row's money moved from: its From. Mirrored in SQL by `EFFECTIVE_FROM_SQL`
+ * (`cashQuery.ts`); `cashSql.test.ts` and `bucketFlows.test.ts` fail if the two drift.
  */
-export function payFromOf(t: { kind?: string | null; pay_method?: string | null }): AssetBucket | 'credit' | null {
-  if (isCardRepayment(t)) return 'bank';
+export function payFromOf(t: { pay_method?: string | null }): AssetBucket | 'credit' | null {
   return assetOf(t.pay_method);
 }
 

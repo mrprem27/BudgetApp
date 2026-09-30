@@ -134,7 +134,7 @@ describe('round trips through the real push and pull', () => {
       recur_freq: 'monthly', recur_interval: 1, recur_end: T0 + 99, recur_override_date: null, parent_recur_id: null,
       recur_state: 'paused', recur_paused_at: null, recur_mode: 'remind',
       tz: 'Asia/Kolkata', lat: 12.9, lng: 77.6, place_label: 'Home', pay_method: 'card', currency: null, source: 'manual',
-      asset_id: null, account_id: 'default:card', author_person_id: null, is_deleted: 0, created_at: T0 - 90, updated_at: T0 + 1_000,
+      asset_id: null, account_id: 'default:card', to_account_id: null, author_person_id: null, is_deleted: 0, created_at: T0 - 90, updated_at: T0 + 1_000,
     };
     const bundle = {
       txn,
@@ -162,6 +162,23 @@ describe('round trips through the real push and pull', () => {
     const refused = (await db.prepare('SELECT code FROM sync_rejections ORDER BY mutation_id').all()).results.map(r => r.code);
     expect(refused).toEqual(['forbidden', 'forbidden']);
     expect((await db.prepare("SELECT account_id FROM transactions WHERE id = 'x3'").first())?.account_id).toBe(`${USER}:default:bank`);
+  });
+
+  it('a card bill goes into one of your own cards, and only a transfer can (DQ-109)', async () => {
+    const db = await server();
+    await send(db, [groupToServer({ id: 'me', name: 'Personal', icon: 'user', color: '#20C4B8', is_personal: 1, simplify_debt: 1, default_split: 'equal', carry_over: 0, created_at: T0 })]);
+    const t = (id: string, kind: string, card: string) => txnToServer({
+      txn: { id, group_id: 'me', kind, entry_mode: 'quick', date: T0, category: 'Repayment', pay_method: 'bank', account_id: 'default:bank', to_account_id: card, created_at: T0 },
+      payments: [{ txn_id: id, person_id: ME, amount: 100 }], shares: kind === 'settlement' ? [] : [{ txn_id: id, person_id: ME, amount: 100 }], items: [], skips: [],
+    }, ctx);
+    const mutations: Mutation[] = [t('c1', 'settlement', 'someone-elses'), t('c2', 'expense', 'default:card'), t('c3', 'settlement', 'default:card')]
+      .map(o => ({ id: ++mutationId, entity: o.entity, op: 'upsert', entityId: o.entityId, baseVersion: 0, data: o.data }));
+    const last = (await ensureDevice(db, USER, 'phone', T0 + 1_000))!;
+    await applyPush({ db, userId: USER, deviceId: 'phone', now: T0 + 1_000 }, mutations, last, ENTITIES);
+    const refused = (await db.prepare('SELECT code FROM sync_rejections ORDER BY mutation_id').all()).results.map(r => r.code);
+    expect(refused).toEqual(['forbidden', 'forbidden']);
+    const back = serverToTxn(rowsOf(await pulled(db), 'transactions', 'me').find(r => r.id === 'c3')!, ctx);
+    expect(back.txn).toMatchObject({ to_account_id: 'default:card', account_id: 'default:bank', pay_method: 'bank' });
   });
 
   it('never keeps which of a peer\'s accounts their entry used (U-68)', () => {

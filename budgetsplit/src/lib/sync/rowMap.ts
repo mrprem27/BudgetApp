@@ -106,6 +106,7 @@ export const COLUMN_FATES: Record<string, Record<string, Fate>> = {
     source: '→ transactions.source',
     asset_id: '→ transactions.asset_id',
     account_id: '→ transactions.account_id (default:<kind> is <user>:default:<kind>; a peer\'s is never kept)',
+    to_account_id: '→ transactions.to_account_id (a card-bill payment\'s card, mapped like account_id)',
     author_person_id: '→ transactions.author_id (NULL means me)',
     sync_version: local('v1 sync bookkeeping, replaced by sync_queue'),
     is_deleted: '→ transactions.deleted_at',
@@ -579,6 +580,7 @@ export function txnToServer(b: LocalBundle, ctx: MapContext): Outgoing {
       source: t.source ?? null,
       currency: str(t.currency) ?? undefined,           // NULL means INR: let the server's default say so
       asset_id: t.asset_id ?? null, account_id: accountOut(t.account_id, ctx),
+      to_account_id: accountOut(t.to_account_id, ctx),
       latitude: t.lat ?? null, longitude: t.lng ?? null,
       place_label: t.place_label ?? null, adjustments: t.adjustments ?? null,
       recurring_rule_id: t.parent_recur_id ?? null, occurrence_date: t.recur_override_date ?? null,
@@ -629,6 +631,7 @@ export function serverToTxn(t: Row, ctx: MapContext): LocalBundle {
       source: t.source ?? null, asset_id: t.asset_id ?? null,
       // Which of THEIR accounts a peer used is not mine to hold, and would name a row I don't have.
       account_id: author && !isMe(author, ctx) ? null : accountIn(t.account_id, ctx),
+      to_account_id: author && !isMe(author, ctx) ? null : accountIn(t.to_account_id, ctx),
       author_person_id: author && !isMe(author, ctx) ? author : null,
       is_deleted: t.deleted_at != null ? 1 : 0,
       created_at: t.created_at, updated_at: t.updated_at,

@@ -35,7 +35,9 @@ function makeDb(): DatabaseSync {
       deleted_at INTEGER,
       PRIMARY KEY (group_id, person_id)
     );
-    CREATE TABLE txn (id TEXT PRIMARY KEY, group_id TEXT, category TEXT NOT NULL, pay_method TEXT, account_id TEXT, author_person_id TEXT);
+    CREATE TABLE txn (id TEXT PRIMARY KEY, group_id TEXT, kind TEXT, category TEXT NOT NULL, pay_method TEXT, account_id TEXT,
+      to_account_id TEXT, asset_id TEXT, author_person_id TEXT);
+    CREATE TABLE txn_share (txn_id TEXT, person_id TEXT, amount INTEGER);
     CREATE TABLE pending_txn (id TEXT PRIMARY KEY, pay_method TEXT, account_id TEXT);
     CREATE TABLE sync_queue (
       queue_id INTEGER PRIMARY KEY AUTOINCREMENT, local_table TEXT NOT NULL, local_id TEXT NOT NULL,

@@ -685,6 +685,8 @@ export const COLUMN_MIGRATIONS = [
   // U-68: every transaction and import points at its account (`account` table).
   "ALTER TABLE txn ADD COLUMN account_id TEXT",
   "ALTER TABLE pending_txn ADD COLUMN account_id TEXT",
+  // DQ-109 1b: the card a bill payment went INTO (the money left `account_id`).
+  "ALTER TABLE txn ADD COLUMN to_account_id TEXT",
 ];
 
 /**
@@ -948,6 +950,22 @@ export const LAUNCH_INVARIANTS: string[] = [
      WHERE account_id IS NULL AND author_person_id IS NULL AND pay_method IN ('bank','cash','wallet','card')`,
   `UPDATE pending_txn SET account_id = 'default:' || pay_method
      WHERE account_id IS NULL AND pay_method IN ('bank','cash','wallet','card')`,
+  /*
+   * `DQ-109` 1b: a card-bill payment says both ends. It was a settlement "from the card", read as
+   * money leaving the default bank; now it is from a bank account INTO the card (`to_account_id`).
+   * Only my own one-sided rows convert: a transfer to a friend paid by card has a share for the
+   * friend, and is card spending, which the old reading got wrong. Converted rows are queued.
+   * One BEGIN/COMMIT so a row is never queued without being converted, or the reverse.
+   */
+  `BEGIN;
+   INSERT OR REPLACE INTO sync_queue (local_table, local_id, op, snapshot, queued_at, sent_ids)
+     SELECT 'txn', id, 'upsert', NULL, CAST(strftime('%s','now') AS INTEGER) * 1000, NULL FROM txn
+      WHERE kind = 'settlement' AND pay_method = 'card' AND to_account_id IS NULL AND asset_id IS NULL
+        AND author_person_id IS NULL AND NOT EXISTS (SELECT 1 FROM txn_share s WHERE s.txn_id = txn.id);
+   UPDATE txn SET to_account_id = COALESCE(account_id, 'default:card'), account_id = 'default:bank', pay_method = 'bank'
+     WHERE kind = 'settlement' AND pay_method = 'card' AND to_account_id IS NULL AND asset_id IS NULL
+       AND author_person_id IS NULL AND NOT EXISTS (SELECT 1 FROM txn_share s WHERE s.txn_id = txn.id);
+   COMMIT;`,
 ];
 
 /** Run {@link LAUNCH_INVARIANTS}. Engine-agnostic, like `applyOneTimeFixes`. */
@@ -1299,7 +1317,7 @@ export async function openDB(): Promise<SQLite.SQLiteDatabase> {
       // SCHEMA above.
       const cols = 'id,group_id,kind,entry_mode,date,category,note,attachment_uri,tags,adjustments,'
         + 'recur_freq,recur_interval,recur_end,recur_override_date,parent_recur_id,recur_state,'
-        + 'recur_paused_at,recur_mode,tz,lat,lng,place_label,pay_method,account_id,currency,source,asset_id,author_person_id,'
+        + 'recur_paused_at,recur_mode,tz,lat,lng,place_label,pay_method,account_id,to_account_id,currency,source,asset_id,author_person_id,'
         + 'sync_version,is_deleted,created_at,updated_at';
       await rebuildTable(db, 'txn_new', `
         CREATE TABLE txn_new (
@@ -1327,6 +1345,7 @@ export async function openDB(): Promise<SQLite.SQLiteDatabase> {
           place_label    TEXT,
           pay_method     TEXT,
           account_id     TEXT,
+          to_account_id  TEXT,
           currency       TEXT,
           source         TEXT,
           asset_id       TEXT,

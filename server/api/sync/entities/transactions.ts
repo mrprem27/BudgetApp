@@ -27,7 +27,7 @@ import { approvalsForDelete, approvalsForWrite } from './approvals';
 
 const COLUMNS = [
   'group_id', 'kind', 'entry_mode', 'amount', 'date', 'timezone', 'category', 'note', 'pay_method', 'source',
-  'currency', 'asset_id', 'account_id', 'latitude', 'longitude', 'place_label', 'adjustments', 'recurring_rule_id', 'occurrence_date',
+  'currency', 'asset_id', 'account_id', 'to_account_id', 'latitude', 'longitude', 'place_label', 'adjustments', 'recurring_rule_id', 'occurrence_date',
 ] as const;
 const RULE_COLUMNS = ['frequency', 'interval', 'ends_at', 'status', 'mode', 'paused_at'] as const;
 const ITEM_COLUMNS = ['id', 'name', 'quantity', 'unit_price', 'assigned_to', 'split_mode', 'split_values'] as const;
@@ -112,6 +112,16 @@ async function writeTransaction(ctx: PushContext, m: Mutation): Promise<D1Prepar
       `? IS NOT NULL AND (? = ? || ':default:' || ?
         OR EXISTS (SELECT 1 FROM accounts WHERE id = ? AND scope_id = ? AND kind = ? AND deleted_at IS NULL))`,
       data.pay_method ?? null, data.account_id, userId, data.pay_method ?? null, data.account_id, userId, data.pay_method ?? null));
+  }
+  // A card-bill payment goes into one of the author's own cards (DQ-109).
+  if (data.to_account_id != null) {
+    const card = String(data.to_account_id);
+    const implicit = card === `${userId}:default:card`;
+    if (String(data.kind ?? existing?.kind) !== 'settlement'
+      || (!implicit && !(await db.prepare("SELECT 1 AS ok FROM accounts WHERE id = ? AND scope_id = ? AND kind = 'card' AND deleted_at IS NULL")
+        .bind(card, userId).first()))) {
+      throw new Rejected('forbidden', 'transactions.to_account_id: not one of your cards');
+    }
   }
   const people = [...new Set([...payers, ...splits].map(p => p.person_id))];
   // Invited counts: adding a friend and splitting the bill with them is one

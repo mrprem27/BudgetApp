@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
 import {
-  PAY_METHOD, PAY_METHOD_LABEL, INCOME_LANDING, PayMethod, assetOf, payFromOf, asPayMethod,
+  PAY_METHOD, PAY_METHOD_LABEL, INCOME_LANDING, PayMethod, assetOf, payFromOf, isCardRepayment, asPayMethod,
 } from '../constants/enums';
 
 /**
@@ -35,12 +35,16 @@ describe('From is the only pay field', () => {
     expect(asPayMethod('wallet')).toBe(PayMethod.Wallet);
   });
 
-  it('draws each From on its own place, and a card bill on the bank', () => {
+  it('draws each From on its own place, a card bill on the bank it was paid from', () => {
     expect(assetOf(PayMethod.Bank)).toBe('bank');
     expect(assetOf(PayMethod.Card)).toBe('credit');
     expect(assetOf(PayMethod.Other)).toBeNull();
     expect(payFromOf({ kind: 'expense', pay_method: 'card' })).toBe('credit');
-    expect(payFromOf({ kind: 'settlement', pay_method: 'card' })).toBe('bank');
+    expect(payFromOf({ pay_method: 'bank' })).toBe('bank');
+    // A transfer to a friend paid by card is card spending, not a card bill (`DQ-109`).
+    expect(payFromOf({ pay_method: 'card' })).toBe('credit');
+    expect(isCardRepayment({ kind: 'settlement', to_account_id: 'default:card' })).toBe(true);
+    expect(isCardRepayment({ kind: 'settlement' })).toBe(false);
     expect(payFromOf({ kind: 'expense', pay_method: null })).toBeNull();
   });
 });

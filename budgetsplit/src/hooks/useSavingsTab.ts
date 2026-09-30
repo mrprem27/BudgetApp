@@ -22,6 +22,8 @@ import { loadSavingsTabData } from '../lib/savingsTabData';
 import { getPendingOverspendNotice, setPendingOverspendNotice } from '../lib/overspendNotice';
 import { useDataRefresh } from '../components/system/DataRefreshProvider';
 import { useScreenData } from './useScreenData';
+import { listAccounts } from '../db/queries/accounts';
+import type { AccountChoice } from '../lib/paidFrom';
 
 /**
  * State, reads and write-handlers for the Savings tab.
@@ -42,6 +44,11 @@ export function useSavingsTab() {
 
   const [showMoneyEditor, setShowMoneyEditor] = useState(false);
   const [showPayCardBill, setShowPayCardBill] = useState(false);
+  // Which bank and which card, asked only when there are several (`DQ-109`).
+  const [cardBillAccounts, setCardBillAccounts] = useState<AccountChoice[]>([]);
+  useEffect(() => {
+    if (showPayCardBill) listAccounts(db).then(setCardBillAccounts).catch(() => {});
+  }, [showPayCardBill, db]);
   const [showMoveInvest, setShowMoveInvest] = useState(false);
   // "Paid from not set": how many of my entries, while its sheet is open (`U-62`).
   const [unsetCount, setUnsetCount] = useState<number | null>(null);
@@ -117,8 +124,8 @@ export function useSavingsTab() {
     refresh();
   }
 
-  async function handlePayCardBill(amountPaise: number) {
-    await payCardBill(db, amountPaise);
+  async function handlePayCardBill(amountPaise: number, accounts: { from?: string; card?: string } = {}) {
+    await payCardBill(db, amountPaise, undefined, accounts);
     haptic.success();
     setShowPayCardBill(false);
     await reload();
@@ -245,7 +252,7 @@ export function useSavingsTab() {
     overspend, setOverspend, applied, handleApproveOverspend, handleUndoOverspend, handleDismissOverspend,
     // money editor
     showMoneyEditor, setShowMoneyEditor, handleSaveMoney,
-    showPayCardBill, setShowPayCardBill, handlePayCardBill,
+    showPayCardBill, setShowPayCardBill, handlePayCardBill, cardBillAccounts,
     showMoveInvest, setShowMoveInvest, handleMoveMoney,
     unsetCount, openSetUnattributed, closeSetUnattributed: () => setUnsetCount(null), handleSetUnattributed,
     // fund a goal

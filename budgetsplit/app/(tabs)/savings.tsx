@@ -102,7 +102,7 @@ export default function SavingsScreen() {
     loading, error, refreshing, onRefresh, reload,
     overspend, applied, handleApproveOverspend, handleUndoOverspend, handleDismissOverspend,
     showMoneyEditor, setShowMoneyEditor, handleSaveMoney,
-    showPayCardBill, setShowPayCardBill, handlePayCardBill,
+    showPayCardBill, setShowPayCardBill, handlePayCardBill, cardBillAccounts,
     showMoveInvest, setShowMoveInvest, handleMoveMoney,
     unsetCount, openSetUnattributed, closeSetUnattributed, handleSetUnattributed,
     fundGoalId, setFundGoalId, fundGoalObj, fundAmt, setFundAmt, handleFundGoal,
@@ -356,6 +356,7 @@ export default function SavingsScreen() {
         visible={showPayCardBill}
         onClose={() => setShowPayCardBill(false)}
         creditUsed={money?.creditUsed ?? 0}
+        accounts={cardBillAccounts}
         onPay={handlePayCardBill}
       />
 

@@ -2,7 +2,7 @@
 
 `Last verified: 2026-09-30 (§0, §1, §9–§11 and every row whose status changed; the rest as of 2026-09-07) · Guarded by: trackerIntegrity.test.ts · countClaims.test.ts · docIdGraph.test.ts`
 
-**279 items, 111 of them still open.** One row each: what it is, and where it stands.
+**279 items, 110 of them still open.** One row each: what it is, and where it stands.
 Nothing else. **This is the V1 tracker** — start at §0.
 
 **The evidence is not here.** Why each item exists, what it costs, what breaks if you touch it, and
@@ -23,7 +23,7 @@ is defined in two places.
 |---|---|---|
 | §1 · Ship blockers | **12** | 19 |
 | §2 · Complexity — `OV-` | **13** | 34 |
-| §3 · Decisions — `DQ-` | **44** | 64 |
+| §3 · Decisions — `DQ-` | **43** | 64 |
 | §4 · Walk 1 — `W1-` | **12** | 39 |
 | §5 · Sync — `SYNC-F` | **0** | 24 |
 | §6 · Debt — `D-` | **10** | 11 |
@@ -45,8 +45,8 @@ here, one tested commit per step. Phase 5 is what only you can do.
 1. **Data model** (your order: entities, then real time, then items).
    - 1a Accounts carry the money: balances per account, openings / card limit / due day move off the
      money profile, a screen to add and name accounts, Paid from picks one — `U-68`.
-   - 1b Transfers, settlements, adjustments and repeat rules as their own records — `DQ-109`, which
-     also answers `OV-02` and `DQ-15` / `D-08` (the sweep knows where money came from).
+   - 1b **Done 2026-09-30** (`DQ-109`, your call: explicit links on entries, not new tables): a card
+     bill is from a bank account into a card. `DQ-15` / `D-08` stay parked on their trigger.
    - 1c Categories by id, one budget period, dead columns gone — `DQ-106`, `OV-06`, `OV-19`,
      `OV-23`, `D-07`.
 2. **Server as a web app** (built and tested here; deploying needs `DQ-95`).
@@ -121,7 +121,7 @@ otherwise, except the business and legal ones in phase 5. `PARKED` rows keep the
 ---
 ## §3 · Open decisions — `DQ-`
 
-**64 items: 37 `DECIDE`, 7 `BLOCKED`, 20 `DONE`.** A `DQ-` is a question only you can answer, so every unanswered one is `DECIDE` by definition. The default column is what ships if you never decide.
+**64 items: 36 `DECIDE`, 7 `BLOCKED`, 21 `DONE`.** A `DQ-` is a question only you can answer, so every unanswered one is `DECIDE` by definition. The default column is what ships if you never decide.
 
 | | What | Status | Default if never decided |
 |---|---|---|---|
@@ -161,7 +161,6 @@ otherwise, except the business and legal ones in phase 5. `PARKED` rows keep the
 | `DQ-106` | Settle categories-by-id, budget period vs cadence and dead columns before any public API? | `DECIDE` | Yes — `OV-06`, `OV-19`, `OV-23` in the server schema while a reset is still free |
 | `DQ-107` | Queues and Cron for email, notifications and cleanup (needs Workers Paid) | `DECIDE` | With `DQ-95`: before the first sign-in that isn't you |
 | `DQ-108` | Real time: server-first writes, and a live push to every member's open app (and a notification when closed)? | `DECIDE` | Yes — `SPEC-SERVER-WEBAPP.md` §4; needs Workers Paid |
-| `DQ-109` | Proper entities — accounts, transfers, settlements, adjustments, repeat rules — instead of flags on one transaction table? | `DECIDE` | Yes, in the same server reset as `DQ-106`, before a web client |
 | `DQ-80` | Paid Apple Developer account, $99/yr | `BLOCKED` | Apple |
 | `DQ-81` | Google OAuth **CASA Tier-3** for `gmail.readonly` | `BLOCKED` | Google |
 | `DQ-82` | The GPay export format | `BLOCKED` | Google |
@@ -170,7 +169,7 @@ otherwise, except the business and legal ones in phase 5. `PARKED` rows keep the
 | `DQ-85` | R2 object storage | `BLOCKED` | A Cloudflare dashboard opt-in that asks for a card |
 | `DQ-86` | Cloudflare Email Sending | `BLOCKED` | Workers Paid $5/mo + an owned domain |
 
-**Closed (20), detail in `FINDINGS.md`:** `DQ-110` `DQ-14` `DQ-07` `DQ-22` `DQ-26` `DQ-28` `DQ-31` `DQ-32` `DQ-88` `DQ-89` `DQ-91` `DQ-93` `DQ-94` `DQ-97` `DQ-98` `DQ-99` `DQ-100` `DQ-101` `DQ-102` `DQ-103`
+**Closed (21), detail in `FINDINGS.md`:** `DQ-110` `DQ-14` `DQ-07` `DQ-22` `DQ-26` `DQ-28` `DQ-31` `DQ-32` `DQ-88` `DQ-89` `DQ-91` `DQ-93` `DQ-94` `DQ-97` `DQ-98` `DQ-99` `DQ-100` `DQ-101` `DQ-102` `DQ-103` `DQ-109`
 
 ---
 ## §4 · Walk 1 — `W1-`

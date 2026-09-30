@@ -1,21 +1,20 @@
 import { NOT_AWAITING_APPROVAL } from './approvalSql';
 
 /**
- * The place a row's money moved from: its From, except a card-bill payment, whose From names the
- * card it repays while the money leaves the bank. The SQL twin of `payFromOf`
+ * The place a row's money moved from: its From. The SQL twin of `payFromOf`
  * (`constants/enums.ts`) — this module stays import-free so it can run against a real engine; the
- * parity tests hold the two together.
+ * parity tests hold the two together. A card-bill payment is From the bank that paid it, and names
+ * the card in `to_account_id` (`DQ-109`).
  */
 export const EFFECTIVE_FROM_SQL = `(CASE
-      WHEN t.pay_method = 'card' AND t.kind = 'settlement' THEN 'bank'
       WHEN t.pay_method = 'card'   THEN 'credit'
       WHEN t.pay_method = 'cash'   THEN 'cash'
       WHEN t.pay_method = 'wallet' THEN 'wallet'
       WHEN t.pay_method = 'bank'   THEN 'bank'
       ELSE NULL END)`;
 const FROM = EFFECTIVE_FROM_SQL;
-/** A card-bill payment (`isCardRepayment`). */
-const REPAY = `(t.kind = 'settlement' AND t.pay_method = 'card')`;
+/** A card-bill payment (`isCardRepayment`): money into a card account of mine. */
+const REPAY = `(t.kind = 'settlement' AND t.to_account_id IS NOT NULL)`;
 
 // SQL for the derived cash position, aggregated in the DB instead of loading every
 // txn + all its split rows into JS and reducing there (getCashPosition scans all of
@@ -132,14 +131,12 @@ export const BUCKET_FLOWS_SQL = `
 /**
  * The same movement per ACCOUNT (`U-68`), so each named account has a balance. Per kind it sums
  * to `BUCKET_FLOWS_SQL` exactly (`accountFlows.test.ts`). A row with no `account_id` (a peer's
- * entry: their account is not mine to name) counts against that kind's default, and a card-bill
- * payment against the default bank, until transfers carry a from-account (`DQ-109`).
+ * entry: their account is not mine to name) counts against that kind's default.
  * Binds: [personId, personId, toMs].
  */
 export const ACCOUNT_FLOWS_SQL = `
   SELECT
-    CASE WHEN ${REPAY} THEN 'default:bank'
-         WHEN ${FROM} IN ('bank', 'cash', 'wallet') THEN COALESCE(t.account_id, 'default:' || t.pay_method)
+    CASE WHEN ${FROM} IN ('bank', 'cash', 'wallet') THEN COALESCE(t.account_id, 'default:' || t.pay_method)
          ELSE NULL END AS account_id,
     ${MY_DELTA} AS delta
   ${MY_FLOWS_FROM}
@@ -152,14 +149,14 @@ export const ACCOUNT_FLOWS_SQL = `
  * Binds: [cardBaselineMs, cardBaselineMs, personId, toMs].
  */
 export const CARD_FLOWS_SQL = `
-  SELECT COALESCE(t.account_id, 'default:card') AS account_id,
+  SELECT CASE WHEN ${REPAY} THEN t.to_account_id ELSE COALESCE(t.account_id, 'default:card') END AS account_id,
     COALESCE(SUM(CASE WHEN (t.kind = 'expense' OR (t.kind = 'settlement' AND NOT ${REPAY}))
                        AND ${FROM} = 'credit' AND t.date > ? THEN mp.amt
                       WHEN ${REPAY} AND t.date > ? THEN -mp.amt
                       ELSE 0 END), 0) AS delta
   FROM txn t
   JOIN (SELECT txn_id, SUM(amount) AS amt FROM txn_payment WHERE person_id = ? GROUP BY txn_id) mp ON mp.txn_id = t.id
-  WHERE t.is_deleted = 0 AND t.recur_freq IS NULL AND t.date <= ? AND t.pay_method = 'card'
+  WHERE t.is_deleted = 0 AND t.recur_freq IS NULL AND t.date <= ? AND (t.pay_method = 'card' OR ${REPAY})
     AND ${NOT_AWAITING_APPROVAL}
   GROUP BY 1
 `;

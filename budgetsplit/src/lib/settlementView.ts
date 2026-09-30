@@ -1,5 +1,4 @@
 import { colors } from '../theme';
-import { PayMethod } from '../constants/enums';
 import type { FeatherName } from '../constants/palette';
 
 /**
@@ -68,6 +67,8 @@ export type SettlementView = {
 export type SettlementRow = {
   asset_id?: string | null;
   pay_method?: string | null;
+  /** Set on a card-bill payment: the card it went into (`DQ-109`). */
+  to_account_id?: string | null;
   /** Read only to recognise a balance adjustment (`U-64`). */
   category?: string | null;
   payments: ReadonlyArray<{ personId: string; amount: number }>;
@@ -125,10 +126,9 @@ export function settlementView(row: SettlementRow, assetName?: string | null): S
     };
   }
 
-  // A card repayment is a settlement whose pay method is the card being repaid.
-  // `lib/cash.ts` uses the same read; it is a heuristic on a descriptive field, and
-  // it is the one thing here a real `settle_kind` would improve.
-  if (row.pay_method === PayMethod.Card) {
+  // A card repayment names the card it went into (`to_account_id`, `DQ-109`); `lib/cash.ts`
+  // reads the same column.
+  if (row.to_account_id) {
     return {
       kind: 'card',
       label: 'Card payment',

@@ -27,7 +27,7 @@ const row = (over: Partial<SettlementRow> = {}): SettlementRow => ({
 const invest = row({ asset_id: 'gold' });
 /** Money OUT of an asset: shares-only, same `asset_id`. */
 const redeem = row({ asset_id: 'gold', payments: [], shares: [{ personId: ME, amount: 1000000 }] });
-const cardBill = row({ pay_method: PayMethod.Card });
+const cardBill = row({ pay_method: PayMethod.Bank, to_account_id: 'default:card' });
 const p2p = row({ shares: [{ personId: 'aarav', amount: 1000000 }] });
 
 describe('the four things a settlement can be', () => {

@@ -181,15 +181,15 @@ export async function getSafeToSpendV2(db: SQLite.SQLiteDatabase, nowMs: number 
 }
 
 /**
- * Log a card-bill payment: ONE settlement row in the personal ledger with
- * `pay_method = 'card'` — the marker `computeCash`/`CASH_TOTALS_SQL` read to
- * move the same amount out of cash (settledOut) AND off the card debt
- * (cardSpend goes down). Shows in the ledger like any transfer, is excluded
- * from spend analysis like any settlement, and finally gives `creditUsed` a
- * way down between Plan edits. The full accounts model stays future work; this
- * row is designed to survive it (it is just a settlement with a pay method).
+ * Log a card-bill payment: ONE settlement in the personal ledger, from a bank account INTO a card
+ * (`to_account_id`, `DQ-109`). Cash leaves that bank (settledOut) and the same amount comes off
+ * the card's debt (`cardSpend` goes down). Shows in the ledger like any transfer and is excluded
+ * from spend analysis like any settlement. Omitted accounts are the defaults.
  */
-export async function payCardBill(db: SQLite.SQLiteDatabase, amountPaise: number, note?: string): Promise<string> {
+export async function payCardBill(
+  db: SQLite.SQLiteDatabase, amountPaise: number, note?: string,
+  accounts: { from?: string; card?: string } = {},
+): Promise<string> {
   if (!Number.isFinite(amountPaise) || amountPaise <= 0) throw new Error('Card payment needs a positive amount');
   const me = await getMe(db);
   if (!me) throw new Error('No current user');
@@ -202,7 +202,9 @@ export async function payCardBill(db: SQLite.SQLiteDatabase, amountPaise: number
     date: Date.now(),
     category: 'Repayment',
     note: note ?? 'Card bill payment',
-    payMethod: PayMethod.Card,
+    payMethod: PayMethod.Bank,
+    accountId: accounts.from,
+    toAccountId: accounts.card ?? 'default:card',
     payments: [{ personId: me.id, amount: amountPaise }],
     shares: [],
   });

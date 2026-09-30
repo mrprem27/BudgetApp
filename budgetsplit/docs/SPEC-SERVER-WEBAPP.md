@@ -294,24 +294,12 @@ four defaults (`default:bank|cash|wallet|card`), `account_id` on `txn` / `pendin
 6. *Show it.* Transaction detail shows the account name. The row showing Paid from is `DQ-18`
    (phase 3).
 
-**1b · Transfers, settlements, adjustments and repeat rules as their own records (`DQ-109`, E3).**
-One step at a time, each behind `settlementView`, so no screen changes meaning mid-way:
-
-1. **Transfers** — new local `transfer` table: `from_account_id` / `from_asset_id`,
-   `to_account_id` / `to_asset_id`, amount, date, note. A card-bill payment becomes bank → card
-   (this ends the `pay_method = 'card'` heuristic and the step-3 workaround in 1a). An investment is
-   account → asset; a redemption asset → account. Move the writers (`insertCardBillPayment`, the
-   Move money sheet, the asset flows in `db/queries/assets.ts`) and migrate existing rows with a
-   launch invariant. `settlementView` reads the new table; the ledger shows the union.
-2. **Adjustments** — `adjustment` table (account, signed amount, reason). Today it is a settlement
-   with category "Balance adjustment" (`recordBalanceAdjustment` in `spendPower.ts`).
-3. **Settlements** stay in `txn` with `kind = 'settlement'` (payer, payee, group); once 1–2 have
-   moved out, that kind means only "paying a person back", which closes `OV-02`.
-4. **Repeat rules** — a `recurring_rule` table on the phone like the server's `recurring_rules`;
-   occurrences keep `parent_recur_id`. The server's unique occurrence index is already in.
-5. Server: `transfers` and `adjustments` tables and entity specs (`server/api/sync/entities/`),
-   added to `SYNCED_TABLES`, pull, erase and the engine's `RANK`; mappers and `COLUMN_FATES`.
-6. The sweep then knows where money came from (`DQ-15`, `D-08`).
+**1b · Done 2026-09-30, reshaped (`DQ-109`).** You chose explicit links on entries over new tables.
+A card-bill payment is From a bank account INTO a card (`txn.to_account_id`), converted at launch
+for old rows; the server checks the card is yours. Asset moves (`asset_id`), bank / cash / wallet
+moves (two legs, each naming its place) and balance adjustments (their account) already said both
+ends. Repeat rules stay flagged entries on the phone (the server already splits them). The sweep
+(`DQ-15`, `D-08`) stays parked on its trigger.
 
 **1c · Categories by id and cleanup (`DQ-106`).** `txn.category`, budgets and rules name a category
 by text (`OV-06`); switch to `category_id`, with the server's deterministic id
@@ -355,7 +343,7 @@ Known small bugs found in the last pass, not yet fixed:
 - Repeat entries post only when the author opens the app (fixed by 2b).
 - "Set where it went" also relabels entries marked Other (`setSourceForUnsetEntries`).
 - The Personal totals row shows on the Budget and Recurring tabs.
-- A friend transfer marked Credit card reads as a card bill (fixed by 1b.1).
+- ~~A friend transfer marked Credit card reads as a card bill~~ fixed in 1b.
 
 ### Phase 4 · Code debt
 

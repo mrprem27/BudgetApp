@@ -11,6 +11,8 @@ export type CashTxn = {
   is_deleted?: number | boolean;
   /** Where the money came from. Credit-card spend is debt, not cash out — see `computeCash`. */
   pay_method?: string | null;
+  /** Set on a card-bill payment: the card it went into (`DQ-109`). */
+  to_account_id?: string | null;
   /** Epoch ms. Only used to date card spend against the money profile's baseline. */
   date?: number;
   payments: { personId: string; amount: number }[];

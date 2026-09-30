@@ -18,6 +18,8 @@ type Fixture = {
   date: number;
   /** null = not recorded (treated as non-card, i.e. real cash out). */
   pay_method?: string | null;
+  /** Set on a card-bill payment: the card it went into (`DQ-109`). */
+  to_account_id?: string | null;
   payments: Split[];
   shares: Split[];
 };
@@ -27,17 +29,17 @@ function makeDb(fixtures: Fixture[]): DatabaseSync {
   db.exec(`
     CREATE TABLE txn (
       id TEXT PRIMARY KEY, group_id TEXT, kind TEXT, is_deleted INTEGER,
-      recur_freq TEXT, date INTEGER, pay_method TEXT
+      recur_freq TEXT, date INTEGER, pay_method TEXT, to_account_id TEXT
     );
     CREATE TABLE txn_payment (txn_id TEXT, person_id TEXT, amount INTEGER, PRIMARY KEY (txn_id, person_id));
     CREATE TABLE txn_share   (txn_id TEXT, person_id TEXT, amount INTEGER, PRIMARY KEY (txn_id, person_id));
     CREATE TABLE txn_approval (txn_id TEXT PRIMARY KEY, state TEXT NOT NULL, created_at INTEGER NOT NULL, decided_at INTEGER);
   `);
-  const insTxn = db.prepare('INSERT INTO txn (id, group_id, kind, is_deleted, recur_freq, date, pay_method) VALUES (?,?,?,?,?,?,?)');
+  const insTxn = db.prepare('INSERT INTO txn (id, group_id, kind, is_deleted, recur_freq, date, pay_method, to_account_id) VALUES (?,?,?,?,?,?,?,?)');
   const insPay = db.prepare('INSERT INTO txn_payment (txn_id, person_id, amount) VALUES (?,?,?)');
   const insShare = db.prepare('INSERT INTO txn_share (txn_id, person_id, amount) VALUES (?,?,?)');
   for (const f of fixtures) {
-    insTxn.run(f.id, 'g1', f.kind, f.is_deleted, f.recur_freq, f.date, f.pay_method ?? null);
+    insTxn.run(f.id, 'g1', f.kind, f.is_deleted, f.recur_freq, f.date, f.pay_method ?? null, f.to_account_id ?? null);
     for (const p of f.payments) insPay.run(f.id, p.person, p.amount);
     for (const s of f.shares) insShare.run(f.id, s.person, s.amount);
   }
@@ -66,6 +68,7 @@ function toCashTxns(fixtures: Fixture[], cutoff: number): CashTxn[] {
       kind: f.kind,
       is_deleted: 0,
       pay_method: f.pay_method ?? null,
+      to_account_id: f.to_account_id ?? null,
       date: f.date,
       payments: f.payments.map(p => ({ personId: p.person, amount: p.amount })),
       shares: f.shares.map(s => ({ personId: s.person, amount: s.amount })),
@@ -126,12 +129,12 @@ describe('CASH_TOTALS_SQL parity with computeCash', () => {
     expect(after.cardSpend).toBe(3000);
   });
 
-  // Card repayment: a settlement with pay_method 'card' takes cash out AND the
+  // Card repayment: a settlement from the bank into the card takes cash out AND the
   // same amount off card debt — creditUsed's one way down between Plan edits.
   it('a card-bill settlement lowers card debt and cash together', () => {
     const fx: Fixture[] = [
       { id: 'e1', kind: 'expense',    is_deleted: 0, recur_freq: null, date: 500, pay_method: 'card', payments: [{ person: ME, amount: 10000 }], shares: [{ person: ME, amount: 10000 }] },
-      { id: 'p1', kind: 'settlement', is_deleted: 0, recur_freq: null, date: 800, pay_method: 'card', payments: [{ person: ME, amount: 6000 }], shares: [] },
+      { id: 'p1', kind: 'settlement', is_deleted: 0, recur_freq: null, date: 800, pay_method: 'bank', to_account_id: 'default:card', payments: [{ person: ME, amount: 6000 }], shares: [] },
     ];
     assertParity(fx, 0, 0);
     const pos = cashPositionFromTotals(sqlTotals(makeDb(fx), ME, CUTOFF, 0), 0, 0);
@@ -142,8 +145,8 @@ describe('CASH_TOTALS_SQL parity with computeCash', () => {
 
   it('honours the baseline cutoff for repayments exactly like spend', () => {
     const fx: Fixture[] = [
-      { id: 'p0', kind: 'settlement', is_deleted: 0, recur_freq: null, date: 400, pay_method: 'card', payments: [{ person: ME, amount: 2000 }], shares: [] },
-      { id: 'p1', kind: 'settlement', is_deleted: 0, recur_freq: null, date: 900, pay_method: 'card', payments: [{ person: ME, amount: 3000 }], shares: [] },
+      { id: 'p0', kind: 'settlement', is_deleted: 0, recur_freq: null, date: 400, pay_method: 'bank', to_account_id: 'default:card', payments: [{ person: ME, amount: 2000 }], shares: [] },
+      { id: 'p1', kind: 'settlement', is_deleted: 0, recur_freq: null, date: 900, pay_method: 'bank', to_account_id: 'default:card', payments: [{ person: ME, amount: 3000 }], shares: [] },
     ];
     // Baseline at 500: the earlier repayment is already inside the stated balance.
     assertParity(fx, 0, 0, 500);
@@ -188,7 +191,7 @@ describe('CASH_TOTALS_SQL parity with computeCash', () => {
 describe('From decides card debt (U-48, U-49)', () => {
   // UPI on a RuPay credit card is stored as From = Credit card: card debt, not cash out.
   const upiFromCard: Fixture = { id: 'u1', kind: 'expense', is_deleted: 0, recur_freq: null, date: 100, pay_method: 'card', payments: [{ person: ME, amount: 4000 }], shares: [{ person: ME, amount: 4000 }] };
-  const cardBill: Fixture = { id: 'c1', kind: 'settlement', is_deleted: 0, recur_freq: null, date: 200, pay_method: 'card', payments: [{ person: ME, amount: 3000 }], shares: [] };
+  const cardBill: Fixture = { id: 'c1', kind: 'settlement', is_deleted: 0, recur_freq: null, date: 200, pay_method: 'bank', to_account_id: 'default:card', payments: [{ person: ME, amount: 3000 }], shares: [] };
   const upiFromBank: Fixture = { id: 'u2', kind: 'expense', is_deleted: 0, recur_freq: null, date: 400, pay_method: 'bank', payments: [{ person: ME, amount: 700 }], shares: [{ person: ME, amount: 700 }] };
 
   it('SQL and JS agree with credit-card spend, a card bill, and bank spend', () => {

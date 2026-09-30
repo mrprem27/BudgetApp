@@ -623,6 +623,7 @@ CREATE TABLE transactions (
   currency           TEXT NOT NULL DEFAULT 'INR' CHECK (length(currency) = 3),
   asset_id           TEXT REFERENCES assets(id),
   account_id         TEXT,                                        -- the author's account (U-68); see accounts
+  to_account_id      TEXT,                                        -- a card-bill payment: the author's card it went into (DQ-109)
   latitude           REAL CHECK (latitude IS NULL OR latitude BETWEEN -90 AND 90),
   longitude          REAL CHECK (longitude IS NULL OR longitude BETWEEN -180 AND 180),
   place_label        TEXT,
