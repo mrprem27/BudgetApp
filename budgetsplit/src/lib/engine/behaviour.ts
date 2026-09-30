@@ -96,11 +96,15 @@ function median(values: number[]): number {
  * other E2 model's own minimum-data rule.
  */
 export function essentialFloor(snapshot: FinanceSnapshot): number {
+  // What you chose to keep aside (§10b); a week of essentials when you have not said.
+  const keep = snapshot.settings?.keepAside ?? 'week';
+  if (keep === 'none') return 0;
+  if (keep === 'custom') return Math.max(0, snapshot.settings?.keepAsideAmount ?? 0);
   const fromMs = snapshot.asOf - EVERYDAY_WINDOW_DAYS * 86_400_000;
   const needRows = snapshot.history.filter(h => h.kind === 'expense' && isNeedCategory(h.category));
   const buckets = dailySpendTotals(toQualifyingRows(needRows), r => r.amountPaise, fromMs, snapshot.asOf);
   if (buckets.length < EVERYDAY_MIN_DAYS) return 0;
-  return median(buckets) * 7;
+  return median(buckets) * (keep === 'month' ? 30 : 7);
 }
 
 export function behaviourOf(snapshot: FinanceSnapshot): Behaviour {

@@ -123,6 +123,31 @@ cd budgetsplit && npx jest && npx tsc --noEmit     # everything
 - **Ask first:** a new stored input; changing Home's figure beyond what §2 records.
 - **Never:** a receivable counted as money; a repayment likelihood synced or shown as a score.
 
+## 10b · Your money settings (`U-33`, built 2026-09-30)
+
+Everything the engine assumes about *how you are paid* is inferred today: the next payday comes from
+recurring income rules, the horizon runs to it (≥ 30 days, ≤ 60; 60 when income is irregular). That is
+right for a salaried user who logged their salary as a rule, and invisible to everyone else — a daily
+earner with no income rule gets a 30-day month-shaped answer they cannot relate to. Apps built for
+irregular or weekly income (PocketGuard's "In My Pocket", pay-schedule planners) let you **say** your
+cycle and show the answer per day or per pay period.
+
+**Settings** (Settings → Preferences, three rows, each one question in a sheet; the defaults are today's inference, so an untouched install is unchanged — tested). Your picks, 2026-09-30: these three; no per-day display; the month keeps calendar dates:
+
+| Setting | Choices | What it changes |
+|---|---|---|
+| How you're paid | Automatic · Monthly on day N · Twice a month · Weekly on a weekday · Daily · Irregular | The next-payday date the horizon runs to; overrides inference when set |
+| Safe to spend looks ahead | Until next payday · 7 days · 30 days · End of month | `horizonDaysFor` |
+| Keep aside | A week of essentials (today's floor) · A month of essentials · An amount · Nothing | The floor the low-point warning and Afford's "tight" use |
+
+Stored on the phone (`lib/moneySettingsStore.ts`, AsyncStorage) — about you, not a ledger, and syncing
+them would need a server column; worth it once they are used. `getFinanceSnapshot` puts them on the
+snapshot, so the engine stays pure (`lib/engine/moneySettings.ts`, `engineMoneySettings.test.ts`). A
+stated daily cycle means "until tomorrow" — a daily earner's answer, not a month-shaped one.
+
+**Not in this cut:** a budget month that starts on payday (e.g. 25th → 24th). It moves every "this
+month" figure in the app, not only the engine's; its own spec if you want it.
+
 ## 11 · Remaining work
 
 Tracked in `docs/TRACKER.md`; the build history is `docs/history/TASKS-2026-09-CLOSEOUT.md`. Nothing here is a task list.

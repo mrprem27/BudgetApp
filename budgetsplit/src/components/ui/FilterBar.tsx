@@ -63,8 +63,7 @@ type Props = {
   onTags?: (tags: string[]) => void;
 };
 
-// No "Last 30 days": beside "This month" it read as the same choice twice (`U-36`).
-const RANGE_PRESETS: RangePreset[] = ['any', '7d', 'thisMonth', 'lastMonth'];
+const RANGE_PRESETS: RangePreset[] = ['any', '7d', '30d', 'thisMonth', 'lastMonth'];
 
 /** The row swapping between chips and the search field: a short cross-fade, the field arriving
  *  from where the button was. Snaps under Reduce Motion (AGENTS §11). */

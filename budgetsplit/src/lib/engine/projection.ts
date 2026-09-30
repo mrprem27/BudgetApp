@@ -21,6 +21,7 @@ import { expandUpcoming } from '../upcoming';
 import { STS_HORIZON_DAYS } from '../safeToSpend';
 import { materializeInstances } from '../recurrence';
 import { everydayRate, incomeModel, activeIncomeRules, IRREGULAR_MIN_HORIZON_DAYS } from './behaviour';
+import { nextPayday, daysToMonthEnd } from './moneySettings';
 
 const DAY_MS = 86_400_000;
 /** The longest safety window, however far off the next income is. */
@@ -36,6 +37,17 @@ const MAX_HORIZON_DAYS = 60;
  * becoming every function's default.
  */
 export function horizonDaysFor(snapshot: FinanceSnapshot): number {
+  // What you told it wins over what it infers (§10b). Absent, everything below is unchanged.
+  const s = snapshot.settings;
+  if (s) {
+    if (s.lookAhead === '7') return 7;
+    if (s.lookAhead === '30') return 30;
+    if (s.lookAhead === 'monthEnd') return daysToMonthEnd(snapshot.asOf);
+    if (s.payCycle === 'irregular') return Math.max(STS_HORIZON_DAYS, IRREGULAR_MIN_HORIZON_DAYS);
+    const stated = nextPayday(snapshot.asOf, s.payCycle, s.payDay);
+    // A stated cycle is taken at its word — a daily earner's "until tomorrow" is the point.
+    if (stated != null) return Math.min(Math.max(1, Math.ceil((stated - snapshot.asOf) / DAY_MS)), MAX_HORIZON_DAYS);
+  }
   const income = incomeModel(snapshot);
   if (income.consistency === 'irregular') return Math.max(STS_HORIZON_DAYS, IRREGULAR_MIN_HORIZON_DAYS);
   if (income.nextDate == null) return STS_HORIZON_DAYS;

@@ -23,6 +23,7 @@ import { PayMethodSelector } from '../../../src/components/finance/PayMethodSele
 import { Input } from '../../../src/components/ui/Input';
 import { PrimaryButton } from '../../../src/components/ui/PrimaryButton';
 import { ScreenHeader } from '../../../src/components/ui/ScreenHeader';
+import { MoneySettingsRows } from '../../../src/components/finance/settings/MoneySettingsRows';
 import { SettingsRow, settingsRowDivider } from '../../../src/components/ui/SettingsRow';
 import { IconCircle } from '../../../src/components/ui/IconCircle';
 import { decor } from '../../../src/constants/palette';
@@ -371,6 +372,8 @@ export default function SettingsScreen() {
         <SettingsRow icon={PAY_METHOD_ICON[defaultPay]} label="Default pay method" tint={TINT.payMethod} value={PAY_METHOD_LABEL[defaultPay]} onPress={() => setShowPayMethod(true)} />
         <View style={settingsRowDivider} />
         <SettingsRow icon="repeat" label="Default budget cadence" tint={TINT.cadence} value={CADENCE_LABELS[defaultCadence]} onPress={() => setShowCadence(true)} />
+        <View style={settingsRowDivider} />
+        <MoneySettingsRows tint={TINT.cadence} />
         <View style={settingsRowDivider} />
         <SettingsRow icon="sliders" label="Feature management" tint={TINT.features} value="Modules & toggles" onPress={() => { router.push('/features'); }} />
         {/* Notifications used to be a section of its own holding one row — a

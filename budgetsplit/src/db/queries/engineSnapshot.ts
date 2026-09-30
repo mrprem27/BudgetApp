@@ -11,6 +11,7 @@ import { getMyExposure } from './balances';
 import { getMyGlobalBudgetRows } from './categoryBudgets';
 import { getGoalFundingStatus } from './spendPower';
 import { settlementView } from '../../lib/settlementView';
+import { getMoneySettings } from '../../lib/moneySettingsStore';
 
 const DAY_MS = 86_400_000;
 const HISTORY_MONTHS = 24;
@@ -122,6 +123,7 @@ export async function getFinanceSnapshot(db: SQLite.SQLiteDatabase, nowMs: numbe
 
   return {
     asOf: nowMs,
+    settings: await getMoneySettings(),
     meId: me.id,
     cash: { available: pos.available, creditUsed: money.creditUsed, creditLimit: money.creditLimit, cardDueDay },
     recurring: { rules, skips },

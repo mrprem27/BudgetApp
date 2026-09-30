@@ -1,3 +1,4 @@
+import type { MoneySettings } from './moneySettings';
 import type { TxnWithSplits } from '../../db/queries/transactions';
 import type { SavingsGoal } from '../../db/queries/savings';
 import type { GoalFundingStatus } from '../../db/queries/spendPower';
@@ -17,6 +18,8 @@ import type { CategoryBudget } from '../../db/queries/categoryBudgets';
 export type FinanceSnapshot = {
   asOf: number;
   meId: string;
+  /** What you told the engine about how you are paid (§10b). Absent = infer, as before. */
+  settings?: MoneySettings;
 
   cash: {
     /** Spendable right now: cash only (`getCashPosition().available`). */
