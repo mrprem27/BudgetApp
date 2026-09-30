@@ -37,21 +37,40 @@ is defined in two places.
 
 ## §0 · V1 — the road to release
 
-V1 is the pilot: a TestFlight build for you and a few friends, not the public App Store. The order
-below is the plan; every line points at rows further down, where status lives.
+V1 is the pilot: a TestFlight build for you and a few friends, not the public App Store. Plan agreed
+2026-09-30 ("create a proper plan and close all the pending points"). Five phases, in order; every
+line points at rows further down, where status lives. Phases 1–4 are code and are worked through
+here, one tested commit per step. Phase 5 is what only you can do.
 
-1. **Your phone pass** — `U-10` (the list for tomorrow), `B-12`, the sweep in
-   `RELEASE_CHECKLIST.md` §2 and the sync checks in §3.1. Everything it finds becomes a `U-` row in §11.
-2. **Answer the open questions** — `V-06` cash last confirmed · `V-07` Android before or after V1.
-3. **Fix what 1 and 2 turn up**, then the tidy-ups `U-07` and `U-08`, and measure `U-02`.
-4. **Ship steps** — `B-19` merge to `main` · `B-07` rotate the Brevo key · `B-02` the Apple
-   Developer Program (a free Apple ID already covers your own phone) · `DQ-95` Workers Paid before
-   the first sign-in that isn't you · `B-14` the no-enumeration
-   check · `B-04` / `B-05` the build env on whichever machine archives.
-5. **Before inviting anyone** — `B-08` privacy policy · `B-09` DPDP · `B-10` icon, splash,
-   screenshots · `B-13` store copy and privacy answers.
-6. **Not V1** — `B-01` (dev tools off) is for the public App Store. §9 is what was deferred on
-   purpose; §8 is larger scope parked with its trigger.
+1. **Data model** (your order: entities, then real time, then items).
+   - 1a Accounts carry the money: balances per account, openings / card limit / due day move off the
+     money profile, a screen to add and name accounts, Paid from picks one — `U-68`.
+   - 1b Transfers, settlements, adjustments and repeat rules as their own records — `DQ-109`, which
+     also answers `OV-02` and `DQ-15` / `D-08` (the sweep knows where money came from).
+   - 1c Categories by id, one budget period, dead columns gone — `DQ-106`, `OV-06`, `OV-19`,
+     `OV-23`, `D-07`.
+2. **Server as a web app** (built and tested here; deploying needs `DQ-95`).
+   - 2a Real time: writes go to the server first when online, a live push to every member's open
+     app, queued offline as today — `DQ-108`.
+   - 2b Cron and Queues: the server posts repeat entries, sends email and notifications, cleans
+     up — `DQ-105`, `DQ-107`.
+   - 2c The `/v1` read API a web client would use — `DQ-104`.
+3. **Screens** — split by items tidied (`U-69`), spacing and alignment (`U-20`, `W1-28`, `W1-29`,
+   `W1-32`), composed screens (`U-16`), sorting (`U-31`), Friends names (`U-09`), the transaction
+   row shows Paid from (`DQ-18` / `D-05`), transfer detail chips (`DQ-13` / `D-06`), one collapsible
+   (`DQ-17` / `D-04`), Home's stacked red surfaces (`DQ-12` / `A-01`), `OV-10`, `OV-15`.
+4. **Code debt** — the file-system API (`DQ-23` / `A-11`), a memo boundary (`OV-14`), foreign keys
+   (`DQ-19`), one vocabulary for people and for periods (`OV-05`, `OV-22`).
+5. **Yours** — nothing here can be done from the repo.
+   - On the phone: `U-10`, `B-12`, measure `U-02`; UPI checks `D-01`, `D-02`, `D-03`.
+   - Accounts and money: `B-02` / `DQ-80` Apple, `DQ-95` Workers Paid, `B-07` the Brevo key,
+     `U-24` a Mixpanel token, `DQ-81` to `DQ-86` outside services.
+   - Release: `B-19`, `B-14`, `B-04`, `B-05`, `B-08`, `B-09` / `DQ-05`, `B-10`, `B-13`; `B-01` is
+     for the public App Store.
+   - Business: `DQ-01`, `DQ-03`, `DQ-04`.
+
+**The remaining `DECIDE` rows close on their default** (the last column in §3) unless you say
+otherwise, except the business and legal ones in phase 5. `PARKED` rows keep their trigger.
 
 ---
 
