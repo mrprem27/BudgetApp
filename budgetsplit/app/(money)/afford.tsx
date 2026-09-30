@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity, Switch } from 'react-native';
 import { KeyboardForm } from '../../src/components/ui/KeyboardForm';
 import { useRouter } from 'expo-router';
 import { useScreenData } from '../../src/hooks/useScreenData';
@@ -8,8 +8,13 @@ import { colors, type, space, radius, layout, shadow, alpha } from '../../src/th
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { SecondaryButton } from '../../src/components/ui/SecondaryButton';
 import { ErrorState } from '../../src/components/ui/ErrorState';
-import { CategoryChip } from '../../src/components/finance/CategoryChip';
-import { TabPills } from '../../src/components/ui/TabPills';
+import { CategoryPicker } from '../../src/components/finance/CategoryPicker';
+import { Card } from '../../src/components/ui/Card';
+import { ListRow } from '../../src/components/ui/ListRow';
+import { Divider } from '../../src/components/ui/Divider';
+import { Chip } from '../../src/components/ui/Chip';
+import { SheetModal } from '../../src/components/ui/SheetModal';
+import { OptionRow } from '../../src/components/ui/OptionRow';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 import type { Category } from '../../src/db/queries/categories';
 import { loadAffordData } from '../../src/lib/affordData';
@@ -57,6 +62,8 @@ export default function AffordScreen() {
   const [frequency, setFrequency] = useState<PurchaseFrequency>('once');
   const [canWait, setCanWait] = useState(false);
   const [showBreakdown, setShowBreakdown] = useState(false);
+  const [freqOpen, setFreqOpen] = useState(false);
+  const [catOpen, setCatOpen] = useState(false);
 
   // Errors must NOT be swallowed: a null snapshot renders as "no result yet",
   // never as a confident wrong answer — `error` short-circuits to a retry
@@ -120,39 +127,36 @@ export default function AffordScreen() {
             />
           </View>
 
-          {/* Pick exactly one → a segmented control, not a chip row (AGENTS.md §9). */}
-          <TabPills tabs={FREQUENCY_OPTS} active={frequency} onChange={k => setFrequency(k as PurchaseFrequency)} size="sm" />
-
-          {snapshot && snapshot.categories.length > 0 && (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.chipRow}
-              keyboardShouldPersistTaps="handled"
-              directionalLockEnabled
-              nestedScrollEnabled
-            >
-              {snapshot.categories.map(c => (
-                <CategoryChip
-                  key={c.id}
-                  category={c}
-                  selected={categoryName === c.name}
-                  onPress={() => setCategoryName(categoryName === c.name ? null : c.name)}
-                />
-              ))}
-            </ScrollView>
+          {/* The answer, live, right under the amount — the keyboard covers everything below the
+              fold, so the verdict has to sit where the typing is (`U-04`). */}
+          {showResult && result && (
+            <View style={[styles.liveLine, { backgroundColor: alpha(V.color, 13), borderColor: alpha(V.color, 33) }]}>
+              <Feather name={V.icon} size={16} color={V.color} />
+              <Text style={[styles.liveText, { color: V.color }]} numberOfLines={1}>{V.title}</Text>
+            </View>
           )}
 
-          <TouchableOpacity
-            style={styles.waitRow}
-            onPress={() => setCanWait(!canWait)}
-            accessibilityRole="checkbox"
-            accessibilityState={{ checked: canWait }}
-            hitSlop={{ top: 6, bottom: 6 }}
-          >
-            <Feather name={canWait ? 'check-square' : 'square'} size={18} color={canWait ? colors.accent : colors.textMuted} />
-            <Text style={styles.waitLabel}>Can wait</Text>
-          </TouchableOpacity>
+          {/* The three questions as one card of rows, each opening its own answer. */}
+          <Card clip>
+            <ListRow icon="repeat" title="How often" value={FREQUENCY_OPTS.find(o => o.key === frequency)?.label} onPress={() => setFreqOpen(true)} />
+            <Divider indent="text" />
+            <ListRow
+              icon="tag"
+              title="Category"
+              value={categoryName
+                ? <Chip label={categoryName} selected maxWidth={140} onRemove={() => setCategoryName(null)} />
+                : 'Any'}
+              onPress={snapshot && snapshot.categories.length > 0 ? () => setCatOpen(true) : undefined}
+            />
+            <Divider indent="text" />
+            <ListRow
+              icon="clock"
+              title="Can wait"
+              subtitle="Find the first comfortable date"
+              chevron={false}
+              value={<Switch value={canWait} onValueChange={setCanWait} trackColor={{ true: colors.accent, false: colors.bgMuted }} thumbColor={colors.textPrimary} accessibilityLabel="Can wait" />}
+            />
+          </Card>
 
           {showResult && result && (
             <View style={[styles.resultCard, { borderColor: alpha(V.color, 33) }]}>
@@ -240,6 +244,25 @@ export default function AffordScreen() {
           )}
         </KeyboardForm>
       )}
+
+      {/* One question: pick exactly one. */}
+      <SheetModal visible={freqOpen} onClose={() => setFreqOpen(false)} title="How often?" scroll={false}>
+        <View style={styles.options}>
+          {FREQUENCY_OPTS.map(o => (
+            <OptionRow key={o.key} label={o.label} selected={frequency === o.key} onPress={() => { setFrequency(o.key); setFreqOpen(false); }} />
+          ))}
+        </View>
+      </SheetModal>
+      {snapshot && (
+        <CategoryPicker
+          categories={snapshot.categories}
+          value={snapshot.categories.find(c => c.name === categoryName) ?? null}
+          onChange={c => { setCategoryName(c.name); setCatOpen(false); }}
+          forceOpen={catOpen}
+          onClose={() => setCatOpen(false)}
+          hideTrigger
+        />
+      )}
     </View>
   );
 }
@@ -274,9 +297,9 @@ const styles = StyleSheet.create({
   amountWrap: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.xs, paddingVertical: space.sm, borderBottomWidth: 1, borderColor: colors.border },
   rupee: { fontFamily: 'SpaceMono_400Regular', fontSize: 32, color: colors.textMuted },
   amountInput: { fontFamily: 'SpaceMono_400Regular', fontSize: 40, color: colors.textPrimary, minWidth: 120, textAlign: 'center' },
-  chipRow: { flexDirection: 'row', gap: space.sm, paddingRight: space.md },
-  waitRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.xs },
-  waitLabel: { ...type.body, color: colors.textPrimary },
+  liveLine: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, alignSelf: 'center', paddingHorizontal: space.md, height: 36, borderRadius: radius.pill, borderWidth: 1 },
+  liveText: { ...type.labelSemi },
+  options: { gap: space.sm },
   resultCard: { alignItems: 'center', gap: space.xs, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, padding: space.lg, ...shadow.sm },
   resultIcon: { marginBottom: space.xs },
   resultTitle: { ...type.subheading, marginBottom: space.xs },

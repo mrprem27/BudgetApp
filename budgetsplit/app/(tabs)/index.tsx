@@ -26,10 +26,9 @@ import { useScreenData } from '../../src/hooks/useScreenData';
 import { AppRefreshControl } from '../../src/components/ui/AppRefreshControl';
 import { HeroCard } from '../../src/components/finance/home/HeroCard';
 import { StsSheet } from '../../src/components/finance/home/StsSheet';
-import { StsStrip } from '../../src/components/finance/home/StsStrip';
+import { HomeTiles } from '../../src/components/finance/home/HomeTiles';
 import { BalanceStrip } from '../../src/components/finance/home/BalanceStrip';
 import { CategoryRankList } from '../../src/components/finance/home/CategoryRankList';
-import { ForecastCard } from '../../src/components/finance/home/ForecastCard';
 import { StreakCard } from '../../src/components/finance/home/StreakCard';
 import { StreakBadge } from '../../src/components/finance/home/StreakBadge';
 import { HealthSheet } from '../../src/components/finance/HealthSheet';
@@ -91,7 +90,6 @@ export default function DashboardScreen() {
   const upcoming = data?.upcoming ?? [];
   const sts = data?.sts ?? null;
   const forecast = data?.forecast ?? null;
-  const topShift = data?.topShift ?? null;
   const streak = data?.streak ?? 0;
   const streakLoggedDays = data?.streakLoggedDays ?? new Set<string>();
 
@@ -300,9 +298,16 @@ export default function DashboardScreen() {
               />
             )}
 
-            {/* Horizon-scoped, so it sits *outside* the card the period pills
-                drive — see StsStrip's header for why it stopped being the hero. */}
-            <StsStrip sts={sts} onPress={() => setShowSts(true)} obfuscate={hideAmounts} />
+            {/* The two forward-looking numbers, side by side and above the period pills, since
+                neither depends on them (`U-21`). */}
+            <HomeTiles
+              sts={sts}
+              projected={forecast?.ready ? forecast.projected : null}
+              budget={budget.monthlyAllocated}
+              obfuscate={hideAmounts}
+              onPressSts={() => setShowSts(true)}
+              onPressForecast={() => router.push('/insights')}
+            />
 
             <HeroCard
               spent={spending}
@@ -342,16 +347,6 @@ export default function DashboardScreen() {
               <BalanceStrip oweTotal={oweTotal} owedTotal={owedTotal} onSettle={() => router.push('/add/quick?kind=transfer')} />
             )}
 
-            {/* Month-end forecast (+ insight teaser) — below the owe/owed strip, Month view only */}
-            {tab === 'month' && forecast?.ready && (
-              <ForecastCard
-                projected={forecast.projected}
-                budget={budget.monthlyAllocated}
-                topShift={topShift}
-                obfuscate={hideAmounts}
-                onPressInsights={() => router.push('/insights')}
-              />
-            )}
 
             {/* Tracking streak — opt-in (Settings › Sections); StreakCard self-hides under 3 days. */}
             {flags.streak && (

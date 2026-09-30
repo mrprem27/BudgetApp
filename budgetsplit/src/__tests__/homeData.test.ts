@@ -287,13 +287,15 @@ describe('loadHomeData — forecast scope', () => {
     expect((await load(db, 'month')).forecast).not.toBeNull();
   });
 
-  it('never computes a forecast outside the month tab', async () => {
+  it('computes the same month-end forecast on every tab — it is a Home tile, not a Month-only line (U-21)', async () => {
     const { db, me, personal } = setup();
     for (let i = 0; i < 8; i++) {
       addSimpleExpense(db, { groupId: personal, personId: me, amount: 10000, date: daysAgo(i) });
     }
-    expect((await load(db, 'today')).forecast).toBeNull();
-    expect((await load(db, 'year')).forecast).toBeNull();
+    const month = (await load(db, 'month')).forecast;
+    expect(month).not.toBeNull();
+    expect((await load(db, 'today')).forecast?.projected).toBe(month!.projected);
+    expect((await load(db, 'year')).forecast?.projected).toBe(month!.projected);
   });
 });
 

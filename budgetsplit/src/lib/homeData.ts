@@ -24,7 +24,6 @@ import { monthEndFromEngine, type Forecast } from './forecast';
 import { buildUpcoming, type UpcomingItem } from './upcoming';
 import { categoryVisual } from '../constants/categories';
 import type { CategoryRow } from '../components/finance/home/CategoryRankList';
-import type { ForecastShift } from '../components/finance/home/ForecastCard';
 import type { BudgetGroup } from '../db/queries/groups';
 
 /**
@@ -110,7 +109,7 @@ export async function loadHomeData(
         catRows: [] as CategoryRow[], catTotal: 0,
         health: null as HealthResult | null, healthInputs: null as HealthInputs | null, healthTxnCount: 0,
         upcoming: [] as UpcomingItem[],
-        forecast: null as Forecast | null, topShift: null as ForecastShift | null,
+        forecast: null as Forecast | null,
         streak: 0, streakLoggedDays: new Set<string>(), everLogged: false,
       };
     }
@@ -312,31 +311,15 @@ export async function loadHomeData(
     const health = computeHealthScore(healthInputsNow);
     const healthInputs = healthInputsNow;
 
-    // Month-end forecast + biggest category shift vs last month (Month view only).
+    // Month-end forecast — on every tab: it is one of Home's two headline tiles (`U-21`). On Month
+    // the period's own spend is the month's; elsewhere, month-to-date (`monthSp`, the health score's).
+    const monthSpend = tab === 'month' ? sp : monthSp;
     let forecast: Forecast | null = null;
-    let topShift: ForecastShift | null = null;
-    if (tab === 'month') {
+    {
       const now = new Date();
-      const lmStart = startOfMonth(subMonths(now, 1)).getTime();
-      const lmEnd = endOfMonth(subMonths(now, 1)).getTime();
-      const lmTxns = await getTransactionsInRange(db, null, lmStart, lmEnd);
-      let lmSpend = 0;
-      const lmCat: Record<string, number> = {};
-      for (const t of lmTxns) {
-        if (t.is_deleted || t.kind !== 'expense') continue;
-        const share = myShareOf(t, me.id);
-        if (share <= 0) continue;
-        lmSpend += share;
-        lmCat[t.category] = (lmCat[t.category] ?? 0) + share;
-      }
       // Known committed bills still due this month floor the forecast — the
       // same figure Safe-to-Spend subtracts, so the two can't disagree.
-      forecast = monthEndFromEngine(sp, getDate(now), getDaysInMonth(now), sts.dailyRate, billsWithin(sts, now.getTime(), getDaysInMonth(now) - getDate(now)));
-      // Biggest shift among categories present in BOTH months (avoids "new"/∞%).
-      topShift = Object.entries(catMap)
-        .filter(([cat]) => lmCat[cat])
-        .map(([cat, thisAmt]) => ({ cat, thisAmt, pct: lmCat[cat] > 0 ? Math.round(((thisAmt - lmCat[cat]) / lmCat[cat]) * 100) : 0 }))
-        .sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct))[0] ?? null;
+      forecast = monthEndFromEngine(monthSpend, getDate(now), getDaysInMonth(now), sts.dailyRate, billsWithin(sts, now.getTime(), getDaysInMonth(now) - getDate(now)));
     }
 
     return {
@@ -362,7 +345,7 @@ export async function loadHomeData(
       peopleCount: persons.filter(p => p.id !== me.id).length,
       catRows, catTotal, health, healthInputs,
       healthTxnCount: txns.filter(t => !t.is_deleted).length,
-      upcoming, forecast, topShift, sts,
+      upcoming, forecast, sts,
       streak: s, streakLoggedDays: loggedDays,
       /** Anything ever logged — what separates a first run from a quiet period. */
       everLogged: ledger.txnCount > 0,

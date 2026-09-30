@@ -2150,7 +2150,6 @@ widgets; `system/` = onboarding, gates, privacy. `ui/` never imports from `finan
 | `AvatarStack` | Overlapping member avatars (Groups cards, group hero). |
 | `BalanceRow` | "A owes B" row + **Settle amount** CTA (group Members settlements). |
 | `BudgetBar` | Animated utilization bar, health-coloured. Budgets, group cards, category detail. |
-| `CategoryChip` | Selectable category chip (Afford check). |
 | `CategoryDonut` | SVG donut of category spend (Reports); centre label auto-shrinks. |
 | `CategoryPicker` | Searchable category grid *(sheet)* + inline create. Add flows, Review. |
 | `GoalCelebration` | Full-screen confetti at 100% goal (auto-dismiss). |

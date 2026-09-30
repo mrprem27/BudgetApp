@@ -47,10 +47,6 @@ describe('a filter chip is `ui/Chip`, everywhere', () => {
    */
   const ALLOWED: Record<string, string> = {
     'ui/Chip.tsx': 'is the chip',
-    'finance/CategoryChip.tsx':
-      'A FILLED selected state (accent background, bg-coloured label) where `Chip` '
-      + 'tints. Used in the Add screen\'s category row, where the fill is what marks '
-      + 'the one chosen category among many. Converting it is a visual change.',
     'review/ReviewRowCard.tsx':
       'Row-internal pills sized by `flex: 1` to share a dense import row, not a chip '
       + 'row. `Chip` sizes to its content and only stretches with `grow`.',

@@ -825,24 +825,27 @@ describe('RV · review fixes: links land on the right Money section; Clear filte
 });
 
 describe('H1 · Home says where the month is heading in one line, and shows the streak', () => {
-  const { forecastVerdict } = jest.requireActual('../lib/forecastVerdict') as typeof import('../lib/forecastVerdict');
+  const { forecastTile } = jest.requireActual('../lib/forecastVerdict') as typeof import('../lib/forecastVerdict');
   const fs = jest.requireActual('fs') as typeof import('fs');
-  it('under budget reads as on track, with what is left', () => {
-    expect(forecastVerdict({ projected: 3_000_000, budget: 3_500_000 })).toEqual({ tone: 'good', headline: 'Projected ₹5K under budget', sub: 'At this pace, by month end' });
+  it('under budget: the projection, and what is left under the budget', () => {
+    expect(forecastTile({ projected: 3_000_000, budget: 3_500_000 })).toEqual({ tone: 'good', amount: '₹30K', sub: '₹5K under budget' });
   });
-  it('over budget names the overshoot, and the category behind it when it moved', () => {
-    expect(forecastVerdict({ projected: 4_000_000, budget: 3_500_000, topShift: { cat: 'Eating Out', pct: 40 } }))
-      .toEqual({ tone: 'over', headline: 'Projected ₹5K over budget', sub: 'At this pace · Eating Out up 40%' });
-    expect(forecastVerdict({ projected: 4_000_000, budget: 3_500_000, topShift: { cat: 'Fuel', pct: 2 } }).sub).toBe('At this pace, by month end');
+  it('over budget: the projection, and by how much', () => {
+    expect(forecastTile({ projected: 4_000_000, budget: 3_500_000 })).toEqual({ tone: 'over', amount: '₹40K', sub: '₹5K over budget' });
   });
-  it('with no budget it states the projection and says how to get a verdict', () => {
-    expect(forecastVerdict({ projected: 3_000_000, budget: 0 }).tone).toBe('neutral');
-  });
-  it('every headline says it is a projection, not money already spent (U-11)', () => {
-    for (const budget of [0, 3_500_000, 2_000_000]) expect(forecastVerdict({ projected: 3_000_000, budget }).headline).toMatch(/^Projected /);
+  it('with no budget it is only the projection', () => {
+    expect(forecastTile({ projected: 3_000_000, budget: 0 })).toEqual({ tone: 'neutral', amount: '₹30K', sub: 'at this pace' });
   });
   it('hidden amounts stay hidden', () => {
-    expect(forecastVerdict({ projected: 4_000_000, budget: 3_500_000, mask: () => '••••' }).headline).toBe('Projected •••• over budget');
+    expect(forecastTile({ projected: 4_000_000, budget: 3_500_000, mask: () => '••••' })).toEqual({ tone: 'over', amount: '••••', sub: '•••• over budget' });
+  });
+  it('the tile says it is a projection, and sits beside Safe to spend above the pills (U-11, U-21)', () => {
+    const tiles = fs.readFileSync('src/components/finance/home/HomeTiles.tsx', 'utf8');
+    expect(tiles).toMatch(/label="Month end · projected"/);
+    expect(tiles).toMatch(/label="Safe to spend"/);
+    const home = fs.readFileSync('app/(tabs)/index.tsx', 'utf8');
+    expect(home.indexOf('<HomeTiles')).toBeGreaterThan(0);
+    expect(home.indexOf('<HomeTiles')).toBeLessThan(home.indexOf('<TabPills'));
   });
   it('the streak badge sits beside the name on Home', () => {
     expect(fs.readFileSync('app/(tabs)/index.tsx', 'utf8')).toMatch(/titleAccessory=\{<StreakBadge days=\{streak\} \/>\}/);
@@ -1032,8 +1035,8 @@ describe('P2-8 · Afford', () => {
   it('does not say "Not enough data yet" twice', () => {
     expect(src).not.toMatch(/`Not enough data yet —/);
   });
-  it('asks "how often" with a segmented control, and offers a goal only when goals are on', () => {
-    expect(src).toMatch(/<TabPills tabs=\{FREQUENCY_OPTS\}/);
+  it('asks "how often" as pick-one (a row opening a list), and offers a goal only when goals are on', () => {
+    expect(src).toMatch(/title="How often"[\s\S]*<OptionRow key=\{o\.key\}/);
     expect(src).toMatch(/flags\.savingsGoals && \(\s*<SecondaryButton label="Save toward it in a goal"/);
   });
 });
@@ -1087,6 +1090,21 @@ describe('U-17 · the ledger filter is one search field and one row of chips, on
   });
   it('keeps its horizontal strip from taking the parent\'s height', () => {
     expect(src).toMatch(/strip: \{ flexGrow: 0 \}/);
+  });
+});
+
+describe('U-04 · Afford answers where you are typing', () => {
+  const src = fs.readFileSync('app/(money)/afford.tsx', 'utf8');
+  it('puts a live verdict line straight under the amount, before the questions', () => {
+    const amount = src.indexOf('accessibilityLabel="Purchase amount"');
+    const live = src.indexOf('styles.liveLine');
+    const questions = src.indexOf('title="How often"');
+    expect(amount).toBeGreaterThan(0);
+    expect(live).toBeGreaterThan(amount);
+    expect(questions).toBeGreaterThan(live);
+  });
+  it('asks the three questions as one card of rows', () => {
+    expect(src).toMatch(/<Card clip>[\s\S]*title="How often"[\s\S]*title="Category"[\s\S]*title="Can wait"[\s\S]*<\/Card>/);
   });
 });
 
