@@ -286,3 +286,13 @@ describe('a Paytm row with a newline in its details survives', () => {
     expect(parsePaytmCsv(plain).rows).toHaveLength(2);
   });
 });
+
+describe('a debit card is the bank (W1-06)', () => {
+  it('reads "Debit Card" as bank and a credit card as card', () => {
+    const { rows } = parsePaytmWorkbook([summarySheet, historySheet([
+      row('24/07/2026', '10:00:00', 'Paid to Shop A', 'a@ybl on PhonePe', 'HDFC Bank Debit Card - 11', '-300.00', '1'),
+      row('24/07/2026', '11:00:00', 'Paid to Shop B', 'b@ybl on PhonePe', 'ICICI Bank Rupay Credit Card - 00', '-400.00', '2'),
+    ])]);
+    expect(rows.map(r => r.payMethod)).toEqual(['bank', 'card']);
+  });
+});

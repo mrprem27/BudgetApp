@@ -143,7 +143,9 @@ function counterparty(details: string): string {
  *  spending on credit, which matters more for budgeting than the UPI rail. */
 function payMethodFor(account: string, details: string): PayMethod {
   if (/automatic payment|autopay|mandate/i.test(details)) return PayMethod.Autopay;
-  if (/credit card|debit card|\bcard\b/i.test(account)) return PayMethod.Card;
+  // A debit card is the bank account: money leaves the bank, nothing is owed on a card (`W1-06`).
+  if (/debit[\s-]?card/i.test(account)) return PayMethod.Bank;
+  if (/credit card|\bcard\b/i.test(account)) return PayMethod.Card;
   if (/wallet/i.test(account)) return PayMethod.Wallet;
   return PayMethod.Upi;
 }

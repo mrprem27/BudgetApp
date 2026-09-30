@@ -121,9 +121,13 @@ export const PAY_METHOD = [
   PayMethod.Wallet, PayMethod.Autopay, PayMethod.Other,
 ] as const;
 export const PAY_METHOD_LABEL: Record<PayMethod, string> = {
-  [PayMethod.Upi]: 'UPI', [PayMethod.Card]: 'Card', [PayMethod.Cash]: 'Cash',
+  [PayMethod.Upi]: 'UPI', [PayMethod.Card]: 'Credit card', [PayMethod.Cash]: 'Cash',
   [PayMethod.Bank]: 'Bank', [PayMethod.Wallet]: 'Wallet',
   [PayMethod.Autopay]: 'Autopay', [PayMethod.Other]: 'Other',
+};
+/** One hint where a label alone leaves a doubt: a debit card is the bank account (`W1-06`). */
+export const PAY_METHOD_HINT: Partial<Record<PayMethod, string>> = {
+  [PayMethod.Bank]: 'Account, debit card, net banking',
 };
 // Each pay method's glyph lives in `components/finance/pay/PayMethodGlyph` (`W1-06`).
 

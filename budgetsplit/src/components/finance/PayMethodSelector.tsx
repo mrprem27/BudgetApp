@@ -7,7 +7,7 @@ import { Card } from '../ui/Card';
 import { Divider } from '../ui/Divider';
 import { ListRow } from '../ui/ListRow';
 import {
-  PAY_METHOD_CHOOSABLE, PAY_METHOD_LABEL, type PayMethod,
+  PAY_METHOD_CHOOSABLE, PAY_METHOD_LABEL, PAY_METHOD_HINT, type PayMethod,
 } from '../../constants/enums';
 
 type Props = {
@@ -59,6 +59,7 @@ export function PayMethodSelector({
             <ListRow
               leading={<PayMethodDisc method={m} size={layout.iconCircle} color={on ? accent : colors.textSecondary} />}
               title={PAY_METHOD_LABEL[m]}
+              subtitle={PAY_METHOD_HINT[m]}
               chevron={false}
               selected={on}
               value={on ? <Feather name="check" size={18} color={accent} /> : undefined}

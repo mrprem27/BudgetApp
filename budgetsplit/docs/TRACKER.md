@@ -2,7 +2,7 @@
 
 `Last verified: 2026-09-30 (§0, §1, §9–§11 and every row whose status changed; the rest as of 2026-09-07) · Guarded by: trackerIntegrity.test.ts · countClaims.test.ts · docIdGraph.test.ts`
 
-**249 items, 105 of them still open.** One row each: what it is, and where it stands.
+**249 items, 104 of them still open.** One row each: what it is, and where it stands.
 Nothing else. **This is the V1 tracker** — start at §0.
 
 **The evidence is not here.** Why each item exists, what it costs, what breaks if you touch it, and
@@ -24,7 +24,7 @@ is defined in two places.
 | §1 · Ship blockers | **12** | 19 |
 | §2 · Complexity — `OV-` | **13** | 34 |
 | §3 · Decisions — `DQ-` | **39** | 57 |
-| §4 · Walk 1 — `W1-` | **13** | 39 |
+| §4 · Walk 1 — `W1-` | **12** | 39 |
 | §5 · Sync — `SYNC-F` | **0** | 24 |
 | §6 · Debt — `D-` | **10** | 11 |
 | §7 · Accepted — `A-` | **2** | 11 |
@@ -151,11 +151,10 @@ below is the plan; every line points at rows further down, where status lives.
 ---
 ## §4 · Walk 1 — `W1-`
 
-**39 items: 4 `OPEN`, 9 `PARKED`, 26 `DONE`.** The cold sweep: an unpopulated app, opened as a first-time user. 38 ids were assigned — W1-38 was never used — and the nineteenth split into two leaves.
+**39 items: 3 `OPEN`, 9 `PARKED`, 27 `DONE`.** The cold sweep: an unpopulated app, opened as a first-time user. 38 ids were assigned — W1-38 was never used — and the nineteenth split into two leaves.
 
 | | What | Status | Un-parks when |
 |---|---|---|---|
-| `W1-06` | More pay methods, and better icons for them | `OPEN` |  |
 | `W1-28` | *"Component placement comes and goes in a line/section and sizes change — feels broken."* The… | `OPEN` |  |
 | `W1-29` | *"Transfer and Income have a bottom line, others don't."* **No divider asymmetry exists in… | `OPEN` |  |
 | `W1-32` | The category chip is a `grow` chip with a chevron and may be clipped on the right | `OPEN` |  |
@@ -169,7 +168,7 @@ below is the plan; every line points at rows further down, where status lives.
 | `W1-36` | Colours, view and position on `SC-18` | `PARKED` | Taste, cheap, no urgency |
 | `W1-37` | `SC-42` needs a clearer outline | `PARKED` | Taste, cheap, no urgency |
 
-**Closed (26), detail in `FINDINGS.md`:** `W1-01` `W1-02` `W1-03` `W1-04` `W1-05` `W1-07` `W1-08` `W1-09` `W1-10` `W1-12` `W1-13` `W1-14` `W1-15` `W1-19a` `W1-20` `W1-21` `W1-22` `W1-23` `W1-25` `W1-26` `W1-27` `W1-33` `W1-39` `W1-31` `W1-17` `W1-18`
+**Closed (27), detail in `FINDINGS.md`:** `W1-01` `W1-02` `W1-03` `W1-04` `W1-05` `W1-07` `W1-08` `W1-09` `W1-10` `W1-12` `W1-13` `W1-14` `W1-15` `W1-19a` `W1-20` `W1-21` `W1-22` `W1-23` `W1-25` `W1-26` `W1-27` `W1-33` `W1-39` `W1-31` `W1-17` `W1-18` `W1-06`
 
 ---
 ## §5 · Sync — `SYNC-F`

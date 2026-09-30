@@ -7,9 +7,14 @@ describe('detectPayMethod', () => {
     expect(detectPayMethod('Payment to swiggy@ybl successful')).toBe('upi');
   });
 
-  it('detects card from "card ending", credit/debit card', () => {
+  it('detects a credit card from "credit card" / "card ending"', () => {
     expect(detectPayMethod('Rs 1200 spent on your Credit Card ending 4321')).toBe('card');
-    expect(detectPayMethod('Debit card transaction of INR 500 at Store')).toBe('card');
+  });
+
+  it('reads a debit card as the bank, never as card debt (W1-06)', () => {
+    expect(detectPayMethod('Debit card transaction of INR 500 at Store')).toBe('bank');
+    expect(detectPayMethod('Rs 800 spent using your HDFC Debit Card ending 1234')).toBe('bank');
+    expect(detectPayMethod('Rs 800 spent using debit-card xx1234')).toBe('bank');
   });
 
   it('detects bank rails: NEFT / IMPS / RTGS / net banking', () => {

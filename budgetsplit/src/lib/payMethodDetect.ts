@@ -13,8 +13,12 @@ import { PayMethod } from '../constants/enums';
 // autopay first — a mandate debit often also names the instrument ("e-mandate on
 // your card"), but the defining fact is that it's an automatic recurring debit.
 const AUTOPAY_RE = /\b(?:auto[\s-]?pay|autopay|e-?mandate|mandate|standing instruction|si\s+debit|auto[\s-]?debit)\b/i;
-// Cards — "card ending 1234", "credit/debit card", "xx1234 card".
-const CARD_RE = /\b(?:credit card|debit card|card ending|card no|card x{2,}\d+|ending in \d{3,4}|\bcard\b)\b/i;
+// A debit card is the bank account (`W1-06`): the money leaves the bank, and nothing is owed on a
+// card. Tested before CARD_RE, which would otherwise book it as credit-card debt.
+const DEBIT_CARD_RE = /\bdebit[\s-]?card\b/i;
+// Credit cards — "credit card", "card ending 1234", "xx1234 card". A bare card with no word for
+// which kind stays Card; Review lets you change it.
+const CARD_RE = /\b(?:credit card|card ending|card no|card x{2,}\d+|ending in \d{3,4}|\bcard\b)\b/i;
 // Bank rails — NEFT / IMPS / RTGS / net banking / bank transfer.
 const BANK_RE = /\b(?:neft|imps|rtgs|net[\s-]?banking|internet banking|bank transfer|a\/c transfer)\b/i;
 // Wallets — named wallets or an explicit "wallet balance".
@@ -31,6 +35,7 @@ export function detectPayMethod(text: string | null | undefined): PayMethod | nu
   if (AUTOPAY_RE.test(t)) return PayMethod.Autopay;
   if (WALLET_RE.test(t)) return PayMethod.Wallet;
   if (UPI_RE.test(t)) return PayMethod.Upi;
+  if (DEBIT_CARD_RE.test(t)) return PayMethod.Bank;
   if (CARD_RE.test(t)) return PayMethod.Card;
   if (BANK_RE.test(t)) return PayMethod.Bank;
   if (CASH_RE.test(t)) return PayMethod.Cash;
