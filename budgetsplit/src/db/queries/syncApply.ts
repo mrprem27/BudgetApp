@@ -1,9 +1,9 @@
 import type * as SQLite from 'expo-sqlite';
 import {
-  assetToServer, budgetToServer, categoryToServer, friendToPerson, goalToServer, groupPreferenceToServer, groupToServer,
+  accountToServer, assetToServer, budgetToServer, categoryToServer, friendToPerson, goalToServer, groupPreferenceToServer, groupToServer,
   importToServer, isMe, meToProfile, memberToPerson, memberToServer, moneyProfileToServer, MONEY_KEYS, personToFriend, profileToMe,
   savingsTxnToServer, serverToApproval, serverToAudit, serverToBudget, serverToCategory, serverToDispute, serverToGroup,
-  serverToMember, serverToMoneySettings, serverToTxn, simpleToLocal, trustToServer, txnToServer,
+  serverToAccount, serverToMember, serverToMoneySettings, serverToTxn, simpleToLocal, trustToServer, txnToServer,
   type MapContext, type Outgoing, type Row,
 } from '../../lib/sync/rowMap';
 import { selfPersonId, syncIds } from '../../lib/sync/ids';
@@ -165,6 +165,12 @@ export async function buildOutbound(db: SQLite.SQLiteDatabase, row: QueueRow, ct
       const r = await one('SELECT * FROM asset WHERE id = ?');
       return r ? [up(assetToServer(r))] : [];
     }
+    case 'account': {
+      const serverId = syncIds.account(ctx.userId, row.local_id);
+      if (row.op === 'delete') return [del('accounts', serverId)];
+      const r = await one('SELECT * FROM account WHERE id = ?');
+      return r ? [up(accountToServer(r, ctx))] : [];
+    }
     case 'savings_goal': {
       if (row.op === 'delete') return [del('savings_goals', row.local_id)];
       const r = await one('SELECT * FROM savings_goal WHERE id = ?');
@@ -178,7 +184,7 @@ export async function buildOutbound(db: SQLite.SQLiteDatabase, row: QueueRow, ct
     case 'pending_txn': {
       if (row.op === 'delete') return [del('imported_transactions', row.local_id)];
       const r = await one('SELECT * FROM pending_txn WHERE id = ?');
-      return r ? [up(importToServer(r))] : [];
+      return r ? [up(importToServer(r, ctx))] : [];
     }
     case 'person': {
       if (row.op === 'delete') return [del('friends', syncIds.friend(ctx.userId, row.local_id))];
@@ -433,8 +439,15 @@ export async function applyRows(db: SQLite.SQLiteDatabase, scope: PulledScope, c
         await db.runAsync(`DELETE FROM ${table} WHERE id = ?`, [String(r.id)]);
         continue;
       }
-      await upsert(db, table, ['id'], simpleToLocal(table, r));
+      await upsert(db, table, ['id'], simpleToLocal(table, r, ctx));
     }
+  }
+  for (const a of rows('accounts')) {
+    const localId = serverToAccount(a, ctx).id as string;
+    if (!(await take('accounts', a, 'account', localId))) continue;
+    // A default is never gone for good: the launch invariant seeds it again.
+    if (a.deleted_at != null) await db.runAsync('DELETE FROM account WHERE id = ?', [localId]);
+    else await upsert(db, 'account', ['id'], serverToAccount(a, ctx));
   }
   for (const p of rows('money_profiles')) {
     if (!(await take('money_profiles', p, 'settings', MONEY_PROFILE_ID))) continue;

@@ -5,9 +5,9 @@ import { pull, type PullResult } from '../../../server/api/sync/pull';
 import { ENTITIES } from '../../../server/api/sync/routes';
 import {
   COLUMN_FATES, assetToServer, budgetToServer, categoryToServer, friendToPerson, goalToServer, groupPreferenceToServer,
-  groupToServer, importToServer, meToProfile, moneyProfileToServer, personToFriend, preferenceToServer, profileToMe,
+  accountToServer, groupToServer, importToServer, meToProfile, moneyProfileToServer, personToFriend, preferenceToServer, profileToMe,
   savingsTxnToServer, serverToAudit, serverToBudget, serverToCategory, serverToGroup, serverToMember,
-  serverToMoneySettings, serverToTxn, simpleToLocal, trustToServer, txnToServer, type Outgoing, type Row,
+  serverToAccount, serverToMoneySettings, serverToTxn, simpleToLocal, trustToServer, txnToServer, type Outgoing, type Row,
 } from '../lib/sync/rowMap';
 import { selfPersonId, syncIds } from '../lib/sync/ids';
 
@@ -73,13 +73,26 @@ describe('round trips through the real push and pull', () => {
     const asset = { id: 'a1', name: 'Gold', kind: 'gold', icon: 'award', color: '#F5B700', balance: 500000, is_archived: 0, sort_order: 2, created_at: T0 - 5_000 };
     const goal = { id: 'g1', name: 'Trip', target: 5000000, priority: 'want', category: 'Travel', icon: 'map', color: '#20C4B8', allocation: 100000, frequency: 'monthly', locked: 1, is_archived: 0, last_auto_at: T0 - 9, target_date: T0 + 9, sort_order: 0, created_at: T0 - 7_000 };
     const st = { id: 's1', goal_id: 'g1', amount: 100000, kind: 'deposit', source: 'auto', date: T0 - 3, note: 'Sept', created_at: T0 - 2, source_asset: 'bank' };
-    const imp = { id: 'i1', date: T0 - 10, amount: 4500, description: 'SWIGGY', kind: 'expense', category: 'Food', direction: 'debit', raw: 'row', created_at: T0 - 11, dest_group_id: null, split_draft: '{"mode":"equal"}', counterparty_id: null, source: 'paytm', pay_method: 'card', lat: 28.4, lng: 77.1, place_label: 'Cyber Hub' };
-    await send(db, [assetToServer(asset), goalToServer(goal), savingsTxnToServer(st), importToServer(imp)]);
+    const imp = { id: 'i1', date: T0 - 10, amount: 4500, description: 'SWIGGY', kind: 'expense', category: 'Food', direction: 'debit', raw: 'row', created_at: T0 - 11, dest_group_id: null, split_draft: '{"mode":"equal"}', counterparty_id: null, source: 'paytm', pay_method: 'card', account_id: 'default:card', lat: 28.4, lng: 77.1, place_label: 'Cyber Hub' };
+    await send(db, [assetToServer(asset), goalToServer(goal), savingsTxnToServer(st), importToServer(imp, ctx)]);
     const p = await pulled(db);
     expect(simpleToLocal('asset', rowsOf(p, 'assets')[0])).toEqual({ ...asset, updated_at: T0 + 1_000 });
     expect(simpleToLocal('savings_goal', rowsOf(p, 'savings_goals')[0])).toEqual(goal);
     expect(simpleToLocal('savings_txn', rowsOf(p, 'savings_transactions')[0])).toEqual(st);
-    expect(simpleToLocal('pending_txn', rowsOf(p, 'imported_transactions')[0])).toEqual(imp);
+    expect(simpleToLocal('pending_txn', rowsOf(p, 'imported_transactions')[0], ctx)).toEqual(imp);
+    // On the server the default card is this user's own.
+    expect(rowsOf(p, 'imported_transactions')[0].account_id).toBe(`${USER}:default:card`);
+  });
+
+  it('accounts come back identical, a default one under the same local id (U-68)', async () => {
+    const db = await server();
+    const card = { id: 'default:card', name: 'HDFC Millennia', kind: 'card', opening_balance: 0, credit_limit: 20000000, due_day: 5, is_default: 1, is_archived: 0, sort_order: 3, created_at: T0 - 9 };
+    const sbi = { id: 'acc-sbi', name: 'SBI salary', kind: 'bank', opening_balance: 1250000, credit_limit: null, due_day: null, is_default: 0, is_archived: 0, sort_order: 4, created_at: T0 - 8 };
+    await send(db, [accountToServer(card, ctx), accountToServer(sbi, ctx)]);
+    const p = await pulled(db);
+    const back = rowsOf(p, 'accounts').map(a => serverToAccount(a, ctx));
+    expect(back).toEqual([{ ...card, updated_at: T0 + 1_000 }, { ...sbi, updated_at: T0 + 1_000 }]);
+    expect(rowsOf(p, 'accounts').map(a => a.id)).toEqual([`${USER}:default:card`, 'acc-sbi']);
   });
 
   it('me → profile, a friend → friends, trust everywhere and in one group', async () => {
@@ -121,7 +134,7 @@ describe('round trips through the real push and pull', () => {
       recur_freq: 'monthly', recur_interval: 1, recur_end: T0 + 99, recur_override_date: null, parent_recur_id: null,
       recur_state: 'paused', recur_paused_at: null, recur_mode: 'remind',
       tz: 'Asia/Kolkata', lat: 12.9, lng: 77.6, place_label: 'Home', pay_method: 'card', currency: null, source: 'manual',
-      asset_id: null, author_person_id: null, is_deleted: 0, created_at: T0 - 90, updated_at: T0 + 1_000,
+      asset_id: null, account_id: 'default:card', author_person_id: null, is_deleted: 0, created_at: T0 - 90, updated_at: T0 + 1_000,
     };
     const bundle = {
       txn,
@@ -133,6 +146,28 @@ describe('round trips through the real push and pull', () => {
     await send(db, [txnToServer(bundle, ctx)]);
     const p = await pulled(db);
     expect(serverToTxn(rowsOf(p, 'transactions', 'me')[0], ctx)).toEqual(bundle);
+  });
+
+  it('refuses an account that is not the author\'s, or not of the kind Paid from names (U-68)', async () => {
+    const db = await server();
+    await send(db, [groupToServer({ id: 'me', name: 'Personal', icon: 'user', color: '#20C4B8', is_personal: 1, simplify_debt: 1, default_split: 'equal', carry_over: 0, created_at: T0 })]);
+    const t = (id: string, pay: string, account: string) => txnToServer({
+      txn: { id, group_id: 'me', kind: 'expense', entry_mode: 'quick', date: T0, category: 'Food', pay_method: pay, account_id: account, created_at: T0 },
+      payments: [{ txn_id: id, person_id: ME, amount: 100 }], shares: [{ txn_id: id, person_id: ME, amount: 100 }], items: [], skips: [],
+    }, ctx);
+    const mutations: Mutation[] = [t('x1', 'bank', 'someone-elses'), t('x2', 'cash', 'default:bank'), t('x3', 'bank', 'default:bank')]
+      .map(o => ({ id: ++mutationId, entity: o.entity, op: 'upsert', entityId: o.entityId, baseVersion: 0, data: o.data }));
+    const last = (await ensureDevice(db, USER, 'phone', T0 + 1_000))!;
+    await applyPush({ db, userId: USER, deviceId: 'phone', now: T0 + 1_000 }, mutations, last, ENTITIES);
+    const refused = (await db.prepare('SELECT code FROM sync_rejections ORDER BY mutation_id').all()).results.map(r => r.code);
+    expect(refused).toEqual(['forbidden', 'forbidden']);
+    expect((await db.prepare("SELECT account_id FROM transactions WHERE id = 'x3'").first())?.account_id).toBe(`${USER}:default:bank`);
+  });
+
+  it('never keeps which of a peer\'s accounts their entry used (U-68)', () => {
+    const b = serverToTxn({ id: 'p1', group_id: 'flat', kind: 'expense', entry_mode: 'quick', date: T0, category: 'Food',
+      pay_method: 'bank', account_id: 'u-peer:default:bank', author_id: 'u-peer', created_at: T0, updated_at: T0 }, ctx);
+    expect(b.txn.account_id).toBeNull();
   });
 
   it('normalises only what means the same: a NULL interval is 1, a NULL currency is INR', async () => {

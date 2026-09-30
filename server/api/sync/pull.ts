@@ -21,7 +21,7 @@ import { scopesFor, type Db, type RevokedWhy } from './utils/access';
 export const PULL_PAGE_ROWS = 500;
 
 const USER_TABLES = [
-  'profiles', 'friends', 'group_preferences', 'categories', 'assets', 'savings_goals', 'savings_transactions',
+  'profiles', 'friends', 'group_preferences', 'categories', 'assets', 'accounts', 'savings_goals', 'savings_transactions',
   'money_profiles', 'user_preferences', 'imported_transactions', 'approvals', 'trust_settings', 'activity_log',
 ] as const;
 const GROUP_TABLES = ['groups', 'group_members', 'budgets', 'transactions', 'disputes', 'activity_log'] as const;

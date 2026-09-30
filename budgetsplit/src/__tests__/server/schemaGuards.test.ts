@@ -76,7 +76,7 @@ describe('every table is classified, and every sync one follows its convention',
   /** Pulled to the phone: carries every §2.3 column and a (scope_id, seq) index. */
   const SYNCED = [
     'profiles', 'friends', 'groups', 'group_members', 'group_preferences', 'categories', 'budgets',
-    'assets', 'savings_goals', 'savings_transactions', 'money_profiles', 'user_preferences',
+    'assets', 'accounts', 'savings_goals', 'savings_transactions', 'money_profiles', 'user_preferences',
     'imported_transactions', 'transactions', 'approvals', 'trust_settings', 'disputes',
   ];
   /** Written and read only with their parent transaction, in the same batch. */

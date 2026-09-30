@@ -2,7 +2,7 @@
 
 `Last verified: 2026-09-30 (§0, §1, §9–§11 and every row whose status changed; the rest as of 2026-09-07) · Guarded by: trackerIntegrity.test.ts · countClaims.test.ts · docIdGraph.test.ts`
 
-**276 items, 111 of them still open.** One row each: what it is, and where it stands.
+**277 items, 111 of them still open.** One row each: what it is, and where it stands.
 Nothing else. **This is the V1 tracker** — start at §0.
 
 **The evidence is not here.** Why each item exists, what it costs, what breaks if you touch it, and
@@ -102,7 +102,7 @@ below is the plan; every line points at rows further down, where status lives.
 ---
 ## §3 · Open decisions — `DQ-`
 
-**64 items: 39 `DECIDE`, 7 `BLOCKED`, 18 `DONE`.** A `DQ-` is a question only you can answer, so every unanswered one is `DECIDE` by definition. The default column is what ships if you never decide.
+**64 items: 38 `DECIDE`, 7 `BLOCKED`, 19 `DONE`.** A `DQ-` is a question only you can answer, so every unanswered one is `DECIDE` by definition. The default column is what ships if you never decide.
 
 | | What | Status | Default if never decided |
 |---|---|---|---|
@@ -118,7 +118,6 @@ below is the plan; every line points at rows further down, where status lives.
 | `DQ-11` | Android UPI is entirely untested | `DECIDE` | The whole feature silently does nothing on Android |
 | `DQ-12` | Three red surfaces can stack on one Home open | `DECIDE` | Three at once |
 | `DQ-13` | Transfer has no `DetailChips` | `DECIDE` | Two note fields |
-| `DQ-14` | Named accounts as entities | `DECIDE` | Buckets forever; `INCOME_LANDING` stays a view over… |
 | `DQ-15` | The sweep's source-asset round trip | `DECIDE` | The sweep works; where the money came from is approximate |
 | `DQ-16` | Global categories, undeletable once shared | `DECIDE` | Categories stay deletable and references stay strings |
 | `DQ-17` | `help.tsx` is a third collapsible pattern | `DECIDE` | Three patterns |
@@ -153,7 +152,7 @@ below is the plan; every line points at rows further down, where status lives.
 | `DQ-85` | R2 object storage | `BLOCKED` | A Cloudflare dashboard opt-in that asks for a card |
 | `DQ-86` | Cloudflare Email Sending | `BLOCKED` | Workers Paid $5/mo + an owned domain |
 
-**Closed (18), detail in `FINDINGS.md`:** `DQ-07` `DQ-22` `DQ-26` `DQ-28` `DQ-31` `DQ-32` `DQ-88` `DQ-89` `DQ-91` `DQ-93` `DQ-94` `DQ-97` `DQ-98` `DQ-99` `DQ-100` `DQ-101` `DQ-102` `DQ-103`
+**Closed (19), detail in `FINDINGS.md`:** `DQ-14` `DQ-07` `DQ-22` `DQ-26` `DQ-28` `DQ-31` `DQ-32` `DQ-88` `DQ-89` `DQ-91` `DQ-93` `DQ-94` `DQ-97` `DQ-98` `DQ-99` `DQ-100` `DQ-101` `DQ-102` `DQ-103`
 
 ---
 ## §4 · Walk 1 — `W1-`
@@ -293,7 +292,7 @@ testing or describing the app. Where one needs action, the id says where.
 ---
 ## §11 · Open from the last pass, and your feedback — `U-`
 
-**67 items: 7 `OPEN`, 1 `BLOCKED`, 1 `PARKED`, 58 `DONE`.** From the 2026-09-30 pass (`SPEC-BUGSCAN.md` Pass 2) and your answers and feedback the same night. Evidence in `FINDINGS.md` §11.
+**68 items: 8 `OPEN`, 1 `BLOCKED`, 1 `PARKED`, 58 `DONE`.** From the 2026-09-30 pass (`SPEC-BUGSCAN.md` Pass 2) and your answers and feedback the same night. Evidence in `FINDINGS.md` §11.
 
 | | What | Status | Default if never decided |
 |---|---|---|---|
@@ -305,6 +304,7 @@ testing or describing the app. Where one needs action, the id says where.
 | `U-19` | The PDF is poor — fix later | `PARKED` |  |
 | `U-20` | Spacing is uneven in many places | `OPEN` |  |
 | `U-24` | Product analytics (Mixpanel): built, with an opt-out; needs your project token | `BLOCKED` |  |
+| `U-68` | Named accounts: the entity, backfill and sync are in; money math and the UI move onto it next | `OPEN` |  |
 | `U-31` | Sorting is not right — which lists? (the money card now orders largest first) | `OPEN` |  |
 
 **Closed (58), detail in `FINDINGS.md`:** `U-01` `U-03` `U-04` `U-05` `U-06` `U-11` `U-12` `U-17` `U-21` `U-14` `U-25` `U-26` `U-27` `U-28` `U-29` `U-30` `U-32` `U-15` `U-33` `U-35` `U-36` `U-37` `U-34` `U-38` `U-39` `U-40` `U-41` `U-42` `U-43` `U-13` `U-44` `U-45` `U-46` `U-22` `U-23` `U-07` `U-08` `U-47` `U-48` `U-49` `U-50` `U-51` `U-52` `U-53` `U-54` `U-55` `U-56` `U-57` `U-58` `U-59` `U-60` `U-61` `U-62` `U-63` `U-64` `U-65` `U-66` `U-67`

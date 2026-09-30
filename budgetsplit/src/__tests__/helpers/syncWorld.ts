@@ -6,6 +6,7 @@ import { ENTITIES } from '../../../../server/api/sync/routes';
 import type { Transport } from '../../lib/sync/engine';
 import { readAllTables } from '../../db/queries/backup';
 import { seedGlobalCategories } from '../../db/seedCategories';
+import { applyLaunchInvariants } from '../../db/schema';
 import type * as SQLite from 'expo-sqlite';
 
 /**
@@ -56,6 +57,8 @@ export async function freshPhone(meId = 'local-me'): Promise<Db> {
                   VALUES (?, 'Personal', 'credit-card', '#4F46E5', 1, 1, ?)`).run(`personal-${meId}`, meId);
   db.raw.prepare("INSERT INTO group_member (group_id, person_id, joined_at, role) VALUES (?, ?, 1, 'admin')").run(`personal-${meId}`, meId);
   await seedGlobalCategories(db);
+  // What every launch asserts — the default accounts among it — so "before" is a real phone's state.
+  await applyLaunchInvariants(async sql => { db.raw.exec(sql); });
   return db;
 }
 

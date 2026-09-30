@@ -122,6 +122,8 @@ export const BACKUP_TABLES = [
   // foreign keys are off — i.e. a trap armed for whoever turns them on, which
   // `applyConnectionPragmas` says is the plan.
   'asset',
+  // `U-68`: before `txn` for the same reason — `txn.account_id` points at it.
+  'account',
   'txn', 'recur_skip', 'line_item', 'txn_share', 'txn_payment', 'txn_approval', 'txn_dispute',
   'savings_goal', 'savings_txn', 'pending_txn', 'audit_log', 'settings',
 ] as const;
@@ -173,6 +175,9 @@ const OPTIONAL_BACKUP_TABLES = new Set<BackupTableName>([
   // short by the whole investment, silently, right after somebody recovered their
   // phone. See LAUNCH_INVARIANTS in db/schema.ts.
   'asset',
+  // Older files have no accounts; the launch invariant seeds the four defaults and points
+  // the restored entries at them.
+  'account',
 ]);
 
 export type BackupTableName = typeof BACKUP_TABLES[number];

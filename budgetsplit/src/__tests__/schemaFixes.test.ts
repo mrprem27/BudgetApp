@@ -35,8 +35,13 @@ function makeDb(): DatabaseSync {
       deleted_at INTEGER,
       PRIMARY KEY (group_id, person_id)
     );
-    CREATE TABLE txn (id TEXT PRIMARY KEY, group_id TEXT, category TEXT NOT NULL, pay_method TEXT);
-    CREATE TABLE pending_txn (id TEXT PRIMARY KEY, pay_method TEXT);
+    CREATE TABLE txn (id TEXT PRIMARY KEY, group_id TEXT, category TEXT NOT NULL, pay_method TEXT, account_id TEXT, author_person_id TEXT);
+    CREATE TABLE pending_txn (id TEXT PRIMARY KEY, pay_method TEXT, account_id TEXT);
+    CREATE TABLE account (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL, kind TEXT NOT NULL, opening_balance INTEGER NOT NULL DEFAULT 0,
+      credit_limit INTEGER, due_day INTEGER, is_default INTEGER NOT NULL DEFAULT 0, is_archived INTEGER NOT NULL DEFAULT 0,
+      sort_order INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+    );
     CREATE TABLE txn_approval (txn_id TEXT PRIMARY KEY, landed_pay_method TEXT);
     CREATE TABLE category (
       id TEXT PRIMARY KEY, group_id TEXT, name TEXT NOT NULL,
@@ -90,6 +95,42 @@ const catNames = (db: DatabaseSync) =>
   (db.prepare('SELECT name, kind FROM category ORDER BY name, kind').all() as { name: string; kind: string }[]);
 
 describe('one-time data fixes', () => {
+  it('seeds the four default accounts and points every entry of mine at its own (U-68)', async () => {
+    const db = makeDb();
+    db.exec(`
+      INSERT INTO txn (id, group_id, category, pay_method, author_person_id) VALUES
+        ('b','g','Food','bank',NULL), ('c','g','Food','card',NULL), ('o','g','Food','other',NULL),
+        ('n','g','Food',NULL,NULL), ('u','g','Food','upi',NULL), ('peer','g','Food','bank','p2');
+      INSERT INTO pending_txn (id, pay_method) VALUES ('pw','wallet');
+    `);
+    await fullLaunch(db);
+    const ids = (db.prepare('SELECT id, kind FROM account ORDER BY sort_order').all() as { id: string; kind: string }[]);
+    expect(ids).toEqual([
+      { id: 'default:bank', kind: 'bank' }, { id: 'default:cash', kind: 'cash' },
+      { id: 'default:wallet', kind: 'wallet' }, { id: 'default:card', kind: 'card' },
+    ]);
+    const acct = (id: string) => (db.prepare('SELECT account_id AS a FROM txn WHERE id = ?').get(id) as { a: string | null }).a;
+    expect(acct('b')).toBe('default:bank');
+    expect(acct('c')).toBe('default:card');
+    // UPI was folded into Bank by the one-time fix, which runs first.
+    expect(acct('u')).toBe('default:bank');
+    expect(acct('o')).toBeNull();
+    expect(acct('n')).toBeNull();
+    // Someone else's entry: which of their accounts it used is theirs to say.
+    expect(acct('peer')).toBeNull();
+    expect((db.prepare("SELECT account_id AS a FROM pending_txn WHERE id = 'pw'").get() as { a: string }).a).toBe('default:wallet');
+  });
+
+  it('seeds the accounts again after a restore that kept the fix markers (U-68)', async () => {
+    const db = makeDb();
+    await fullLaunch(db);
+    // A restore: `account` emptied, `fix_%` markers kept, entries back without account ids.
+    db.exec(`DELETE FROM account; INSERT INTO txn (id, group_id, category, pay_method) VALUES ('r','g','Food','cash');`);
+    await fullLaunch(db);
+    expect((db.prepare('SELECT COUNT(*) AS n FROM account').get() as { n: number }).n).toBe(4);
+    expect((db.prepare("SELECT account_id AS a FROM txn WHERE id = 'r'").get() as { a: string }).a).toBe('default:cash');
+  });
+
   it('folds UPI and autopay into Bank, and leaves every other From alone (U-49)', async () => {
     const db = makeDb();
     db.exec(`

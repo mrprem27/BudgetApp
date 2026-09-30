@@ -144,6 +144,8 @@ export async function backfillQueue(db: SQLite.SQLiteDatabase): Promise<void> {
     ['category', 'SELECT id FROM category'],
     ['category_budget', 'SELECT id FROM category_budget'],
     ['asset', 'SELECT id FROM asset'],
+    // A default account nobody has touched is implicit on the server (`U-68`); only real rows go.
+    ['account', 'SELECT id FROM account WHERE is_default = 0 OR updated_at > 0'],
     ['savings_goal', 'SELECT id FROM savings_goal'],
     ['savings_txn', 'SELECT id FROM savings_txn'],
     ['pending_txn', 'SELECT id FROM pending_txn'],

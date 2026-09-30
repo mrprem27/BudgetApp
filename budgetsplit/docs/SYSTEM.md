@@ -225,7 +225,7 @@ photos never sync (`SYNC-F4`); balances never travel (`E-50`).
 
 One SQLite database, `budgetsplit.db`, opened by `SQLiteProvider` at the root. It is the single
 source of truth — there is no Redux, no React Query, no in-memory mirror. Reads go through
-`src/db/queries/` (27 modules); pure logic lives in `src/lib/` (143 modules) and touches neither
+`src/db/queries/` (28 modules); pure logic lives in `src/lib/` (143 modules) and touches neither
 React nor the database.
 
 **Foreign keys are OFF** on every connection (`applyConnectionPragmas`). Every `REFERENCES` clause
@@ -654,9 +654,9 @@ Definition.    Something you own that holds value: gold, an FD, an SIP, a
                property, a vehicle.
 Is not.        · Not cash. Cash is derived (E-54) from the money profile and the
                  ledger; an asset carries its own balance column.
-               · Not an account. There is no "HDFC" with a running balance —
-                 that is DQ-14, still open. The three cash buckets are a
-                 different model again (AX-03's sibling, ASSET_BUCKET).
+               · Not an account. "HDFC" with a running balance is E-93; an
+                 asset is something you own, an account is where money
+                 sits on its way through.
                · Not an expense. Buying one is a transfer: cash moved, nothing
                  was consumed, net worth is unchanged. IV-15 and the settlement
                  overload (OV-02) both live here.
@@ -675,7 +675,7 @@ Aliases.       asset · holding · investment · net-worth item.  With
 Surfaces.      SC-42 · SC-05 (TotalMoneyCard) · SC-07 (transfer banner)
 Invariants.    IV-03 both halves in one transaction · IV-14 · IV-15 archived
                assets stop counting
-Open.          OV-02 · OV-20 · DQ-14 named accounts
+Open.          OV-02 · OV-20
 ```
 
 ### E-15 · savings_goal — something you are saving for
@@ -1580,6 +1580,33 @@ Sync.          No.
 Aliases.       smart category · guess · learned categories.
 Surfaces.      SC-07 (the title field)
 Open.          OV-13
+```
+
+### E-93 · account — where money sits on its way through
+
+```
+Definition.    A named place money moves through: a bank account, cash, a
+               wallet, a credit card. Several of each ("HDFC", "SBI salary").
+Is not.        · Not an asset (E-14). An asset is owned and held; an account
+                 is where spending comes from and income lands.
+               · Not the kind. txn.pay_method says bank / card / cash / wallet /
+                 other; account_id says which one, and is always of that kind.
+Storage.       `account`, src/db/schema.ts. Four defaults seeded by a launch
+               invariant: default:bank · default:cash · default:wallet ·
+               default:card.
+Identity.      id TEXT PK. opening_balance in paise, may be negative.
+Owned by.      You. Personal by definition.
+References.    —
+Referenced by. E-04 account_id · pending_txn.account_id
+Lifecycle.     seeded or created → renamed / opening restated → archived
+Create/Edit/Delete.  Not yet on a screen (U-68).
+Sync.          Travels as `accounts`. A default is <user>:default:<kind> on the
+               server and implicit there until edited. A peer's account_id is
+               never kept. Is backed up.
+Aliases.       account · Paid from · source · bucket (ASSET_BUCKET, older).
+Surfaces.      none yet
+Invariants.    alignAccount: account_id is NULL or an account of pay_method's kind
+Open.          U-68
 ```
 ---
 

@@ -4,6 +4,7 @@ import { v4 as uuid } from 'uuid';
 import type { TxnKind, TxnSource, PayMethod } from '../../constants/enums';
 import type { ParsedDirection } from '../../lib/importParse';
 import { queueDelete, queueUpsert } from './syncQueue';
+import { alignAccount } from './accountSql';
 
 /** A parsed-but-unconfirmed transaction shown in the Review inbox. */
 export type PendingTxn = {
@@ -27,6 +28,8 @@ export type PendingTxn = {
   source: TxnSource;
   /** Detected/edited payment method carried through ingest → Review → txn. */
   pay_method: PayMethod | null;
+  /** The named account of that kind (`U-68`); `alignAccount` keeps it matching `pay_method`. */
+  account_id: string | null;
   /**
    * Where the payment happened, when the import knows it first-hand.
    *
@@ -53,7 +56,7 @@ export type PendingTxn = {
 // forcing every one of them to write `lat: null` would be noise around the single
 // route that does.
 export type NewPending =
-  Omit<PendingTxn, 'id' | 'created_at' | 'dest_group_id' | 'split_draft' | 'counterparty_id' | 'lat' | 'lng' | 'place_label' | 'author_person_id' | 'payer_person_id'>
+  Omit<PendingTxn, 'id' | 'created_at' | 'dest_group_id' | 'split_draft' | 'counterparty_id' | 'lat' | 'lng' | 'place_label' | 'author_person_id' | 'payer_person_id' | 'account_id'>
   // `counterparty_id` is settable at ingest, not only in Review: a voice settlement already
   // knows who was named, and re-asking for it would be asking twice.
   & Partial<Pick<PendingTxn, 'lat' | 'lng' | 'place_label' | 'counterparty_id'>>;
@@ -73,6 +76,7 @@ export async function insertPending(db: SQLite.SQLiteDatabase, rows: NewPending[
         [id, r.date, r.amount, r.description, r.kind, r.category ?? null, r.direction, r.raw ?? null, now, r.source ?? 'manual', r.pay_method ?? null,
           r.lat ?? null, r.lng ?? null, r.place_label ?? null, r.counterparty_id ?? null],
       );
+      await alignAccount(db, 'pending_txn', id);
       await queueUpsert(db, 'pending_txn', id);
     }
   });
@@ -104,6 +108,7 @@ export async function updatePendingDraft(
   if (sets.length === 0) return;
   args.push(id);
   await db.runAsync(`UPDATE pending_txn SET ${sets.join(', ')} WHERE id=?`, args);
+  await alignAccount(db, 'pending_txn', id);
   await queueUpsert(db, 'pending_txn', id);
 }
 
@@ -121,14 +126,14 @@ export async function restorePending(db: SQLite.SQLiteDatabase, row: PendingTxn)
     `INSERT OR REPLACE INTO pending_txn
        (id, date, amount, description, kind, category, direction, raw, created_at,
         dest_group_id, split_draft, source, pay_method, counterparty_id,
-        lat, lng, place_label, author_person_id, payer_person_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        lat, lng, place_label, author_person_id, payer_person_id, account_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       row.id, row.date, row.amount, row.description, row.kind, row.category ?? null,
       row.direction, row.raw ?? null, row.created_at, row.dest_group_id ?? null, row.split_draft ?? null,
       row.source ?? 'manual', row.pay_method ?? null, row.counterparty_id ?? null,
       row.lat ?? null, row.lng ?? null, row.place_label ?? null,
-      row.author_person_id ?? null, row.payer_person_id ?? null,
+      row.author_person_id ?? null, row.payer_person_id ?? null, row.account_id ?? null,
     ],
   );
   await queueUpsert(db, 'pending_txn', row.id);

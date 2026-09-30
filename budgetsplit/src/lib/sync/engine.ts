@@ -69,7 +69,7 @@ const PUSH_SHARE = 0.9;
  */
 const RANK = [
   'profiles', 'friends', 'trust_settings', 'groups', 'group_preferences', 'group_members', 'categories', 'budgets',
-  'assets', 'savings_goals', 'savings_transactions', 'transactions', 'imported_transactions', 'money_profiles',
+  'assets', 'accounts', 'savings_goals', 'savings_transactions', 'transactions', 'imported_transactions', 'money_profiles',
 ];
 const rank = (e: string) => { const i = RANK.indexOf(e); return i < 0 ? RANK.length : i; };
 

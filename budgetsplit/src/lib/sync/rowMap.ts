@@ -1,5 +1,5 @@
 import { parseTags, serializeTags } from '../tags';
-import { selfPersonId, syncIds } from './ids';
+import { localAccountId, selfPersonId, syncIds } from './ids';
 
 /**
  * The phone's rows ⇄ the server's rows (SPEC-SERVER.md §2.11).
@@ -105,6 +105,7 @@ export const COLUMN_FATES: Record<string, Record<string, Fate>> = {
     currency: '→ transactions.currency (NULL means INR)',
     source: '→ transactions.source',
     asset_id: '→ transactions.asset_id',
+    account_id: '→ transactions.account_id (default:<kind> is <user>:default:<kind>; a peer\'s is never kept)',
     author_person_id: '→ transactions.author_id (NULL means me)',
     sync_version: local('v1 sync bookkeeping, replaced by sync_queue'),
     is_deleted: '→ transactions.deleted_at',
@@ -175,6 +176,12 @@ export const COLUMN_FATES: Record<string, Record<string, Fate>> = {
     color: '→ assets.color', balance: '→ assets.balance', is_archived: '→ assets.is_archived',
     sort_order: '→ assets.sort_order', created_at: '→ assets.created_at', updated_at: SERVER_STAMP,
   },
+  account: {
+    id: '→ accounts.id (default:<kind> is <user>:default:<kind>)', name: '→ accounts.name', kind: '→ accounts.kind',
+    opening_balance: '→ accounts.opening_balance', credit_limit: '→ accounts.credit_limit', due_day: '→ accounts.due_day',
+    is_default: '→ accounts.is_default', is_archived: '→ accounts.is_archived', sort_order: '→ accounts.sort_order',
+    created_at: '→ accounts.created_at', updated_at: SERVER_STAMP,
+  },
   savings_goal: {
     id: '→ savings_goals.id', name: '→ savings_goals.name', target: '→ savings_goals.target',
     priority: '→ savings_goals.priority', category: '→ savings_goals.category', icon: '→ savings_goals.icon',
@@ -198,6 +205,7 @@ export const COLUMN_FATES: Record<string, Record<string, Fate>> = {
     created_at: '→ imported_transactions.created_at', dest_group_id: '→ imported_transactions.dest_group_id',
     split_draft: '→ imported_transactions.split_draft', counterparty_id: '→ imported_transactions.counterparty_id',
     source: '→ imported_transactions.source', pay_method: '→ imported_transactions.pay_method',
+    account_id: '→ imported_transactions.account_id (as transactions.account_id)',
     lat: '→ imported_transactions.latitude', lng: '→ imported_transactions.longitude',
     place_label: '→ imported_transactions.place_label',
     author_person_id: local('schema-only groundwork; nothing reads it'),
@@ -290,30 +298,50 @@ const SIMPLE: Record<'asset' | 'savings_goal' | 'savings_txn' | 'pending_txn', S
     cols: { date: 'date', amount: 'amount', description: 'description', kind: 'kind', category: 'category',
       direction: 'direction', raw: 'raw', created_at: 'created_at', dest_group_id: 'dest_group_id',
       split_draft: 'split_draft', counterparty_id: 'counterparty_id', source: 'source', pay_method: 'pay_method',
-      lat: 'latitude', lng: 'longitude', place_label: 'place_label' },
+      account_id: 'account_id', lat: 'latitude', lng: 'longitude', place_label: 'place_label' },
   },
 };
 
-export function simpleToServer(table: keyof typeof SIMPLE, row: Row): Outgoing {
+/** An `account_id` column between the phone's id and the server's (`U-68`). */
+const accountOut = (v: unknown, ctx: MapContext) => (typeof v === 'string' ? syncIds.account(ctx.userId, v) : null);
+const accountIn = (v: unknown, ctx: MapContext) => (typeof v === 'string' ? localAccountId(ctx.userId, v) : null);
+
+export function simpleToServer(table: keyof typeof SIMPLE, row: Row, ctx?: MapContext): Outgoing {
   const { entity, cols } = SIMPLE[table];
   const data: Row = {};
   for (const [l, s] of Object.entries(cols)) if (row[l] !== undefined) data[s] = row[l];
+  if (ctx && data.account_id !== undefined) data.account_id = accountOut(data.account_id, ctx);
   return { entity, entityId: String(row.id), data };
 }
 
-export function simpleToLocal(table: keyof typeof SIMPLE, row: Row): Row {
+export function simpleToLocal(table: keyof typeof SIMPLE, row: Row, ctx?: MapContext): Row {
   const { cols } = SIMPLE[table];
   const out: Row = { id: row.id };
   for (const [l, s] of Object.entries(cols)) out[l] = row[s] ?? null;
   if (table === 'asset') out.updated_at = row.updated_at;
   if (table === 'pending_txn') out.pay_method = localPayMethod(out.pay_method);
+  if (ctx && 'account_id' in out) out.account_id = accountIn(out.account_id, ctx);
+  return out;
+}
+
+/** An account (`U-68`): one row to one row, but a default's id is made the user's own on the way up. */
+const ACCOUNT_COLS = ['name', 'kind', 'opening_balance', 'credit_limit', 'due_day', 'is_default', 'is_archived', 'sort_order', 'created_at'] as const;
+export function accountToServer(row: Row, ctx: MapContext): Outgoing {
+  const data: Row = {};
+  for (const c of ACCOUNT_COLS) if (row[c] !== undefined) data[c] = row[c];
+  return { entity: 'accounts', entityId: syncIds.account(ctx.userId, String(row.id)), data };
+}
+export function serverToAccount(row: Row, ctx: MapContext): Row {
+  const out: Row = { id: localAccountId(ctx.userId, String(row.id)) };
+  for (const c of ACCOUNT_COLS) out[c] = row[c] ?? null;
+  out.updated_at = row.updated_at;
   return out;
 }
 
 export const assetToServer = (r: Row) => simpleToServer('asset', r);
 export const goalToServer = (r: Row) => simpleToServer('savings_goal', r);
 export const savingsTxnToServer = (r: Row) => simpleToServer('savings_txn', r);
-export const importToServer = (r: Row) => simpleToServer('pending_txn', r);
+export const importToServer = (r: Row, ctx: MapContext) => simpleToServer('pending_txn', r, ctx);
 
 // ---------------------------------------------------------------------------
 // People: me → profiles; everyone else → friends + trust_settings
@@ -545,7 +573,6 @@ export function txnToServer(b: LocalBundle, ctx: MapContext): Outgoing {
       paused_at: t.recur_paused_at ?? null,
     })
     : null;
-  void ctx;
   return {
     entity: 'transactions', entityId: String(t.id),
     data: compact({
@@ -553,7 +580,8 @@ export function txnToServer(b: LocalBundle, ctx: MapContext): Outgoing {
       timezone: t.tz ?? null, category: t.category, note: t.note ?? null, pay_method: t.pay_method ?? null,
       source: t.source ?? null,
       currency: str(t.currency) ?? undefined,           // NULL means INR: let the server's default say so
-      asset_id: t.asset_id ?? null, latitude: t.lat ?? null, longitude: t.lng ?? null,
+      asset_id: t.asset_id ?? null, account_id: accountOut(t.account_id, ctx),
+      latitude: t.lat ?? null, longitude: t.lng ?? null,
       place_label: t.place_label ?? null, adjustments: t.adjustments ?? null,
       recurring_rule_id: t.parent_recur_id ?? null, occurrence_date: t.recur_override_date ?? null,
       created_at: t.created_at,
@@ -601,6 +629,8 @@ export function serverToTxn(t: Row, ctx: MapContext): LocalBundle {
       pay_method: localPayMethod(t.pay_method),
       currency: t.currency === 'INR' ? null : (t.currency ?? null),
       source: t.source ?? null, asset_id: t.asset_id ?? null,
+      // Which of THEIR accounts a peer used is not mine to hold, and would name a row I don't have.
+      account_id: author && !isMe(author, ctx) ? null : accountIn(t.account_id, ctx),
       author_person_id: author && !isMe(author, ctx) ? author : null,
       is_deleted: t.deleted_at != null ? 1 : 0,
       created_at: t.created_at, updated_at: t.updated_at,

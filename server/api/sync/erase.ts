@@ -65,7 +65,7 @@ export async function eraseAccount(db: Db, userId: string, now: number): Promise
       'approvals', 'disputes'].map(t => del(`DELETE FROM ${t} WHERE transaction_id IN ${txns}`, scopes)),
     del(`DELETE FROM transactions WHERE scope_id IN ${inScopes}`, scopes),
     // Everything else in those scopes, children before parents.
-    ...['savings_transactions', 'savings_goals', 'assets', 'budgets', 'disputes', 'approvals', 'trust_settings',
+    ...['savings_transactions', 'savings_goals', 'assets', 'accounts', 'budgets', 'disputes', 'approvals', 'trust_settings',
       'group_preferences', 'friends', 'categories', 'money_profiles', 'user_preferences', 'imported_transactions',
       'profiles', 'activity_log', 'group_members'].map(t => del(`DELETE FROM ${t} WHERE scope_id IN ${inScopes}`, scopes)),
     // Others' rows about a group that is going: their list preference, their trust in me there.

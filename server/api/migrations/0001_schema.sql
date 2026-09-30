@@ -435,6 +435,33 @@ CREATE TABLE assets (
 );
 CREATE INDEX idx_assets_pull ON assets(scope_id, seq);
 
+-- Where money sits and moves through (U-68): named bank accounts, cash, wallets, credit cards.
+-- A transaction's pay_method says which KIND; account_id says which one. The four defaults are
+-- implicit — `<user>:default:<kind>` is valid before any row exists, and becomes a row the first
+-- time it is renamed or given an opening balance. Money, so writes are compare-and-set.
+CREATE TABLE accounts (
+  id               TEXT PRIMARY KEY,
+  scope_id         TEXT NOT NULL REFERENCES sync_scopes(id),
+  version          INTEGER NOT NULL DEFAULT 1 CHECK (version >= 1),
+  seq              INTEGER NOT NULL CHECK (seq >= 1),
+  created_at       INTEGER NOT NULL,
+  updated_at       INTEGER NOT NULL,
+  created_by       TEXT NOT NULL REFERENCES users(id),
+  updated_by       TEXT NOT NULL REFERENCES users(id),
+  deleted_at       INTEGER,
+  user_id          TEXT NOT NULL REFERENCES users(id),
+  name             TEXT NOT NULL CHECK (length(trim(name)) > 0),
+  kind             TEXT NOT NULL CHECK (kind IN ('bank','cash','wallet','card')),
+  opening_balance  INTEGER NOT NULL DEFAULT 0,                    -- paise; may be negative (overdrawn)
+  credit_limit     INTEGER CHECK (credit_limit IS NULL OR credit_limit >= 0),
+  due_day          INTEGER CHECK (due_day IS NULL OR due_day BETWEEN 1 AND 31),
+  is_default       INTEGER NOT NULL DEFAULT 0 CHECK (is_default IN (0,1)),
+  is_archived      INTEGER NOT NULL DEFAULT 0 CHECK (is_archived IN (0,1)),
+  sort_order       INTEGER NOT NULL DEFAULT 0,
+  CHECK (scope_id = user_id)
+);
+CREATE INDEX idx_accounts_pull ON accounts(scope_id, seq);
+
 CREATE TABLE savings_goals (
   id            TEXT PRIMARY KEY,
   scope_id      TEXT NOT NULL REFERENCES sync_scopes(id),
@@ -561,6 +588,7 @@ CREATE TABLE imported_transactions (
   raw              TEXT,
   source           TEXT NOT NULL DEFAULT 'manual',
   pay_method       TEXT CHECK (pay_method IS NULL OR pay_method IN ('bank','card','cash','wallet','other')),
+  account_id       TEXT,
   dest_group_id    TEXT,
   split_draft      TEXT CHECK (split_draft IS NULL OR json_valid(split_draft)),
   counterparty_id  TEXT,
@@ -601,6 +629,7 @@ CREATE TABLE transactions (
   source             TEXT CHECK (source IS NULL OR source IN ('voice','email','gpay','paytm','bank_csv','sms','notification','upi_qr','peer','manual')),
   currency           TEXT NOT NULL DEFAULT 'INR' CHECK (length(currency) = 3),
   asset_id           TEXT REFERENCES assets(id),
+  account_id         TEXT,                                        -- the author's account (U-68); see accounts
   latitude           REAL CHECK (latitude IS NULL OR latitude BETWEEN -90 AND 90),
   longitude          REAL CHECK (longitude IS NULL OR longitude BETWEEN -180 AND 180),
   place_label        TEXT,

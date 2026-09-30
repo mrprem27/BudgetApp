@@ -27,7 +27,7 @@ import { approvalsForDelete, approvalsForWrite } from './approvals';
 
 const COLUMNS = [
   'group_id', 'kind', 'entry_mode', 'amount', 'date', 'timezone', 'category', 'note', 'pay_method', 'source',
-  'currency', 'asset_id', 'latitude', 'longitude', 'place_label', 'adjustments', 'recurring_rule_id', 'occurrence_date',
+  'currency', 'asset_id', 'account_id', 'latitude', 'longitude', 'place_label', 'adjustments', 'recurring_rule_id', 'occurrence_date',
 ] as const;
 const RULE_COLUMNS = ['frequency', 'interval', 'ends_at', 'status', 'mode', 'paused_at'] as const;
 const ITEM_COLUMNS = ['id', 'name', 'quantity', 'unit_price', 'assigned_to', 'split_mode', 'split_values'] as const;
@@ -99,6 +99,20 @@ async function writeTransaction(ctx: PushContext, m: Mutation): Promise<D1Prepar
   const addsUp = (side: Share[]) => side.length === 0 || validateShares(amount, side.map(s => ({ personId: s.person_id, amount: s.amount }))).ok;
   if (!addsUp(payers)) throw new Rejected('invalid', 'transactions: payers must add up to the amount');
   if (!addsUp(splits)) throw new Rejected('invalid', 'transactions: splits must add up to the amount');
+  // Which of the author's accounts it moved through (U-68): their own, and of the kind Paid from
+  // names. A default account is implicit until edited, so its derived id stands without a row.
+  if (data.account_id != null) {
+    const acct = String(data.account_id);
+    const implicit = data.pay_method != null && acct === `${userId}:default:${String(data.pay_method)}`;
+    if (!implicit && !(await db.prepare('SELECT 1 AS ok FROM accounts WHERE id = ? AND scope_id = ? AND kind = ? AND deleted_at IS NULL')
+      .bind(acct, userId, data.pay_method ?? null).first())) {
+      throw new Rejected('forbidden', 'transactions.account_id: not one of your accounts of that kind');
+    }
+    fences.push(guard(db,
+      `? IS NOT NULL AND (? = ? || ':default:' || ?
+        OR EXISTS (SELECT 1 FROM accounts WHERE id = ? AND scope_id = ? AND kind = ? AND deleted_at IS NULL))`,
+      data.pay_method ?? null, data.account_id, userId, data.pay_method ?? null, data.account_id, userId, data.pay_method ?? null));
+  }
   const people = [...new Set([...payers, ...splits].map(p => p.person_id))];
   // Invited counts: adding a friend and splitting the bill with them is one
   // motion, and on the adder's phone they are already a member. Their consent is

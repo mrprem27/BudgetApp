@@ -29,7 +29,16 @@ export const syncIds = {
   budget: (groupId: string, category: string, personId: string | null) => `${groupId}:${category}:${personId ?? '*'}`,
   member: (groupId: string, personId: string) => `${groupId}:${personId}`,
   approval: (transactionId: string, userId: string) => `${transactionId}:${userId}`,
+  /**
+   * An account (`U-68`). Every phone seeds the same four defaults as `default:<kind>`, so on the
+   * server they are made the user's own; a named account's id is already unique.
+   */
+  account: (userId: string, localId: string) => (localId.startsWith('default:') ? `${userId}:${localId}` : localId),
 } as const;
+
+/** The server's account id back to the phone's: `<user>:default:bank` → `default:bank`. */
+export const localAccountId = (userId: string, serverId: string): string =>
+  serverId.startsWith(`${userId}:default:`) ? serverId.slice(userId.length + 1) : serverId;
 
 /**
  * The user's own choices that travel between their phones. Everything else in

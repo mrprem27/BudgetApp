@@ -17,7 +17,7 @@ import { errorMessage } from '../../lib';
 
 export const SYNCED_TABLES = [
   'profiles', 'friends', 'groups', 'group_members', 'group_preferences', 'categories', 'budgets',
-  'assets', 'savings_goals', 'savings_transactions', 'money_profiles', 'user_preferences',
+  'assets', 'accounts', 'savings_goals', 'savings_transactions', 'money_profiles', 'user_preferences',
   'imported_transactions', 'transactions', 'approvals', 'trust_settings', 'disputes',
 ] as const;
 export type SyncedTable = typeof SYNCED_TABLES[number];

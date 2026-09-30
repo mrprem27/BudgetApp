@@ -56,6 +56,10 @@ export const PERSONAL_ENTITIES: Record<string, EntitySpec> = {
     table: 'assets', money: true,
     columns: ['name', 'kind', 'icon', 'color', 'balance', 'is_archived', 'sort_order'],
   },
+  accounts: {
+    table: 'accounts', money: true,
+    columns: ['name', 'kind', 'opening_balance', 'credit_limit', 'due_day', 'is_default', 'is_archived', 'sort_order'],
+  },
   savings_goals: {
     table: 'savings_goals', money: true,
     columns: ['name', 'target', 'priority', 'category', 'icon', 'color', 'allocation', 'frequency',
@@ -85,6 +89,6 @@ export const PERSONAL_ENTITIES: Record<string, EntitySpec> = {
   imported_transactions: {
     table: 'imported_transactions', money: false,
     columns: ['date', 'amount', 'description', 'kind', 'category', 'direction', 'raw', 'source', 'pay_method',
-      'dest_group_id', 'split_draft', 'counterparty_id', 'latitude', 'longitude', 'place_label'],
+      'account_id', 'dest_group_id', 'split_draft', 'counterparty_id', 'latitude', 'longitude', 'place_label'],
   },
 };

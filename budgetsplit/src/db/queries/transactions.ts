@@ -4,6 +4,7 @@ import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
 
 import { logAudit } from './audit';
+import { alignAccount } from './accountSql';
 import { NOT_AWAITING_APPROVAL, AWAITING_APPROVAL_COL } from './approvalSql';
 import { RULE_IN_LIVE_GROUP } from './memberSql';
 import { settlementView } from '../../lib/settlementView';
@@ -51,6 +52,12 @@ export type Txn = {
   lng: number | null;
   place_label: string | null;
   pay_method: PayMethod | null;
+  /**
+   * Which of my named accounts it moved through (`U-68`). Always an account of the kind
+   * `pay_method` names, or NULL when `pay_method` is Other/unset: `alignAccount` holds that
+   * after every write, so the two can never disagree.
+   */
+  account_id: string | null;
   /**
    * The named asset a transfer moved money into or out of. NULL on every other
    * row — which is every row that existed before the asset register.
@@ -383,6 +390,7 @@ export async function insertTxnRows(
         now, now,
       ],
     );
+    await alignAccount(db, 'txn', id);
     for (const p of input.payments) {
       await db.runAsync(
         'INSERT INTO txn_payment (txn_id, person_id, amount) VALUES (?, ?, ?)',
@@ -515,6 +523,7 @@ export async function insertItemizedTxn(
         input.payMethod ?? null, input.currency ?? null, input.source ?? null, now, now,
       ],
     );
+    await alignAccount(db, 'txn', id);
     // Its own INSERT INTO txn — this function deliberately does NOT reuse
     // `insertTxnRows`, so the queue call there does not cover it. Missing this is
     // how every itemized bill would have gone unsynced with nothing to show for it.
@@ -608,6 +617,7 @@ export async function updateItemizedTxn(
         input.date, input.payMethod ?? null, input.currency ?? null, now, id,
       ],
     );
+    await alignAccount(db, 'txn', id);
     await queueEntry(db, id);
     await db.runAsync('DELETE FROM line_item WHERE txn_id=?', [id]);
     await db.runAsync('DELETE FROM txn_payment WHERE txn_id=?', [id]);
@@ -1037,6 +1047,7 @@ export async function updateTxn(
       `UPDATE txn SET group_id=?, kind=?, date=?, category=?, note=?, pay_method=?, tags=?, updated_at=? WHERE id=?`,
       [input.groupId, input.kind, input.date, input.category, input.note ?? null, input.payMethod ?? null, serializeTags(input.tags ?? []), now, id],
     );
+    await alignAccount(db, 'txn', id);
     if (input.attachmentUri !== undefined) {
       await db.runAsync('UPDATE txn SET attachment_uri=? WHERE id=?', [input.attachmentUri, id]);
     }
@@ -1124,6 +1135,7 @@ export async function setSourceForUnsetEntries(
     const now = Date.now();
     for (const r of rows) {
       await db.runAsync('UPDATE txn SET pay_method = ?, updated_at = ? WHERE id = ?', [method, now, r.id]);
+      await alignAccount(db, 'txn', r.id);
       await queueEntry(db, r.id);
     }
     n = rows.length;

@@ -1,3 +1,4 @@
+import { alignAccount } from './accountSql';
 import type * as SQLite from 'expo-sqlite';
 import { softDeleteTxn, restoreTxn } from './transactions';
 import { logAudit } from './audit';
@@ -160,6 +161,7 @@ export async function approveTxn(
     // the decision; this makes the ledger act on it without a second read path.
     if (landedPayMethod) {
       await db.runAsync('UPDATE txn SET pay_method = ?, updated_at = ? WHERE id = ?', [landedPayMethod, now, txnId]);
+      await alignAccount(db, 'txn', txnId);
     }
     /*
      * The decision, not just the entry (F21).

@@ -222,6 +222,27 @@ CREATE TABLE IF NOT EXISTS asset (
   updated_at   INTEGER NOT NULL
 );
 
+-- Where money is held or borrowed from (DQ-109, U-68): a bank account (as many as you have,
+-- named), cash, a wallet, a credit card. Every transaction points at the account it came from
+-- (txn.account_id). The four defaults have fixed ids ('default:bank' …) so the same account is
+-- one row on every device; accounts you add are uuids. pay_method on a transaction stays the
+-- account's KIND, which is what the money math and the server's CHECK read.
+CREATE TABLE IF NOT EXISTS account (
+  id              TEXT PRIMARY KEY,
+  name            TEXT NOT NULL,
+  kind            TEXT NOT NULL CHECK(kind IN ('bank','cash','wallet','card')),
+  -- Paise. The starting balance the account's movement is added to; may be negative (overdrawn).
+  opening_balance INTEGER NOT NULL DEFAULT 0,
+  -- Credit cards only.
+  credit_limit    INTEGER,
+  due_day         INTEGER,
+  is_default      INTEGER NOT NULL DEFAULT 0,
+  is_archived     INTEGER NOT NULL DEFAULT 0,
+  sort_order      INTEGER NOT NULL DEFAULT 0,
+  created_at      INTEGER NOT NULL,
+  updated_at      INTEGER NOT NULL
+);
+
 -- Savings Goals / Bucket List. Kept entirely separate from budgets: money lives
 -- in the Savings Pool and is earmarked to goals; it never inflates a budget.
 CREATE TABLE IF NOT EXISTS savings_goal (
@@ -660,6 +681,9 @@ export const COLUMN_MIGRATIONS = [
   // status; this lets the members list say "Invited" instead of passing them off
   // as in. 0 is right for every existing row: v1 had no invitations.
   "ALTER TABLE group_member ADD COLUMN invited INTEGER NOT NULL DEFAULT 0",
+  // U-68: every transaction and import points at its account (`account` table).
+  "ALTER TABLE txn ADD COLUMN account_id TEXT",
+  "ALTER TABLE pending_txn ADD COLUMN account_id TEXT",
 ];
 
 /**
@@ -874,6 +898,22 @@ export const LAUNCH_INVARIANTS: string[] = [
      WHERE deleted_at IS NULL
        AND role <> 'admin'
        AND person_id = (SELECT created_by FROM budget_group WHERE id = group_member.group_id)`,
+  /*
+   * `U-68`: the four default accounts, and every entry of mine pointed at the one its Paid from
+   * names. An INVARIANT for the reason the asset conversion above is one: a restore empties
+   * `account` but keeps this device's `fix_%` markers, so a keyed fix would never seed it again.
+   * Each statement is idempotent on its own (INSERT OR IGNORE; only NULL ids are filled), so no
+   * BEGIN is needed. A peer's entry is left alone: their accounts are not mine to name.
+   */
+  `INSERT OR IGNORE INTO account (id, name, kind, is_default, sort_order, created_at, updated_at) VALUES
+     ('default:bank', 'Bank', 'bank', 1, 0, 0, 0),
+     ('default:cash', 'Cash', 'cash', 1, 1, 0, 0),
+     ('default:wallet', 'Wallet', 'wallet', 1, 2, 0, 0),
+     ('default:card', 'Credit card', 'card', 1, 3, 0, 0)`,
+  `UPDATE txn SET account_id = 'default:' || pay_method
+     WHERE account_id IS NULL AND author_person_id IS NULL AND pay_method IN ('bank','cash','wallet','card')`,
+  `UPDATE pending_txn SET account_id = 'default:' || pay_method
+     WHERE account_id IS NULL AND pay_method IN ('bank','cash','wallet','card')`,
 ];
 
 /** Run {@link LAUNCH_INVARIANTS}. Engine-agnostic, like `applyOneTimeFixes`. */
@@ -1225,7 +1265,7 @@ export async function openDB(): Promise<SQLite.SQLiteDatabase> {
       // SCHEMA above.
       const cols = 'id,group_id,kind,entry_mode,date,category,note,attachment_uri,tags,adjustments,'
         + 'recur_freq,recur_interval,recur_end,recur_override_date,parent_recur_id,recur_state,'
-        + 'recur_paused_at,recur_mode,tz,lat,lng,place_label,pay_method,currency,source,asset_id,author_person_id,'
+        + 'recur_paused_at,recur_mode,tz,lat,lng,place_label,pay_method,account_id,currency,source,asset_id,author_person_id,'
         + 'sync_version,is_deleted,created_at,updated_at';
       await rebuildTable(db, 'txn_new', `
         CREATE TABLE txn_new (
@@ -1252,6 +1292,7 @@ export async function openDB(): Promise<SQLite.SQLiteDatabase> {
           lng            REAL,
           place_label    TEXT,
           pay_method     TEXT,
+          account_id     TEXT,
           currency       TEXT,
           source         TEXT,
           asset_id       TEXT,

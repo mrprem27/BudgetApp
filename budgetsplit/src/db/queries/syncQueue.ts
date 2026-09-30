@@ -18,7 +18,7 @@ import type * as SQLite from 'expo-sqlite';
 /** Local tables whose rows travel. Each maps to server rows in `lib/sync/rowMap`. */
 export type QueueTable =
   | 'person' | 'person_group_trust' | 'budget_group' | 'group_member' | 'txn'
-  | 'category' | 'category_budget' | 'asset' | 'savings_goal' | 'savings_txn' | 'pending_txn' | 'settings'
+  | 'category' | 'category_budget' | 'asset' | 'account' | 'savings_goal' | 'savings_txn' | 'pending_txn' | 'settings'
   /** My answer to an invitation: no local row exists until I'm in, so it travels as its snapshot. */
   | 'group_invite'
   /**

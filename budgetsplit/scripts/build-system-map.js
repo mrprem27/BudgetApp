@@ -310,7 +310,7 @@ const AREAS = [
   {
     key: 'savings', name: 'Savings and assets',
     blurb: 'Money set aside and things you own. Buying gold or funding an SIP is a transfer, not an expense: the cash moved, nothing was consumed, and net worth must not change.',
-    ent: ['E-11','E-14','E-15','E-16','E-54','E-62'],
+    ent: ['E-11','E-14','E-93','E-15','E-16','E-54','E-62'],
     fl:  ['FL-10','FL-33','FL-34','FL-35','FL-36','FL-37','FL-45'],
     sc:  ['SC-05','SC-17','SC-42','SC-46'],
     fe:  ['FE-27','FE-28','FE-29','FE-30','FE-31'],
@@ -389,7 +389,7 @@ const FRIENDLY = {
   'E-01': 'people', 'E-02': 'groups', 'E-03': 'membership', 'E-04': 'transactions',
   'E-05': 'skipped dates', 'E-06': 'who paid', 'E-07': 'who owes', 'E-08': 'bill lines',
   'E-09': 'categories', 'E-10': 'deleted-category markers', 'E-11': 'stored settings',
-  'E-12': 'budget lines', 'E-13': 'the history log', 'E-14': 'assets', 'E-15': 'goals',
+  'E-12': 'budget lines', 'E-13': 'the history log', 'E-14': 'assets', 'E-93': 'accounts', 'E-15': 'goals',
   'E-16': 'goal movements', 'E-17': 'the review inbox', 'E-18a': 'the send queue', 'E-18b': 'confirmed versions',
   'E-19': 'invites', 'E-20': 'approvals', 'E-21': 'per-group trust', 'E-22': 'disputes',
   'E-50': 'balances', 'E-51': 'what you owe and are owed', 'E-52': 'the settle-up plan',
