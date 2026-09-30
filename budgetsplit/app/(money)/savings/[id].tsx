@@ -25,6 +25,7 @@ import { PRIORITY, PRIORITY_LABEL } from '../../../src/constants/enums';
 import type { SavingsTxn, SavingsFrequency, Priority } from '../../../src/db/queries/savings';
 import { AppRefreshControl } from '../../../src/components/ui/AppRefreshControl';
 import { useSavingsGoalScreen } from '../../../src/hooks/useSavingsGoalScreen';
+import { backOr } from '../../../src/lib/nav';
 
 // Order matches funding/raid weight: Emergency funds first & is never raided;
 // Want funds last & is raided first. See src/lib/savingsEngine.ts.
@@ -80,7 +81,7 @@ export default function GoalDetailScreen() {
   if (error) {
     return (
       <View style={styles.container}>
-        <ScreenHeader title="Goal" onBack={() => router.back()} />
+        <ScreenHeader title="Goal" onBack={() => backOr(router, '/(tabs)')} />
         <ErrorState onRetry={reload} />
       </View>
     );
@@ -89,7 +90,7 @@ export default function GoalDetailScreen() {
   if (loading) {
     return (
       <View style={styles.container}>
-        <ScreenHeader title="Goal" onBack={() => router.back()} />
+        <ScreenHeader title="Goal" onBack={() => backOr(router, '/(tabs)')} />
         <View style={styles.scroll}>
           <SkeletonCard height={180} />
           <SkeletonCard height={120} />
@@ -103,7 +104,7 @@ export default function GoalDetailScreen() {
   if (goal == null) {
     return (
       <View style={styles.container}>
-        <ScreenHeader title="Goal" onBack={() => router.back()} />
+        <ScreenHeader title="Goal" onBack={() => backOr(router, '/(tabs)')} />
         <EmptyState icon="target" title="Goal not found" body="This savings goal may have been deleted." tint={colors.textSecondary} fill />
       </View>
     );
@@ -121,7 +122,7 @@ export default function GoalDetailScreen() {
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title={goal.name} onBack={() => router.back()} />
+      <ScreenHeader title={goal.name} onBack={() => backOr(router, '/(tabs)')} />
       <ScrollView contentContainerStyle={styles.scroll} refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
         {/* Hero — progress ring + amounts */}
         <Card style={styles.heroCard}>

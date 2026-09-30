@@ -2,7 +2,7 @@
 
 `Last verified: 2026-09-30 (§0, §1, §9–§11 and every row whose status changed; the rest as of 2026-09-07) · Guarded by: trackerIntegrity.test.ts · countClaims.test.ts · docIdGraph.test.ts`
 
-**279 items, 104 of them still open.** One row each: what it is, and where it stands.
+**279 items, 96 of them still open.** One row each: what it is, and where it stands.
 Nothing else. **This is the V1 tracker** — start at §0.
 
 **The evidence is not here.** Why each item exists, what it costs, what breaks if you touch it, and
@@ -22,14 +22,14 @@ is defined in two places.
 | Section | Open | Total |
 |---|---|---|
 | §1 · Ship blockers | **12** | 19 |
-| §2 · Complexity — `OV-` | **11** | 34 |
-| §3 · Decisions — `DQ-` | **39** | 64 |
+| §2 · Complexity — `OV-` | **10** | 34 |
+| §3 · Decisions — `DQ-` | **36** | 64 |
 | §4 · Walk 1 — `W1-` | **12** | 39 |
 | §5 · Sync — `SYNC-F` | **0** | 24 |
-| §6 · Debt — `D-` | **10** | 11 |
-| §7 · Accepted — `A-` | **2** | 11 |
+| §6 · Debt — `D-` | **8** | 11 |
+| §7 · Accepted — `A-` | **1** | 11 |
 | §9 · Deferred from V1 — `V-` | **7** | 7 |
-| §11 · Open from the last pass, and your feedback — `U-` | **11** | 70 |
+| §11 · Open from the last pass, and your feedback — `U-` | **10** | 70 |
 
 §8 (parked scope) and §10 (built but easy to forget) carry no ids.
 
@@ -55,7 +55,7 @@ here, one tested commit per step. Phase 5 is what only you can do.
      second and syncs; push notifications for a closed app wait on Apple (`DQ-80`).
    - 2b Nightly cleanup **done 2026-09-30**; posting repeat entries and queued email wait on Workers
      Paid (`DQ-105`, `DQ-107`, now `BLOCKED` on `DQ-95`).
-   - 2c **Done 2026-09-30** (`DQ-104`): `/v1` reads for groups, a group's ledger and balances.
+   - 2c **Done 2026-09-30** (`DQ-104`): the server's read API (v1) for groups, a group's ledger and balances.
 3. **Screens** — split by items tidied (`U-69`), spacing and alignment (`U-20`, `W1-28`, `W1-29`,
    `W1-32`), composed screens (`U-16`), sorting (`U-31`), Friends names (`U-09`), the transaction
    row shows Paid from (`DQ-18` / `D-05`), transfer detail chips (`DQ-13` / `D-06`), one collapsible
@@ -99,13 +99,12 @@ otherwise, except the business and legal ones in phase 5. `PARKED` rows keep the
 ---
 ## §2 · Complexity and overlap — `OV-`
 
-**34 items: 2 `OPEN`, 3 `DECIDE`, 6 `PARKED`, 23 `DONE`.** Duplications, overloads and phantoms, each with a verdict. `FINDINGS.md` §2 carries the count, the blast radius and the risk for each.
+**34 items: 2 `OPEN`, 2 `DECIDE`, 6 `PARKED`, 24 `DONE`.** Duplications, overloads and phantoms, each with a verdict. `FINDINGS.md` §2 carries the count, the blast radius and the risk for each.
 
 | | What | Status |
 |---|---|---|
 | `OV-05` | Person, friend, member, roster member, contact | `OPEN` |
 | `OV-22` | Six vocabularies over daily/weekly/monthly/yearly | `OPEN` |
-| `OV-10` | backOr is used in 8 of 46 route files | `DECIDE` |
 | `OV-14` | E-50 is recomputed on every read, with no memo boundary | `DECIDE` |
 | `OV-15` | /personal is a stack route pretending to be a tab | `DECIDE` |
 | `OV-19` | category_budget.period AND .cadence | `PARKED` |
@@ -115,12 +114,12 @@ otherwise, except the business and legal ones in phase 5. `PARKED` rows keep the
 | `OV-17` | The tab bar owns sync, alerts, reconciliation and snapshots | `PARKED` |
 | `OV-24` | SC-19 owns twelve sheet states | `PARKED` |
 
-**Closed (23), detail in `FINDINGS.md`:** `OV-27` `OV-12` `OV-09` `OV-25` `OV-28` `OV-29` `OV-30` `OV-31` `OV-32` `OV-33` `OV-34` `OV-26` `OV-03` `OV-13` `OV-21` `OV-16` `OV-18` `OV-20` `OV-11` `OV-04` `OV-01` `OV-06` `OV-23`
+**Closed (24), detail in `FINDINGS.md`:** `OV-27` `OV-12` `OV-09` `OV-25` `OV-28` `OV-29` `OV-30` `OV-31` `OV-32` `OV-33` `OV-34` `OV-26` `OV-03` `OV-13` `OV-21` `OV-16` `OV-18` `OV-20` `OV-11` `OV-04` `OV-01` `OV-06` `OV-23` `OV-10`
 
 ---
 ## §3 · Open decisions — `DQ-`
 
-**64 items: 30 `DECIDE`, 9 `BLOCKED`, 25 `DONE`.** A `DQ-` is a question only you can answer, so every unanswered one is `DECIDE` by definition. The default column is what ships if you never decide.
+**64 items: 27 `DECIDE`, 9 `BLOCKED`, 28 `DONE`.** A `DQ-` is a question only you can answer, so every unanswered one is `DECIDE` by definition. The default column is what ships if you never decide.
 
 | | What | Status | Default if never decided |
 |---|---|---|---|
@@ -134,11 +133,8 @@ otherwise, except the business and legal ones in phase 5. `PARKED` rows keep the
 | `DQ-09` | CRED's `mode` vs `tr` | `DECIDE` | Both stay off |
 | `DQ-10` | Amazon Pay and WhatsApp were tested against the same `@kotak` handle | `DECIDE` | Recorded as "refused" on possibly-wrong evidence |
 | `DQ-11` | Android UPI is entirely untested | `DECIDE` | The whole feature silently does nothing on Android |
-| `DQ-12` | Three red surfaces can stack on one Home open | `DECIDE` | Three at once |
 | `DQ-13` | Transfer has no `DetailChips` | `DECIDE` | Two note fields |
 | `DQ-15` | The sweep's source-asset round trip | `DECIDE` | The sweep works; where the money came from is approximate |
-| `DQ-17` | `help.tsx` is a third collapsible pattern | `DECIDE` | Three patterns |
-| `DQ-18` | `TransactionRow` never displays pay method | `DECIDE` | Not shown |
 | `DQ-19` | `PRAGMA foreign_keys` is OFF | `DECIDE` | Off |
 | `DQ-20` | Voice auto-save has no off switch | `DECIDE` | No switch |
 | `DQ-21` | `DEV_TOOLS_ENABLED = true` | `DECIDE` | It stays true and the guard keeps complaining, which is… |
@@ -164,7 +160,7 @@ otherwise, except the business and legal ones in phase 5. `PARKED` rows keep the
 | `DQ-85` | R2 object storage | `BLOCKED` | A Cloudflare dashboard opt-in that asks for a card |
 | `DQ-86` | Cloudflare Email Sending | `BLOCKED` | Workers Paid $5/mo + an owned domain |
 
-**Closed (25), detail in `FINDINGS.md`:** `DQ-110` `DQ-14` `DQ-07` `DQ-22` `DQ-26` `DQ-28` `DQ-31` `DQ-32` `DQ-88` `DQ-89` `DQ-91` `DQ-93` `DQ-94` `DQ-97` `DQ-98` `DQ-99` `DQ-100` `DQ-101` `DQ-102` `DQ-103` `DQ-109` `DQ-106` `DQ-16` `DQ-108` `DQ-104`
+**Closed (28), detail in `FINDINGS.md`:** `DQ-110` `DQ-14` `DQ-07` `DQ-22` `DQ-26` `DQ-28` `DQ-31` `DQ-32` `DQ-88` `DQ-89` `DQ-91` `DQ-93` `DQ-94` `DQ-97` `DQ-98` `DQ-99` `DQ-100` `DQ-101` `DQ-102` `DQ-103` `DQ-109` `DQ-106` `DQ-16` `DQ-108` `DQ-104` `DQ-12` `DQ-17` `DQ-18`
 
 ---
 ## §4 · Walk 1 — `W1-`
@@ -201,34 +197,31 @@ otherwise, except the business and legal ones in phase 5. `PARKED` rows keep the
 ---
 ## §6 · Open debt — `D-`
 
-**11 items: 4 `OPEN`, 2 `DECIDE`, 4 `PARKED`, 1 `DONE`.** Real, evidenced, not blocking the pilot. **Verify a bullet against the tree before acting on it, and delete it the moment it lands.**
+**11 items: 3 `OPEN`, 1 `DECIDE`, 4 `PARKED`, 3 `DONE`.** Real, evidenced, not blocking the pilot. **Verify a bullet against the tree before acting on it, and delete it the moment it lands.**
 
 | | What | Status |
 |---|---|---|
 | `D-01` | CRED's `mode` vs `tr` was never isolated | `OPEN` |
 | `D-02` | Amazon Pay and WhatsApp were both tested against the same `@kotak` handle | `OPEN` |
 | `D-03` | Android UPI is entirely untested | `OPEN` |
-| `D-04` | `help.tsx` is a third collapsible | `OPEN` |
-| `D-05` | `TransactionRow` never displays pay method | `DECIDE` |
 | `D-06` | Transfer has no `DetailChips` | `DECIDE` |
 | `D-07` | `budget_group.limit_daily/monthly/yearly` still exist as columns | `PARKED` |
 | `D-08` | The sweep has to know *where from*, and give it back to the same place | `PARKED` |
 | `D-09` | Named accounts as entities | `PARKED` |
 | `D-12` | Import restructure (remainder) | `PARKED` |
 
-**Closed (1), detail in `FINDINGS.md`:** `D-10`
+**Closed (3), detail in `FINDINGS.md`:** `D-10` `D-04` `D-05`
 
 ---
 ## §7 · Known and accepted — `A-`
 
-**11 items: 2 `PARKED`, 9 `DONE`.** Recorded so nobody re-discovers them as bugs. These are decisions, not neglect — `DONE` here means the decision is made, not that the behaviour changed.
+**11 items: 1 `PARKED`, 10 `DONE`.** Recorded so nobody re-discovers them as bugs. These are decisions, not neglect — `DONE` here means the decision is made, not that the behaviour changed.
 
 | | What | Status |
 |---|---|---|
-| `A-01` | Three red surfaces stack on every Home open | `PARKED` |
 | `A-11` | `expo-file-system` legacy API | `PARKED` |
 
-**Closed (9), detail in `FINDINGS.md`:** `A-02` `A-03` `A-04` `A-05` `A-06` `A-07` `A-08` `A-09` `A-10`
+**Closed (10), detail in `FINDINGS.md`:** `A-02` `A-03` `A-04` `A-05` `A-06` `A-07` `A-08` `A-09` `A-10` `A-01`
 
 ---
 ## §8 · Parked with no id
@@ -304,7 +297,7 @@ testing or describing the app. Where one needs action, the id says where.
 ---
 ## §11 · Open from the last pass, and your feedback — `U-`
 
-**70 items: 9 `OPEN`, 1 `BLOCKED`, 1 `PARKED`, 59 `DONE`.** From the 2026-09-30 pass (`SPEC-BUGSCAN.md` Pass 2) and your answers and feedback the same night. Evidence in `FINDINGS.md` §11.
+**70 items: 8 `OPEN`, 1 `BLOCKED`, 1 `PARKED`, 60 `DONE`.** From the 2026-09-30 pass (`SPEC-BUGSCAN.md` Pass 2) and your answers and feedback the same night. Evidence in `FINDINGS.md` §11.
 
 | | What | Status | Default if never decided |
 |---|---|---|---|
@@ -318,6 +311,5 @@ testing or describing the app. Where one needs action, the id says where.
 | `U-24` | Product analytics (Mixpanel): built, with an opt-out; needs your project token | `BLOCKED` |  |
 | `U-68` | Named accounts: built (balances, Accounts screen, Paid from picks one); waits on the phone check | `OPEN` |  |
 | `U-69` | Split by items stays its own screen, tidied: input structure, copy, spacing, alignment and a proper grid | `OPEN` |  |
-| `U-31` | Sorting is not right — which lists? (the money card now orders largest first) | `OPEN` |  |
 
-**Closed (59), detail in `FINDINGS.md`:** `U-01` `U-03` `U-04` `U-05` `U-06` `U-11` `U-12` `U-17` `U-21` `U-14` `U-25` `U-26` `U-27` `U-28` `U-29` `U-30` `U-32` `U-15` `U-33` `U-35` `U-36` `U-37` `U-34` `U-38` `U-39` `U-40` `U-41` `U-42` `U-43` `U-13` `U-44` `U-45` `U-46` `U-22` `U-23` `U-07` `U-08` `U-47` `U-48` `U-49` `U-50` `U-51` `U-52` `U-53` `U-54` `U-55` `U-56` `U-57` `U-58` `U-59` `U-60` `U-61` `U-62` `U-63` `U-64` `U-65` `U-66` `U-67` `U-70`
+**Closed (60), detail in `FINDINGS.md`:** `U-01` `U-03` `U-04` `U-05` `U-06` `U-11` `U-12` `U-17` `U-21` `U-14` `U-25` `U-26` `U-27` `U-28` `U-29` `U-30` `U-32` `U-15` `U-33` `U-35` `U-36` `U-37` `U-34` `U-38` `U-39` `U-40` `U-41` `U-42` `U-43` `U-13` `U-44` `U-45` `U-46` `U-22` `U-23` `U-07` `U-08` `U-47` `U-48` `U-49` `U-50` `U-51` `U-52` `U-53` `U-54` `U-55` `U-56` `U-57` `U-58` `U-59` `U-60` `U-61` `U-62` `U-63` `U-64` `U-65` `U-66` `U-67` `U-70` `U-31`

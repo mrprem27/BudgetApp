@@ -16,6 +16,7 @@ import { oweView } from '../../src/lib/owe';
 import { canRemind } from '../../src/lib/whatsappReminder';
 import { useReminder } from '../../src/hooks/useReminder';
 import { Card } from '../../src/components/ui/Card';
+import { backOr } from '../../src/lib/nav';
 
 
 export default function UpcomingScreen() {
@@ -30,7 +31,7 @@ export default function UpcomingScreen() {
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Upcoming" onBack={() => router.back()} />
+      <ScreenHeader title="Upcoming" onBack={() => backOr(router, '/(tabs)')} />
       {error ? (
         <ErrorState onRetry={reload} />
       ) : (

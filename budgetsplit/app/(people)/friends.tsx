@@ -24,6 +24,7 @@ import { useStore } from '../../src/store';
 import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
 import { PersonNameSheet } from '../../src/components/finance/PersonNameSheet';
 import { Card } from '../../src/components/ui/Card';
+import { backOr } from '../../src/lib/nav';
 
 export default function FriendsScreen() {
   const db = useSQLiteContext();
@@ -193,7 +194,7 @@ export default function FriendsScreen() {
     <View style={styles.container}>
       <ScreenHeader
         title="Friends"
-        onBack={() => router.back()}
+        onBack={() => backOr(router, '/(tabs)')}
         right={
           <HeaderIconButton icon="user-plus" label="Add person" onPress={() => { setAddName(''); setShowAdd(true); }} />
         }

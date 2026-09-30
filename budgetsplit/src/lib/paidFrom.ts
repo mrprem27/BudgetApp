@@ -30,3 +30,17 @@ export function accountName(accounts: readonly AccountChoice[], kind: PayMethod,
   const id = chosenAccountId(accounts, kind, accountId);
   return accounts.find(a => a.id === id)?.name ?? PAY_METHOD_LABEL[kind];
 }
+
+/**
+ * What a transaction row says about where its money came from (`DQ-18`): the account's name for
+ * my own entries, the kind for someone else's (their accounts are not mine to name). Nothing for
+ * "Other" or unset, which would only be noise on every row.
+ */
+export function rowPaidFrom(
+  accounts: readonly AccountChoice[],
+  t: { pay_method?: string | null; account_id?: string | null; author_person_id?: string | null },
+): string | null {
+  const kind = t.pay_method as PayMethod | null | undefined;
+  if (!kind || !(kind in PAY_METHOD_LABEL) || kind === 'other') return null;
+  return t.author_person_id ? PAY_METHOD_LABEL[kind] : accountName(accounts, kind, t.account_id);
+}

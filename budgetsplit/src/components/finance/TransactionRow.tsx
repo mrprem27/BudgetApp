@@ -14,6 +14,8 @@ import { settlementView } from '../../lib/settlementView';
 import { categoryVisual } from '../../constants/categories';
 import type { TxnWithSplits } from '../../db/queries/transactions';
 import type { Person } from '../../db/queries/persons';
+import { useStore } from '../../store';
+import { rowPaidFrom } from '../../lib/paidFrom';
 
 type Props = {
   txn: TxnWithSplits;
@@ -63,6 +65,7 @@ export const TransactionRow = React.memo(function TransactionRow({
   txn, myId, onPress, onDelete, showDate = false, members, isPersonal, groupName, highlight,
   assetNames, assetSide,
 }: Props) {
+  const accounts = useStore(s => s.accounts);
   const myShare = myShareOf(txn, myId);
   const personOf = (pid?: string) => members?.find(m => m.id === pid);
   const nameOf = (pid?: string) => personOf(pid)?.name ?? 'Someone';
@@ -149,7 +152,10 @@ export const TransactionRow = React.memo(function TransactionRow({
   // rather than the bare category "Investment", which said neither what happened
   // nor where the money went. With no note it becomes the primary, so the row
   // still names itself.
-  const { primary: primaryText, secondary: secondaryText } = rowText({ settlementTitle, note: txn.note, settleLine, category: txn.category });
+  const { primary: primaryText, secondary: rowSecondary } = rowText({ settlementTitle, note: txn.note, settleLine, category: txn.category });
+  // Where the money came from, on every row (`DQ-18`): "Food · HDFC".
+  const paidFrom = rowPaidFrom(accounts, txn);
+  const secondaryText = [rowSecondary, paidFrom].filter(Boolean).join(' · ') || null;
 
   return (
     <PressableScale
@@ -184,7 +190,7 @@ export const TransactionRow = React.memo(function TransactionRow({
           )}
         </View>
 
-        {/* Secondary line: category (only when note is primary) */}
+        {/* Secondary line: the category when the note is primary, then where the money came from */}
         {secondaryText ? (
           <Text style={styles.secondary} numberOfLines={1}>{secondaryText}</Text>
         ) : null}

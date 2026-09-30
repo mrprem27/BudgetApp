@@ -19,6 +19,7 @@ import { OptionRow } from '../../src/components/ui/OptionRow';
 import { applyPersona, asIntent, PERSONA_OPTIONS, type OnboardingIntent } from '../../src/lib/personaDefaults';
 import { haptic } from '../../src/lib/haptics';
 import { Card } from '../../src/components/ui/Card';
+import { backOr } from '../../src/lib/nav';
 
 // The pillar is always on — the app's reason to exist. It shows a "Core" badge
 // instead of a toggle so users understand they can't switch off the basics.
@@ -276,7 +277,7 @@ export default function FeaturesScreen() {
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Feature Management" onBack={() => router.back()} />
+      <ScreenHeader title="Feature Management" onBack={() => backOr(router, '/(tabs)')} />
       <ScrollView contentContainerStyle={styles.scroll}>
         {/* This used to read "Off by default keeps the app clean", which stopped
             being true when the flags were reworked: everything except the streak

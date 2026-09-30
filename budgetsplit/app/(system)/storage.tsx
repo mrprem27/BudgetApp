@@ -23,6 +23,7 @@ import { applyPersona, asIntent } from '../../src/lib/personaDefaults';
 import { settings } from '../../src/lib/settings';
 import { haptic } from '../../src/lib/haptics';
 import { IconCircle } from '../../src/components/ui/IconCircle';
+import { backOr } from '../../src/lib/nav';
 
 export default function StorageScreen() {
   const db = useSQLiteContext();
@@ -36,7 +37,7 @@ export default function StorageScreen() {
   // dataset (loadDemoPersona/resetToEmpty below), so a stray deep link or old muscle
   // memory must not reach it once the gate closes either.
   useFocusEffect(useCallback(() => {
-    if (!DEV_TOOLS_ENABLED) router.back();
+    if (!DEV_TOOLS_ENABLED) backOr(router, '/(tabs)');
   }, [router]));
 
   // Refetch on focus (via useScreenData) so the stored-attachment stats reflect
@@ -132,7 +133,7 @@ export default function StorageScreen() {
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Developer tools" onBack={() => router.back()} />
+      <ScreenHeader title="Developer tools" onBack={() => backOr(router, '/(tabs)')} />
       <ScrollView contentContainerStyle={styles.content}>
         {/*
           Named, not hidden. This screen is deliberately reachable in pilot builds,

@@ -28,6 +28,7 @@ import { ConflictCard } from '../../../src/components/finance/txn/ConflictCard';
 import { HistoryList } from '../../../src/components/finance/txn/HistoryList';
 import { refusalText } from '../../../src/lib/txnHistory';
 import { Card } from '../../../src/components/ui/Card';
+import { backOr } from '../../../src/lib/nav';
 
 
 export default function TxnDetailScreen() {
@@ -52,14 +53,14 @@ export default function TxnDetailScreen() {
   useEffect(() => { setAttachmentMissing(false); }, [txn?.attachment_uri]);
 
   // No id → nothing to show; bounce back (kept as an effect so hooks above still run).
-  useEffect(() => { if (!id) router.back(); }, [id, router]);
+  useEffect(() => { if (!id) backOr(router, '/(tabs)'); }, [id, router]);
 
   if (!id) return null;
 
   if (error) {
     return (
       <View style={styles.container}>
-        <ScreenHeader title="Transaction" onBack={() => router.back()} />
+        <ScreenHeader title="Transaction" onBack={() => backOr(router, '/(tabs)')} />
         <ErrorState onRetry={reload} />
       </View>
     );
@@ -69,20 +70,20 @@ export default function TxnDetailScreen() {
   if (!loading && !error && txn == null) {
     return (
       <View style={styles.container}>
-        <ScreenHeader title="Transaction" onBack={() => router.back()} />
+        <ScreenHeader title="Transaction" onBack={() => backOr(router, '/(tabs)')} />
         <EmptyState
           icon="file-minus"
           title="Transaction not found"
           body="It may have been deleted or settled. It's no longer available to view."
           actionLabel="Go back"
-          onAction={() => router.back()}
+          onAction={() => backOr(router, '/(tabs)')}
           tint={colors.textSecondary}
           fill
         />
       </View>
     );
   }
-  if (!txn) return <View style={styles.container}><ScreenHeader title="Transaction" onBack={() => router.back()} /></View>;
+  if (!txn) return <View style={styles.container}><ScreenHeader title="Transaction" onBack={() => backOr(router, '/(tabs)')} /></View>;
 
   const nameOf = (pid: string) => members.find(m => m.id === pid)?.name ?? 'Someone';
   const imageOf = (pid: string) => members.find(m => m.id === pid)?.image_uri ?? null;
@@ -135,7 +136,7 @@ export default function TxnDetailScreen() {
     <View style={styles.container}>
       <ScreenHeader
         title="Transaction"
-        onBack={() => router.back()}
+        onBack={() => backOr(router, '/(tabs)')}
         right={canEdit ? (
           <HeaderIconButton icon="edit-2" label="Edit" onPress={() => router.push(editHref as never)} />
         ) : undefined}

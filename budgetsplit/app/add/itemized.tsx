@@ -27,6 +27,7 @@ import { haptic } from '../../src/lib/haptics';
 import { useItemizedForm, ITEMIZED_STEPS, ADJUSTMENT_LABELS } from '../../src/hooks/useItemizedForm';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 import { Card } from '../../src/components/ui/Card';
+import { backOr } from '../../src/lib/nav';
 
 /**
  * Itemized-bill wizard (items → assign → payers → review). All state and
@@ -46,7 +47,7 @@ export default function ItemizedScreen() {
   return (
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={10} accessibilityRole="button" accessibilityLabel="Close">
+        <TouchableOpacity onPress={() => backOr(router, '/(tabs)')} hitSlop={10} accessibilityRole="button" accessibilityLabel="Close">
           <Feather name="chevron-left" size={24} color={colors.accent} />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>

@@ -29,6 +29,7 @@ import { isAdmin, canRemoveMember, canChangeRole } from '../../../../src/lib/per
 import { Card } from '../../../../src/components/ui/Card';
 import { ListRow } from '../../../../src/components/ui/ListRow';
 import { Divider } from '../../../../src/components/ui/Divider';
+import { backOr } from '../../../../src/lib/nav';
 
 export default function MembersScreen() {
   const { id: groupId } = useLocalSearchParams<{ id: string }>();
@@ -53,7 +54,7 @@ export default function MembersScreen() {
   const roleOf = new Map((data?.roles ?? []).map(r => [r.person_id, r]));
   const mayManage = ctx ? isAdmin(ctx) : false;
 
-  useEffect(() => { if (!groupId) router.back(); }, [groupId]);
+  useEffect(() => { if (!groupId) backOr(router, '/(tabs)'); }, [groupId]);
   if (!groupId) return null;
 
 
@@ -191,7 +192,7 @@ export default function MembersScreen() {
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Members" onBack={() => router.back()} />
+      <ScreenHeader title="Members" onBack={() => backOr(router, '/(tabs)')} />
 
       {loadError ? (
         <ErrorState onRetry={reload} />

@@ -7,6 +7,7 @@ import { BudgetEditor } from '../../../../src/components/finance/budget/BudgetEd
 import { ScreenHeader } from '../../../../src/components/ui/ScreenHeader';
 import { SkeletonCard } from '../../../../src/components/ui/Skeleton';
 import { colors, space, layout } from '../../../../src/theme';
+import { backOr } from '../../../../src/lib/nav';
 
 /**
  * One group's budget — the admin's default and your own override of it.
@@ -44,7 +45,7 @@ export default function GroupBudgetScreen() {
   if (!id || isPersonal !== false) {
     return (
       <View style={styles.container}>
-        <ScreenHeader title="Budget" onBack={() => router.back()} />
+        <ScreenHeader title="Budget" onBack={() => backOr(router, '/(tabs)')} />
         <View style={styles.skeleton}>
           <SkeletonCard height={92} />
           <SkeletonCard height={64} />

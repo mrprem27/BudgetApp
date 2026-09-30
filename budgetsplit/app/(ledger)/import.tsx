@@ -20,6 +20,7 @@ import { haptic } from '../../src/lib/haptics';
 import { IconCircle } from '../../src/components/ui/IconCircle';
 import { TabPills } from '../../src/components/ui/TabPills';
 import { PressableScale } from '../../src/components/ui/PressableScale';
+import { backOr } from '../../src/lib/nav';
 
 const SAMPLE = '2026-06-01, Swiggy order, -450\n2026-06-02, Salary, 85000\n2026-06-03, Uber, -220';
 
@@ -163,7 +164,7 @@ export default function ImportScreen() {
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Import transactions" onBack={() => router.back()} />
+      <ScreenHeader title="Import transactions" onBack={() => backOr(router, '/(tabs)')} />
       <KeyboardForm contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + space.xl }]}>
           {/* One line, one way in at a time (`U-43`): this was a paragraph, then a file button,
               then a paste form with its own chips and hints, all on screen at once. */}

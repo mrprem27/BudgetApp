@@ -17,6 +17,7 @@ import { TimePickerSheet } from '../../../src/components/ui/TimePickerSheet';
 import { settings } from '../../../src/lib/settings';
 import { haptic } from '../../../src/lib/haptics';
 import { Card } from '../../../src/components/ui/Card';
+import { backOr } from '../../../src/lib/nav';
 
 type PermStatus = 'granted' | 'denied' | 'undetermined';
 
@@ -107,7 +108,7 @@ export default function NotificationsScreen() {
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Notifications & Reminders" onBack={() => router.back()} />
+      <ScreenHeader title="Notifications & Reminders" onBack={() => backOr(router, '/(tabs)')} />
       {loadError ? (
         <ErrorState
           title="Couldn't load reminder settings"

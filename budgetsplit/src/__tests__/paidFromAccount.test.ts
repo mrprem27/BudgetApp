@@ -1,4 +1,4 @@
-import { paidFromLabel, accountName, accountsToChoose } from '../lib/paidFrom';
+import { paidFromLabel, accountName, accountsToChoose, rowPaidFrom } from '../lib/paidFrom';
 import { PayMethod } from '../constants/enums';
 import { insertTxn, updateTxn } from '../db/queries/transactions';
 import { upsertAccount } from '../db/queries/accounts';
@@ -73,5 +73,16 @@ describe('an entry keeps the account it was paid from', () => {
       { ok: true, groupId: 'g', kind: 'expense', payer: 'me', total: 100, category: 'Food', payMethod: PayMethod.Bank, snap: {} as never, shares: [] } as never,
     );
     expect(input.accountId).toBe('hdfc');
+  });
+});
+
+describe('every row says where the money came from (DQ-18)', () => {
+  it('names my account, the kind for a friend\'s entry, and nothing for Other or unset', () => {
+    expect(rowPaidFrom(ACCOUNTS, { pay_method: 'bank', account_id: 'hdfc' })).toBe('HDFC');
+    expect(rowPaidFrom(ACCOUNTS, { pay_method: 'bank', account_id: null })).toBe('Bank');
+    expect(rowPaidFrom(ACCOUNTS, { pay_method: 'card', account_id: null })).toBe('Credit card');
+    expect(rowPaidFrom(ACCOUNTS, { pay_method: 'bank', account_id: null, author_person_id: 'riya' })).toBe('Bank');
+    expect(rowPaidFrom(ACCOUNTS, { pay_method: 'other' })).toBeNull();
+    expect(rowPaidFrom(ACCOUNTS, { pay_method: null })).toBeNull();
   });
 });

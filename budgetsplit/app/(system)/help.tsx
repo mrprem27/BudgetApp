@@ -7,7 +7,10 @@ import { decor } from '../../src/constants/palette';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { IconCircle } from '../../src/components/ui/IconCircle';
 import { helpBullets } from '../../src/lib/helpBullets';
-import { Card } from '../../src/components/ui/Card';
+import { SectionCard } from '../../src/components/ui/SectionCard';
+import { Divider } from '../../src/components/ui/Divider';
+import { Collapse } from '../../src/components/ui/anim/Collapse';
+import { backOr } from '../../src/lib/nav';
 
 type Item = { icon: keyof typeof Feather.glyphMap; color: string; title: string; body: string };
 type Section = { title: string; illustration: { icons: Array<{ name: keyof typeof Feather.glyphMap; bg: string; color: string }> }; items: Item[] };
@@ -249,54 +252,44 @@ export default function HelpScreen() {
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Help & Guide" onBack={() => router.back()} />
+      <ScreenHeader title="Help & Guide" onBack={() => backOr(router, '/(tabs)')} />
       <ScrollView contentContainerStyle={styles.scroll}>
+        {/* The app's one collapsible (`SectionCard`, `DQ-17`), not a third pattern of its own. */}
         {SECTIONS.map(section => {
+          const lead = section.illustration.icons[0];
           const isExpanded = openSection === section.title;
           return (
-            <View key={section.title}>
-              <TouchableOpacity
-                style={styles.sectionHeader}
-                onPress={() => setOpenSection(isExpanded ? null : section.title)}
-                accessibilityRole="button"
-                accessibilityLabel={section.title}
-                accessibilityState={{ expanded: isExpanded }}
-              >
-                <View style={styles.illustrationRow}>
-                  {section.illustration.icons.map((ic, i) => (
-                    <View key={i} style={[styles.illustrationDot, { backgroundColor: ic.bg }]}>
-                      <Feather name={ic.name} size={14} color={ic.color} />
+            <SectionCard
+              key={section.title}
+              title={section.title}
+              icon={lead.name}
+              iconColor={lead.color}
+              expanded={isExpanded}
+              onToggle={() => setOpenSection(isExpanded ? null : section.title)}
+            >
+              <View style={styles.items}>
+                {section.items.map((item, i) => {
+                  const isItemOpen = openItem === item.title;
+                  return (
+                    <View key={item.title}>
+                      {i > 0 && <Divider indent="text" />}
+                      <TouchableOpacity
+                        style={styles.row}
+                        onPress={() => setOpenItem(isItemOpen ? null : item.title)}
+                        accessibilityRole="button"
+                        accessibilityLabel={item.title}
+                        accessibilityState={{ expanded: isItemOpen }}
+                      >
+                        <IconCircle icon={item.icon} size={layout.iconCircle} color={item.color} />
+                        <Text style={styles.rowTitle}>{item.title}</Text>
+                        <Feather name={isItemOpen ? 'minus' : 'plus'} size={16} color={colors.textMuted} />
+                      </TouchableOpacity>
+                      <Collapse visible={isItemOpen}><HelpBody body={item.body} /></Collapse>
                     </View>
-                  ))}
-                </View>
-                <Text style={styles.sectionTitle}>{section.title}</Text>
-                <Feather name={isExpanded ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textMuted} />
-              </TouchableOpacity>
-
-              {isExpanded && (
-                <Card style={styles.card}>
-                  {section.items.map((item, i) => {
-                    const isItemOpen = openItem === item.title;
-                    return (
-                      <View key={item.title} style={[i < section.items.length - 1 && styles.rowBorder]}>
-                        <TouchableOpacity
-                          style={styles.row}
-                          onPress={() => setOpenItem(isItemOpen ? null : item.title)}
-                          accessibilityRole="button"
-                          accessibilityLabel={item.title}
-                          accessibilityState={{ expanded: isItemOpen }}
-                        >
-                          <IconCircle icon={item.icon} size={30} color={item.color} />
-                          <Text style={styles.rowTitle}>{item.title}</Text>
-                          <Feather name={isItemOpen ? 'minus' : 'plus'} size={16} color={colors.textMuted} />
-                        </TouchableOpacity>
-                        {isItemOpen && <HelpBody body={item.body} />}
-                      </View>
-                    );
-                  })}
-                </Card>
-              )}
-            </View>
+                  );
+                })}
+              </View>
+            </SectionCard>
           );
         })}
       </ScrollView>
@@ -306,17 +299,12 @@ export default function HelpScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  scroll: { padding: layout.screenPaddingH, gap: space.md, paddingBottom: space.lg },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.md, paddingHorizontal: space.xs },
-  illustrationRow: { flexDirection: 'row', marginRight: space.xs },
-  illustrationDot: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginRight: -6 },
-  sectionTitle: { ...type.subheading, color: colors.textPrimary, flex: 1 },
-  card: { paddingHorizontal: space.md },
-  rowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
-  row: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.smd },
+  scroll: { padding: layout.screenPaddingH, paddingBottom: space.lg },
+  items: { paddingHorizontal: space.md },
+  row: { flexDirection: 'row', alignItems: 'center', gap: space.smd, minHeight: layout.rowMinHeight },
   rowTitle: { ...type.body, color: colors.textPrimary, flex: 1 },
-  body: { ...type.body, color: colors.textSecondary, lineHeight: 22, paddingBottom: space.md, paddingLeft: 30 + space.sm },
-  bullets: { paddingBottom: space.md, paddingLeft: 30 + space.sm, gap: space.xs },
+  body: { ...type.body, color: colors.textSecondary, lineHeight: 22, paddingBottom: space.md, paddingLeft: layout.iconCircle + space.smd },
+  bullets: { paddingBottom: space.md, paddingLeft: layout.iconCircle + space.smd, gap: space.xs },
   bulletRow: { flexDirection: 'row', gap: space.sm },
   bulletDot: { ...type.body, color: colors.textMuted, lineHeight: 22 },
   bulletText: { ...type.body, color: colors.textSecondary, lineHeight: 22, flex: 1 },

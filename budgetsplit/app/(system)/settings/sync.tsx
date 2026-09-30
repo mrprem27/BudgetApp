@@ -10,6 +10,7 @@ import { serverConfigured } from '../../../src/lib/serverApi';
 import { useServerSession } from '../../../src/hooks/useServerSession';
 import { useSyncInvites } from '../../../src/hooks/useSyncInvites';
 import { SyncStatus } from '../../../src/components/system/SyncStatus';
+import { backOr } from '../../../src/lib/nav';
 
 /**
  * What syncing actually means for you — said plainly, in one place.
@@ -33,7 +34,7 @@ export default function SyncScreen() {
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Sync" onBack={() => router.back()} />
+      <ScreenHeader title="Sync" onBack={() => backOr(router, '/(tabs)')} />
       <ScrollView contentContainerStyle={styles.content}>
         {/* Where this phone's data stands (SPEC-SERVER.md §6.1). Draws nothing
             when signed out; the Banner below says what to do then. */}

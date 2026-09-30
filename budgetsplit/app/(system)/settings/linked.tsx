@@ -25,6 +25,7 @@ import {
   type ServerLink, type PendingClaim, type IncomingRequest,
 } from '../../../src/lib/serverApi';
 import { routeErrorBoundary } from '../../../src/components/system/AppErrorBoundary';
+import { backOr } from '../../../src/lib/nav';
 
 /**
  * Route-level, so a throw here replaces this screen's content and leaves the
@@ -226,7 +227,7 @@ export default function LinkedPeopleScreen() {
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Linked people" onBack={() => router.back()} />
+      <ScreenHeader title="Linked people" onBack={() => backOr(router, '/(tabs)')} />
       <ScrollView contentContainerStyle={styles.content}>
         {loading ? (
           <ActivityIndicator color={colors.accent} style={styles.loading} />

@@ -20,6 +20,7 @@ import { useContentInset } from '../../src/hooks/useContentInset';
 import { loadReportTransactions, reportTransactionRows, type ReportSort as SortKey } from '../../src/lib/reportsData';
 import { haptic } from '../../src/lib/haptics';
 import { AppRefreshControl } from '../../src/components/ui/AppRefreshControl';
+import { backOr } from '../../src/lib/nav';
 
 /**
  * All three kinds, because this is a **ledger** — a record of what happened — not an
@@ -112,7 +113,7 @@ export default function ReportTransactionsScreen() {
     <View style={styles.container}>
       <ScreenHeader
         title={cat !== 'all' ? cat : 'Transactions'}
-        onBack={() => router.back()}
+        onBack={() => backOr(router, '/(tabs)')}
         right={
           <TouchableOpacity
             onPress={() => { haptic.selection(); setSort(s => (s === 'date' ? 'amount' : 'date')); }}

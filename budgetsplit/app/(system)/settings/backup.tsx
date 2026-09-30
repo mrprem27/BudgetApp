@@ -24,6 +24,7 @@ import { readBackupTables, readBackupPhotos, restoreBackup, isLinkedToAccount } 
 import { useServerSession } from '../../../src/hooks/useServerSession';
 import { beginRestore, endRestore } from '../../../src/lib/restoreGuard';
 import { Card } from '../../../src/components/ui/Card';
+import { backOr } from '../../../src/lib/nav';
 
 export default function BackupScreen() {
   const db = useSQLiteContext();
@@ -251,7 +252,7 @@ export default function BackupScreen() {
       haptic.success();
       refresh();
       Alert.alert('Restored', 'Your data has been restored from the backup.', [
-        { text: 'OK', onPress: () => router.back() },
+        { text: 'OK', onPress: () => backOr(router, '/(tabs)') },
       ]);
     } catch (e) {
       haptic.error();
@@ -268,7 +269,7 @@ export default function BackupScreen() {
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Backup & restore" onBack={() => router.back()} />
+      <ScreenHeader title="Backup & restore" onBack={() => backOr(router, '/(tabs)')} />
       <View style={styles.content}>
         <Card style={styles.card}>
           <IconCircle icon="shield" size={56} iconSize={20} color={colors.accent} bg={colors.accentMuted} style={styles.iconCircle} />

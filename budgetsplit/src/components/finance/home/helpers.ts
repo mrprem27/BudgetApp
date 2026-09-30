@@ -20,6 +20,14 @@ export function healthBandColor(band: HealthBand): string {
 }
 
 /**
+ * The health ring's colour on Home: the band's own, except the bottom band reads amber there
+ * (`DQ-12`), so Safe to spend is the one red on the dashboard. The health sheet keeps red.
+ */
+export function homeHealthColor(band: HealthBand): string {
+  return band === 'vulnerable' ? colors.healthAmber : healthBandColor(band);
+}
+
+/**
  * Short human label for a health tier.
  *
  * The bottom band says **"Stretched thin"**, not "Vulnerable". Same threshold,

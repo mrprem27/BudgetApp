@@ -28,6 +28,7 @@ import { haptic } from '../../../src/lib/haptics';
 import {
   deleteAccount, updateProfile, uploadAvatar, deviceLabel,
 } from '../../../src/lib/serverApi';
+import { backOr } from '../../../src/lib/nav';
 
 /**
  * The account screen: sign in by email link, see what the server holds about
@@ -192,7 +193,7 @@ export default function AccountScreen() {
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Account" onBack={() => router.back()} />
+      <ScreenHeader title="Account" onBack={() => backOr(router, '/(tabs)')} />
       <KeyboardForm contentContainerStyle={styles.content}>
         {!configured ? (
           <Card padded>

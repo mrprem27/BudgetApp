@@ -42,6 +42,7 @@ import { BadgeBoard } from '../../../src/components/finance/badges/BadgeBoard';
 import { useServerSession } from '../../../src/hooks/useServerSession';
 import { ErrorState } from '../../../src/components/ui/ErrorState';
 import { Card } from '../../../src/components/ui/Card';
+import { backOr } from '../../../src/lib/nav';
 
 const CADENCE_LABELS: Record<BudgetCadence, string> = { daily: 'Daily', monthly: 'Monthly', yearly: 'Yearly' };
 const CADENCE_KEYS: BudgetCadence[] = ['daily', 'monthly', 'yearly'];
@@ -256,7 +257,7 @@ export default function SettingsScreen() {
     // No keyboard container: every field here is in a sheet, and `DraggableSheet`
     // handles its own keyboard (AGENTS.md §6b).
     <View style={styles.root}>
-    <ScreenHeader title="Settings" onBack={() => router.back()} />
+    <ScreenHeader title="Settings" onBack={() => backOr(router, '/(tabs)')} />
     <ScrollView style={styles.container} contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + space.lg }]} keyboardShouldPersistTaps="handled">
       {loadError && (
         <ErrorState

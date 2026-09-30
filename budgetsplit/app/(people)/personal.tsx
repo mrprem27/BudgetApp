@@ -37,6 +37,7 @@ import { shareCsv, csvFileSlug } from '../../src/lib/shareCsv';
 import { keyboardAwareScroll } from '../../src/components/ui/KeyboardForm';
 import { RecurringTab } from '../../src/components/finance/group/RecurringTab';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
+import { backOr } from '../../src/lib/nav';
 
 /*
  * Three tabs, the same three a group has for its own money: Activity, Budget, Recurring.
@@ -224,7 +225,7 @@ export default function PersonalScreen() {
     <View style={styles.container}>
       <ScreenHeader
         title="Personal"
-        onBack={() => router.back()}
+        onBack={() => backOr(router, '/(tabs)')}
         right={
           <HeaderIconButton icon="more-horizontal" label="Personal options" onPress={() => setShowMenu(true)} />
         }

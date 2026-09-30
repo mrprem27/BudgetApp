@@ -14,6 +14,7 @@ import { formatCompact } from '../../src/lib/money';
 import type { AuditAction } from '../../src/constants/enums';
 import { loadHistory, historySections, auditEntryView, type HistorySection } from '../../src/lib/historyData';
 import { Card } from '../../src/components/ui/Card';
+import { backOr } from '../../src/lib/nav';
 
 const PAGE_SIZE = 30;
 
@@ -100,7 +101,7 @@ export default function HistoryScreen() {
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Audit log" onBack={() => router.back()} />
+      <ScreenHeader title="Audit log" onBack={() => backOr(router, '/(tabs)')} />
 
       {loadError ? (
         <ErrorState onRetry={reload} />

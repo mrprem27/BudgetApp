@@ -50,6 +50,7 @@ import { haptic } from '../../src/lib/haptics';
 import {
   type TxnSource, TXN_SOURCE_LABEL,
 } from '../../src/constants/enums';
+import { backOr } from '../../src/lib/nav';
 
 // One screen: every pending row is fully editable in place. dest = 'personal' or a
 // group id; picking a group reveals the inline split. Edits auto-save (draft) to
@@ -342,7 +343,7 @@ export default function ReviewScreen() {
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Review" onBack={() => router.back()} right={headerRight} />
+      <ScreenHeader title="Review" onBack={() => backOr(router, '/(tabs)')} right={headerRight} />
 
       {/* A transaction changed on two phones (SPEC-SERVER.md §6.3): listed here too,
           so there is no new inbox to find. The choice is made on the transaction. */}

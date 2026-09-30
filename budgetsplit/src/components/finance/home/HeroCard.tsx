@@ -89,9 +89,9 @@ export function HeroCard({
   const hasBudget = budgetAllocated > 0;
   const util = hasBudget ? Math.round((budgetSpent / budgetAllocated) * 100) : 0;
   const over = util >= 100;
-  // healthRed (not colors.expense) — "over budget" and "you owe money" are
-  // different meanings and shouldn't share a color.
-  const paceColor = over ? colors.healthRed : util >= 80 ? colors.healthAmber : colors.income;
+  // Amber even when over (`DQ-12`): on Home the Safe to spend tile is the one red alarm, and
+  // three red surfaces at once read as a verdict on the person rather than a next step.
+  const paceColor = util >= 80 ? colors.healthAmber : colors.income;
   const barPct = Math.min(100, Math.max(0, util));
 
   const delta = spent - prevSpending;

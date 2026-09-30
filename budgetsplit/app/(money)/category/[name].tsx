@@ -29,6 +29,7 @@ import { SectionHeader } from '../../../src/components/ui/SectionHeader';
 import { Divider } from '../../../src/components/ui/Divider';
 import { TabPills } from '../../../src/components/ui/TabPills';
 import { useContentInset } from '../../../src/hooks/useContentInset';
+import { backOr } from '../../../src/lib/nav';
 
 type Period = 'day' | 'month' | 'year';
 const PERIODS: { key: Period; label: string }[] = [
@@ -351,7 +352,7 @@ export default function CategoryDetailScreen() {
     <View style={styles.container}>
       <ScreenHeader
         title={categoryName}
-        onBack={() => router.back()}
+        onBack={() => backOr(router, '/(tabs)')}
         right={<IconCircle icon={visual.icon} size={32} iconSize={17} color={visual.color} />}
       />
       <FlatList

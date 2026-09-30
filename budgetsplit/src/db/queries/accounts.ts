@@ -117,7 +117,9 @@ export async function archiveAccount(db: SQLite.SQLiteDatabase, id: string, arch
   });
 }
 
-/** Live accounts without balances, for pickers. */
-export async function listAccounts(db: SQLite.SQLiteDatabase): Promise<Account[]> {
-  return db.getAllAsync<Account>(`SELECT ${COLUMNS} FROM account WHERE is_archived = 0 ORDER BY sort_order ASC, created_at ASC`);
+/** Accounts without balances: live ones for pickers, or every one (`all`) to name old entries. */
+export async function listAccounts(db: SQLite.SQLiteDatabase, opts: { all?: boolean } = {}): Promise<Account[]> {
+  return db.getAllAsync<Account>(
+    `SELECT ${COLUMNS} FROM account ${opts.all ? '' : 'WHERE is_archived = 0'} ORDER BY sort_order ASC, created_at ASC`,
+  );
 }

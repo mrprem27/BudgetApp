@@ -27,6 +27,7 @@ import type { Category } from '../../src/db/queries/categories';
 import { AppRefreshControl } from '../../src/components/ui/AppRefreshControl';
 import { SectionCard } from '../../src/components/ui/SectionCard';
 import { Card } from '../../src/components/ui/Card';
+import { backOr } from '../../src/lib/nav';
 
 
 
@@ -141,7 +142,7 @@ export default function CategoriesScreen() {
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Categories" onBack={() => router.back()} />
+      <ScreenHeader title="Categories" onBack={() => backOr(router, '/(tabs)')} />
 
       {loadError ? (
         <ErrorState onRetry={() => reload()} />

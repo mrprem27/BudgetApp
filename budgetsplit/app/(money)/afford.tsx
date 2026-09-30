@@ -24,6 +24,7 @@ import type { AffordResult, AffordVerdict, Purchase } from '../../src/lib/engine
 import { parseToPaise, formatRupees, formatCompact } from '../../src/lib/money';
 import { shortDate } from '../../src/lib/dateFormat';
 import type { FeatherName } from '../../src/constants/palette';
+import { backOr } from '../../src/lib/nav';
 
 /**
  * `EN11` — rebuilt on the money engine (`SPEC-ENGINE.md` §4.1), "number
@@ -109,7 +110,7 @@ export default function AffordScreen() {
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Can I afford this?" onBack={() => router.back()} />
+      <ScreenHeader title="Can I afford this?" onBack={() => backOr(router, '/(tabs)')} />
       {loadError ? (
         <ErrorState
           title="Couldn't check your balance"
@@ -241,7 +242,7 @@ export default function AffordScreen() {
                 >
                   <Text style={styles.ghostBtnText}>{result?.verdict === 'not-affordable' ? 'Buy anyway' : 'Log it'}</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.ghostBtn} onPress={() => router.back()} accessibilityRole="button">
+                <TouchableOpacity style={styles.ghostBtn} onPress={() => backOr(router, '/(tabs)')} accessibilityRole="button">
                   <Text style={styles.ghostBtnText}>Dismiss</Text>
                 </TouchableOpacity>
               </View>

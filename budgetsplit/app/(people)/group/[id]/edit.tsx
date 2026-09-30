@@ -21,6 +21,7 @@ import { GROUP_COLORS } from '../../../../src/constants/palette';
 import { useDataRefresh } from '../../../../src/components/system/DataRefreshProvider';
 import { haptic } from '../../../../src/lib/haptics';
 import { ARCHIVE_GROUP } from '../../../../src/lib/groupCopy';
+import { backOr } from '../../../../src/lib/nav';
 
 export default function EditGroupScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -56,7 +57,7 @@ export default function EditGroupScreen() {
   // Seed the editable form fields once the read-only data arrives.
   useEffect(() => {
     if (!id || !data) return;
-    if (!data.group) { Alert.alert('Group not found', 'This group may have been deleted.'); router.back(); return; }
+    if (!data.group) { Alert.alert('Group not found', 'This group may have been deleted.'); backOr(router, '/(tabs)'); return; }
     setName(data.group.name);
     setIcon(data.group.icon);
     setColor(data.group.color);
@@ -65,7 +66,7 @@ export default function EditGroupScreen() {
     setMembers(data.initialMembers);
   }, [data]);
 
-  useEffect(() => { if (!id) router.back(); }, [id]);
+  useEffect(() => { if (!id) backOr(router, '/(tabs)'); }, [id]);
 
   if (!id) return null;
 
@@ -94,7 +95,7 @@ export default function EditGroupScreen() {
       await saveGroupEdit(db, id, meId, { name: name.trim(), icon, color, split: defaultSplit, isPersonal, initialMembers, members });
       haptic.success();
       refresh();
-      router.back();
+      backOr(router, '/(tabs)');
     } catch (e) {
       haptic.error();
       Alert.alert('Couldn’t save changes', e instanceof Error ? e.message : 'Please try again.');
@@ -202,7 +203,7 @@ export default function EditGroupScreen() {
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Edit group" onBack={() => router.back()} />
+      <ScreenHeader title="Edit group" onBack={() => backOr(router, '/(tabs)')} />
       {error ? (
         <ErrorState onRetry={reload} />
       ) : (

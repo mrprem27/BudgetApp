@@ -17,6 +17,7 @@ import { loadSearchData, searchResults, isMore } from '../../src/lib/searchData'
 import { useScreenData } from '../../src/hooks/useScreenData';
 import { SEARCH_SOURCE, SEARCH_SOURCE_LABEL, type SearchSource } from '../../src/constants/enums';
 import { keyboardAwareScroll } from '../../src/components/ui/KeyboardForm';
+import { backOr } from '../../src/lib/nav';
 
 // `KindFilter` was declared here, one of three private copies of the same idea.
 // It lives in `lib/txnFilter.ts` now, with the predicate that reads it.
@@ -70,7 +71,7 @@ export default function SearchScreen() {
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Search" onBack={() => router.back()} />
+      <ScreenHeader title="Search" onBack={() => backOr(router, '/(tabs)')} />
       {error ? (
         <ErrorState onRetry={reload} />
       ) : (

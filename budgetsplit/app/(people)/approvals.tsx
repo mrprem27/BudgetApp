@@ -13,6 +13,7 @@ import { ApprovalCard } from '../../src/components/finance/approvals/ApprovalCar
 import { useApprovals } from '../../src/hooks/useApprovals';
 import type { PendingEntry } from '../../src/lib/approvalData';
 import type { PayMethod } from '../../src/constants/enums';
+import { backOr } from '../../src/lib/nav';
 
 /**
  * Entries other people wrote that are waiting on you.
@@ -50,7 +51,7 @@ export default function ApprovalsScreen() {
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Waiting for you" onBack={() => router.back()} />
+      <ScreenHeader title="Waiting for you" onBack={() => backOr(router, '/(tabs)')} />
       {error ? (
         <ErrorState onRetry={reload} />
       ) : (

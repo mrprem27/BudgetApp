@@ -36,6 +36,7 @@ import { buildGroupExportCsv } from '../../../src/lib/groupExport';
 import { useFeatureFlags } from '../../../src/components/system/FeatureFlagsProvider';
 import { shareCsv, csvFileSlug } from '../../../src/lib/shareCsv';
 import { ARCHIVE_GROUP } from '../../../src/lib/groupCopy';
+import { backOr } from '../../../src/lib/nav';
 
 type TabKey = 'transactions' | 'budget' | 'members' | 'recurring';
 
@@ -190,7 +191,7 @@ export default function GroupDetailScreen() {
   if (error) {
     return (
       <View style={styles.container}>
-        <ScreenHeader title="Group" onBack={() => router.back()} />
+        <ScreenHeader title="Group" onBack={() => backOr(router, '/(tabs)')} />
         <ErrorState onRetry={() => reload()} />
       </View>
     );
@@ -198,8 +199,8 @@ export default function GroupDetailScreen() {
   if (!loading && !group) {
     return (
       <View style={styles.container}>
-        <ScreenHeader title="Group" onBack={() => router.back()} />
-        <EmptyState icon="alert-circle" title="Group not found" body="This group may have been deleted or archived." actionLabel="Back to Groups" onAction={() => router.back()} tint={colors.textSecondary} fill />
+        <ScreenHeader title="Group" onBack={() => backOr(router, '/(tabs)')} />
+        <EmptyState icon="alert-circle" title="Group not found" body="This group may have been deleted or archived." actionLabel="Back to Groups" onAction={() => backOr(router, '/(tabs)')} tint={colors.textSecondary} fill />
       </View>
     );
   }
@@ -217,7 +218,7 @@ export default function GroupDetailScreen() {
           the group's name, so repeating it here would just be redundant. */}
       <ScreenHeader
         title="Groups"
-        onBack={() => router.back()}
+        onBack={() => backOr(router, '/(tabs)')}
         right={
           <HeaderIconButton icon="more-horizontal" label="Group options" onPress={() => setShowMenu(true)} />
         }

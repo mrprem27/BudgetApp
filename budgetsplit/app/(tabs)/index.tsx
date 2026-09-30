@@ -36,7 +36,7 @@ import { HealthSheet } from '../../src/components/finance/HealthSheet';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { HeaderIconButton } from '../../src/components/ui/HeaderIconButton';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
-import { greeting, healthBandColor } from '../../src/components/finance/home/helpers';
+import { greeting, homeHealthColor } from '../../src/components/finance/home/helpers';
 import { loadHomeData, loadCatchUp, PREV_LABEL, PERIOD_LABEL, TXN_COUNT_PERIOD_LABEL, TARGET_FOR_TAB, type TabKey } from '../../src/lib/homeData';
 import { Card } from '../../src/components/ui/Card';
 import { SheetModal } from '../../src/components/ui/SheetModal';
@@ -354,7 +354,7 @@ export default function DashboardScreen() {
               obfuscate={hideAmounts}
               healthScore={health && health.gate.ok ? health.score : null}
               healthLocked={!!health && !health.gate.ok}
-              healthColor={health ? healthBandColor(health.band) : colors.accent}
+              healthColor={health ? homeHealthColor(health.band) : colors.accent}
               onPressHealth={() => setShowHealth(true)}
               onPressPace={() => router.push('/insights')}
             />

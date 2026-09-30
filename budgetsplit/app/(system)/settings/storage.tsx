@@ -19,6 +19,7 @@ import {
 } from '../../../src/lib/deviceStorage';
 import { StorageVerdict, storageVerdict, storageAdvice, formatBytes, allowsAttachments } from '../../../src/lib/storage';
 import { AppRefreshControl } from '../../../src/components/ui/AppRefreshControl';
+import { backOr } from '../../../src/lib/nav';
 
 /**
  * What this device has left, what BudgetSplit is using, and how to get some back.
@@ -105,7 +106,7 @@ export default function StorageSettingsScreen() {
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Storage" onBack={() => router.back()} />
+      <ScreenHeader title="Storage" onBack={() => backOr(router, '/(tabs)')} />
       {error ? (
         <ErrorState
           title="Couldn't read storage"

@@ -680,13 +680,15 @@ OV-06 · Categories are referenced by NAME, not by id            [split-storage]
            derives a category's id from its kind and name, so a /v1 API exposes the
            same thing either way.
 
-OV-10 · backOr is used in 8 of 46 route files            [path-duplication]
+OV-10 · backOr on every route (was 8 of 46)                [path-duplication]
   lib/nav.ts documents exactly the cold-start-empty-stack failure it fixes. ~40
   bare router.back() calls remain. Safe today only because nothing deep-links into
   those screens — and FL-44 adds deep links.
   Blocked on. Which screens become deep-link targets, which follows from the
               widget and App Intents decisions.  → DQ-06
-  Verdict. NEEDS-DECISION. Cheap to fix mechanically; the question is which 40.
+  Verdict. DONE 2026-09-30: every bare router.back() (50 in 30 screens) is
+           backOr(router, '/(tabs)'), Home when there is no stack; backOrEverywhere.test.ts
+           keeps it so. A screen-specific fallback can replace Home where one reads better.
 
 OV-14 · E-50 is recomputed on every read, with no memo boundary       [overload]
   Home recomputes every balance on every render.
@@ -791,13 +793,13 @@ offered.** That does not solve identity; it turns a silent loss into a visible o
 | `DQ-09` | **CRED's `mode` vs `tr`** was never isolated — it failed once with both added and both are off today, which closes the question by avoidance. Two attempts would settle it. | Both stay off. | An hour with a CRED account. |
 | `DQ-10` | **Amazon Pay and WhatsApp were tested against the same `@kotak` handle** — an uncontrolled variable, and Kotak is not among WhatsApp's five PSP banks. | Recorded as "refused" on possibly-wrong evidence. | Retest against `@okhdfcbank` or `@ybl`. |
 | `DQ-11` | **Android UPI is entirely untested.** `useUpiApps` returns null there, so the per-app payload table is *unreachable*, not merely dead. Needs a device pass, not a patch. | The whole feature silently does nothing on Android. | The Android port. |
-| `DQ-12` | **Three red surfaces can stack on one Home open.** Thresholds deliberately not moved or de-duplicated. | Three at once. | Real users saying so. |
+| `DQ-12` | **Three red surfaces can stack on one Home open.** Thresholds deliberately not moved or de-duplicated. | **Closed 2026-09-30, your call:** one red alarm on Home (Safe to spend); the budget bar and the health ring read amber. See `A-01`. | Closed. |
 | `DQ-13` | **Transfer has no `DetailChips`** and writes `transferNote`, a different field from every other kind's `note`. Consolidating means deciding which fields a settlement legitimately has — a product question. | Two note fields. | `OV-02`'s collapse, which touches the same rows. |
 | `DQ-14` | **Named accounts as entities** ("HDFC", "Paytm") with their own balances. Half-closed: three buckets shipped. Bank sync would need the rest. | **Decided 2026-09-30: yes, named and several of each.** An `account` table with four seeded defaults, every entry pointed at one; the work is `U-68`. | Closed. |
 | `DQ-15` | **The sweep's source-asset round trip** is decided and only partly built — parked *behind* the per-method baselines pass, not beside it. | The sweep works; where the money came from is approximate. | Turning `auto_sweep_enabled` on for anyone. |
 | `DQ-16` | **Global categories, undeletable once shared.** Phase GC made them global; whether a shared category can ever be deleted is unanswered, and `OV-06` (reference by name) is blocked behind it. | **Closed 2026-09-30 on the default:** categories stay deletable and references stay strings. Reopen at the first shared group where one person deletes a category the other is using. | Closed. |
-| `DQ-17` | **`help.tsx` is a third collapsible pattern.** Converting to `SectionCard` is a real visual change. | Three patterns. | Any Help rewrite. |
-| `DQ-18` | **`TransactionRow` never displays pay method.** A density question, not a bug. | Not shown. | Real users asking "which card was that". |
+| `DQ-17` | **`help.tsx` is a third collapsible pattern.** Converting to `SectionCard` is a real visual change. | **Closed 2026-09-30:** Help uses `SectionCard` (`D-04`). One pattern. | Closed. |
+| `DQ-18` | **`TransactionRow` never displays pay method.** A density question, not a bug. | **Closed 2026-09-30, your call:** always, as a caption (`D-05`). | Closed. |
 | `DQ-19` | **`PRAGMA foreign_keys` is OFF** on the live connection. Every `REFERENCES` clause is documentation. Flipping it needs every delete path audited first — `deletePerson` already hand-rolls a ten-column check *because* of this. | Off. Referential integrity is a convention. | Any dangling-id bug in the wild. |
 | `DQ-20` | **Voice auto-save has no off switch**, deliberately — "add one only if it misfires in practice". | No switch. | It misfiring. |
 | `DQ-21` | **`DEV_TOOLS_ENABLED = true`** ships a load-demo-data / erase-everything screen in a release build. This is **deliberate for the pilot** so testers can reset the same build they were given, and `devToolsGate.test.ts` fails the suite while it is true unless `RELEASE_CHECKLIST` carries the matching unchecked blocker. | It stays true and the guard keeps complaining, which is the design. | App Store upload. Flip one constant. |
@@ -991,8 +993,8 @@ Real, evidenced, and not blocking the pilot.
 | `D-01` | **CRED's `mode` vs `tr` was never isolated** — it failed once *both* were added, so the payload is the cause but not which half. Both are off today, closing the question by avoidance. Two attempts settle it. `DQ-09`. | `OPEN` |
 | `D-02` | **Amazon Pay and WhatsApp were both tested against the same `@kotak` handle** — an uncontrolled variable, and Kotak is not among WhatsApp's five PSP banks. Retrying against `@okhdfcbank`/`@ybl` could show it was never blocked. `DQ-10`. | `OPEN` |
 | `D-03` | **Android UPI is entirely untested.** `useUpiApps` returns null there, so `spec` is always null and no per-app prefix or `blocked` flag is ever reached — the quirks are not "dead on Android", they are **unreachable** there, and the whole per-app table is untested on the platform the pilot is heading to. Needs a device pass, not a patch. `DQ-11`. | `OPEN` |
-| `D-04` | **`help.tsx` is a third collapsible**, structurally unlike the other two (bare header + card body, plus a nested item-level accordion). Converting to `SectionCard` adds card chrome — a real visual change. `DQ-17`. | `OPEN` |
-| `D-05` | **`TransactionRow` never displays pay method.** Captured everywhere now, shown only in Review and on transaction detail. A density question, not a bug. `DQ-18`. | `DECIDE` |
+| `D-04` | **`help.tsx` is a third collapsible**, structurally unlike the other two (bare header + card body, plus a nested item-level accordion). Converting to `SectionCard` adds card chrome — a real visual change. `DQ-17`. **Done 2026-09-30:** each Help section is a `SectionCard` (its lead icon, the app's chevron, `Collapse` for the body); the item-level disclosure inside keeps plus/minus and now animates through `Collapse` too. | `DONE` |
+| `D-05` | **`TransactionRow` never displays pay method.** Captured everywhere now, shown only in Review and on transaction detail. A density question, not a bug. `DQ-18`. **Done 2026-09-30, your call (always, as a caption):** every row's second line ends with where the money came from, "Food · HDFC" (`rowPaidFrom`): the account's name for my entries, the kind for someone else's, nothing for Other or unset. Account names come from the store (`accounts`, archived included), so no loader had to join `account`. | `DONE` |
 | `D-06` | **Transfer has no `DetailChips`** — no tags, receipt, time, location or repeat; its note writes `transferNote`, a *different field* from every other kind's `note`. Consolidating means deciding which fields a settlement legitimately has, which is a product question. `DQ-13`. | `DECIDE` |
 | `D-07` | **`budget_group.limit_daily/monthly/yearly` still exist as columns.** Removed from the `BudgetGroup` type — nothing ever wrote them, so the type was advertising a group-level budget the app does not have. The physical columns stay: dropping one in SQLite needs a table rebuild, not worth a migration for three fields nobody reads. **`person.remote_uid` is not dead** — `SYNC-F5` uses it. `OV-23`. | `PARKED` |
 | `D-08` | **The sweep has to know *where from*, and give it back to the same place.** A surplus sweep moves money out of a specific asset, and a later withdrawal has to return it to **that same one** — handing ₹5,000 back as "cash" when it came from a bank account silently rewrites where the money is, and every figure built on that is then wrong. The sweep logic is small; **the prerequisite is not.** Parked *behind* the per-method baselines pass, not beside it, because building it first would bake the pooled-cash assumption into the savings ledger — the hardest place to unpick it. (2026-09-30: that prerequisite now exists, per-account balances from `U-68`; the sweep itself is still off for everyone.) When built: `savings_txn` needs the source asset on the row, a withdrawal must default to it and be unable to silently pick another, and an auto-sweep must **refuse rather than guess** when the source is ambiguous. `DQ-15`. | `PARKED` |
@@ -1008,7 +1010,7 @@ Recorded so nobody re-discovers them as bugs. These are **decisions**, not negle
 
 | | Accepted |
 |---|---|
-| `A-01` | **Three red surfaces stack on every Home open** — the Safe-to-Spend strip, the pace row and the health ring. Retention research names a "guilt cycle": two or three months of red and users conclude they are bad at budgeting and leave. Each one was given a next action and the band that judged the person was renamed ("Vulnerable" → "Stretched thin"), but **no threshold was moved and the three were not de-duplicated.** Whether three at once is too many is a question only real users can settle. `DQ-12`. |
+| `A-01` **Settled 2026-09-30, your call:** on Home, Safe to spend is the one red; the budget bar and the health ring read amber even at their worst (`homeHealthColor`; `homeOneAlarm.test.ts`). The health sheet keeps the band's own red. |
 | `A-02` | **`openDB()` re-runs ~40 `ALTER`s every launch.** Cold-start cost, accepted. |
 | `A-03` | **`PRAGMA foreign_keys` is OFF** on the live connection (ON only during migrations); cascades are hand-rolled. Flipping it needs every delete path audited first. `DQ-19`. |
 | `A-04` | **Voice auto-save has no off switch.** A confident phrase posts itself; the guard is Undo plus the duplicate prompt. Deliberately no flag — add one only if it misfires in practice. `DQ-20`. |
@@ -1112,7 +1114,7 @@ here from `U-11` on.
 | `U-28` | **The money card was rows and text.** Three row weights indented by spaces, a sentence under each figure, two full-width outlined buttons. Now it reads as a sum you can check by hand — Bank + Cash + Wallet = Spendable, + Invested − Card owed = Net worth — with a colour bar of where the money sits, a matching dot per line, places largest first, and two compact actions on one row. Built, not yet seen on a phone. | — |
 | `U-29` | **"Can I afford this?" belongs with Goals.** Your call: it is the question before a purchase, and the answer is often "save toward it". The card now leads the Goals section; Overview lost the "Now" label that sat above everything. | — |
 | `U-30` | **Home order.** Your call: Spend this month first, the two tiles under it at equal size, then the period pills. | — |
-| `U-31` | **Sorting is not right.** The money card now lists places largest first; which other lists you meant is for your next screenshot. | — |
+| `U-31` | **Sorting is not right.** The money card now lists places largest first; which other lists you meant is for your next screenshot. **Closed 2026-09-30:** you said mostly fixed already. Reopen with the list that is still wrong. | — |
 | `U-32` | **Safe to spend had no year.** "until 5 Oct" is now "until 5 Oct 2026", on the tile and in its sheet. | — |
 | `U-33` | **Money engine settings.** Built from your picks (2026-09-30): how you're paid (automatic, monthly on a day, twice a month, weekly on a weekday, daily, irregular), how far Safe to spend looks ahead (payday, 7 days, 30 days, month end), and what it keeps aside (a week or a month of essentials, an amount, nothing). Three rows in Settings → Preferences. Researched against PocketGuard's "In My Pocket" and pay-schedule planners. Defaults reproduce today's inference exactly (tested). On the phone, not synced, for now. `SPEC-ENGINE.md` §10b. | — |
 | `U-34` | **Two category selectors.** Add and Review pick a category with different controls. One selector, used by both. | — |

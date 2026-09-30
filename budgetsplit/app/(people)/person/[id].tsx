@@ -28,6 +28,7 @@ import { useContentInset } from '../../../src/hooks/useContentInset';
 import { oweView } from '../../../src/lib/owe';
 import { formatCompact } from '../../../src/lib/money';
 import type { MyActivityItem } from '../../../src/db/queries/transactions';
+import { backOr } from '../../../src/lib/nav';
 
 /**
  * One person, everything you two have shared.
@@ -54,7 +55,7 @@ export default function PersonScreen() {
   // Rows span every shared group, so the actions read the owning group off each txn.
   const { handleDelete, handleEditTxn } = useGroupTxnActions(reload);
 
-  useEffect(() => { if (!id) router.back(); }, [id, router]);
+  useEffect(() => { if (!id) backOr(router, '/(tabs)'); }, [id, router]);
 
   const renderSectionHeader = useCallback(
     ({ section }: { section: { title: string } }) => <SectionHeader title={section.title} />,
@@ -85,7 +86,7 @@ export default function PersonScreen() {
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title={name} onBack={() => router.back()} />
+      <ScreenHeader title={name} onBack={() => backOr(router, '/(tabs)')} />
 
       {error ? (
         <ErrorState onRetry={reload} />

@@ -16,6 +16,7 @@ import { useContentInset } from '../../src/hooks/useContentInset';
 import { useTrustCentre } from '../../src/hooks/useTrustCentre';
 import { trustStateLabel, trustInert, trustStandingNote } from '../../src/lib/trustCopy';
 import type { TrustRow } from '../../src/lib/trustCentre';
+import { backOr } from '../../src/lib/nav';
 
 /**
  * **Who can add to my ledger** — the one place that answers it.
@@ -62,7 +63,7 @@ export default function TrustCentreScreen() {
   if (error) {
     return (
       <View style={styles.container}>
-        <ScreenHeader title="Who can add to my ledger" onBack={() => router.back()} />
+        <ScreenHeader title="Who can add to my ledger" onBack={() => backOr(router, '/(tabs)')} />
         <ErrorState onRetry={reload} />
       </View>
     );
@@ -103,7 +104,7 @@ export default function TrustCentreScreen() {
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Who can add to my ledger" onBack={() => router.back()} />
+      <ScreenHeader title="Who can add to my ledger" onBack={() => backOr(router, '/(tabs)')} />
       <ScrollView
         contentContainerStyle={[styles.scroll, { paddingBottom: bottomPad }]}
         refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}

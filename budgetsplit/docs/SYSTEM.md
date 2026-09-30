@@ -2173,7 +2173,7 @@ nowhere to go.
 
 `lib/nav.ts` exports `backOr(router, fallback)` — `back()` if there is a stack, otherwise
 `replace(fallback)`. It exists because a deep-linked or cold-started screen has an empty stack and a
-dead ✕. **It is used in 8 of 46 route files**; the other ~38 call bare `router.back()` (`OV-10`).
+dead ✕. **Every route uses it** since 2026-09-30 (`OV-10`); `backOrEverywhere.test.ts` fails on a bare `router.back()`.
 Today that is only safe because nothing deep-links into those screens.
 
 Four sites were pushing a *tab* route onto the stack, which stacks a duplicate tab instead of
