@@ -48,7 +48,7 @@ import { backOr } from '../../../src/lib/nav';
  * The deleted screen summed **all** payments, so a ₹9,000 rent split three ways
  * read ₹9,000 here and ₹3,000 on Plan; and it titled rows `category`, so "Netflix"
  * appeared as "Entertainment". Both now match every other surface — `myShareOrTotal`
- * and `note || category`, the same derivations `RecurringRow` uses.
+ * and `note || category`, the same derivations `RecurringInventory` uses.
  *
  * The whole bill is not hidden, it is named underneath: on a shared rule "your
  * share" is the number you plan against, and the total is the number on the invoice.

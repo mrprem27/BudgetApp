@@ -162,5 +162,6 @@ const styles = StyleSheet.create({
   // container gap stacked on top of them was producing 24px above every date
   // header plus a stray 8px between a header and its first row. It also would have
   // split the section card apart, since its rows must sit flush.
-  listContent: { padding: layout.screenPaddingH },
+  // Tight under the tabs: the tabs already end the header block (`U-37`).
+  listContent: { paddingHorizontal: layout.screenPaddingH, paddingTop: space.xs },
 });

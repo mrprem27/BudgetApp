@@ -1,18 +1,13 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { Feather } from '@expo/vector-icons';
-import { colors, type, space, radius, layout, shadow } from '../../tokens';
+import React, { useMemo } from 'react';
+import { StyleSheet, ScrollView } from 'react-native';
+import { space, layout } from '../../tokens';
 import { useContentInset } from '../../../hooks/useContentInset';
-import { formatRupees } from '../../../lib/money';
-import { splitLabel } from '../../../lib/groupDetail';
-import { categoryVisual } from '../../../constants/categories';
 import { EmptyState } from '../../ui/EmptyState';
-import { SectionHeader } from '../../ui/SectionHeader';
-import { Divider } from '../../ui/Divider';
-import { RecurringRow } from '../RecurringRow';
+import { SecondaryButton } from '../../ui/SecondaryButton';
 import { AppRefreshControl } from '../../ui/AppRefreshControl';
+import { RecurringInventory } from '../recurring/RecurringInventory';
+import { toRecurringSubs } from '../../../lib/recurringData';
 import type { TxnWithSplits } from '../../../db/queries/transactions';
-import { alpha } from '../../../theme';
 
 type Props = {
   refreshing: boolean;
@@ -21,22 +16,26 @@ type Props = {
   /** Skipped occurrence dates per rule — keeps "next charge" honest. */
   skips?: Map<string, Set<number>>;
   meId: string;
-  defaultSplit: string;
-  monthlyTotal: number;
-  nextLabel: string | null;
   onAdd: () => void;
   onOpenRule: (ruleId: string) => void;
 };
 
-/** Group Recurring tab: monthly-total summary + active recurring rules + add CTA. */
-export function RecurringTab({ rules, skips, meId, defaultSplit, monthlyTotal, nextLabel, onAdd, onOpenRule, refreshing, onRefresh }: Props) {
+/**
+ * A group's (or Personal's) Recurring tab: the same inventory Money's Recurring screen shows,
+ * scoped to this group's rules, and a way to add one (`U-38`).
+ */
+export function RecurringTab({ rules, skips, meId, onAdd, onOpenRule, refreshing, onRefresh }: Props) {
   const bottomPad = useContentInset({ fab: true });
-  if (rules.length === 0) {
-    return (
-      <ScrollView
-        contentContainerStyle={[styles.listContent, { paddingBottom: bottomPad }]}
-        refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-      >
+  const subs = useMemo(
+    () => toRecurringSubs(rules.filter(r => r.recur_state !== 'ended'), skips, meId, Date.now()),
+    [rules, skips, meId],
+  );
+  return (
+    <ScrollView
+      contentContainerStyle={[styles.listContent, { paddingBottom: bottomPad }]}
+      refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+    >
+      {subs.length === 0 ? (
         <EmptyState
           icon="repeat"
           title="No recurring yet"
@@ -44,54 +43,17 @@ export function RecurringTab({ rules, skips, meId, defaultSplit, monthlyTotal, n
           actionLabel="Add recurring expense"
           onAction={onAdd}
         />
-      </ScrollView>
-    );
-  }
-
-  return (
-    <ScrollView
-        contentContainerStyle={[styles.listContent, { paddingBottom: bottomPad }]}
-        refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-      >
-      <View style={styles.recurSummaryCard}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: space.xs }}>
-          <Text style={styles.recurSummaryTitle}>Group recurring</Text>
-          <Text style={styles.recurSummaryAmt}>{formatRupees(monthlyTotal)}/mo</Text>
-        </View>
-        <Text style={styles.recurSummarySub}>
-          {rules.length} active{nextLabel ? ` · next charge ${nextLabel}` : ''} · split {splitLabel(defaultSplit)}
-        </Text>
-      </View>
-
-      <SectionHeader title={`Active · ${rules.length}`} />
-      <View style={[styles.insightCard, { paddingHorizontal: 0 }]}>
-        {rules.map((r, i) => (
-          <React.Fragment key={r.id}>
-            {i > 0 && <Divider indent="text" />}
-            <RecurringRow rule={r} meId={meId} showNext showShareLabel skipDates={skips?.get(r.id)} onPress={() => onOpenRule(r.id)} />
-          </React.Fragment>
-        ))}
-      </View>
-
-      <TouchableOpacity style={styles.addRecurBtn} onPress={onAdd} accessibilityRole="button">
-        <Feather name="plus" size={15} color={colors.accent} />
-        <View>
-          <Text style={styles.addRecurBtnText}>Add recurring expense</Text>
-          <Text style={styles.addRecurBtnSub}>Bills, memberships, any fixed charge</Text>
-        </View>
-      </TouchableOpacity>
+      ) : (
+        <>
+          <RecurringInventory subs={subs} onOpen={onOpenRule} />
+          <SecondaryButton label="Add recurring expense" onPress={onAdd} style={styles.add} />
+        </>
+      )}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  listContent: { padding: layout.screenPaddingH, gap: space.sm },
-  recurSummaryCard: { backgroundColor: colors.settleTint, borderRadius: 14, padding: 14, marginBottom: 14, borderWidth: 1.5, borderColor: colors.settle },
-  recurSummaryTitle: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: colors.textPrimary },
-  recurSummaryAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 16, color: colors.settle, letterSpacing: -0.5 },
-  recurSummarySub: { fontSize: 12, color: colors.textMuted },
-  insightCard: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, marginBottom: 10, ...shadow.sm },
-  addRecurBtn: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.accentMuted, borderWidth: 1.5, borderColor: colors.accent, borderStyle: 'dashed', borderRadius: radius.md, padding: 12, marginBottom: space.md },
-  addRecurBtnText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: colors.accent },
-  addRecurBtnSub: { fontSize: 11, color: colors.textMuted, marginTop: 1 },
+  listContent: { paddingHorizontal: layout.screenPaddingH, paddingTop: space.xs },
+  add: { marginTop: space.md },
 });

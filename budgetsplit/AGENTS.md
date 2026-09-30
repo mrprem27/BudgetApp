@@ -55,8 +55,9 @@ sat 48pt down one tab of Personal and 64pt down the next, purely because one lis
 - **Whether it sits in a `Card` is the caller's business, and follows its siblings.** Home keeps one
   because its neighbours are cards; `settings/linked.tsx` dropped one because its neighbours are
   plain sections. Same rule, opposite answers — which is why it is a rule and not a preference.
-- A list's content container uses **`padding`**, not `paddingHorizontal`. That one word was the
-  whole of the reported defect.
+- Tab bodies under one set of `TabPills` share **one inset** — the screen's side padding and a
+  `space.xs` top (tightened 2026-09-30, `U-37`). A body that differs moves the illustration when
+  you switch tabs, which was the whole of the original defect.
 
 ---
 

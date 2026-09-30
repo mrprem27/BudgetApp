@@ -28,7 +28,6 @@ import {
   effectiveRow, effectiveSplit, snapshotRow, planCommit as planCommitPure, txnInputFromPlan,
   type RowEdit, type SplitState, type CommitPlan, type ReviewContext,
 } from '../../src/lib/reviewCommit';
-import { FiltersButton } from '../../src/components/ui/FiltersButton';
 import { ReviewFilterSheet } from '../../src/components/finance/review/ReviewFilterSheet';
 import { SaveViewForm } from '../../src/components/finance/review/SaveViewForm';
 import { ReviewRowCard } from '../../src/components/finance/review/ReviewRowCard';
@@ -335,6 +334,10 @@ export default function ReviewScreen() {
   ) : (
     <>
       {importButton}
+      {/* Filters in the header, with its count: it had a whole row to itself (`U-35`). */}
+      {pending.length > 0 && (
+        <HeaderIconButton icon="sliders" label="Filters" badge={reviewFilterCount(filters)} onPress={() => setFilterSheet(true)} />
+      )}
       {pending.length > 0 && (
         <HeaderIconButton icon="more-horizontal" label="More options" onPress={() => setMenuOpen(true)} />
       )}
@@ -390,11 +393,6 @@ export default function ReviewScreen() {
         />
       )}
 
-      {!loading && !error && pending.length > 0 && (
-        <View style={{ flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: layout.screenPaddingH, paddingBottom: space.xs }}>
-          <FiltersButton count={reviewFilterCount(filters)} onPress={() => setFilterSheet(true)} />
-        </View>
-      )}
 
       {!loading && !error && (
         <ReviewSourceTabs

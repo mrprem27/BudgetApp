@@ -206,7 +206,7 @@ export function MembersTab({ members, net, meId, totalSpent, settlements, person
 }
 
 const styles = StyleSheet.create({
-  listContent: { padding: layout.screenPaddingH, gap: space.sm },
+  listContent: { paddingHorizontal: layout.screenPaddingH, paddingTop: space.xs, gap: space.sm },
   groupBalCard: { flexDirection: 'row', backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, marginBottom: space.md, ...shadow.sm },
   groupBalItem: { flex: 1, alignItems: 'center', paddingVertical: space.md, gap: 3 },
   groupBalDivider: { width: 1, backgroundColor: colors.border, marginVertical: space.sm },

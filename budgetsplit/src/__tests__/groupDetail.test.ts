@@ -1,6 +1,6 @@
 import {
   isRecurInstance, splitLabel,
-  computeContributions, computeRecurringMonthlyTotal, computeRecurNextLabel,
+  computeContributions,
 } from '../lib/groupDetail';
 import type { TxnWithSplits } from '../db/queries/transactions';
 import type { Person } from '../db/queries/persons';
@@ -67,9 +67,3 @@ describe('computeContributions', () => {
   });
 });
 
-describe('computeRecurringMonthlyTotal / computeRecurNextLabel', () => {
-  it('returns 0 and null for no rules', () => {
-    expect(computeRecurringMonthlyTotal([])).toBe(0);
-    expect(computeRecurNextLabel([])).toBeNull();
-  });
-});

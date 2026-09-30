@@ -73,27 +73,3 @@ export function computeContributions(
   };
 }
 
-/** Monthly-equivalent WHOLE-BILL total across active recurring rules (the group
- *  summary pill — a group surface shows the group's bill; rows carry "your share"). */
-export function computeRecurringMonthlyTotal(rules: TxnWithSplits[]): number {
-  return rules.reduce(
-    (sum, r) => sum + recurringMonthlyEquivalent(txnTotal(r), r.recur_freq, r.recur_interval),
-    0,
-  );
-}
-
-/**
- * Earliest upcoming charge across active recurring rules (or null). Skip-aware:
- * without the skips map this advertised a charge the user explicitly skipped.
- */
-export function computeRecurNextLabel(
-  rules: TxnWithSplits[],
-  skips?: Map<string, Set<number>>,
-  now: number = Date.now(),
-): string | null {
-  const next = rules
-    .map(r => nextUnskippedOccurrence(r, now, skips?.get(r.id)))
-    .filter((d): d is number => d != null)
-    .sort((a, b) => a - b)[0];
-  return next ? shortDate(next) : null;
-}

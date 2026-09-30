@@ -239,7 +239,7 @@ function CountChip({ count, label, tint, active, onPress }: {
 }
 
 const styles = StyleSheet.create({
-  content: { padding: layout.screenPaddingH },
+  content: { paddingHorizontal: layout.screenPaddingH, paddingTop: space.xs },
   overview: { marginBottom: space.sm },
   head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: space.sm },
   headLabel: { ...type.sectionLabel, color: colors.textMuted },

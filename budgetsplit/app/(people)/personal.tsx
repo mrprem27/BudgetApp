@@ -36,7 +36,6 @@ import { buildGroupExportCsv } from '../../src/lib/groupExport';
 import { shareCsv, csvFileSlug } from '../../src/lib/shareCsv';
 import { keyboardAwareScroll } from '../../src/components/ui/KeyboardForm';
 import { RecurringTab } from '../../src/components/finance/group/RecurringTab';
-import { computeRecurringMonthlyTotal, computeRecurNextLabel } from '../../src/lib/groupDetail';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 
 /*
@@ -99,8 +98,6 @@ export default function PersonalScreen() {
   const summary = data?.summary ?? { owe: 0, lent: 0 };
   const recurringRules = data?.recurringRules ?? [];
   const recurSkips = data?.recurSkips;
-  const recurringMonthlyTotal = useMemo(() => computeRecurringMonthlyTotal(recurringRules), [recurringRules]);
-  const recurNextLabel = useMemo(() => computeRecurNextLabel(recurringRules, recurSkips), [recurringRules, recurSkips]);
 
   // Memoised through to `filterGroups`: the filter bar sits above a SectionList,
   // so without it every keystroke re-filtered the ledger, rebuilt the chip row and
@@ -338,9 +335,6 @@ export default function PersonalScreen() {
               rules={recurringRules}
               skips={recurSkips}
               meId={me.id}
-              defaultSplit={personalGroup.default_split}
-              monthlyTotal={recurringMonthlyTotal}
-              nextLabel={recurNextLabel}
               onAdd={addPersonal}
               onOpenRule={(ruleId) => router.push(`/recurring/${ruleId}`)}
             />
@@ -377,7 +371,7 @@ export default function PersonalScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  tabs: { marginHorizontal: layout.screenPaddingH, marginBottom: space.md },
+  tabs: { marginHorizontal: layout.screenPaddingH, marginBottom: space.sm },
   summaryCard: { flexDirection: 'row', alignItems: 'center', marginHorizontal: layout.screenPaddingH, marginBottom: space.md, backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingVertical: space.md, ...shadow.sm },
   summaryItem: { flex: 1, alignItems: 'center', gap: 2 },
   summaryDivider: { width: 1, alignSelf: 'stretch', backgroundColor: colors.border, marginVertical: space.xs },
@@ -388,12 +382,9 @@ const styles = StyleSheet.create({
   // No `gap` here: a date section's rows form ONE card, so any gap between them
   // slices it into separate slabs. `SectionHeader` supplies its own spacing.
   //
-  // `padding`, not `paddingHorizontal`: this was the ONE list in the app missing
-  // its vertical inset, and that 16pt was the whole of the reported defect —
-  // Personal's empty state sat 48pt down on Activity and 64pt down on Budget
-  // (`BudgetList.tsx` uses `padding`), so switching tabs moved the illustration.
-  // Every group tab already matches; this was the outlier.
-  activityContent: { padding: layout.screenPaddingH },
+  // The same inset as every other tab body (group and Personal alike): switching tabs must not
+  // move anything. It was 16pt all round; tightened to a 4pt top under the tabs (`U-37`).
+  activityContent: { paddingHorizontal: layout.screenPaddingH, paddingTop: space.xs },
 
 
 

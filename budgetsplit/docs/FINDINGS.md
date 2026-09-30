@@ -1089,4 +1089,8 @@ here from `U-11` on.
 | `U-32` | **Safe to spend had no year.** "until 5 Oct" is now "until 5 Oct 2026", on the tile and in its sheet. | — |
 | `U-33` | **Money engine settings.** Your ask: make the engine's assumptions configurable — how far ahead Safe to spend looks (months), and a pay cycle that fits someone paid daily or weekly, not only a monthly salary. Research, then a spec in `SPEC-ENGINE.md` and a plan, then build. | — |
 | `U-34` | **Two category selectors.** Add and Review pick a category with different controls. One selector, used by both. | — |
+| `U-35` | **Review's filters had a row to themselves** — one right-aligned "Filters" button above the source tabs. Now a filter icon in Review's header with its count as a badge; `FiltersButton` had no other caller and is deleted. | — |
+| `U-36` | **Date presets.** "Last 30 days" beside "This month" read as the same choice twice — dropped. The one range picker (`DateRangeSheet`) was already what the ledgers and Review use for custom dates. | — |
+| `U-37` | **The group screen had too much space** between the header card, the tabs and the filters: 16pt under the card, 8pt under the tabs, then 16pt of list padding and the section header's own margin. Tightened, and every tab body — group and Personal — now shares one inset (side padding, 4pt top), so switching tabs moves nothing. AGENTS §2's inset rule updated to say so. | — |
+| `U-38` | **Group Recurring looked unlike Money's.** Money's summary and sections are now `RecurringInventory`, built from `toRecurringSubs` (pure); Money's screen, a group's Recurring tab and Personal's all render it. The group tab's hand-rolled summary, `RecurringRow`, and two summary helpers are gone. | — |
 

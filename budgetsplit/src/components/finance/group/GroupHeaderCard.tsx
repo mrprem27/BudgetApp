@@ -33,8 +33,9 @@ export function GroupHeaderCard({ group, members, myNet, settleWith, onSettle }:
 
   return (
     <View style={styles.card}>
+      {/* A light wash of the group's colour: at 40% it overpowered the name and balance on it (`U-15`). */}
       <LinearGradient
-        colors={[alpha(group.color, 40), colors.bgCard]}
+        colors={[alpha(group.color, 15), colors.bgCard]}
         start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFill}
         pointerEvents="none"
@@ -74,7 +75,7 @@ export function GroupHeaderCard({ group, members, myNet, settleWith, onSettle }:
 
 const styles = StyleSheet.create({
   card: {
-    marginHorizontal: layout.screenPaddingH, marginBottom: space.md, padding: space.md, overflow: 'hidden',
+    marginHorizontal: layout.screenPaddingH, marginBottom: space.smd, padding: space.md, overflow: 'hidden',
     backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border,
   },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.md },

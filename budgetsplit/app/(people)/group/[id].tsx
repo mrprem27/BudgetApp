@@ -18,7 +18,7 @@ import { canEditGroupBudget } from '../../../src/lib/permissions';
 import type { BudgetAnalytics } from '../../../src/lib/analytics';
 import { simplify, rawDebts } from '../../../src/lib/settle';
 import {
-  computeContributions, computeRecurringMonthlyTotal, computeRecurNextLabel,
+  computeContributions,
 } from '../../../src/lib/groupDetail';
 import { haptic } from '../../../src/lib/haptics';
 import { useDataRefresh } from '../../../src/components/system/DataRefreshProvider';
@@ -180,8 +180,6 @@ export default function GroupDetailScreen() {
       setTrusting(false);
     }
   }
-  const recurringMonthlyTotal = useMemo(() => computeRecurringMonthlyTotal(recurringRules), [recurringRules]);
-  const recurNextLabel = useMemo(() => computeRecurNextLabel(recurringRules, recurSkips), [recurringRules, recurSkips]);
   const totalSpent = useMemo(
     () => settled.filter(t => t.kind === 'expense' && !t.is_deleted).reduce((s, t) => s + t.shares.reduce((a, x) => a + x.amount, 0), 0),
     [settled],
@@ -311,9 +309,6 @@ export default function GroupDetailScreen() {
           rules={recurringRules}
           skips={recurSkips}
           meId={meId}
-          defaultSplit={group.default_split}
-          monthlyTotal={recurringMonthlyTotal}
-          nextLabel={recurNextLabel}
           onAdd={() => router.push(`/add/quick?groupId=${id}&kind=expense`)}
           onOpenRule={(ruleId) => router.push(`/recurring/${ruleId}`)}
         />

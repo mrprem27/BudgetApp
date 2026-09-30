@@ -635,8 +635,8 @@ describe('G2b · Review carries the same Filters button, with a count', () => {
     expect(reviewFilterCount(DEFAULT_FILTERS)).toBe(0);
     expect(reviewFilterCount({ ...DEFAULT_FILTERS, query: 'swiggy', categories: ['Food', 'Fuel'], amountMin: '100', dateFrom: '2026-09-01' })).toBe(5);
   });
-  it('Review keeps its Filters button', () => {
-    expect(fs.readFileSync('app/(ledger)/review.tsx', 'utf8')).toMatch(/<FiltersButton/);
+  it('Review\'s filters sit in its header, with the count as a badge (U-35)', () => {
+    expect(fs.readFileSync('app/(ledger)/review.tsx', 'utf8')).toMatch(/<HeaderIconButton icon="sliders" label="Filters" badge=\{reviewFilterCount\(filters\)\}/);
   });
 });
 

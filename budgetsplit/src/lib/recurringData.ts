@@ -1,5 +1,5 @@
 import type * as SQLite from 'expo-sqlite';
-import { getTxnById } from '../db/queries/transactions';
+import { getTxnById, type TxnWithSplits } from '../db/queries/transactions';
 import { getSkipsMap, getAllRecurringRules } from '../db/queries/recurring';
 import { getMe } from '../db/queries/persons';
 import { nextUnskippedOccurrence } from './recurrence';
@@ -32,7 +32,6 @@ export type RecurringSub = { id: string; groupId: string; name: string; category
  * Archived groups count: their rules still post (`getAllRecurringRules`).
  */
 export async function loadRecurringInventory(db: SQLite.SQLiteDatabase): Promise<RecurringSub[]> {
-  const now = Date.now();
   const byGroup = await getAllRecurringRules(db);
   // Every kind: recurring income (salary) belongs on this screen too — it was
   // invisible everywhere until it first materialized, which made onboarding's
@@ -63,6 +62,16 @@ export async function loadRecurringInventory(db: SQLite.SQLiteDatabase): Promise
   // happens, not the next one the schedule would produce.
   const skips = await getSkipsMap(db, rules.map(r => r.id));
   const meRow = await getMe(db);
+  return toRecurringSubs(rules, skips, meRow?.id ?? null, Date.now());
+}
+
+/**
+ * Rules as the rows the inventory shows — pure, so Money's Recurring and a group's Recurring tab
+ * build the same rows from the same rules (`U-38`).
+ */
+export function toRecurringSubs(
+  rules: TxnWithSplits[], skips: Map<string, Set<number>> | undefined, meId: string | null, now: number,
+): RecurringSub[] {
   const list: RecurringSub[] = rules.map(t => ({
     id: t.id,
     groupId: t.group_id,
@@ -71,15 +80,15 @@ export async function loadRecurringInventory(db: SQLite.SQLiteDatabase): Promise
     kind: t.kind,
     // My share — the only basis that sums honestly with budgets and afford.
     // Income is attributed by payments, so it reads the other side.
-    amount: meRow
-      ? (t.kind === 'income' ? myIncomeOf(t, meRow.id) : myShareOrTotal(t, meRow.id))
+    amount: meId
+      ? (t.kind === 'income' ? myIncomeOf(t, meId) : myShareOrTotal(t, meId))
       : txnTotal(t),
     freq: t.recur_freq!,
     interval: t.recur_interval,
     // A paused rule has no next charge — `materializeDueOccurrences` filters on
     // `recur_state = 'active'` — so showing the schedule's next date would
     // advertise a charge that will not happen.
-    nextMs: t.recur_state === 'paused' ? null : nextUnskippedOccurrence(t, now, skips.get(t.id)),
+    nextMs: t.recur_state === 'paused' ? null : nextUnskippedOccurrence(t, now, skips?.get(t.id)),
     paused: t.recur_state === 'paused',
   }));
   // Paused rules sink below the live ones: they are here to be found and
