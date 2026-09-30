@@ -2,7 +2,7 @@
 
 `Last verified: 2026-09-30 (§0, §1, §9–§11 and every row whose status changed; the rest as of 2026-09-07) · Guarded by: trackerIntegrity.test.ts · countClaims.test.ts · docIdGraph.test.ts`
 
-**277 items, 111 of them still open.** One row each: what it is, and where it stands.
+**278 items, 111 of them still open.** One row each: what it is, and where it stands.
 Nothing else. **This is the V1 tracker** — start at §0.
 
 **The evidence is not here.** Why each item exists, what it costs, what breaks if you touch it, and
@@ -102,7 +102,7 @@ below is the plan; every line points at rows further down, where status lives.
 ---
 ## §3 · Open decisions — `DQ-`
 
-**64 items: 38 `DECIDE`, 7 `BLOCKED`, 19 `DONE`.** A `DQ-` is a question only you can answer, so every unanswered one is `DECIDE` by definition. The default column is what ships if you never decide.
+**64 items: 37 `DECIDE`, 7 `BLOCKED`, 20 `DONE`.** A `DQ-` is a question only you can answer, so every unanswered one is `DECIDE` by definition. The default column is what ships if you never decide.
 
 | | What | Status | Default if never decided |
 |---|---|---|---|
@@ -143,7 +143,6 @@ below is the plan; every line points at rows further down, where status lives.
 | `DQ-107` | Queues and Cron for email, notifications and cleanup (needs Workers Paid) | `DECIDE` | With `DQ-95`: before the first sign-in that isn't you |
 | `DQ-108` | Real time: server-first writes, and a live push to every member's open app (and a notification when closed)? | `DECIDE` | Yes — `SPEC-SERVER-WEBAPP.md` §4; needs Workers Paid |
 | `DQ-109` | Proper entities — accounts, transfers, settlements, adjustments, repeat rules — instead of flags on one transaction table? | `DECIDE` | Yes, in the same server reset as `DQ-106`, before a web client |
-| `DQ-110` | Split by items as a fifth split mode inside Add, not a separate 4-step screen? | `DECIDE` | Yes — `SPEC-SERVER-WEBAPP.md` §6 |
 | `DQ-80` | Paid Apple Developer account, $99/yr | `BLOCKED` | Apple |
 | `DQ-81` | Google OAuth **CASA Tier-3** for `gmail.readonly` | `BLOCKED` | Google |
 | `DQ-82` | The GPay export format | `BLOCKED` | Google |
@@ -152,7 +151,7 @@ below is the plan; every line points at rows further down, where status lives.
 | `DQ-85` | R2 object storage | `BLOCKED` | A Cloudflare dashboard opt-in that asks for a card |
 | `DQ-86` | Cloudflare Email Sending | `BLOCKED` | Workers Paid $5/mo + an owned domain |
 
-**Closed (19), detail in `FINDINGS.md`:** `DQ-14` `DQ-07` `DQ-22` `DQ-26` `DQ-28` `DQ-31` `DQ-32` `DQ-88` `DQ-89` `DQ-91` `DQ-93` `DQ-94` `DQ-97` `DQ-98` `DQ-99` `DQ-100` `DQ-101` `DQ-102` `DQ-103`
+**Closed (20), detail in `FINDINGS.md`:** `DQ-110` `DQ-14` `DQ-07` `DQ-22` `DQ-26` `DQ-28` `DQ-31` `DQ-32` `DQ-88` `DQ-89` `DQ-91` `DQ-93` `DQ-94` `DQ-97` `DQ-98` `DQ-99` `DQ-100` `DQ-101` `DQ-102` `DQ-103`
 
 ---
 ## §4 · Walk 1 — `W1-`
@@ -292,7 +291,7 @@ testing or describing the app. Where one needs action, the id says where.
 ---
 ## §11 · Open from the last pass, and your feedback — `U-`
 
-**68 items: 8 `OPEN`, 1 `BLOCKED`, 1 `PARKED`, 58 `DONE`.** From the 2026-09-30 pass (`SPEC-BUGSCAN.md` Pass 2) and your answers and feedback the same night. Evidence in `FINDINGS.md` §11.
+**69 items: 9 `OPEN`, 1 `BLOCKED`, 1 `PARKED`, 58 `DONE`.** From the 2026-09-30 pass (`SPEC-BUGSCAN.md` Pass 2) and your answers and feedback the same night. Evidence in `FINDINGS.md` §11.
 
 | | What | Status | Default if never decided |
 |---|---|---|---|
@@ -305,6 +304,7 @@ testing or describing the app. Where one needs action, the id says where.
 | `U-20` | Spacing is uneven in many places | `OPEN` |  |
 | `U-24` | Product analytics (Mixpanel): built, with an opt-out; needs your project token | `BLOCKED` |  |
 | `U-68` | Named accounts: the entity, backfill and sync are in; money math and the UI move onto it next | `OPEN` |  |
+| `U-69` | Split by items stays its own screen, tidied: input structure, copy, spacing, alignment and a proper grid | `OPEN` |  |
 | `U-31` | Sorting is not right — which lists? (the money card now orders largest first) | `OPEN` |  |
 
 **Closed (58), detail in `FINDINGS.md`:** `U-01` `U-03` `U-04` `U-05` `U-06` `U-11` `U-12` `U-17` `U-21` `U-14` `U-25` `U-26` `U-27` `U-28` `U-29` `U-30` `U-32` `U-15` `U-33` `U-35` `U-36` `U-37` `U-34` `U-38` `U-39` `U-40` `U-41` `U-42` `U-43` `U-13` `U-44` `U-45` `U-46` `U-22` `U-23` `U-07` `U-08` `U-47` `U-48` `U-49` `U-50` `U-51` `U-52` `U-53` `U-54` `U-55` `U-56` `U-57` `U-58` `U-59` `U-60` `U-61` `U-62` `U-63` `U-64` `U-65` `U-66` `U-67`

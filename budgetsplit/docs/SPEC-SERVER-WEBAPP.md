@@ -207,7 +207,12 @@ buttons. It asks again for things the Add screen already has (payer, category, d
 inputs are hand-built rather than the app's own fields, each item opens a full split editor with its
 own Equal / Exact / % / Shares tabs, and it cannot be reached while editing an entry.
 
-**Proposed:** "By items" becomes a fifth split mode on the Add screen — Equal · Exact · % · Shares ·
+**Decided 2026-09-30 (`DQ-110`): keep the separate screen and fix it** (`U-69`). The rest of this
+section was the proposal, kept for the record. The fix: one input pattern for name, quantity and
+price built from the app's own fields; clearer copy; spacing, alignment and a grid that lines every
+item's columns up with each other and with the per-person totals.
+
+**Proposed (not taken):** "By items" becomes a fifth split mode on the Add screen — Equal · Exact · % · Shares ·
 **Items**. Choosing it opens one items sheet:
 
 - a list of items (name, price, qty) with **Scan receipt** at the top;
