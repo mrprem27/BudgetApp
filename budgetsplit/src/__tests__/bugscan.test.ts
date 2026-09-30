@@ -828,18 +828,21 @@ describe('H1 · Home says where the month is heading in one line, and shows the 
   const { forecastVerdict } = jest.requireActual('../lib/forecastVerdict') as typeof import('../lib/forecastVerdict');
   const fs = jest.requireActual('fs') as typeof import('fs');
   it('under budget reads as on track, with what is left', () => {
-    expect(forecastVerdict({ projected: 3_000_000, budget: 3_500_000 })).toEqual({ tone: 'good', headline: 'On track — ₹5K to spare', sub: 'by month end' });
+    expect(forecastVerdict({ projected: 3_000_000, budget: 3_500_000 })).toEqual({ tone: 'good', headline: 'Projected ₹5K under budget', sub: 'At this pace, by month end' });
   });
   it('over budget names the overshoot, and the category behind it when it moved', () => {
     expect(forecastVerdict({ projected: 4_000_000, budget: 3_500_000, topShift: { cat: 'Eating Out', pct: 40 } }))
-      .toEqual({ tone: 'over', headline: '₹5K over budget by month end', sub: 'Eating Out up 40%' });
-    expect(forecastVerdict({ projected: 4_000_000, budget: 3_500_000, topShift: { cat: 'Fuel', pct: 2 } }).sub).toBeNull();
+      .toEqual({ tone: 'over', headline: 'Projected ₹5K over budget', sub: 'At this pace · Eating Out up 40%' });
+    expect(forecastVerdict({ projected: 4_000_000, budget: 3_500_000, topShift: { cat: 'Fuel', pct: 2 } }).sub).toBe('At this pace, by month end');
   });
   it('with no budget it states the projection and says how to get a verdict', () => {
     expect(forecastVerdict({ projected: 3_000_000, budget: 0 }).tone).toBe('neutral');
   });
+  it('every headline says it is a projection, not money already spent (U-11)', () => {
+    for (const budget of [0, 3_500_000, 2_000_000]) expect(forecastVerdict({ projected: 3_000_000, budget }).headline).toMatch(/^Projected /);
+  });
   it('hidden amounts stay hidden', () => {
-    expect(forecastVerdict({ projected: 4_000_000, budget: 3_500_000, mask: () => '••••' }).headline).toBe('•••• over budget by month end');
+    expect(forecastVerdict({ projected: 4_000_000, budget: 3_500_000, mask: () => '••••' }).headline).toBe('Projected •••• over budget');
   });
   it('the streak badge sits beside the name on Home', () => {
     expect(fs.readFileSync('app/(tabs)/index.tsx', 'utf8')).toMatch(/titleAccessory=\{<StreakBadge days=\{streak\} \/>\}/);

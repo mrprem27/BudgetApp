@@ -27,6 +27,7 @@ import { MoveMoneySheet } from '../../src/components/finance/plan/MoveMoneySheet
 import { AmountRow } from '../../src/components/ui/AmountRow';
 import { useAssets } from '../../src/hooks/useAssets';
 import { AssetsSection } from '../../src/components/finance/plan/AssetsSection';
+import { AffordHeroCard } from '../../src/components/finance/plan/AffordHeroCard';
 import { HeaderIconButton } from '../../src/components/ui/HeaderIconButton';
 import { Card } from '../../src/components/ui/Card';
 import { ListRow } from '../../src/components/ui/ListRow';
@@ -124,10 +125,7 @@ export default function SavingsScreen() {
         large
         right={(
           <>
-            {/* "Can I afford this?" first, the way a state icon leads on every tab, so the fixed action
-                keeps its place. Both destinations also have labelled rows in the body (OV-16: they are
-                linked from nowhere else, and a bare glyph is not a door anyone finds). */}
-            {flags.affordCheck && <HeaderIconButton icon="help-circle" color={colors.accent} label="Can I afford this?" onPress={() => router.push('/afford')} />}
+            {/* One door each (`U-12`): Recurring here, Afford as the card in the body. */}
             {flags.recurring && <HeaderIconButton icon="refresh-cw" color={colors.accent} label="Recurring" onPress={() => router.push('/plan/recurring')} />}
           </>
         )}
@@ -169,13 +167,7 @@ export default function SavingsScreen() {
           />
         )}
 
-        {(flags.affordCheck || flags.recurring) && (
-          <Card clip style={{ marginBottom: space.md }}>
-            {flags.affordCheck && <ListRow icon="help-circle" title="Can I afford this?" subtitle="Check a purchase against your money" onPress={() => router.push('/afford')} />}
-            {flags.affordCheck && flags.recurring && <Divider indent="text" />}
-            {flags.recurring && <ListRow icon="refresh-cw" title="Recurring" subtitle="Bills, subscriptions and income that repeat" onPress={() => router.push('/plan/recurring')} />}
-          </Card>
-        )}
+        {flags.affordCheck && <AffordHeroCard onPress={() => router.push('/afford')} />}
 
         {((overspend?.total ?? 0) > 0 || upcoming.length > 0) && <SectionHeader title="This month" />}
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { colors, type, space } from '../../tokens';
 import { Card } from '../../ui/Card';
 import { Input } from '../../ui/Input';
@@ -69,14 +69,15 @@ export function SignInStage({ onBack, onVerified }: Props) {
   function codeEntry() {
     return (
       <>
-        <Card padded style={styles.heroCard}>
-          <IconCircle icon="key" size={56} iconSize={20} color={colors.accent} bg={colors.accentMuted} />
-          <Text style={styles.heroTitle}>Enter your code</Text>
-          <Text style={styles.note}>
-            We&apos;ve emailed a code to {sentTo}. It expires in 15 minutes.
-          </Text>
-        </Card>
+        {/* One card: what happened, then the field. Two stacked cards touched edge to edge. */}
         <Card padded>
+          <View style={styles.hero}>
+            <IconCircle icon="key" size={56} iconSize={20} color={colors.accent} bg={colors.accentMuted} />
+            <Text style={styles.heroTitle}>Enter your code</Text>
+            <Text style={styles.note}>
+              Sent to {sentTo} · expires in 15 minutes
+            </Text>
+          </View>
           <Input
             value={code}
             onChangeText={(t) => { setCode(t); setError(null); }}
@@ -139,7 +140,7 @@ export function SignInStage({ onBack, onVerified }: Props) {
 }
 
 const styles = StyleSheet.create({
-  heroCard: { alignItems: 'center', gap: space.sm },
+  hero: { alignItems: 'center', gap: space.sm, marginBottom: space.lg },
   heroTitle: { ...type.subheading, color: colors.textPrimary, textAlign: 'center' },
   note: { ...type.body, color: colors.textSecondary, textAlign: 'center', lineHeight: 20 },
   cta: { marginTop: space.md },
