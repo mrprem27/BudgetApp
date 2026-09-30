@@ -2,7 +2,7 @@
 
 `Last verified: 2026-09-30 (§0, §1, §9–§11 and every row whose status changed; the rest as of 2026-09-07) · Guarded by: trackerIntegrity.test.ts · countClaims.test.ts · docIdGraph.test.ts`
 
-**279 items, 110 of them still open.** One row each: what it is, and where it stands.
+**279 items, 106 of them still open.** One row each: what it is, and where it stands.
 Nothing else. **This is the V1 tracker** — start at §0.
 
 **The evidence is not here.** Why each item exists, what it costs, what breaks if you touch it, and
@@ -22,8 +22,8 @@ is defined in two places.
 | Section | Open | Total |
 |---|---|---|
 | §1 · Ship blockers | **12** | 19 |
-| §2 · Complexity — `OV-` | **13** | 34 |
-| §3 · Decisions — `DQ-` | **43** | 64 |
+| §2 · Complexity — `OV-` | **11** | 34 |
+| §3 · Decisions — `DQ-` | **41** | 64 |
 | §4 · Walk 1 — `W1-` | **12** | 39 |
 | §5 · Sync — `SYNC-F` | **0** | 24 |
 | §6 · Debt — `D-` | **10** | 11 |
@@ -47,8 +47,9 @@ here, one tested commit per step. Phase 5 is what only you can do.
      money profile, a screen to add and name accounts, Paid from picks one — `U-68`.
    - 1b **Done 2026-09-30** (`DQ-109`, your call: explicit links on entries, not new tables): a card
      bill is from a bank account into a card. `DQ-15` / `D-08` stay parked on their trigger.
-   - 1c Categories by id, one budget period, dead columns gone — `DQ-106`, `OV-06`, `OV-19`,
-     `OV-23`, `D-07`.
+   - 1c **Closed 2026-09-30 on the defaults:** the server already keeps one budget field (cadence)
+     and no group limits; categories stay names (`DQ-16`); dead phone columns stay listed (`OV-23`).
+     `OV-19` and `D-07` are phone-side table rebuilds, parked behind `OV-07`.
 2. **Server as a web app** (built and tested here; deploying needs `DQ-95`).
    - 2a Real time: writes go to the server first when online, a live push to every member's open
      app, queued offline as today — `DQ-108`.
@@ -98,30 +99,28 @@ otherwise, except the business and legal ones in phase 5. `PARKED` rows keep the
 ---
 ## §2 · Complexity and overlap — `OV-`
 
-**34 items: 2 `OPEN`, 6 `DECIDE`, 5 `PARKED`, 21 `DONE`.** Duplications, overloads and phantoms, each with a verdict. `FINDINGS.md` §2 carries the count, the blast radius and the risk for each.
+**34 items: 2 `OPEN`, 3 `DECIDE`, 6 `PARKED`, 23 `DONE`.** Duplications, overloads and phantoms, each with a verdict. `FINDINGS.md` §2 carries the count, the blast radius and the risk for each.
 
 | | What | Status |
 |---|---|---|
 | `OV-05` | Person, friend, member, roster member, contact | `OPEN` |
 | `OV-22` | Six vocabularies over daily/weekly/monthly/yearly | `OPEN` |
-| `OV-06` | Categories are referenced by NAME, not by id | `DECIDE` |
 | `OV-10` | backOr is used in 8 of 46 route files | `DECIDE` |
 | `OV-14` | E-50 is recomputed on every read, with no memo boundary | `DECIDE` |
 | `OV-15` | /personal is a stack route pretending to be a tab | `DECIDE` |
-| `OV-19` | category_budget.period AND .cadence | `DECIDE` |
-| `OV-23` | Dead and near-dead columns | `DECIDE` |
+| `OV-19` | category_budget.period AND .cadence | `PARKED` |
 | `OV-02` | kind='settlement' means four different things | `PARKED` |
 | `OV-07` | Budget is three concepts, two levels, and three strays | `PARKED` |
 | `OV-08` | /add/quick: 11 params, 24 entry points | `PARKED` |
 | `OV-17` | The tab bar owns sync, alerts, reconciliation and snapshots | `PARKED` |
 | `OV-24` | SC-19 owns twelve sheet states | `PARKED` |
 
-**Closed (21), detail in `FINDINGS.md`:** `OV-27` `OV-12` `OV-09` `OV-25` `OV-28` `OV-29` `OV-30` `OV-31` `OV-32` `OV-33` `OV-34` `OV-26` `OV-03` `OV-13` `OV-21` `OV-16` `OV-18` `OV-20` `OV-11` `OV-04` `OV-01`
+**Closed (23), detail in `FINDINGS.md`:** `OV-27` `OV-12` `OV-09` `OV-25` `OV-28` `OV-29` `OV-30` `OV-31` `OV-32` `OV-33` `OV-34` `OV-26` `OV-03` `OV-13` `OV-21` `OV-16` `OV-18` `OV-20` `OV-11` `OV-04` `OV-01` `OV-06` `OV-23`
 
 ---
 ## §3 · Open decisions — `DQ-`
 
-**64 items: 36 `DECIDE`, 7 `BLOCKED`, 21 `DONE`.** A `DQ-` is a question only you can answer, so every unanswered one is `DECIDE` by definition. The default column is what ships if you never decide.
+**64 items: 34 `DECIDE`, 7 `BLOCKED`, 23 `DONE`.** A `DQ-` is a question only you can answer, so every unanswered one is `DECIDE` by definition. The default column is what ships if you never decide.
 
 | | What | Status | Default if never decided |
 |---|---|---|---|
@@ -138,7 +137,6 @@ otherwise, except the business and legal ones in phase 5. `PARKED` rows keep the
 | `DQ-12` | Three red surfaces can stack on one Home open | `DECIDE` | Three at once |
 | `DQ-13` | Transfer has no `DetailChips` | `DECIDE` | Two note fields |
 | `DQ-15` | The sweep's source-asset round trip | `DECIDE` | The sweep works; where the money came from is approximate |
-| `DQ-16` | Global categories, undeletable once shared | `DECIDE` | Categories stay deletable and references stay strings |
 | `DQ-17` | `help.tsx` is a third collapsible pattern | `DECIDE` | Three patterns |
 | `DQ-18` | `TransactionRow` never displays pay method | `DECIDE` | Not shown |
 | `DQ-19` | `PRAGMA foreign_keys` is OFF | `DECIDE` | Off |
@@ -158,7 +156,6 @@ otherwise, except the business and legal ones in phase 5. `PARKED` rows keep the
 | `DQ-96` | May a group member edit someone else's transaction (Splitwise's model)? | `DECIDE` | No — author-only; approve/reject answers someone else's entry |
 | `DQ-104` | A web client: a `/v1` read API over the server (writes through the same rules as sync), or a local-first web replica? | `DECIDE` | The `/v1` read API (`SPEC-SERVER-WEBAPP.md` §2.1) |
 | `DQ-105` | Should the server post recurring occurrences (Cron + Queue) instead of the author's phone? | `DECIDE` | Yes, after Workers Paid; phones keep posting until the server path has run a clean month |
-| `DQ-106` | Settle categories-by-id, budget period vs cadence and dead columns before any public API? | `DECIDE` | Yes — `OV-06`, `OV-19`, `OV-23` in the server schema while a reset is still free |
 | `DQ-107` | Queues and Cron for email, notifications and cleanup (needs Workers Paid) | `DECIDE` | With `DQ-95`: before the first sign-in that isn't you |
 | `DQ-108` | Real time: server-first writes, and a live push to every member's open app (and a notification when closed)? | `DECIDE` | Yes — `SPEC-SERVER-WEBAPP.md` §4; needs Workers Paid |
 | `DQ-80` | Paid Apple Developer account, $99/yr | `BLOCKED` | Apple |
@@ -169,7 +166,7 @@ otherwise, except the business and legal ones in phase 5. `PARKED` rows keep the
 | `DQ-85` | R2 object storage | `BLOCKED` | A Cloudflare dashboard opt-in that asks for a card |
 | `DQ-86` | Cloudflare Email Sending | `BLOCKED` | Workers Paid $5/mo + an owned domain |
 
-**Closed (21), detail in `FINDINGS.md`:** `DQ-110` `DQ-14` `DQ-07` `DQ-22` `DQ-26` `DQ-28` `DQ-31` `DQ-32` `DQ-88` `DQ-89` `DQ-91` `DQ-93` `DQ-94` `DQ-97` `DQ-98` `DQ-99` `DQ-100` `DQ-101` `DQ-102` `DQ-103` `DQ-109`
+**Closed (23), detail in `FINDINGS.md`:** `DQ-110` `DQ-14` `DQ-07` `DQ-22` `DQ-26` `DQ-28` `DQ-31` `DQ-32` `DQ-88` `DQ-89` `DQ-91` `DQ-93` `DQ-94` `DQ-97` `DQ-98` `DQ-99` `DQ-100` `DQ-101` `DQ-102` `DQ-103` `DQ-109` `DQ-106` `DQ-16`
 
 ---
 ## §4 · Walk 1 — `W1-`

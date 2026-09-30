@@ -676,7 +676,9 @@ OV-06 · Categories are referenced by NAME, not by id            [split-storage]
   a delete orphans the string into Others.
   Blocked on. Whether categories become global-and-undeletable-once-shared, which
               is a product decision, not a schema one.  → DQ-16
-  Verdict. NEEDS-DECISION.
+  Verdict. DECIDED 2026-09-30 on DQ-16's default: references stay names. The server
+           derives a category's id from its kind and name, so a /v1 API exposes the
+           same thing either way.
 
 OV-10 · backOr is used in 8 of 46 route files            [path-duplication]
   lib/nav.ts documents exactly the cold-start-empty-stack failure it fixes. ~40
@@ -703,7 +705,8 @@ OV-19 · category_budget.period AND .cadence                  [dead-alternative]
   lib/budget.ts reasons exclusively in cadence.
   Blocked on. Dropping `period` means rebuilding the table and both partial
               indexes, which is the same migration OV-07 wants. Do them together.
-  Verdict. NEEDS-DECISION → sequence behind OV-07.
+  Verdict. PARKED behind OV-07. The server already stores cadence only (checked
+           2026-09-30), so no public API freezes the duplicate; it is a phone-side rebuild.
 
 OV-23 · Dead and near-dead columns                           [dead-alternative]
   budget_group.limit_daily/monthly/yearly (never read) · default_currency (never
@@ -714,7 +717,8 @@ OV-23 · Dead and near-dead columns                           [dead-alternative]
   payer_person_id (no writer) · audit_log.amount (one reader).
   Blocked on. Currency is not dead, it is PARKED — a multi-currency pilot would
               want it. Dropping columns is irreversible; leaving them costs bytes.
-  Verdict. NEEDS-DECISION. The honest default is to leave them and keep this list.
+  Verdict. DECIDED 2026-09-30: leave them and keep this list. The server has no
+           limit_* columns; carry_over and currency travel, currency on purpose.
 ```
 
 ### One layout question for you
@@ -791,7 +795,7 @@ offered.** That does not solve identity; it turns a silent loss into a visible o
 | `DQ-13` | **Transfer has no `DetailChips`** and writes `transferNote`, a different field from every other kind's `note`. Consolidating means deciding which fields a settlement legitimately has — a product question. | Two note fields. | `OV-02`'s collapse, which touches the same rows. |
 | `DQ-14` | **Named accounts as entities** ("HDFC", "Paytm") with their own balances. Half-closed: three buckets shipped. Bank sync would need the rest. | **Decided 2026-09-30: yes, named and several of each.** An `account` table with four seeded defaults, every entry pointed at one; the work is `U-68`. | Closed. |
 | `DQ-15` | **The sweep's source-asset round trip** is decided and only partly built — parked *behind* the per-method baselines pass, not beside it. | The sweep works; where the money came from is approximate. | Turning `auto_sweep_enabled` on for anyone. |
-| `DQ-16` | **Global categories, undeletable once shared.** Phase GC made them global; whether a shared category can ever be deleted is unanswered, and `OV-06` (reference by name) is blocked behind it. | Categories stay deletable and references stay strings. | The first shared group where one person deletes a category the other is using. |
+| `DQ-16` | **Global categories, undeletable once shared.** Phase GC made them global; whether a shared category can ever be deleted is unanswered, and `OV-06` (reference by name) is blocked behind it. | **Closed 2026-09-30 on the default:** categories stay deletable and references stay strings. Reopen at the first shared group where one person deletes a category the other is using. | Closed. |
 | `DQ-17` | **`help.tsx` is a third collapsible pattern.** Converting to `SectionCard` is a real visual change. | Three patterns. | Any Help rewrite. |
 | `DQ-18` | **`TransactionRow` never displays pay method.** A density question, not a bug. | Not shown. | Real users asking "which card was that". |
 | `DQ-19` | **`PRAGMA foreign_keys` is OFF** on the live connection. Every `REFERENCES` clause is documentation. Flipping it needs every delete path audited first — `deletePerson` already hand-rolls a ten-column check *because* of this. | Off. Referential integrity is a convention. | Any dangling-id bug in the wild. |
@@ -820,7 +824,7 @@ offered.** That does not solve identity; it turns a silent loss into a visible o
 | `DQ-96` | **May a group member edit someone else's transaction?** Splitwise works like a wiki: anyone involved may edit or delete. This app has always said no (`AGENTS.md` §13, `MW-23`) — approve or reject is how you answer someone else's entry. | No. The server enforces author-only edits (`SPEC-SERVER.md` §3.2). | A pilot group asking to fix each other's typos. |
 | `DQ-104` | **How a web client reads.** The server already holds a readable, modelled copy (`DQ-93`) but serves it only as a sync stream, which assumes a local database. A browser without one needs resource reads. | Proposed: a versioned `/v1` read API on the server, derived figures computed with the shared `src/lib` code, web writes built as one mutation each and run through `applyPush` (`SPEC-SERVER-WEBAPP.md` §2.1). | You want a web client, or a second person needs to read without the app. |
 | `DQ-105` | **Who posts a recurring occurrence.** Only the rule's author's phone does, when it opens, so a shared rent stops while its author is away. | Proposed: a daily Cron enqueues due rules; a Queue consumer posts them with the same code; the new unique index (`U-66`) makes a gradual switch safe (§2.2). | Workers Paid (`DQ-95`). |
-| `DQ-106` | **Model debts a public API would freeze.** `OV-06` (categories by name), `OV-19` (budget period and cadence), `OV-23` (dead columns). | Proposed: settle them in the server schema now, while resetting the dev database is free (§2.3). | Before the server's `/v1` API ships. |
+| `DQ-106` | **Model debts a public API would freeze.** `OV-06` (categories by name), `OV-19` (budget period and cadence), `OV-23` (dead columns). | **Closed 2026-09-30 on the defaults.** Checked the server schema: `budgets` keeps `cadence` only and `groups` has no `limit_*`, so `OV-19` and `D-07` freeze nothing in an API; category references stay names (`DQ-16`), and the server's category id is already derived from kind and name; dead columns stay listed (`OV-23`). | Closed. |
 | `DQ-107` | **Background work.** No Queues or Cron: email is sent inline, expiry happens on read, no notifications. | Proposed: Queues for email, approval notifications and exports; nightly Cron for cleanup (§2.2). | Workers Paid, with `DQ-95`. |
 | `DQ-108` | **Real time.** A write uploads ~2 s after it is saved, but other people only see it when their app next syncs, and nobody is told. | Proposed: server-first writes (optimistic row, offline queue kept); after a commit the server tells a per-user Durable Object, which pings every open app over a WebSocket to pull that scope; a push notification when the app is closed (`SPEC-SERVER-WEBAPP.md` §4). | Workers Paid; your go on the direction. |
 | `DQ-109` | **Flags standing in for entities.** One `txn` table carries friend repayments, asset moves, card bills and balance adjustments, told apart by `asset_id`, `pay_method`, `category`; repeat rules are flagged transactions; bank / cash / wallet / card are settings, not rows. | **Decided 2026-09-30: explicit links on entries, not new tables.** Separate tables would have moved every ledger query, the money math, backup and sync at once, with no screen tests. Instead: every entry names its account (`U-68`); a card-bill payment is From a bank account INTO a card (`txn.to_account_id`), which ends the `pay_method = 'card'` reading and its known bug (a transfer to a friend paid by card read as a card bill); old bills convert once at launch (a launch invariant, queued for sync); the server checks the card is the author's own and the row is a transfer. Asset moves already name the asset (`asset_id`), bank / cash / wallet moves name each place on their two legs, and a balance adjustment names its account, so none needed a new record. A web API can still present them as separate resources. | Closed. |
