@@ -20,6 +20,7 @@ import {
 import { StorageVerdict, storageVerdict, storageAdvice, formatBytes, allowsAttachments } from '../../../src/lib/storage';
 import { AppRefreshControl } from '../../../src/components/ui/AppRefreshControl';
 import { backOr } from '../../../src/lib/nav';
+import { useContentInset } from '../../../src/hooks/useContentInset';
 
 /**
  * What this device has left, what BudgetSplit is using, and how to get some back.
@@ -32,6 +33,7 @@ import { backOr } from '../../../src/lib/nav';
 export default function StorageSettingsScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
+  const bottomPad = useContentInset();
   const [busy, setBusy] = useState(false);
 
   // All four probes are synchronous filesystem walks, so they run in the loader rather than
@@ -115,7 +117,7 @@ export default function StorageSettingsScreen() {
         />
       ) : (
         <ScrollView
-          contentContainerStyle={styles.scroll}
+          contentContainerStyle={[styles.scroll, { paddingBottom: bottomPad }]}
           refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         >
           {/* The device figure is the hero: it's the number that decides what the app is
@@ -201,7 +203,7 @@ export default function StorageSettingsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  scroll: { padding: layout.screenPaddingH, paddingBottom: space.xxl },
+  scroll: { padding: layout.screenPaddingH },
   hero: { alignItems: 'center', gap: space.xs },
   heroAmount: { ...type.amountXL },
   heroSub: { ...type.body, color: colors.textSecondary, textAlign: 'center' },

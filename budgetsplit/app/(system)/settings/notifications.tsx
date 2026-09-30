@@ -18,12 +18,14 @@ import { settings } from '../../../src/lib/settings';
 import { haptic } from '../../../src/lib/haptics';
 import { Card } from '../../../src/components/ui/Card';
 import { backOr } from '../../../src/lib/nav';
+import { useContentInset } from '../../../src/hooks/useContentInset';
 
 type PermStatus = 'granted' | 'denied' | 'undetermined';
 
 export default function NotificationsScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
+  const bottomPad = useContentInset();
   const [permStatus, setPermStatus] = useState<PermStatus>('undetermined');
   const [testSent, setTestSent] = useState(false);
   const [timeEditing, setTimeEditing] = useState<null | 'renewal' | 'daily'>(null);
@@ -116,7 +118,7 @@ export default function NotificationsScreen() {
           onRetry={reload}
         />
       ) : (
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: bottomPad }]}>
         {permStatus === 'denied' && (
           <View style={styles.deniedBanner}>
             <View style={styles.deniedLeft}>
@@ -238,7 +240,7 @@ export default function NotificationsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  scroll: { padding: layout.screenPaddingH, gap: space.xs, paddingBottom: space.xxl },
+  scroll: { padding: layout.screenPaddingH, gap: space.xs },
   deniedBanner: { backgroundColor: colors.expenseTintDeep, borderWidth: 1.5, borderColor: colors.expense, borderRadius: radius.lg, padding: space.md, gap: space.sm, marginBottom: space.xs },
   deniedLeft: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm },
   deniedTitle: { ...type.body, color: colors.expense, fontFamily: 'Inter_600SemiBold', marginBottom: 2 },

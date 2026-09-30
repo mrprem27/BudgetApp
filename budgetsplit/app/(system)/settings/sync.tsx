@@ -11,6 +11,7 @@ import { useServerSession } from '../../../src/hooks/useServerSession';
 import { useSyncInvites } from '../../../src/hooks/useSyncInvites';
 import { SyncStatus } from '../../../src/components/system/SyncStatus';
 import { backOr } from '../../../src/lib/nav';
+import { useContentInset } from '../../../src/hooks/useContentInset';
 
 /**
  * What syncing actually means for you — said plainly, in one place.
@@ -27,6 +28,7 @@ import { backOr } from '../../../src/lib/nav';
  */
 export default function SyncScreen() {
   const router = useRouter();
+  const bottomPad = useContentInset();
   const { session } = useServerSession();
   const configured = serverConfigured();
 
@@ -35,7 +37,7 @@ export default function SyncScreen() {
   return (
     <View style={styles.container}>
       <ScreenHeader title="Sync" onBack={() => backOr(router, '/(tabs)')} />
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: bottomPad }]}>
         {/* Where this phone's data stands (SPEC-SERVER.md §6.1). Draws nothing
             when signed out; the Banner below says what to do then. */}
         <SyncStatus />
@@ -109,7 +111,7 @@ export default function SyncScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: layout.screenPaddingH, paddingBottom: space.xl },
+  content: { padding: layout.screenPaddingH },
   heading: { ...type.sectionLabel, color: colors.textSecondary, marginTop: space.lg, marginBottom: space.sm },
   accept: { ...type.button, color: colors.accent },
   footnote: { ...type.caption, color: colors.textMuted, lineHeight: 18, marginTop: space.lg },

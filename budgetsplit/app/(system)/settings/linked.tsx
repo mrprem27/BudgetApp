@@ -26,6 +26,7 @@ import {
 } from '../../../src/lib/serverApi';
 import { routeErrorBoundary } from '../../../src/components/system/AppErrorBoundary';
 import { backOr } from '../../../src/lib/nav';
+import { useContentInset } from '../../../src/hooks/useContentInset';
 
 /**
  * Route-level, so a throw here replaces this screen's content and leaves the
@@ -47,6 +48,7 @@ export const ErrorBoundary = routeErrorBoundary;
  */
 export default function LinkedPeopleScreen() {
   const router = useRouter();
+  const bottomPad = useContentInset();
 
   const [links, setLinks] = useState<ServerLink[]>([]);
   const [claims, setClaims] = useState<PendingClaim[]>([]);
@@ -228,7 +230,7 @@ export default function LinkedPeopleScreen() {
   return (
     <View style={styles.container}>
       <ScreenHeader title="Linked people" onBack={() => backOr(router, '/(tabs)')} />
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: bottomPad }]}>
         {loading ? (
           <ActivityIndicator color={colors.accent} style={styles.loading} />
         ) : (
@@ -497,7 +499,7 @@ export default function LinkedPeopleScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: layout.screenPaddingH, paddingBottom: space.xl },
+  content: { padding: layout.screenPaddingH },
   loading: { marginTop: space.xl },
   error: { ...type.body, color: colors.expense, textAlign: 'center', marginBottom: space.md },
   decideRow: { flexDirection: 'row', gap: space.sm, paddingHorizontal: space.md, paddingBottom: space.md },

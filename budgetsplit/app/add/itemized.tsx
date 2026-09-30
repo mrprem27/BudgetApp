@@ -34,6 +34,7 @@ import { SectionHeader } from '../../src/components/ui/SectionHeader';
 import { SecondaryButton } from '../../src/components/ui/SecondaryButton';
 import { ItemFields, ItemGridHeader, ItemGridRow, GridAmountRow } from '../../src/components/finance/add/ItemGrid';
 import { backOr } from '../../src/lib/nav';
+import { useContentInset } from '../../src/hooks/useContentInset';
 
 /**
  * Itemized-bill wizard (items → assign → payers → review). All state and
@@ -44,6 +45,7 @@ const assignScroll = keyboardAwareScroll();
 export default function ItemizedScreen() {
   const { groupId: paramGroupId, editId } = useLocalSearchParams<{ groupId?: string; editId?: string }>();
   const router = useRouter();
+  const bottomPad = useContentInset();
   const insets = useSafeAreaInsets();
 
   const f = useItemizedForm(paramGroupId, editId);
@@ -94,7 +96,7 @@ export default function ItemizedScreen() {
       {/* STEP 1: ITEMS — one grid (`U-69`): the add fields, each item, and the totals share the
           same columns (`ItemGrid`), so every figure lines up down the page. */}
       {f.step === 'items' && (
-        <KeyboardForm contentContainerStyle={styles.itemsScroll}>
+        <KeyboardForm contentContainerStyle={[styles.itemsScroll, { paddingBottom: bottomPad }]}>
           {Platform.OS === 'ios' && flags.receiptScan && (
             <SecondaryButton
               label={f.scanning ? 'Reading receipt…' : 'Scan receipt'}
@@ -203,7 +205,7 @@ export default function ItemizedScreen() {
         <FlatList
           data={f.items}
           keyExtractor={i => i.id}
-          contentContainerStyle={styles.scroll}
+          contentContainerStyle={[styles.scroll, { paddingBottom: bottomPad }]}
           // Each item's split has amount fields (AGENTS.md §6b).
           renderScrollComponent={assignScroll}
           ListHeaderComponent={
@@ -290,7 +292,7 @@ export default function ItemizedScreen() {
 
       {/* STEP 3: PAYERS */}
       {f.step === 'payers' && (
-        <KeyboardForm contentContainerStyle={styles.scroll}>
+        <KeyboardForm contentContainerStyle={[styles.scroll, { paddingBottom: bottomPad }]}>
           <Text style={styles.fieldLabel}>Who paid the {formatRupees(f.total)}?</Text>
           <Card style={styles.card}>
             {f.members.map((m, i) => (
@@ -324,7 +326,7 @@ export default function ItemizedScreen() {
 
       {/* STEP 4: REVIEW */}
       {f.step === 'review' && (
-        <KeyboardForm contentContainerStyle={styles.scroll}>
+        <KeyboardForm contentContainerStyle={[styles.scroll, { paddingBottom: bottomPad }]}>
           <Text style={styles.fieldLabel}>Category</Text>
           <CategoryPicker
             categories={f.categories}
@@ -466,9 +468,9 @@ const styles = StyleSheet.create({
   totalCardMeta: { ...type.label, color: colors.textMuted },
   categoryChip: { flexDirection: 'row', alignItems: 'center', gap: space.xs, backgroundColor: colors.bgMuted, paddingHorizontal: space.sm, paddingVertical: 5, borderRadius: radius.pill },
   categoryChipText: { ...type.caption, color: colors.textSecondary, fontFamily: 'Inter_600SemiBold' },
-  scroll: { padding: layout.screenPaddingH, paddingBottom: space.xxl, gap: space.md },
+  scroll: { padding: layout.screenPaddingH, gap: space.md },
   // No gap: `SectionHeader` owns its margins, and the two would add up (AGENTS §3).
-  itemsScroll: { padding: layout.screenPaddingH, paddingBottom: space.xxl },
+  itemsScroll: { padding: layout.screenPaddingH },
   gap: { gap: space.smd },
   editing: { gap: space.sm, paddingVertical: space.smd },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginTop: space.md },

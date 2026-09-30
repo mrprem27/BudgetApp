@@ -37,10 +37,12 @@ import { AppRefreshControl } from '../../src/components/ui/AppRefreshControl';
 import { loadReportsData } from '../../src/lib/reportsData';
 import { backOr } from '../../src/lib/nav';
 import { Card } from '../../src/components/ui/Card';
+import { useContentInset } from '../../src/hooks/useContentInset';
 
 export default function ReportsScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
+  const bottomPad = useContentInset();
   const insets = useSafeAreaInsets();
   // Seeded from a deep link (`?month=yyyy-MM`) — Personal opens it on a filtered month (`U-52`).
   const { month: monthParam, from: fromParam, to: toParam } = useLocalSearchParams<{ month?: string; from?: string; to?: string }>();
@@ -197,7 +199,7 @@ export default function ReportsScreen() {
   return (
     <View style={styles.container}>
       <ScreenHeader title="Reports" onBack={() => backOr(router, '/(tabs)')} right={exportButtons} />
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + space.lg }]} refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={[styles.scroll, { paddingBottom: bottomPad }]} refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
 
       {/* One bar for both modes, the same size and place as the month bar always was (`U-60`):
           a date range must not move anything on this screen. In month mode the label opens the
@@ -500,7 +502,7 @@ export default function ReportsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  scroll: { padding: layout.screenPaddingH, paddingBottom: space.xl, gap: space.md },
+  scroll: { padding: layout.screenPaddingH, gap: space.md },
   exportRow: { flexDirection: 'row', gap: space.xs },
   // 36, deliberately. These sit inside the ScreenHeader's right slot, and a header
   // is a fixed-height bar — 44 made it chunky for no gain. `hitSlop` covers §6.

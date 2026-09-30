@@ -22,12 +22,14 @@ import { useDataRefresh } from '../../../../src/components/system/DataRefreshPro
 import { haptic } from '../../../../src/lib/haptics';
 import { ARCHIVE_GROUP } from '../../../../src/lib/groupCopy';
 import { backOr } from '../../../../src/lib/nav';
+import { useContentInset } from '../../../../src/hooks/useContentInset';
 
 export default function EditGroupScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const db = useSQLiteContext();
   const { refresh } = useDataRefresh();
   const router = useRouter();
+  const bottomPad = useContentInset();
 
   const [name, setName] = useState('');
   const [icon, setIcon] = useState('credit-card');
@@ -207,7 +209,7 @@ export default function EditGroupScreen() {
       {error ? (
         <ErrorState onRetry={reload} />
       ) : (
-      <KeyboardForm contentContainerStyle={styles.scroll}>
+      <KeyboardForm contentContainerStyle={[styles.scroll, { paddingBottom: bottomPad }]}>
         <GroupForm
           values={{ name, icon, color, members, defaultSplit }}
           onChange={(patch) => {
@@ -233,7 +235,6 @@ export default function EditGroupScreen() {
           submitLabel="Add friend"
         />
 
-        <View style={{ height: space.lg }} />
         {/*
           Say it, rather than presenting a Save that can only be refused. The
           name, icon, colour and split all belong to the whole group now — they
@@ -276,7 +277,7 @@ export default function EditGroupScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  scroll: { padding: layout.screenPaddingH, paddingBottom: space.xl },
+  scroll: { padding: layout.screenPaddingH },
   danger: { flexDirection: 'row', gap: space.sm, marginTop: space.md },
   dangerBtn: { flex: 1, alignItems: 'center', paddingVertical: space.md, borderRadius: radius.md, backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border },
   deleteBtn: { backgroundColor: colors.expenseTint, borderColor: colors.expenseTintStrong },

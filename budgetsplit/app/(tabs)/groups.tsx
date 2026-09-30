@@ -37,12 +37,14 @@ import type { BudgetGroup } from '../../src/db/queries/groups';
 import { HeaderIconButton } from '../../src/components/ui/HeaderIconButton';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { Card } from '../../src/components/ui/Card';
+import { useContentInset } from '../../src/hooks/useContentInset';
 
 
 
 export default function GroupsScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
+  const bottomPad = useContentInset({ tabBar: true });
   const insets = useSafeAreaInsets();
   // Groups come from the global store — hydrated at the root by StoreHydrator and
   // refreshed on the data-change signal, so this screen neither queries nor sets them.
@@ -319,7 +321,7 @@ export default function GroupsScreen() {
           data={viewMode === 'active' ? activeGroups : archived}
           keyExtractor={g => g.id}
           renderItem={renderGroup}
-          contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + layout.tabBarHeight + space.lg }]}
+          contentContainerStyle={[styles.list, { paddingBottom: bottomPad }]}
           initialNumToRender={8}
           maxToRenderPerBatch={8}
           windowSize={9}

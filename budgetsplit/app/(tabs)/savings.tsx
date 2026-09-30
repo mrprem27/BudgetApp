@@ -85,7 +85,8 @@ export default function SavingsScreen() {
   // `useContentInset`, not a hand-rolled sum. The previous expression cleared the
   // tab bar but not the "New" FAB floating above it, so the last goal card sat
   // underneath the button — the exact failure `useContentInset` was written for.
-  const contentInset = useContentInset({ fab: true, tabBar: true });
+  // No `fab`: this tab's + is the tab bar's, which `tabBar` already clears.
+  const contentInset = useContentInset({ tabBar: true });
   const { flags } = useFeatureFlags();
   const [tab, setTab] = useState<MoneyTab>('overview');
   const assetsData = useAssets();
@@ -319,7 +320,6 @@ export default function SavingsScreen() {
           </>
         )}
 
-        <View style={{ height: space.lg }} />
       </ScrollView>
       )}
 
