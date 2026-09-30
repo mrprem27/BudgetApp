@@ -24,11 +24,12 @@ export async function loadPersonal(db: SQLite.SQLiteDatabase, meId: string) {
   return { persons, activity, groups, budget, recurringRules, recurSkips, summary: { owe: exp.owe, lent: exp.owed } };
 }
 
-/** Which ledger the scope chip picked: personal, every group, all of it, or one group by id. */
-export function scopeActivity(activity: MyActivityItem[], scope: string): MyActivityItem[] {
+export type ActivityScope = 'personal' | 'groups' | 'all';
+
+/** Which ledger the scope chip picked: personal, every group, or all of it. */
+export function scopeActivity(activity: MyActivityItem[], scope: ActivityScope): MyActivityItem[] {
   return activity.filter(a =>
     scope === 'all' ? true
     : scope === 'personal' ? a.isPersonal
-    : scope === 'groups' ? !a.isPersonal
-    : a.group_id === scope);
+    : !a.isPersonal);
 }

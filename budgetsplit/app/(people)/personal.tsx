@@ -22,7 +22,7 @@ import { FAB } from '../../src/components/ui/FAB';
 import { SettingsRow, settingsRowDivider } from '../../src/components/ui/SettingsRow';
 import { useGroupTxnActions } from '../../src/hooks/useGroupTxnActions';
 import type { MyActivityItem } from '../../src/db/queries/transactions';
-import { loadPersonal, scopeActivity } from '../../src/lib/personalData';
+import { loadPersonal, scopeActivity, type ActivityScope } from '../../src/lib/personalData';
 import { useScreenData } from '../../src/hooks/useScreenData';
 import { useContentInset } from '../../src/hooks/useContentInset';
 import { useStore } from '../../src/store';
@@ -65,7 +65,8 @@ export default function PersonalScreen() {
   const { flags } = useFeatureFlags();
   const tabs = flags.recurring ? TABS : TABS.filter(t => t.key !== 'recurring');
   useEffect(() => { if (!flags.recurring && tab === 'recurring') setTab('activity'); }, [flags.recurring, tab]);
-  const [filter, setFilter] = useState<string>('personal'); // personal | groups | all | <groupId>
+  // Personal, every group, or both. One group on its own is that group's screen, not a filter here.
+  const [filter, setFilter] = useState<ActivityScope>('personal');
   // The transaction filters, none of which this screen had: it offered scope only.
   const [query, setQuery] = useState('');
   const [kind, setKind] = useState<KindFilter>(KIND_ANY);
@@ -97,10 +98,6 @@ export default function PersonalScreen() {
   const recurringRules = data?.recurringRules ?? [];
   const recurSkips = data?.recurSkips;
 
-  // Memoised through to `filterGroups`: the filter bar sits above a SectionList,
-  // so without it every keystroke re-filtered the ledger, rebuilt the chip row and
-  // re-rendered the whole list. `TransactionsTab` already does it this way.
-  const sharedGroups = useMemo(() => groups.filter(g => g.is_personal !== 1), [groups]);
   const personalGroup = useMemo(() => groups.find(g => g.is_personal === 1) ?? null, [groups]);
   // One way into Add from this screen, for the button and the Recurring tab alike.
   // One way into Add from here; the Recurring tab's opens with Repeat on (`OV-27`).
@@ -133,11 +130,10 @@ export default function PersonalScreen() {
       { label: 'Personal', value: 'personal' },
       { label: 'Groups', value: 'groups' },
       { label: 'All', value: 'all' },
-      ...sharedGroups.map(g => ({ label: g.name, value: g.id })),
     ],
-  }], [sharedGroups]);
+  }], []);
   const filterSelected = useMemo(() => ({ scope: filter }), [filter]);
-  const onSelectFilter = useCallback((_: string, v: string) => setFilter(v), []);
+  const onSelectFilter = useCallback((_: string, v: string) => setFilter(v as ActivityScope), []);
 
   // Inline arrows here make SectionList re-render every visible row on any state
   // change, filter typing included.
