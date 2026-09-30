@@ -223,7 +223,7 @@ export const BALANCE_ADJUSTMENT_CATEGORY = 'Balance adjustment';
  * (`BUCKET_FLOWS_SQL`: share − payment) and Spendable by the gap. Returns null for no gap.
  */
 export async function recordBalanceAdjustment(
-  db: SQLite.SQLiteDatabase, place: 'bank' | 'cash' | 'wallet', deltaPaise: number,
+  db: SQLite.SQLiteDatabase, place: 'bank' | 'cash' | 'wallet', deltaPaise: number, accountId?: string,
 ): Promise<string | null> {
   if (!Number.isFinite(deltaPaise) || deltaPaise === 0) return null;
   const me = await getMe(db);
@@ -239,6 +239,7 @@ export async function recordBalanceAdjustment(
     category: BALANCE_ADJUSTMENT_CATEGORY,
     note: deltaPaise > 0 ? 'Balance corrected up' : 'Balance corrected down',
     payMethod: place as PayMethod,
+    accountId,
     payments: deltaPaise < 0 ? [{ personId: me.id, amount }] : [],
     shares: deltaPaise > 0 ? [{ personId: me.id, amount }] : [],
   });

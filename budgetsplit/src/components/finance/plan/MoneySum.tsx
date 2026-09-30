@@ -14,9 +14,10 @@ const LABEL: Record<MoneySumLine['key'], string> = {
 
 /**
  * How your money adds up (`moneySumLines`), drawn once for Money's card and for the editor behind
- * it (`U-47`), so the two always show the same arithmetic. Invested opens the asset register.
+ * it (`U-47`), so the two always show the same arithmetic. Invested opens the asset register; a
+ * place or the card opens the accounts behind it (`U-68`).
  */
-export function MoneySum({ places, unattributed, inGoals, investments, creditUsed, assetCount, creditLeft, onManageAssets, onSetUnattributed }: {
+export function MoneySum({ places, unattributed, inGoals, investments, creditUsed, assetCount, creditLeft, onManageAssets, onManageAccounts, onSetUnattributed }: {
   places: Record<MoneyPlace, number>;
   unattributed?: number;
   inGoals?: number;
@@ -26,6 +27,7 @@ export function MoneySum({ places, unattributed, inGoals, investments, creditUse
   /** Unused limit, shown as a hint on Card owed; never counted. */
   creditLeft?: number;
   onManageAssets?: () => void;
+  onManageAccounts?: () => void;
   /** Opens "where did this go through?" for the unattributed line (`U-62`). */
   onSetUnattributed?: () => void;
 }) {
@@ -46,7 +48,8 @@ export function MoneySum({ places, unattributed, inGoals, investments, creditUse
             value={l.value}
             total={l.total}
             color={l.key === 'card' ? colors.expense : undefined}
-            onPress={l.key === 'invested' ? onManageAssets : l.key === 'unattributed' ? onSetUnattributed : undefined}
+            onPress={l.key === 'invested' ? onManageAssets : l.key === 'unattributed' ? onSetUnattributed
+              : l.key === 'bank' || l.key === 'cash' || l.key === 'wallet' || l.key === 'card' ? onManageAccounts : undefined}
             hint={l.key === 'invested' && assetCount ? `${assetCount} ${assetCount === 1 ? 'asset' : 'assets'}`
               : l.key === 'card' && creditLeft ? `${formatCompact(creditLeft)} left to borrow`
               : l.key === 'goals' ? 'Set aside, not spendable'

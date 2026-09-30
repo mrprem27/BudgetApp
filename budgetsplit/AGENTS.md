@@ -809,12 +809,12 @@ BudgetApp/
 │   │   ├── _layout.tsx          # Boot: DB init, providers, gates, Stack
 │   │   ├── (tabs)/              # Custom 5-slot tab bar over 4 tab routes
 │   │   ├── add/                 # quick.tsx · itemized.tsx — the only fullScreenModal routes
-│   │   ├── (money)/             # reports · insights · budget · afford · categories · assets · history ·
+│   │   ├── (money)/             # reports · insights · budget · afford · categories · assets · accounts · history ·
 │   │   │                        #   upcoming · plan/ · savings/ · recurring/ · category/ · asset/
 │   │   ├── (people)/            # friends · personal · trust · approvals · link · person/ · group/[id]
 │   │   ├── (ledger)/            # review · import · search · txn/[id]
 │   │   └── (system)/            # help · features · storage · auth · settings/
-│   │                            # 45 routes in total. `(group)` folders organise files and are
+│   │                            # 46 routes in total. `(group)` folders organise files and are
 │   │                            # NOT part of the URL — moving a file between them changes no route.
 │   ├── src/
 │   │   ├── components/

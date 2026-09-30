@@ -158,6 +158,7 @@ export default function SavingsScreen() {
             onPayCardBill={() => setShowPayCardBill(true)}
             onMoveToInvestments={() => setShowMoveInvest(true)}
             onManageAssets={() => setTab('assets')}
+            onManageAccounts={() => router.push('/accounts')}
             onSetUnattributed={openSetUnattributed}
           />
         )}
@@ -336,6 +337,7 @@ export default function SavingsScreen() {
         inGoals={inGoals}
         onSave={handleSaveMoney}
         onManageAssets={() => { setShowMoneyEditor(false); setTab('assets'); }}
+        onManageAccounts={() => { setShowMoneyEditor(false); router.push('/accounts'); }}
       />
 
       {/* Opens as bank → your first asset (the common "I bought an investment" case); ⇅ flips it,

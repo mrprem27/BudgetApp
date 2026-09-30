@@ -105,22 +105,61 @@ export const CASH_TOTALS_SQL = `
  * the bank goes down when you pay the bill — before `U-48` it was skipped, and Bank + Cash +
  * Wallet stopped adding up to Spendable after the first bill paid.
  */
-export const BUCKET_FLOWS_SQL = `
-  SELECT
-    CASE WHEN ${FROM} IN ('bank', 'cash', 'wallet') THEN ${FROM} ELSE NULL END AS bucket,
-    COALESCE(SUM(
+const MY_DELTA = `COALESCE(SUM(
       CASE
         WHEN t.kind = 'income'     THEN  COALESCE(mp.amt, 0)
         WHEN t.kind = 'expense'    THEN -COALESCE(mp.amt, 0)
         WHEN t.kind = 'settlement' THEN  COALESCE(ms.amt, 0) - COALESCE(mp.amt, 0)
         ELSE 0
       END
-    ), 0) AS delta
+    ), 0)`;
+const MY_FLOWS_FROM = `
   FROM txn t
   LEFT JOIN (SELECT txn_id, SUM(amount) AS amt FROM txn_payment WHERE person_id = ? GROUP BY txn_id) mp ON mp.txn_id = t.id
   LEFT JOIN (SELECT txn_id, SUM(amount) AS amt FROM txn_share   WHERE person_id = ? GROUP BY txn_id) ms ON ms.txn_id = t.id
   WHERE t.is_deleted = 0 AND t.recur_freq IS NULL AND t.date <= ?
     AND (${FROM} IS NULL OR ${FROM} <> 'credit')
-    AND ${NOT_AWAITING_APPROVAL}
+    AND ${NOT_AWAITING_APPROVAL}`;
+
+export const BUCKET_FLOWS_SQL = `
+  SELECT
+    CASE WHEN ${FROM} IN ('bank', 'cash', 'wallet') THEN ${FROM} ELSE NULL END AS bucket,
+    ${MY_DELTA} AS delta
+  ${MY_FLOWS_FROM}
   GROUP BY bucket
+`;
+
+/**
+ * The same movement per ACCOUNT (`U-68`), so each named account has a balance. Per kind it sums
+ * to `BUCKET_FLOWS_SQL` exactly (`accountFlows.test.ts`). A row with no `account_id` (a peer's
+ * entry: their account is not mine to name) counts against that kind's default, and a card-bill
+ * payment against the default bank, until transfers carry a from-account (`DQ-109`).
+ * Binds: [personId, personId, toMs].
+ */
+export const ACCOUNT_FLOWS_SQL = `
+  SELECT
+    CASE WHEN ${REPAY} THEN 'default:bank'
+         WHEN ${FROM} IN ('bank', 'cash', 'wallet') THEN COALESCE(t.account_id, 'default:' || t.pay_method)
+         ELSE NULL END AS account_id,
+    ${MY_DELTA} AS delta
+  ${MY_FLOWS_FROM}
+  GROUP BY 1
+`;
+
+/**
+ * `cardSpend` of `CASH_TOTALS_SQL` per card account (`U-68`): card spend after the stated
+ * baseline, minus bill payments after it. Sums to `cardSpend` exactly (`accountFlows.test.ts`).
+ * Binds: [cardBaselineMs, cardBaselineMs, personId, toMs].
+ */
+export const CARD_FLOWS_SQL = `
+  SELECT COALESCE(t.account_id, 'default:card') AS account_id,
+    COALESCE(SUM(CASE WHEN (t.kind = 'expense' OR (t.kind = 'settlement' AND NOT ${REPAY}))
+                       AND ${FROM} = 'credit' AND t.date > ? THEN mp.amt
+                      WHEN ${REPAY} AND t.date > ? THEN -mp.amt
+                      ELSE 0 END), 0) AS delta
+  FROM txn t
+  JOIN (SELECT txn_id, SUM(amount) AS amt FROM txn_payment WHERE person_id = ? GROUP BY txn_id) mp ON mp.txn_id = t.id
+  WHERE t.is_deleted = 0 AND t.recur_freq IS NULL AND t.date <= ? AND t.pay_method = 'card'
+    AND ${NOT_AWAITING_APPROVAL}
+  GROUP BY 1
 `;

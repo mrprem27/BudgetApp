@@ -225,7 +225,7 @@ photos never sync (`SYNC-F4`); balances never travel (`E-50`).
 
 One SQLite database, `budgetsplit.db`, opened by `SQLiteProvider` at the root. It is the single
 source of truth — there is no Redux, no React Query, no in-memory mirror. Reads go through
-`src/db/queries/` (28 modules); pure logic lives in `src/lib/` (143 modules) and touches neither
+`src/db/queries/` (29 modules); pure logic lives in `src/lib/` (143 modules) and touches neither
 React nor the database.
 
 **Foreign keys are OFF** on every connection (`applyConnectionPragmas`). Every `REFERENCES` clause
@@ -1958,7 +1958,7 @@ that the server could not read.
 
 `Last verified: 2026-09-01 · Guarded by: docCoverage.test.ts, deadRouteRef.test.ts, screenIdMap.test.ts, entryPointCount.test.ts`
 
-45 routes. `SC-xx` numbers are the existing `S-xx` numbers — the same screen, the same digits, so old
+46 routes. `SC-xx` numbers are the existing `S-xx` numbers — the same screen, the same digits, so old
 citations still resolve (§12). `SC-42` and `SC-43` are new: `/assets` and `/settings/sync` had no ID
 and no behaviour section anywhere before this document. `SC-44`, the sync log, was retired in S22
 with the sync it logged; its number is not reused.
@@ -2047,6 +2047,7 @@ taps are listed separately below and are not in the count.
 | `SC-33` | `/afford` | Can I afford this | **1** | Sole entry, now a **labelled** icon on `SC-05` (`OV-16`) |
 | `SC-41` | `/recurring/[id]` | **One** rule, with all the actions | 5 | Replaced `group/[id]/recurring` |
 | `SC-42` | `/assets` | The asset register | 3 | **New ID.** Undocumented until now |
+| `SC-48` | `/accounts` | **Accounts**: each bank, cash, wallet and card with what it holds today (`U-68`) | 2 | **New ID** |
 | `SC-46` | `/asset/[id]` | **One asset**, and the movements that built its balance | 1 | The exit surface `OV-30` was missing: the register showed a balance with no path back to its rows |
 
 #### Transactions, review, people
@@ -2135,6 +2136,7 @@ open. The walkthrough shows these instead of the paths.
 | `SC-45` | **Settings → Security → Who can add to my ledger**. Also the empty state of the *waiting for you* queue |
 | `SC-46` | **Plan → Assets → tap an asset**. Tapping a row used to open its edit sheet; Edit moved to the row's action strip, because seeing what is in an asset is commoner than renaming it |
 | `SC-43` | **Settings → Sync** |
+| `SC-48` | **Money** → tap Bank, Cash, Wallet or Card owed on your money card (or in Your money) |
 
 `SC-01` and `SC-02` are the app shell and the tab bar — you are always inside them, so there is
 nowhere to go.
@@ -2171,7 +2173,7 @@ nowhere to go.
 
 `lib/nav.ts` exports `backOr(router, fallback)` — `back()` if there is a stack, otherwise
 `replace(fallback)`. It exists because a deep-linked or cold-started screen has an empty stack and a
-dead ✕. **It is used in 6 of 45 route files**; the other ~40 call bare `router.back()` (`OV-10`).
+dead ✕. **It is used in 8 of 46 route files**; the other ~38 call bare `router.back()` (`OV-10`).
 Today that is only safe because nothing deep-links into those screens.
 
 Four sites were pushing a *tab* route onto the stack, which stacks a duplicate tab instead of

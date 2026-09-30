@@ -310,6 +310,8 @@ export type InsertTxnInput = {
   lng?: number;
   placeLabel?: string;
   payMethod?: PayMethod;
+  /** Which account of that kind (`U-68`); omitted means the kind's default (`alignAccount`). */
+  accountId?: string;
   /**
    * The named asset this transfer moved money into or out of, so the row can be
    * traced back to it — which is what lets an asset be deleted only when nothing
@@ -374,8 +376,8 @@ export async function insertTxnRows(
     await db.runAsync(
       `INSERT INTO txn
          (id,group_id,kind,entry_mode,date,category,note,attachment_uri,tags,
-          recur_freq,recur_interval,recur_end,recur_mode,tz,lat,lng,place_label,pay_method,currency,source,asset_id,is_deleted,created_at,updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?)`,
+          recur_freq,recur_interval,recur_end,recur_mode,tz,lat,lng,place_label,pay_method,account_id,currency,source,asset_id,is_deleted,created_at,updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?)`,
       [
         id, input.groupId, input.kind, input.entryMode, input.date,
         input.category, input.note ?? null, input.attachmentUri ?? null,
@@ -384,6 +386,7 @@ export async function insertTxnRows(
         input.recurMode ?? 'auto',
         localTz(), input.lat ?? null, input.lng ?? null, input.placeLabel ?? null,
         input.payMethod ?? null,
+        input.accountId ?? null,
         input.currency ?? null,
         input.source ?? null,
         input.assetId ?? null,
@@ -966,6 +969,8 @@ export type UpdateTxnInput = {
   category: string;
   note?: string;
   payMethod?: PayMethod;
+  /** Which account of that kind (`U-68`). Omitted keeps the stored one while the kind still matches. */
+  accountId?: string;
   /** Full replacement set — omit to clear. Normalized by `serializeTags`. */
   tags?: string[];
   /**
@@ -1047,6 +1052,7 @@ export async function updateTxn(
       `UPDATE txn SET group_id=?, kind=?, date=?, category=?, note=?, pay_method=?, tags=?, updated_at=? WHERE id=?`,
       [input.groupId, input.kind, input.date, input.category, input.note ?? null, input.payMethod ?? null, serializeTags(input.tags ?? []), now, id],
     );
+    if (input.accountId !== undefined) await db.runAsync('UPDATE txn SET account_id = ? WHERE id = ?', [input.accountId, id]);
     await alignAccount(db, 'txn', id);
     if (input.attachmentUri !== undefined) {
       await db.runAsync('UPDATE txn SET attachment_uri=? WHERE id=?', [input.attachmentUri, id]);

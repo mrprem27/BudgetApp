@@ -29,6 +29,7 @@ export function MoneyEditorSheet({
   initial,
   onSave,
   onManageAssets,
+  onManageAccounts,
   current,
   unattributed = 0,
   inGoals = 0,
@@ -44,6 +45,8 @@ export function MoneyEditorSheet({
   onSave: (p: MoneyProfileWrite, adjustments?: Partial<Record<MoneyPlace, number>>) => void;
   /** Opens the asset register — where investments live now. */
   onManageAssets?: () => void;
+  /** Opens the accounts behind each place (`U-68`). */
+  onManageAccounts?: () => void;
   /**
    * Each place's balance today (`getCashPosition().byBucket`). The fields show and take these,
    * so what you type is what your bank app says; the starting figure is worked out on save.
@@ -196,6 +199,7 @@ export function MoneyEditorSheet({
             creditUsed={usedPaise}
             creditLeft={limitPaise > 0 ? Math.max(0, limitPaise - usedPaise) : undefined}
             onManageAssets={onManageAssets}
+            onManageAccounts={onManageAccounts}
           />
         </Card>
 
