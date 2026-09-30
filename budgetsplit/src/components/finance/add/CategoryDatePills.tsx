@@ -3,13 +3,11 @@ import { View, StyleSheet } from 'react-native';
 import { format, isSameDay } from 'date-fns';
 import { shortDate, timeOfDay } from '../../../lib/dateFormat';
 import { Chip } from '../../ui/Chip';
-import { IconCircle } from '../../ui/IconCircle';
 import { colors, space } from '../../tokens';
-import { asFeather } from '../../../constants/palette';
-import { categoryVisual } from '../../../constants/categories';
 import type { Category } from '../../../db/queries/categories';
 import type { AddKind } from '../../../constants/enums';
 import type { FeatherName } from '../../../constants/palette';
+import { CategoryField } from '../CategoryField';
 
 type Props = {
   kind: AddKind;
@@ -63,17 +61,12 @@ export function CategoryDatePills({
           accessibilityLabel={destination.a11y}
         />
       ) : (
-        <Chip
-          grow
-          label={selectedCategory?.name ?? catWord}
-          // A chosen category shows its own colour+glyph in a disc; an empty one shows
-          // the neutral glyph for what's being asked for.
-          leading={selectedCategory
-            ? <IconCircle icon={asFeather(categoryVisual(selectedCategory.name).icon, 'tag')} size={22} color={catColor} iconSize={13} />
-            : undefined}
-          icon={selectedCategory ? undefined : kind === 'transfer' ? 'message-circle' : 'tag'}
+        <CategoryField
+          name={selectedCategory?.name}
+          color={catColor}
+          placeholder={catWord}
+          emptyIcon={kind === 'transfer' ? 'message-circle' : 'tag'}
           onPress={onCategory}
-          accessibilityLabel={selectedCategory ? `${catWord}: ${selectedCategory.name}` : `Choose ${catWord.toLowerCase()}`}
         />
       )}
       {/*

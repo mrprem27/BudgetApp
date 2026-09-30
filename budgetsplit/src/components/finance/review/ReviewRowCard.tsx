@@ -4,8 +4,6 @@ import { Feather } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import { SplitEditor } from '../add/SplitEditor';
 import { colors, type, space, radius, layout, shadow } from '../../tokens';
-import { categoryVisual } from '../../../constants/categories';
-import { asFeather } from '../../../constants/palette';
 import { parseToPaise, formatRupees, splitByMode } from '../../../lib/money';
 import { haptic } from '../../../lib/haptics';
 import { alpha } from '../../../theme';
@@ -13,7 +11,8 @@ import type { RowEdit, SplitState } from '../../../lib/reviewCommit';
 import type { PendingTxn } from '../../../db/queries/pending';
 import type { Person } from '../../../db/queries/persons';
 import { type TxnKind, PAY_METHOD_LABEL, PAY_METHOD_ICON, TXN_KIND_LABEL } from '../../../constants/enums';
-import { IconCircle } from '../../ui/IconCircle';
+import { CategoryField } from '../CategoryField';
+import { Chip } from '../../ui/Chip';
 
 /** Kind chips on each row. "Transfer" is the UI name for a `settlement` — money
  *  moving between accounts or people, which is neither spend nor earnings. */
@@ -75,7 +74,6 @@ export const ReviewRowCard = React.memo(function ReviewRowCard({
   onToggleSelect, onAmountChange, onAmountBlur, onPatch, onSplitChange,
   onOpenCategory, onOpenDest, onOpenCounterparty, onOpenPay, onConfirm, onDiscard,
 }: Props) {
-  const vis = categoryVisual(v.category);
   const isGroup = v.dest !== 'personal';
   const isTransfer = v.kind === 'settlement';
   const groupName = isGroup ? (sharedGroups.find(g => g.id === v.dest)?.name ?? 'Group') : 'Personal';
@@ -144,15 +142,11 @@ export const ReviewRowCard = React.memo(function ReviewRowCard({
       </View>
 
       <View style={styles.controls}>
-        <TouchableOpacity style={styles.pill} onPress={() => onOpenCategory(row.id)} accessibilityRole="button" accessibilityLabel="Category">
-          <IconCircle icon={asFeather(vis.icon, 'tag')} size={20} color={vis.color ?? colors.accent} iconSize={12} />
-          <Text style={styles.pillText} numberOfLines={1}>{v.category || 'Category'}</Text>
-        </TouchableOpacity>
+        {/* The same category chip as Add (`U-34`), and the same Chip for where it goes. */}
+        <CategoryField name={v.category} onPress={() => onOpenCategory(row.id)} />
         {hasGroups && v.kind !== 'income' && (
-          <TouchableOpacity style={[styles.pill, isGroup && styles.pillGroup]} accessibilityState={{ selected: isGroup }} onPress={() => onOpenDest(row.id)} accessibilityRole="button" accessibilityLabel="Personal or group">
-            <Feather name={isGroup ? 'users' : 'user'} size={12} color={isGroup ? colors.settle : colors.textSecondary} />
-            <Text style={[styles.pillText, isGroup && { color: colors.settle }]} numberOfLines={1}>{groupName}</Text>
-          </TouchableOpacity>
+          <Chip grow icon={isGroup ? 'users' : 'user'} label={groupName} selected={isGroup} accent={colors.settle}
+            onPress={() => onOpenDest(row.id)} accessibilityLabel="Personal or group" />
         )}
       </View>
 
