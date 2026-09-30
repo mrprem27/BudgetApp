@@ -814,7 +814,7 @@ BudgetApp/
 │   │   ├── (people)/            # friends · personal · trust · approvals · link · person/ · group/[id]
 │   │   ├── (ledger)/            # review · import · search · txn/[id]
 │   │   └── (system)/            # help · features · storage · auth · settings/
-│   │                            # 44 routes in total. `(group)` folders organise files and are
+│   │                            # 45 routes in total. `(group)` folders organise files and are
 │   │                            # NOT part of the URL — moving a file between them changes no route.
 │   ├── src/
 │   │   ├── components/

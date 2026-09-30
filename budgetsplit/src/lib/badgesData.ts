@@ -10,7 +10,7 @@ import { getFinanceSnapshot } from '../db/queries/engineSnapshot';
 import { getMyGlobalBudgetSummary } from './budget';
 import { explain } from './engine/explain';
 import { incomeModel } from './engine/behaviour';
-import { streakFrom } from './streak';
+import { myShareOf, myIncomeOf } from './splitMath';
 import { computeBadges, type Badge } from './badges';
 
 /**
@@ -35,8 +35,12 @@ export async function loadBadges(db: SQLite.SQLiteDatabase, nowMs: number = Date
   const why = explain(snapshot);
   const income = incomeModel(snapshot);
   return computeBadges({
-    streak: streakFrom(counted.map(t => t.date), nowMs).streak,
-    txnCount: counted.length,
+    nowMs,
+    rows: counted.map(t => ({
+      date: t.date,
+      spent: t.kind === 'expense' ? myShareOf(t, me.id) : 0,
+      income: t.kind === 'income' ? myIncomeOf(t, me.id) : 0,
+    })),
     safeToSpend: why.suppressVerdict ? null : sts.amount,
     lowSoon: !!sts.warning,
     incomeConsistency: income.incomeMonths > 0 ? income.consistency : null,
@@ -46,7 +50,6 @@ export async function loadBadges(db: SQLite.SQLiteDatabase, nowMs: number = Date
     goalsDone: goals.filter(g => g.target > 0 && (saved[g.id] ?? 0) >= g.target).length,
     goalsCount: goals.length,
     budgetPct: budget.allocated > 0 ? budget.pct : null,
-    dayOfMonth: new Date(nowMs).getDate(),
     assetCount: assets.length,
   });
 }

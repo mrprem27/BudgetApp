@@ -1931,7 +1931,7 @@ that the server could not read.
 
 `Last verified: 2026-09-01 · Guarded by: docCoverage.test.ts, deadRouteRef.test.ts, screenIdMap.test.ts, entryPointCount.test.ts`
 
-44 routes. `SC-xx` numbers are the existing `S-xx` numbers — the same screen, the same digits, so old
+45 routes. `SC-xx` numbers are the existing `S-xx` numbers — the same screen, the same digits, so old
 citations still resolve (§12). `SC-42` and `SC-43` are new: `/assets` and `/settings/sync` had no ID
 and no behaviour section anywhere before this document. `SC-44`, the sync log, was retired in S22
 with the sync it logged; its number is not reused.
@@ -2053,6 +2053,7 @@ taps are listed separately below and are not in the count.
 | `SC-38` | `/settings/linked` | 2 | Own `ErrorBoundary` |
 | `SC-39` | `/link` | **0** | Deep link only, by design |
 | `SC-43` | `/settings/sync` | 3 | **New ID** |
+| `SC-47` | `/badges` | 1 | Opened from the badge board on Settings (`U-65`). **New ID** |
 
 ### Getting there
 
@@ -2066,6 +2067,7 @@ open. The walkthrough shows these instead of the paths.
 | `SC-04` | **Groups** tab. With splitting off this slot is Personal instead |
 | `SC-05` | **Plan** tab — fourth slot, labelled Plan though the route says savings |
 | `SC-06` | **Settings** tab, or your avatar at the top right of Home |
+| `SC-47` | **Settings** → the **Badges** board under your name |
 | `SC-07` | The **＋** in the middle of the tab bar |
 | `SC-08` | **＋** → *Split by items* |
 | `SC-09` | **Groups** → tap a group |
@@ -2142,7 +2144,7 @@ nowhere to go.
 
 `lib/nav.ts` exports `backOr(router, fallback)` — `back()` if there is a stack, otherwise
 `replace(fallback)`. It exists because a deep-linked or cold-started screen has an empty stack and a
-dead ✕. **It is used in 6 of 44 route files**; the other ~40 call bare `router.back()` (`OV-10`).
+dead ✕. **It is used in 6 of 45 route files**; the other ~40 call bare `router.back()` (`OV-10`).
 Today that is only safe because nothing deep-links into those screens.
 
 Four sites were pushing a *tab* route onto the stack, which stacks a duplicate tab instead of
@@ -2162,7 +2164,7 @@ Three presentation tiers are in use, and the boundaries between them are not pri
 | Tier | Used by |
 |---|---|
 | `fullScreenModal` route | `SC-07`, `SC-08` only |
-| Pushed full screen | the other 42 routes <!--count-ok--> |
+| Pushed full screen | the other 43 routes <!--count-ok--> |
 | In-screen `SheetModal` | ~45 components across 13 route files <!--count-ok--> |
 
 Creating a group is a sheet; editing one is a route. Adding a person is a sheet; adding a member is a

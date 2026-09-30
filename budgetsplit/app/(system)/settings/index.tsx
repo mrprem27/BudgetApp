@@ -38,7 +38,7 @@ import type { BudgetCadence } from '../../../src/db/queries/categoryBudgets';
 import { asBudgetCadence, asPayMethod, PayMethod, PAY_METHOD_LABEL } from '../../../src/constants/enums';
 import { useScreenData } from '../../../src/hooks/useScreenData';
 import { loadBadges } from '../../../src/lib/badgesData';
-import { ProfileBadges } from '../../../src/components/finance/settings/ProfileBadges';
+import { BadgeBoard } from '../../../src/components/finance/badges/BadgeBoard';
 import { useServerSession } from '../../../src/hooks/useServerSession';
 import { ErrorState } from '../../../src/components/ui/ErrorState';
 import { Card } from '../../../src/components/ui/Card';
@@ -300,7 +300,8 @@ export default function SettingsScreen() {
         </Card>
       </TouchableOpacity>
 
-      <ProfileBadges badges={badges ?? []} />
+      {/* The badge board: grey until earned, in colour once it is; opens every badge (`U-65`). */}
+      <BadgeBoard badges={badges ?? []} onOpen={() => router.push('/badges')} compact />
 
       {/* ACCOUNT — only in a build that has a server to talk to
           (EXPO_PUBLIC_API_URL). Signing in keeps a copy of everything on the
