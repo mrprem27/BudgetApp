@@ -97,7 +97,7 @@ export default function SavingsScreen() {
   useEffect(() => { if (!flags.savingsGoals && tab === 'goals') setTab('overview'); }, [flags.savingsGoals, tab]);
   // All state, reads and write-handlers live in the hook; this screen renders.
   const {
-    goals, saved, money, profile, assets, byBucket, unattributed, upcoming,
+    goals, saved, money, profile, assets, byBucket, unattributed, inGoals, upcoming,
     loading, error, refreshing, onRefresh, reload,
     overspend, applied, handleApproveOverspend, handleUndoOverspend, handleDismissOverspend,
     showMoneyEditor, setShowMoneyEditor, handleSaveMoney,
@@ -149,6 +149,7 @@ export default function SavingsScreen() {
             money={money}
             byBucket={byBucket}
             unattributed={unattributed}
+            inGoals={inGoals}
             updatedAt={profile.updatedAt}
             assets={assets}
             onEdit={() => setShowMoneyEditor(true)}
@@ -320,6 +321,10 @@ export default function SavingsScreen() {
         // stated-balance + card spend since the baseline, and a field that disagreed with
         // the number above it is how you talk someone into saving a stale figure.
         initial={{ ...profile, creditUsed: money?.creditUsed ?? profile.creditUsed }}
+        // Today's balances, so the editor's sum reads exactly like the card behind it.
+        current={byBucket}
+        unattributed={unattributed}
+        inGoals={inGoals}
         onSave={handleSaveMoney}
         onManageAssets={() => { setShowMoneyEditor(false); setTab('assets'); }}
       />

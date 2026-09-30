@@ -2,12 +2,11 @@ import { View, Text, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius, shadow } from '../../tokens';
 import { alpha } from '../../../theme';
-import { formatCompact } from '../../../lib/money';
 import { formatAgoCompact } from '../../../lib/time';
 import { AmountText } from '../../ui/AmountText';
 import { Badge } from '../../ui/Badge';
 import { PressableScale } from '../../ui/PressableScale';
-import { SumLine } from '../../ui/SumLine';
+import { MoneySum, MONEY_TONE } from './MoneySum';
 import type { TotalMoney } from '../../../lib/cash';
 import { Card } from '../../ui/Card';
 
@@ -15,7 +14,7 @@ const WEEK = 7 * 24 * 60 * 60 * 1000;
 const MONTH = 30 * 24 * 60 * 60 * 1000;
 
 /** One colour per place money sits, the same in the bar and on each line's dot. */
-const TONE = { bank: colors.accent, cash: colors.income, wallet: colors.settle, assets: colors.healthAmber } as const;
+const TONE = MONEY_TONE;
 const PLACE_LABEL = { bank: 'Bank', cash: 'Cash', wallet: 'Wallet' } as const;
 
 /**
@@ -32,12 +31,14 @@ const PLACE_LABEL = { bank: 'Bank', cash: 'Cash', wallet: 'Wallet' } as const;
  * Credit headroom is in neither total: unused limit is permission to borrow, not money (`V2-12`).
  * `updatedAt` drives the staleness badge — these are figures you typed, with no bank feed behind them.
  */
-export function TotalMoneyCard({ money, byBucket, unattributed, updatedAt, onEdit, onPayCardBill, onMoveToInvestments, assets, onManageAssets }: {
+export function TotalMoneyCard({ money, byBucket, unattributed, inGoals, updatedAt, onEdit, onPayCardBill, onMoveToInvestments, assets, onManageAssets }: {
   money: TotalMoney;
   /** Per-bucket balances from `getCashPosition`. Absent until it has loaded. */
   byBucket?: Record<'bank' | 'cash' | 'wallet', number>;
   /** Movement on entries with no recorded pay method — shown, never folded in. */
   unattributed?: number;
+  /** Money set aside for goals: held back from Spendable, so it gets its own line. */
+  inGoals?: number;
   updatedAt?: number | null;
   onEdit: () => void;
   onPayCardBill?: () => void;
@@ -83,20 +84,16 @@ export function TotalMoneyCard({ money, byBucket, unattributed, updatedAt, onEdi
         </View>
       )}
 
-      <View style={styles.sum}>
-        {places.map((p, i) => (
-          <SumLine key={p.key} op={i === 0 ? '' : '+'} dot={TONE[p.key]} label={PLACE_LABEL[p.key]} value={p.value} />
-        ))}
-        {!!unattributed && <SumLine op="+" label="Not recorded where" value={unattributed} />}
-        <SumLine op="=" label="Spendable" value={money.cashAvailable} total />
-        <SumLine op="+" dot={TONE.assets} label="Invested" value={money.investments} onPress={onManageAssets}
-          hint={assets?.length ? `${assets.length} ${assets.length === 1 ? 'asset' : 'assets'}` : undefined} />
-        {money.creditUsed > 0 && (
-          <SumLine op="−" dot={colors.expense} label="Card owed" value={money.creditUsed} color={colors.expense}
-            hint={money.creditLimit > 0 ? `${formatCompact(money.creditAvailable)} left to borrow` : undefined} />
-        )}
-        <SumLine op="=" label="Net worth" value={money.netWorth} total />
-      </View>
+      <MoneySum
+        places={byBucket ?? { bank: 0, cash: money.cashAvailable, wallet: 0 }}
+        unattributed={unattributed}
+        inGoals={byBucket ? inGoals : 0}
+        investments={money.investments}
+        creditUsed={money.creditUsed}
+        assetCount={assets?.length}
+        creditLeft={money.creditLimit > 0 ? money.creditAvailable : undefined}
+        onManageAssets={onManageAssets}
+      />
 
       {(onMoveToInvestments || (money.creditUsed > 0 && onPayCardBill)) && (
         <View style={styles.actions}>
@@ -127,7 +124,6 @@ const styles = StyleSheet.create({
   eyebrow: { ...type.label, color: colors.textSecondary },
   warn: { ...type.caption, color: colors.expense, marginTop: space.xs },
   bar: { flexDirection: 'row', height: 8, borderRadius: 4, overflow: 'hidden', gap: 2 },
-  sum: { gap: 6 },
   actions: { flexDirection: 'row', gap: space.sm },
   actionCell: { flex: 1 },
   action: {

@@ -1259,3 +1259,13 @@ describe('U-22/U-23 · one people control and one group control', () => {
     expect(src).toMatch(/width: '25%'/);
   });
 });
+
+describe('U-47 · the money editor reconciles like the card outside', () => {
+  it('both draw the one MoneySum', () => {
+    expect(fs.readFileSync('src/components/finance/plan/TotalMoneyCard.tsx', 'utf8')).toMatch(/<MoneySum/);
+    expect(fs.readFileSync('src/components/finance/plan/MoneyEditorSheet.tsx', 'utf8')).toMatch(/<MoneySum/);
+  });
+  it('has no button in the middle of the editor', () => {
+    expect(fs.readFileSync('src/components/finance/plan/MoneyEditorSheet.tsx', 'utf8')).not.toMatch(/SecondaryButton/);
+  });
+});

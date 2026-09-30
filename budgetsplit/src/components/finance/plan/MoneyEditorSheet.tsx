@@ -9,8 +9,9 @@ import { AmountRow } from '../../ui/AmountRow';
 import { IconCircle } from '../../ui/IconCircle';
 import { InfoLabel } from '../../ui/InfoLabel';
 import { PrimaryButton } from '../../ui/PrimaryButton';
-import { SecondaryButton } from '../../ui/SecondaryButton';
-import { formatCompact, formatRupees, parseToPaise, sumInputsPaise } from '../../../lib/money';
+import { formatRupees, parseToPaise } from '../../../lib/money';
+import { openingFor, type MoneyPlace } from '../../../lib/moneySum';
+import { MoneySum } from './MoneySum';
 import { asDueDay, type MoneyProfile } from '../../../lib/cash';
 import type { MoneyProfileWrite } from '../../../db/queries/moneyProfile';
 
@@ -28,6 +29,9 @@ export function MoneyEditorSheet({
   initial,
   onSave,
   onManageAssets,
+  current,
+  unattributed = 0,
+  inGoals = 0,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -35,6 +39,13 @@ export function MoneyEditorSheet({
   onSave: (p: MoneyProfileWrite) => void;
   /** Opens the asset register — where investments live now. */
   onManageAssets?: () => void;
+  /**
+   * Each place's balance today (`getCashPosition().byBucket`). The fields show and take these,
+   * so what you type is what your bank app says; the starting figure is worked out on save.
+   */
+  current?: Record<MoneyPlace, number>;
+  unattributed?: number;
+  inGoals?: number;
 }) {
   const [bank, setBank] = useState('');
   const [cash, setCash] = useState('');
@@ -53,12 +64,23 @@ export function MoneyEditorSheet({
    */
   const initialRef = useRef(initial);
   initialRef.current = initial;
+  const currentRef = useRef(current);
+  currentRef.current = current;
+  // What each field opened with: an untouched field keeps its exact figure, sign included
+  // (`parseToPaise` reads no minus, and an overdrawn place is negative).
+  const seeded = useRef<Record<MoneyPlace, string>>({ bank: '', cash: '', wallet: '' });
   useEffect(() => {
     if (!visible) return;
     const initial = initialRef.current;
-    setBank(toInput(initial.openingBank));
-    setCash(toInput(initial.openingCash));
-    setWallet(toInput(initial.openingWallet));
+    const now = currentRef.current;
+    seeded.current = {
+      bank: toInput(now ? now.bank : initial.openingBank),
+      cash: toInput(now ? now.cash : initial.openingCash),
+      wallet: toInput(now ? now.wallet : initial.openingWallet),
+    };
+    setBank(seeded.current.bank);
+    setCash(seeded.current.cash);
+    setWallet(seeded.current.wallet);
     setLimit(toInput(initial.creditLimit));
     setUsed(toInput(initial.creditUsed));
     setDueDay(initial.cardDueDay ? String(initial.cardDueDay) : '');
@@ -68,11 +90,21 @@ export function MoneyEditorSheet({
   const limitPaise = parseToPaise(limit);
   const usedExceeds = usedPaise > limitPaise && limitPaise > 0;
 
+  const inputs: Record<MoneyPlace, string> = { bank, cash, wallet };
+  const untouched = (k: MoneyPlace) => inputs[k] === seeded.current[k];
+  const typedOf = (k: MoneyPlace) => (current && untouched(k) ? current[k] : parseToPaise(inputs[k]));
+  const typed = { bank: typedOf('bank'), cash: typedOf('cash'), wallet: typedOf('wallet') };
+  // The stored figure is the STARTING balance (each place = start + its movement since), so a
+  // typed "today" becomes start = today − movement. Without `current` (nothing moved yet) the
+  // two are the same.
+  const opening = (k: MoneyPlace, openingOld: number) =>
+    untouched(k) ? openingOld : current ? openingFor(typed[k], current[k], openingOld) : typed[k];
+
   function handleSave() {
     onSave({
-      openingBank: parseToPaise(bank),
-      openingCash: parseToPaise(cash),
-      openingWallet: parseToPaise(wallet),
+      openingBank: opening('bank', initial.openingBank),
+      openingCash: opening('cash', initial.openingCash),
+      openingWallet: opening('wallet', initial.openingWallet),
       creditLimit: limitPaise,
       creditUsed: usedPaise,
       cardDueDay: dueDay.trim() ? Number(dueDay) : null,
@@ -91,7 +123,7 @@ export function MoneyEditorSheet({
         <InfoLabel
           label="Where your money is"
           labelStyle={styles.label}
-          info="What you have right now in each place. Transactions adjust these as you spend, using each one's pay method."
+          info="What each place holds today, as your bank app or wallet shows it. Your transactions move them from here, using each one's pay method."
         />
         <Card clip style={styles.card}>
           <AmountRow icon="briefcase" label="Bank" value={bank} onChangeText={setBank} />
@@ -99,31 +131,7 @@ export function MoneyEditorSheet({
           <AmountRow icon="dollar-sign" label="Cash" value={cash} onChangeText={setCash} iconColor={colors.income} />
           <Divider indent="text" />
           <AmountRow icon="smartphone" label="Wallet" value={wallet} onChangeText={setWallet} iconColor={colors.settle} />
-          <Divider indent="text" />
-          <ListRow icon="layers" title="Total" value={formatRupees(sumInputsPaise(bank, cash, wallet))} chevron={false} />
         </Card>
-
-        {/*
-          * Investments are not a field here any more — they are the asset
-          * register, and this sheet writes the money profile. One number could
-          * not tell gold from an FD from a flat, and typing a new total was the
-          * only way to change it, which is why buying an SIP had to be logged as
-          * an expense and dropped net worth by the amount invested.
-          */}
-        {onManageAssets && (
-          <>
-            <InfoLabel
-              label="Investments and assets"
-              labelStyle={styles.label}
-              info="Gold, a flat, an FD, a fund, named, so moving money in or out is a transfer and your net worth stays put."
-            />
-            <SecondaryButton
-              label={`${formatCompact(initial.investments)} across your assets`}
-              onPress={onManageAssets}
-              style={styles.card}
-            />
-          </>
-        )}
 
         <Text style={styles.label}>Credit card</Text>
         <Card clip style={styles.card}>
@@ -159,6 +167,21 @@ export function MoneyEditorSheet({
               />
             </>
           )}
+        </Card>
+
+        {/* The same sum as Money's card, live as you type (`U-47`): the numbers reconcile the
+            way they read outside, and Invested is a line you tap to reach your assets. */}
+        <Text style={styles.label}>How it adds up</Text>
+        <Card padded style={styles.card}>
+          <MoneySum
+            places={typed}
+            unattributed={unattributed}
+            inGoals={inGoals}
+            investments={initial.investments}
+            creditUsed={usedPaise}
+            creditLeft={limitPaise > 0 ? Math.max(0, limitPaise - usedPaise) : undefined}
+            onManageAssets={onManageAssets}
+          />
         </Card>
 
         <PrimaryButton label="Save" onPress={handleSave} disabled={!!dueDay && !asDueDay(dueDay)} style={{ marginTop: space.sm }} />

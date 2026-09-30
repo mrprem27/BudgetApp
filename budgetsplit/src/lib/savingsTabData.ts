@@ -56,5 +56,5 @@ export async function loadSavingsTabData(
     upcoming = buildUpcoming(rules, me.id, now.getTime(), 5, daysLeftInMonth, skips);
   }
 
-  return { goals, saved, money, profile, assets, byBucket: cashPos.byBucket, unattributed: cashPos.unattributed, upcoming };
+  return { goals, saved, money, profile, assets, byBucket: cashPos.byBucket, unattributed: cashPos.unattributed, inGoals: cashPos.savings, upcoming };
 }

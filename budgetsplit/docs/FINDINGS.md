@@ -141,7 +141,7 @@ seven touches money, the wire, or a migration.
 **By verdict:** 11 `COLLAPSE` · 5 `COLLAPSE-AFTER-PILOT` · 8 `RENAME-ONLY` · 3 `KEEP-DOCUMENTED` ·
 1 `LABELLED` · 6 `NEEDS-DECISION`.
 
-**Still open:** `OV-01` `OV-05` `OV-22`.
+**Still open:** `OV-05` `OV-22`.
 **Needs a decision from you:** `OV-06` `OV-10` `OV-14` `OV-15` `OV-19` `OV-23`.
 
 ---
@@ -520,6 +520,8 @@ OV-01 · Nine names for one row                                     [alias-spraw
   item (Review) · line (ledger).
   Verdict. RENAME-ONLY. Keep **entry** in user-facing copy and **txn** in code.
            "Expense" means kind=expense only. "Item" and "line" belong to E-08.
+  Done.    2026-09-30, your call: keep "transaction" on screen. No rename; the verdict
+           above is superseded.
 
 OV-04 · Seven names over four shapes for a balance                 [alias-sprawl]
   balance · net · owe/owed · who owes whom · exposure · settle-up amount · the strip,
@@ -1115,4 +1117,5 @@ here from `U-11` on.
 | `U-44` | **WhatsApp Remind opened the share sheet, not the chat.** `waNumber` refused any number without a country code, and a ten-digit Indian number is the usual way one is typed, so most reminders fell back to sharing. With the pilot India-only, ten digits starting 6–9 (or with a leading 0) now read as +91 and open that person's chat with the message; anything else still falls back. Then, your call: numbers now carry their code. Every phone field (a friend's, and yours in Account) is a `+91` code box beside the number (`PhoneInput`, `lib/phone.ts`), saved as `+91 98765 43210`; an old number without a code gains +91 the next time it is saved. Review found two ways this could message a stranger, both fixed with tests: a foreign number typed with `+` (`+65 9123 4567`) matched the Indian rule once the `+` was stripped, and a pasted `+91 …` or a legacy `9198…` gained a second 91. | — |
 | `U-45` | **Assets was unstructured, and its + / − and colours made no sense.** Every ledger drew "Moved to Gold" as a coral −, like spending, and "Moved from Gold" as a green +, like income, which `settlementView`'s own rule forbids. Now: asset movements take the settle colour everywhere; an asset's own page signs them from the asset's side (money in positive); the Assets list is a sum card (`SumLine`, as on Money and Friends) with `= Worth`, no Move button per row, and Add asset / Move money as one pair at the end; the edit sheet keeps Stop counting and Delete apart from Save as quiet rows, each with one line saying what it does. Plan in `SPEC-ASSETS-UI.md`. Built, not yet seen on a phone. | — |
 | `U-46` | **Can I afford this? only lived on Goals.** Your pick: also on Overview, directly under Available money, and still first on Goals. One component (`AffordHeroCard`) in both places, both behind `affordCheck`. Built, not yet seen on a phone. | — |
+| `U-47` | **The money editor had a long assets button in the middle of the form, and its numbers did not reconcile with the card outside.** Two number defects under the layout: the fields held STARTING balances while the card shows today's (start + movement), so the two could never agree and typing today's balance double-counted every transaction since; and the card's own sum omitted money set aside for goals, so its places did not add up to Spendable. Now one sum (`lib/moneySum`, drawn by `MoneySum`) serves both: Bank + Cash + Wallet (+ Not recorded where) − In goals = Spendable, + Invested − Card owed = Net worth. The editor takes today's balances, works out the start on save (an untouched field keeps its exact figure, sign included), and shows the same sum live, with Invested as a line that opens your assets. A test checks the sum equals the real Spendable with spending and goal money present. | — |
 
