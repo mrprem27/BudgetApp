@@ -150,7 +150,6 @@ export default function SavingsScreen() {
         : <AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
         {tab === 'overview' && (
           <>
-        <SectionHeader title="Now" first />
 
         {/* Total Money — cash + assets + available credit, with breakdown */}
         {money && (
@@ -167,7 +166,7 @@ export default function SavingsScreen() {
           />
         )}
 
-        {flags.affordCheck && <AffordHeroCard onPress={() => router.push('/afford')} />}
+
 
         {((overspend?.total ?? 0) > 0 || upcoming.length > 0) && <SectionHeader title="This month" />}
 
@@ -238,6 +237,9 @@ export default function SavingsScreen() {
 
         {tab === 'goals' && (
           <>
+        {/* "Can I afford this?" leads Goals: it is the question you ask before a purchase, and
+            the answer is often "save toward it" (`U-29`). */}
+        {flags.affordCheck && <AffordHeroCard onPress={() => router.push('/afford')} />}
         {/* Savings insights moved to the global Insights screen (header link above). */}
 
         {/* Goals — three sections by priority tag (Emergency/Need/Want), each its

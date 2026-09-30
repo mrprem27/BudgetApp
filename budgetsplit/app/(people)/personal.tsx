@@ -6,6 +6,7 @@ import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius, layout, shadow, alpha } from '../../src/theme';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
+import { HeaderIconButton } from '../../src/components/ui/HeaderIconButton';
 import { TabPills } from '../../src/components/ui/TabPills';
 import { FilterBar } from '../../src/components/ui/FilterBar';
 import { rankTagsByFrequency } from '../../src/lib/tags';
@@ -196,14 +197,7 @@ export default function PersonalScreen() {
         title="Personal"
         onBack={() => router.back()}
         right={
-          <TouchableOpacity
-            onPress={() => setShowMenu(true)}
-            hitSlop={10}
-            accessibilityRole="button"
-            accessibilityLabel="Personal options"
-          >
-            <Feather name="more-horizontal" size={22} color={colors.textPrimary} />
-          </TouchableOpacity>
+          <HeaderIconButton icon="more-horizontal" label="Personal options" onPress={() => setShowMenu(true)} />
         }
       />
 

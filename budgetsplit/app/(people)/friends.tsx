@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius, layout, shadow, alpha } from '../../src/theme';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
+import { HeaderIconButton } from '../../src/components/ui/HeaderIconButton';
 import { ErrorState } from '../../src/components/ui/ErrorState';
 import { KeyboardForm } from '../../src/components/ui/KeyboardForm';
 import { AppRefreshControl } from '../../src/components/ui/AppRefreshControl';
@@ -184,10 +185,7 @@ export default function FriendsScreen() {
         title="Friends"
         onBack={() => router.back()}
         right={
-          <TouchableOpacity style={styles.addPill} onPress={() => { setAddName(''); setShowAdd(true); }} hitSlop={8} accessibilityRole="button" accessibilityLabel="Add person">
-            <Feather name="plus" size={13} color={colors.bg} />
-            <Text style={styles.addPillText}>Add</Text>
-          </TouchableOpacity>
+          <HeaderIconButton icon="user-plus" label="Add person" onPress={() => { setAddName(''); setShowAdd(true); }} />
         }
       />
       {loadError ? (

@@ -10,6 +10,7 @@ import { myShareOf, myPaidOf, txnTotal } from '../../../src/lib/splitMath';
 import { settlementView } from '../../../src/lib/settlementView';
 import { colors, type, space, radius, layout, shadow, alpha } from '../../../src/theme';
 import { ScreenHeader } from '../../../src/components/ui/ScreenHeader';
+import { HeaderIconButton } from '../../../src/components/ui/HeaderIconButton';
 import { Banner } from '../../../src/components/ui/Banner';
 import { ErrorState } from '../../../src/components/ui/ErrorState';
 import { EmptyState } from '../../../src/components/ui/EmptyState';
@@ -138,9 +139,7 @@ export default function TxnDetailScreen() {
         title="Transaction"
         onBack={() => router.back()}
         right={canEdit ? (
-          <TouchableOpacity onPress={() => router.push(editHref as never)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Edit">
-            <Feather name="edit-2" size={18} color={colors.accent} />
-          </TouchableOpacity>
+          <HeaderIconButton icon="edit-2" label="Edit" onPress={() => router.push(editHref as never)} />
         ) : undefined}
       />
       <ScrollView contentContainerStyle={styles.scroll}>

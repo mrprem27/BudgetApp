@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { colors, type, space, radius, shadow } from '../../tokens';
+import { alpha } from '../../../theme';
 import { formatCompact } from '../../../lib/money';
 import { formatAgoCompact } from '../../../lib/time';
 import { AmountText } from '../../ui/AmountText';
@@ -12,21 +13,23 @@ import type { TotalMoney } from '../../../lib/cash';
 const WEEK = 7 * 24 * 60 * 60 * 1000;
 const MONTH = 30 * 24 * 60 * 60 * 1000;
 
+/** One colour per place money sits, the same in the bar and on each line's dot. */
+const TONE = { bank: colors.accent, cash: colors.income, wallet: colors.settle, assets: colors.healthAmber } as const;
+const PLACE_LABEL = { bank: 'Bank', cash: 'Cash', wallet: 'Wallet' } as const;
+
 /**
- * The Plan screen hero: **Available Money** — spendable cash, and nothing else.
+ * Money's hero: **Available money** — spendable cash, and nothing else — then how everything adds
+ * up, written as a sum you could check by hand (`U-28`):
  *
- * It used to be one "Total Money" figure adding cash + investments + *unused credit*
- * (`V2-12`). That made a ₹2L card limit read as ₹2L of money, in an app whose job is
- * telling you when to stop; and it moved with a number the user typed once and never
- * revisited. Net worth still matters, so it stays — one line down, clearly separate.
+ *     Bank + Cash + Wallet = Spendable
+ *     + Invested − Card owed = Net worth
  *
- * Credit headroom appears in neither figure. Unused limit is not an asset and not a
- * debt; it is permission to borrow, and labelling it "available" alongside money was
- * the whole problem.
+ * It was one column of rows at three weights, indented by spaces, with a sentence under each
+ * figure and two full-width outlined buttons. Places are listed largest first, and the bar above
+ * shows the same shape in the same colours.
  *
- * `updatedAt` is the last `setMoneyProfile` write — these are manually-entered
- * figures with no bank feed, so a staleness badge is the difference between an
- * honest snapshot and a confident-looking number nobody's touched in months.
+ * Credit headroom is in neither total: unused limit is permission to borrow, not money (`V2-12`).
+ * `updatedAt` drives the staleness badge — these are figures you typed, with no bank feed behind them.
  */
 export function TotalMoneyCard({ money, byBucket, unattributed, updatedAt, onEdit, onPayCardBill, onMoveToInvestments, assets, onManageAssets }: {
   money: TotalMoney;
@@ -44,157 +47,124 @@ export function TotalMoneyCard({ money, byBucket, unattributed, updatedAt, onEdi
 }) {
   const negativeCash = money.cashAvailable < 0;
   const age = updatedAt != null ? Date.now() - updatedAt : null;
-  // <7d: no badge (don't clutter a freshly-edited card). 7-30d: neutral. >30d
-  // or never set: amber — old enough that Insights shouldn't lean on it as fresh.
   const staleness = age === null ? { tone: 'amber' as const, label: 'Never updated' }
     : age > MONTH ? { tone: 'amber' as const, label: `Updated ${formatAgoCompact(updatedAt!)}` }
     : age > WEEK ? { tone: 'neutral' as const, label: `Updated ${formatAgoCompact(updatedAt!)}` }
     : null;
+
+  // Largest first, everywhere: the lines and the bar agree on order.
+  const places = byBucket
+    ? (Object.keys(PLACE_LABEL) as (keyof typeof PLACE_LABEL)[])
+        .map(k => ({ key: k, value: byBucket[k] }))
+        .sort((a, b) => b.value - a.value)
+    : [{ key: 'cash' as const, value: money.cashAvailable }];
+  const slices = [...places.map(p => ({ key: p.key as keyof typeof TONE, v: p.value })), { key: 'assets' as const, v: money.investments }]
+    .filter(s => s.v > 0)
+    .sort((a, b) => b.v - a.v);
+
   return (
-    <PressableScale style={styles.card} onPress={onEdit} accessibilityLabel="Available money, tap to edit">
-      <View style={styles.headRow}>
-        <Text style={styles.label}>AVAILABLE MONEY</Text>
-        <View style={styles.headRowRight}>
-          {staleness && <Badge label={staleness.label} tone={staleness.tone} icon="clock" />}
-          <Feather name="edit-2" size={14} color={colors.textMuted} />
+    <View style={styles.card}>
+      <PressableScale onPress={onEdit} accessibilityLabel="Available money, tap to edit">
+        <View style={styles.headRow}>
+          <Text style={styles.eyebrow}>Available money</Text>
+          <View style={styles.headRight}>
+            {staleness && <Badge label={staleness.label} tone={staleness.tone} icon="clock" />}
+            <Feather name="edit-2" size={14} color={colors.textMuted} />
+          </View>
         </View>
+        <AmountText paise={money.available} size="xl" compact forceColor={negativeCash ? colors.expense : colors.textPrimary} />
+        {negativeCash && <Text style={styles.warn}>Spent past your cash</Text>}
+      </PressableScale>
+
+      {slices.length > 0 && (
+        <View style={styles.bar} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+          {slices.map(s => <View key={s.key} style={{ flex: s.v, backgroundColor: TONE[s.key] }} />)}
+        </View>
+      )}
+
+      <View style={styles.sum}>
+        {places.map((p, i) => (
+          <SumLine key={p.key} op={i === 0 ? '' : '+'} dot={TONE[p.key]} label={PLACE_LABEL[p.key]} value={p.value} />
+        ))}
+        {!!unattributed && <SumLine op="+" label="Not recorded where" value={unattributed} />}
+        <SumLine op="=" label="Spendable" value={money.cashAvailable} total />
+        <SumLine op="+" dot={TONE.assets} label="Invested" value={money.investments} onPress={onManageAssets}
+          hint={assets?.length ? `${assets.length} ${assets.length === 1 ? 'asset' : 'assets'}` : undefined} />
+        {money.creditUsed > 0 && (
+          <SumLine op="−" dot={colors.expense} label="Card owed" value={money.creditUsed} owed
+            hint={money.creditLimit > 0 ? `${formatCompact(money.creditAvailable)} left to borrow` : undefined} />
+        )}
+        <SumLine op="=" label="Net worth" value={money.netWorth} total />
       </View>
-      <AmountText paise={money.available} size="xl" compact forceColor={negativeCash ? colors.expense : colors.textPrimary} />
-      <Text style={styles.heroHint}>
-        {negativeCash ? 'You’ve spent past your cash. Investments and credit are shown below.' : 'Cash you can spend right now.'}
-      </Text>
 
-      <View style={styles.divider} />
-
-      {/* Net worth — what you own minus what you owe. */}
-      <Row label="Net worth" value={formatCompact(money.netWorth)} strong />
-      <SubRow label="Cash" value={formatCompact(money.cashAvailable)} valueColor={negativeCash ? colors.expense : colors.textSecondary} />
-      {/*
-        Where that cash sits, when we know. Nested under Cash rather than replacing
-        it: the hero stays one number (§1), and these are a breakdown of the row
-        above, not four competing figures.
-
-        `unattributed` is shown, not hidden. It is movement on entries whose pay
-        method was never recorded — real money we decline to assign rather than
-        guessing and quietly draining a bucket. Hiding it would make the three
-        buckets look like they should add up to Cash when they do not.
-      */}
-      {byBucket && (
-        <>
-          <SubRow label="  in bank" value={formatCompact(byBucket.bank)} />
-          <SubRow label="  in cash" value={formatCompact(byBucket.cash)} />
-          <SubRow label="  in wallet" value={formatCompact(byBucket.wallet)} />
-          {!!unattributed && (
-            <SubRow label="  not recorded where" value={formatCompact(unattributed)} />
-          )}
-        </>
+      {(onMoveToInvestments || (money.creditUsed > 0 && onPayCardBill)) && (
+        <View style={styles.actions}>
+          {onMoveToInvestments && <Action icon="repeat" label="Move money" onPress={onMoveToInvestments} />}
+          {money.creditUsed > 0 && onPayCardBill && <Action icon="credit-card" label="Card bill paid" onPress={onPayCardBill} />}
+        </View>
       )}
-      {/*
-        * ONE line, and it is the way in — not an itemised list.
-        *
-        * This briefly rendered a SubRow per asset. Unbounded (six assets, six new
-        * rows), duplicating the screen that exists to show exactly that, inside a
-        * card already carrying Cash + three buckets + unattributed + Investments +
-        * Credit used + Headroom + the limit line. A summary card that lists its own
-        * detail has stopped being a summary.
-        *
-        * The count is the affordance instead: "3 assets ›" says there is more and
-        * where it is, in one line, and taps through.
-        */}
-      <SubRow
-        label="Investments & assets"
-        value={formatCompact(money.investments)}
-        hint={assets?.length ? `${assets.length} ${assets.length === 1 ? 'asset' : 'assets'}` : undefined}
-        onPress={onManageAssets}
-      />
-      {money.creditUsed > 0 && <SubRow label="Credit used" value={`−${formatCompact(money.creditUsed)}`} valueColor={colors.expense} />}
-
-      {/* Headroom, deliberately outside both figures. */}
-      <Row label="Credit headroom" value={formatCompact(money.creditAvailable)} strong />
-      <SubRow label={`Limit ${formatCompact(money.creditLimit)} · used ${formatCompact(money.creditUsed)} · borrowing, not money`} value="" />
-
-      {/* Money moves between places — bank, cash, wallet, any asset — and none of it is
-          spending. Buying an SIP was once logged as an expense, which dropped net worth by
-          the amount when it should have stayed flat. */}
-      {onMoveToInvestments && (
-        <PressableScale style={styles.payBillBtn} onPress={onMoveToInvestments} accessibilityLabel="Move money">
-          <Feather name="repeat" size={14} color={colors.accent} />
-          <Text style={styles.payBillText}>Move money, bank, cash or an asset</Text>
-        </PressableScale>
-      )}
-
-      {/* Card debt has a real way down now — not just re-typing the balance. */}
-      {money.creditUsed > 0 && onPayCardBill && (
-        <PressableScale style={styles.payBillBtn} onPress={onPayCardBill} accessibilityLabel="Pay card bill">
-          <Feather name="corner-up-left" size={14} color={colors.accent} />
-          <Text style={styles.payBillText}>Paid your card bill? Log it</Text>
-        </PressableScale>
-      )}
-    </PressableScale>
-  );
-}
-
-function Row({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
-  return (
-    <View style={styles.row}>
-      <Text style={[styles.rowLabel, strong && styles.rowLabelStrong]}>{label}</Text>
-      <Text style={[styles.rowValue, strong && styles.rowValueStrong]}>{value}</Text>
     </View>
   );
 }
 
 /**
- * `onPress` turns a sub-row into the way into its own screen — a chevron and a
- * trailing hint, no extra button. The card was growing a stacked full-width CTA
- * per destination; three of them was ~150pt of identical accent outlines under a
- * summary, all shouting equally.
+ * One line of the sum. The operator column is fixed-width so the numbers line up; a total line
+ * (`=`) gets a rule above it and the primary weight — the arithmetic you learnt at school.
  */
-function SubRow({ label, value, valueColor, hint, onPress }: {
-  label: string; value: string; valueColor?: string; hint?: string; onPress?: () => void;
+function SumLine({ op, dot, label, value, total, owed, hint, onPress }: {
+  op: '' | '+' | '−' | '='; dot?: string; label: string; value: number;
+  total?: boolean; owed?: boolean; hint?: string; onPress?: () => void;
 }) {
-  // Label left, everything else right — the row is `space-between`, so the
-  // trailing items have to be one group or they spread across the whole width.
+  const shown = value < 0 ? `−${formatCompact(-value)}` : formatCompact(value);
   const body = (
-    <>
-      <Text style={styles.subLabel}>{label}</Text>
-      <View style={styles.subRight}>
-        {hint ? <Text style={styles.subHint}>{hint}</Text> : null}
-        {value ? <Text style={[styles.subValue, valueColor ? { color: valueColor } : null]}>{value}</Text> : null}
-        {onPress ? <Feather name="chevron-right" size={13} color={colors.textMuted} /> : null}
+    <View style={[styles.line, total && styles.totalLine]}>
+      <Text style={[styles.op, total && styles.opTotal]}>{op}</Text>
+      {!total && <View style={[styles.dot, { backgroundColor: dot ?? 'transparent' }]} />}
+      <View style={styles.lineText}>
+        <Text style={[styles.lineLabel, total && styles.totalLabel]} numberOfLines={1}>{label}</Text>
+        {hint ? <Text style={styles.hint} numberOfLines={1}>{hint}</Text> : null}
       </View>
-    </>
+      <Text style={[styles.lineValue, total && styles.totalValue, (owed || value < 0) && { color: colors.expense }]}>{shown}</Text>
+      {onPress ? <Feather name="chevron-right" size={14} color={colors.textMuted} /> : null}
+    </View>
   );
-  if (!onPress) return <View style={styles.subRow}>{body}</View>;
+  return onPress
+    ? <TouchableOpacity onPress={onPress} accessibilityRole="button" accessibilityLabel={`${label}, ${shown}`}>{body}</TouchableOpacity>
+    : body;
+}
+
+function Action({ icon, label, onPress }: { icon: keyof typeof Feather.glyphMap; label: string; onPress: () => void }) {
   return (
-    <TouchableOpacity
-      style={styles.subRow}
-      onPress={onPress}
-      hitSlop={{ top: 6, bottom: 6 }}
-      accessibilityRole="button"
-      accessibilityLabel={`${label}, ${value}. ${hint ?? ''}`}
-    >
-      {body}
-    </TouchableOpacity>
+    <PressableScale style={styles.action} onPress={onPress} accessibilityLabel={label}>
+      <Feather name={icon} size={15} color={colors.accent} />
+      <Text style={styles.actionText} numberOfLines={1}>{label}</Text>
+    </PressableScale>
   );
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.lg, ...shadow.md },
+  card: { backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md, gap: space.md, ...shadow.md },
   headRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: space.xs },
-  headRowRight: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  label: { ...type.label, color: colors.textSecondary },
-  heroHint: { ...type.caption, color: colors.textMuted, marginTop: space.xs },
-  divider: { height: 1, backgroundColor: colors.border, marginVertical: space.md },
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: space.sm },
-  rowLabel: { ...type.body, color: colors.textSecondary },
-  rowLabelStrong: { color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
-  rowValue: { fontFamily: 'SpaceMono_400Regular', fontSize: 13, color: colors.textSecondary },
-  rowValueStrong: { color: colors.textPrimary, fontSize: 14 },
-  subRight: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
-  subHint: { ...type.caption, color: colors.textMuted },
-  subRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 3, paddingLeft: space.md },
-  subLabel: { ...type.caption, color: colors.textMuted },
-  subValue: { fontFamily: 'SpaceMono_400Regular', fontSize: 12, color: colors.textSecondary },
-  payBillBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, marginTop: space.md, paddingVertical: space.smd, borderRadius: radius.md, borderWidth: 1, borderColor: colors.accent, minHeight: 44 },
-  payBillText: { ...type.labelSemi, color: colors.accent },
+  headRight: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  eyebrow: { ...type.label, color: colors.textSecondary },
+  warn: { ...type.caption, color: colors.expense, marginTop: space.xs },
+  bar: { flexDirection: 'row', height: 8, borderRadius: 4, overflow: 'hidden', gap: 2 },
+  sum: { gap: 6 },
+  line: { flexDirection: 'row', alignItems: 'center', gap: space.sm, minHeight: 24 },
+  totalLine: { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: space.sm, marginTop: 2 },
+  op: { width: 12, fontFamily: 'SpaceMono_400Regular', fontSize: 14, color: colors.textMuted, textAlign: 'center' },
+  opTotal: { color: colors.textPrimary },
+  dot: { width: 8, height: 8, borderRadius: 4 },
+  lineText: { flex: 1 },
+  lineLabel: { ...type.body, color: colors.textSecondary },
+  totalLabel: { color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
+  hint: { ...type.caption, color: colors.textMuted },
+  lineValue: { fontFamily: 'SpaceMono_400Regular', fontSize: 13, color: colors.textSecondary },
+  totalValue: { fontSize: 15, color: colors.textPrimary },
+  actions: { flexDirection: 'row', gap: space.sm },
+  action: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.xs,
+    minHeight: 44, borderRadius: radius.md, backgroundColor: alpha(colors.accent, 13),
+  },
+  actionText: { ...type.labelSemi, color: colors.accent },
 });

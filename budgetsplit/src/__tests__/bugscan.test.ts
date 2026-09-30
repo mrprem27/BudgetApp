@@ -457,7 +457,7 @@ describe('IR-1 · Import is reachable from Review even while items are waiting',
   const fs = jest.requireActual('fs') as typeof import('fs');
   it("Review's header always carries an Import button", () => {
     const src = fs.readFileSync('app/(ledger)/review.tsx', 'utf8');
-    expect(src).toMatch(/router\.push\('\/import'\)[\s\S]{0,120}Import more data/);
+    expect(src).toMatch(/Import more data[\s\S]{0,80}router\.push\('\/import'\)/);
   });
 });
 
@@ -844,7 +844,8 @@ describe('H1 · Home says where the month is heading in one line, and shows the 
     expect(tiles).toMatch(/label="Month end · projected"/);
     expect(tiles).toMatch(/label="Safe to spend"/);
     const home = fs.readFileSync('app/(tabs)/index.tsx', 'utf8');
-    expect(home.indexOf('<HomeTiles')).toBeGreaterThan(0);
+    expect(home.indexOf('<HeroCard')).toBeGreaterThan(0);
+    expect(home.indexOf('<HeroCard')).toBeLessThan(home.indexOf('<HomeTiles'));  // U-30: spend first
     expect(home.indexOf('<HomeTiles')).toBeLessThan(home.indexOf('<TabPills'));
   });
   it('the streak badge sits beside the name on Home', () => {
@@ -1113,6 +1114,37 @@ describe('U-25 · no dropdown arrow on chips or pills', () => {
     for (const f of ['src/components/ui/Chip.tsx', 'src/components/finance/review/ReviewRowCard.tsx', 'src/components/finance/budget/BudgetAmountRow.tsx']) {
       expect({ f, arrow: /chevron-down|chevron\?:/.test(fs.readFileSync(f, 'utf8')) }).toEqual({ f, arrow: false });
     }
+  });
+});
+
+describe('U-27 · every screen header uses the one icon button', () => {
+  /** Screen headers whose right slot is a labelled control, where the words carry the state. */
+  const LABELLED = new Set(['app/(money)/reports.tsx', 'app/(money)/report-transactions.tsx']);
+  function files(dir: string): string[] {
+    return fs.readdirSync(dir, { withFileTypes: true }).flatMap(e =>
+      e.isDirectory() ? files(`${dir}/${e.name}`) : /\.tsx$/.test(e.name) ? [`${dir}/${e.name}`] : []);
+  }
+  it('hand-rolls no header icon', () => {
+    const bad: string[] = [];
+    for (const f of files('app')) {
+      if (LABELLED.has(f)) continue;
+      const src = fs.readFileSync(f, 'utf8');
+      for (const m of src.matchAll(/right=\{/g)) {
+        const block = src.slice(m.index!, m.index! + 400);
+        if (/<TouchableOpacity[\s\S]{0,200}<Feather/.test(block.split('/>\n')[0] + block)) {
+          if (!/HeaderIconButton/.test(block.slice(0, 200))) bad.push(f);
+        }
+      }
+      if (/const (headerRight|importButton) = \([\s\S]{0,200}<Feather/.test(src)) bad.push(f);
+    }
+    expect([...new Set(bad)]).toEqual([]);
+  });
+});
+
+describe('U-32 · Safe to spend names the year', () => {
+  it('uses the full date on the tile and in its sheet', () => {
+    expect(fs.readFileSync('src/components/finance/home/HomeTiles.tsx', 'utf8')).toMatch(/until \$\{fullDate\(sts\.untilMs\)\}/);
+    expect(fs.readFileSync('src/components/finance/home/StsSheet.tsx', 'utf8')).toMatch(/const until = fullDate\(sts\.untilMs\)/);
   });
 });
 

@@ -298,17 +298,6 @@ export default function DashboardScreen() {
               />
             )}
 
-            {/* The two forward-looking numbers, side by side and above the period pills, since
-                neither depends on them (`U-21`). */}
-            <HomeTiles
-              sts={sts}
-              projected={forecast?.ready ? forecast.projected : null}
-              budget={budget.monthlyAllocated}
-              obfuscate={hideAmounts}
-              onPressSts={() => setShowSts(true)}
-              onPressForecast={() => router.push('/insights')}
-            />
-
             <HeroCard
               spent={spending}
               periodLabel={PERIOD_LABEL[tab]}
@@ -325,6 +314,17 @@ export default function DashboardScreen() {
               healthColor={health ? healthBandColor(health.band) : colors.accent}
               onPressHealth={() => setShowHealth(true)}
               onPressPace={() => router.push('/insights')}
+            />
+
+            {/* Under the hero, side by side at equal size: the two forward-looking numbers
+                (`U-21`, `U-30`). */}
+            <HomeTiles
+              sts={sts}
+              projected={forecast?.ready ? forecast.projected : null}
+              budget={budget.monthlyAllocated}
+              obfuscate={hideAmounts}
+              onPressSts={() => setShowSts(true)}
+              onPressForecast={() => router.push('/insights')}
             />
 
             <View style={styles.tabRow}>

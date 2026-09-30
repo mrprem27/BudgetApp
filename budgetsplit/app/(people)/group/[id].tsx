@@ -26,6 +26,7 @@ import { EmptyState } from '../../../src/components/ui/EmptyState';
 import { ErrorState } from '../../../src/components/ui/ErrorState';
 import { TabPills } from '../../../src/components/ui/TabPills';
 import { ScreenHeader } from '../../../src/components/ui/ScreenHeader';
+import { HeaderIconButton } from '../../../src/components/ui/HeaderIconButton';
 import { SheetModal } from '../../../src/components/ui/SheetModal';
 import { FAB } from '../../../src/components/ui/FAB';
 import { SettingsRow, settingsRowDivider } from '../../../src/components/ui/SettingsRow';
@@ -226,9 +227,7 @@ export default function GroupDetailScreen() {
         title="Groups"
         onBack={() => router.back()}
         right={
-          <TouchableOpacity onPress={() => setShowMenu(true)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Group options">
-            <Feather name="more-horizontal" size={22} color={colors.textPrimary} />
-          </TouchableOpacity>
+          <HeaderIconButton icon="more-horizontal" label="Group options" onPress={() => setShowMenu(true)} />
         }
       />
 

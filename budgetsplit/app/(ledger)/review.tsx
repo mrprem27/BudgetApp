@@ -9,6 +9,7 @@ import { Feather } from '@expo/vector-icons';
 import { colors, space, layout } from '../../src/theme';
 import { reviewStyles as styles } from '../../src/components/finance/review/reviewStyles';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
+import { HeaderIconButton } from '../../src/components/ui/HeaderIconButton';
 import { EmptyState } from '../../src/components/ui/EmptyState';
 import { ErrorState } from '../../src/components/ui/ErrorState';
 import { SheetModal } from '../../src/components/ui/SheetModal';
@@ -325,9 +326,7 @@ export default function ReviewScreen() {
   // Import is always one tap away. The Settings row goes to Review while anything is waiting, so
   // without this there was no way to bring in more data until the inbox was empty.
   const importButton = (
-    <TouchableOpacity onPress={() => router.push('/import')} hitSlop={8} accessibilityRole="button" accessibilityLabel="Import more data">
-      <Feather name="upload" size={20} color={colors.textPrimary} />
-    </TouchableOpacity>
+    <HeaderIconButton icon="upload" label="Import more data" onPress={() => router.push('/import')} />
   );
   const headerRight = selectMode ? (
     <TouchableOpacity onPress={exitSelect} hitSlop={8} accessibilityRole="button" accessibilityLabel="Cancel selection">
@@ -337,9 +336,7 @@ export default function ReviewScreen() {
     <>
       {importButton}
       {pending.length > 0 && (
-        <TouchableOpacity onPress={() => setMenuOpen(true)} hitSlop={8} accessibilityRole="button" accessibilityLabel="More options">
-          <Feather name="more-horizontal" size={22} color={colors.textPrimary} />
-        </TouchableOpacity>
+        <HeaderIconButton icon="more-horizontal" label="More options" onPress={() => setMenuOpen(true)} />
       )}
     </>
   );

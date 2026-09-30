@@ -3,7 +3,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import { colors, type, space, radius, shadow } from '../../tokens';
 import { PressableScale } from '../../ui/PressableScale';
 import { formatCompact } from '../../../lib/money';
-import { dateWithYearIfOther } from '../../../lib/dateFormat';
+import { fullDate } from '../../../lib/dateFormat';
 import { forecastTile } from '../../../lib/forecastVerdict';
 import type { SafeToSpendBreakdown } from '../../../lib/safeToSpend';
 
@@ -36,7 +36,7 @@ export function HomeTiles({ sts, projected, budget, obfuscate, onPressSts, onPre
         label="Safe to spend"
         amount={!sts ? '₹0' : obfuscate ? '••••' : formatCompact(sts.amount)}
         tone={!sts ? colors.textMuted : over ? colors.expense : colors.income}
-        sub={!sts ? 'Add your money in Money' : over ? 'over-committed' : `until ${dateWithYearIfOther(sts.untilMs)}`}
+        sub={!sts ? 'Add your money in Money' : over ? 'over-committed' : `until ${fullDate(sts.untilMs)}`}
         onPress={onPressSts}
         a11y="Safe to spend, see how it is worked out"
       />

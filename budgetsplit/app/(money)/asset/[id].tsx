@@ -4,6 +4,7 @@ import { Feather } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { colors, type, space, layout } from '../../../src/theme';
 import { ScreenHeader } from '../../../src/components/ui/ScreenHeader';
+import { HeaderIconButton } from '../../../src/components/ui/HeaderIconButton';
 import { SectionHeader } from '../../../src/components/ui/SectionHeader';
 import { EmptyState } from '../../../src/components/ui/EmptyState';
 import { ErrorState } from '../../../src/components/ui/ErrorState';
@@ -100,9 +101,7 @@ export default function AssetDetailScreen() {
         right={asset ? (
           // The rare things — rename, change its kind, stop counting, delete — live in the
           // edit sheet behind this, not as buttons on the register's rows.
-          <TouchableOpacity onPress={() => setSheet('edit')} hitSlop={10} accessibilityRole="button" accessibilityLabel={`Edit ${asset.name}`}>
-            <Feather name="more-horizontal" size={22} color={colors.textPrimary} />
-          </TouchableOpacity>
+          <HeaderIconButton icon="more-horizontal" label={`Edit ${asset.name}`} onPress={() => setSheet('edit')} />
         ) : undefined}
       />
 
