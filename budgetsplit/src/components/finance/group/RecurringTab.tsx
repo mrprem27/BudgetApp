@@ -1,17 +1,12 @@
-import { useMemo, useState } from 'react';
-import { StyleSheet, ScrollView, View, Text } from 'react-native';
-import { Feather } from '@expo/vector-icons';
-import { space, layout, colors, type } from '../../tokens';
+import { useMemo } from 'react';
+import { StyleSheet, ScrollView } from 'react-native';
+import { space, layout } from '../../tokens';
 import { useContentInset } from '../../../hooks/useContentInset';
 import { EmptyState } from '../../ui/EmptyState';
 import { AppRefreshControl } from '../../ui/AppRefreshControl';
-import { Card } from '../../ui/Card';
-import { Divider } from '../../ui/Divider';
-import { ListRow } from '../../ui/ListRow';
-import { AmountText } from '../../ui/AmountText';
 import { RecurringInventory } from '../recurring/RecurringInventory';
+import { StoppedRecurring } from '../recurring/StoppedRecurring';
 import { toRecurringSubs } from '../../../lib/recurringData';
-import { freqLabel } from '../../../lib/recurrence';
 import type { TxnWithSplits } from '../../../db/queries/transactions';
 
 type Props = {
@@ -41,7 +36,6 @@ type Props = {
  */
 export function RecurringTab({ rules, skips, meId, onAdd, onOpenRule, refreshing, onRefresh }: Props) {
   const bottomPad = useContentInset({ fab: true });
-  const [showStopped, setShowStopped] = useState(false);
   const now = Date.now();
   const subs = useMemo(
     () => toRecurringSubs(rules.filter(r => r.recur_state !== 'ended'), skips, meId, now),
@@ -70,46 +64,11 @@ export function RecurringTab({ rules, skips, meId, onAdd, onOpenRule, refreshing
         <RecurringInventory subs={subs} onOpen={onOpenRule} />
       )}
 
-      {stopped.length > 0 && (
-        <View style={styles.stopped}>
-          <Card clip>
-            <ListRow
-              icon="archive"
-              title="Stopped"
-              value={
-                <View style={styles.stoppedValue}>
-                  <Text style={styles.stoppedCount}>{stopped.length}</Text>
-                  <Feather name={showStopped ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} />
-                </View>
-              }
-              chevron={false}
-              onPress={() => setShowStopped(o => !o)}
-              accessibilityLabel={`${stopped.length} stopped. ${showStopped ? 'Hide' : 'Show'}`}
-            />
-            {showStopped && stopped.map(s => (
-              <View key={s.id}>
-                <Divider indent="text" />
-                <ListRow
-                  icon="square"
-                  iconColor={colors.textMuted}
-                  title={s.name}
-                  subtitle={`${s.name === s.category ? '' : `${s.category} · `}${freqLabel(s.freq, s.interval)} · ended`}
-                  value={<AmountText paise={s.amount} size="sm" forceColor={colors.textMuted} rounded />}
-                  onPress={() => onOpenRule(s.id)}
-                  accessibilityLabel={`${s.name}, stopped`}
-                />
-              </View>
-            ))}
-          </Card>
-        </View>
-      )}
+      <StoppedRecurring stopped={stopped} onOpen={onOpenRule} />
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   listContent: { paddingHorizontal: layout.screenPaddingH, paddingTop: space.xs },
-  stopped: { marginTop: space.lg },
-  stoppedValue: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
-  stoppedCount: { ...type.body, color: colors.textSecondary },
 });

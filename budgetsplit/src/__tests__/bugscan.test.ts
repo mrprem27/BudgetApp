@@ -854,7 +854,8 @@ describe('H1 · Home says where the month is heading in one line, and shows the 
   });
   it('the streak badge sits beside the name on Home', () => {
     expect(fs.readFileSync('app/(tabs)/index.tsx', 'utf8')).toMatch(/titleAccessory=\{<StreakBadge days=\{streak\} \/>\}/);
-    expect(fs.readFileSync('src/components/finance/home/StreakBadge.tsx', 'utf8')).toMatch(/icon="zap"/);
+    // The ⚡ glyph, as a chip icon or (since `U-61`, a compact inline badge) a Feather name.
+    expect(fs.readFileSync('src/components/finance/home/StreakBadge.tsx', 'utf8')).toMatch(/(icon|name)="zap"/);
   });
 });
 

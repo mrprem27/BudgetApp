@@ -2194,7 +2194,7 @@ widgets; `system/` = onboarding, gates, privacy. `ui/` never imports from `finan
 | `plan/TotalMoneyCard` | Available Money hero + net worth + credit headroom (`V2-12`). |
 | `plan/MoneyEditorSheet` | Editor *(sheet)* for the figures behind Total Money: takes today's balances, works out the start on save. |
 | `plan/MoneySum` | The money sum (places − In goals = Spendable + Invested − Card owed = Net worth), shared by the card and its editor. |
-| `add/PayMethodSheet` From | "Where did it come from?" — one list: Bank (UPI, debit card, net banking, autopay) · Credit card (including UPI on a credit card) · Cash · Wallet · Other. The chip reads "From Bank" under a **Payment** header, beside Repeat (`U-49`). |
+| `add/PayMethodSheet` From | "Where did it come from?" — one list, each hint on one line: Bank (UPI, debit card, net banking) · Credit card (also UPI on a credit card) · Cash · Wallet (Paytm, Amazon Pay, gift cards) · Other. The chip reads "From Bank" under a **Payment** header, beside Repeat (`U-49`). |
 | `pay/PayMethodGlyph` | The one glyph per pay method; Bank, Wallet, Cash drawn on Feather's grid (`W1-06`). |
 | `plan/LockExplainerSheet` | Explains what protecting a goal does. |
 | `add/AmountField` · `add/CategoryDatePills` · `add/ContextPill` · `add/DetailChips` · `add/BudgetNudge` · `add/AttachmentRow` · `add/LocationRow` · `add/SplitSummary` · `add/SplitSheet` · `add/SplitEditor` · `add/PayersSheet` · `add/TransferSlotSheet` | Add-flow sub-views driven by `useAddTxnForm`. `SplitEditor` is also used inline by Review. |

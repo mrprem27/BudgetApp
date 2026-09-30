@@ -166,7 +166,7 @@ export function BudgetList({
               </View>
             }
           />
-          <Chip label="Edit" icon="edit-2" onPress={onEdit} accessibilityLabel="Edit budget" />
+          <Chip label="Edit" icon="edit-2" size="sm" onPress={onEdit} accessibilityLabel="Edit budget" />
         </View>
 
         <View style={styles.amountRow}>
@@ -178,10 +178,8 @@ export function BudgetList({
         </View>
 
         <View style={styles.bar}>
-          <BudgetBar pct={pct} health={health} height={10} />
+          <BudgetBar pct={pct} health={health} height={6} />
         </View>
-
-        <Divider indent="none" />
 
         <View style={styles.filters}>
           <CountChip count={counts.over} label="over" tint={colors.expense} active={filter === 'over'} onPress={() => toggle('over')} />
@@ -309,7 +307,7 @@ function CountChip({ count, label, tint, active, onPress }: {
 }) {
   return (
     <Chip
-      grow
+      size="sm"
       label={`${count} ${label}`}
       accent={tint}
       selected={active}
@@ -325,7 +323,7 @@ const styles = StyleSheet.create({
   head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: space.sm },
   headLabel: { ...type.sectionLabel, color: colors.textMuted },
   amountRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
-  spent: { ...type.amountXL },
+  spent: { ...type.amountLG },
   pct: { ...type.amountSM },
   caption: { ...type.caption, color: colors.textMuted, marginTop: 2 },
   info: { marginTop: space.xs },
@@ -340,6 +338,6 @@ const styles = StyleSheet.create({
   toggleOf: { ...type.caption, color: colors.textMuted },
   toggleBar: { marginTop: space.xs },
   toggleNote: { ...type.caption, color: colors.textMuted, marginTop: space.xs },
-  bar: { marginTop: space.md, marginBottom: space.md },
-  filters: { flexDirection: 'row', gap: space.sm, marginTop: space.md },
+  bar: { marginTop: space.sm },
+  filters: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs, marginTop: space.smd },
 });

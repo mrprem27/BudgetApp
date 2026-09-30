@@ -31,6 +31,13 @@ export type RecurringSub = { id: string; groupId: string; name: string; category
  * The recurring inventory — one row per rule, in every group that still has me.
  * Archived groups count: their rules still post (`getAllRecurringRules`).
  */
+/** Stopped rules across every group, for Money's Recurring screen's Stopped row (`U-62`). */
+export async function loadStoppedRecurring(db: SQLite.SQLiteDatabase): Promise<RecurringSub[]> {
+  const rules = (await getAllRecurringRules(db)).filter(t => t.recur_freq && t.recur_state === 'ended' && !t.pendingApproval);
+  const meRow = await getMe(db);
+  return toRecurringSubs(rules, undefined, meRow?.id ?? null, Date.now());
+}
+
 export async function loadRecurringInventory(db: SQLite.SQLiteDatabase): Promise<RecurringSub[]> {
   const byGroup = await getAllRecurringRules(db);
   // Every kind: recurring income (salary) belongs on this screen too — it was

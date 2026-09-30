@@ -34,31 +34,33 @@ type Props = {
  */
 export function BudgetCategoryRow({ category, cadence, spent, allocated, pct, health, children }: Props) {
   const visual = categoryVisual(category);
+  // Monthly is the default and said nothing on every row; only another cadence is named (`U-62`).
+  const cadenceNote = cadence && cadence !== 'monthly' ? cadence : null;
   return (
     <View style={styles.row}>
       <View style={styles.top}>
-        <IconCircle icon={asFeather(visual?.icon, 'tag')} size={28} color={visual?.color ?? colors.accent} iconSize={14} />
-        <View style={styles.mid}>
-          <Text style={styles.name} numberOfLines={1}>{category}</Text>
-          <Text style={styles.cadence}>{cadence}</Text>
-        </View>
+        <IconCircle icon={asFeather(visual?.icon, 'tag')} size={24} color={visual?.color ?? colors.accent} iconSize={12} />
+        <Text style={styles.name} numberOfLines={1}>
+          {category}
+          {cadenceNote ? <Text style={styles.cadence}>  {cadenceNote}</Text> : null}
+        </Text>
         <Text style={styles.amount}>
           <Text style={{ color: healthColor(health) }}>{formatCompact(spent)}</Text> / {formatCompact(allocated)}
         </Text>
       </View>
-      <BudgetBar pct={pct} health={health} height={6} />
+      <BudgetBar pct={pct} health={health} height={4} />
       {children}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  row: { paddingHorizontal: space.md, paddingVertical: space.md, gap: space.sm },
+  // One line and a thin bar (`U-62`): the row was two lines tall with a 6pt bar, so a budget of
+  // twelve categories filled three screens.
+  row: { paddingHorizontal: space.md, paddingVertical: space.smd, gap: space.sm },
   top: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  mid: { flex: 1, minWidth: 0 },
-  name: { ...type.body, color: colors.textPrimary },
-  cadence: { ...type.caption, color: colors.textMuted, marginTop: 1, textTransform: 'capitalize' },
-  // Money is SpaceMono (AGENTS §1). The two copies of this row used a raw 13 and a
-  // raw 12; `type.amountSM` is the token for an amount at row scale.
+  name: { ...type.body, color: colors.textPrimary, flex: 1, minWidth: 0 },
+  cadence: { ...type.caption, color: colors.textMuted, textTransform: 'capitalize' },
+  // Money is SpaceMono (AGENTS §1); `type.amountSM` is the token for an amount at row scale.
   amount: { ...type.amountSM, color: colors.textSecondary },
 });

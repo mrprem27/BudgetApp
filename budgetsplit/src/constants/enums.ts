@@ -126,9 +126,11 @@ export const PAY_METHOD_LABEL: Record<PayMethod, string> = {
 };
 /** One hint where a label alone leaves a doubt: the bank is every way of paying from an account
  *  (`W1-06`, `U-49`). */
+// Short enough to fit on one line beside the label — a hint cut off at "…" is worse than none (`U-62`).
 export const PAY_METHOD_HINT: Partial<Record<PayMethod, string>> = {
-  [PayMethod.Bank]: 'UPI, debit card, net banking, autopay',
-  [PayMethod.Card]: 'Including UPI on a credit card',
+  [PayMethod.Bank]: 'UPI, debit card, net banking',
+  [PayMethod.Card]: 'Also UPI on a credit card',
+  [PayMethod.Wallet]: 'Paytm, Amazon Pay, gift cards',
 };
 // Each source's glyph lives in `components/finance/pay/PayMethodGlyph` (`W1-06`).
 

@@ -14,6 +14,8 @@ type Props = {
   large?: boolean;
   /** A small badge that sits right after the title (Home's streak). */
   titleAccessory?: React.ReactNode;
+  /** One small line above a large title — Home's greeting (`U-61`). */
+  eyebrow?: string;
 };
 
 /**
@@ -21,7 +23,7 @@ type Props = {
  * never collide with the status bar / Dynamic Island, replacing the previous
  * hardcoded `paddingTop` on every screen.
  */
-export function ScreenHeader({ title, onBack, right, large, titleAccessory }: Props) {
+export function ScreenHeader({ title, onBack, right, large, titleAccessory, eyebrow }: Props) {
   const insets = useSafeAreaInsets();
   return (
     <View style={[styles.wrap, { paddingTop: insets.top + space.sm }]}>
@@ -37,14 +39,17 @@ export function ScreenHeader({ title, onBack, right, large, titleAccessory }: Pr
             <Feather name="chevron-left" size={26} color={colors.textPrimary} />
           </TouchableOpacity>
         ) : null}
-        <View style={styles.titleWrap}>
-          <Text
-            style={[large ? styles.titleLarge : styles.title, onBack && styles.titleWithBack, styles.titleText]}
-            numberOfLines={1}
-          >
-            {title}
-          </Text>
-          {titleAccessory}
+        <View style={styles.titleCol}>
+          {eyebrow ? <Text style={styles.eyebrow} numberOfLines={1}>{eyebrow}</Text> : null}
+          <View style={styles.titleWrap}>
+            <Text
+              style={[large ? styles.titleLarge : styles.title, onBack && styles.titleWithBack, styles.titleText]}
+              numberOfLines={1}
+            >
+              {title}
+            </Text>
+            {titleAccessory}
+          </View>
         </View>
         <View style={styles.right}>{right}</View>
       </View>
@@ -75,6 +80,8 @@ const styles = StyleSheet.create({
   titleLarge: { ...type.title, color: colors.textPrimary, flex: 1 },
   titleWithBack: { ...type.heading },
   right: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  titleWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.sm, minWidth: 0 },
+  titleCol: { flex: 1, minWidth: 0 },
+  eyebrow: { ...type.caption, color: colors.textMuted },
+  titleWrap: { flexDirection: 'row', alignItems: 'center', gap: space.xs, minWidth: 0 },
   titleText: { flex: 0, flexShrink: 1 },
 });

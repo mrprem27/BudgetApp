@@ -42,22 +42,26 @@ export function RecurringInventory({ subs, onOpen }: { subs: Sub[]; onOpen: (id:
     <>
       {/* "a month": each row shows its own per-charge amount, so a yearly ₹12,000 rule reads
           ₹12,000 below while adding ₹1,000 here. */}
+      {/* One figure, then labelled facts in columns (`U-62`). It was one dotted line —
+          "1 active · next 3 Oct · ≈ ₹3.3L a year · +₹85/mo in" — every fact a different kind
+          of thing, run together. */}
       <Card padded style={styles.totalCard}>
-        <View style={styles.totalRow}>
-          <View style={styles.totalLeft}>
-            <Text style={styles.totalLabel}>Spending a month · your share</Text>
-            <AmountText paise={monthlyOut} size="xl" forceColor={colors.textPrimary} />
-            <Text style={styles.totalSub}>
-              ≈ {formatCompact(monthlyOut * 12)} a year
-              {monthlyIn > 0 ? ` · +${formatCompact(monthlyIn)}/mo in` : ''}
-              {monthlyMoved > 0 ? ` · ${formatCompact(monthlyMoved)}/mo moved` : ''}
-            </Text>
-          </View>
-          <View style={styles.totalRight}>
-            <Text style={styles.totalCount}>{activeCount} active{pausedCount > 0 ? ` · ${pausedCount} paused` : ''}</Text>
-            {nextUp?.nextMs != null && <Text style={styles.totalNext}>next {shortDate(nextUp.nextMs)}</Text>}
-          </View>
+        <Text style={styles.totalLabel}>Spending a month · your share</Text>
+        <AmountText paise={monthlyOut} size="xl" forceColor={colors.textPrimary} />
+        <View style={styles.stats}>
+          <Stat label="A year" value={formatCompact(monthlyOut * 12)} />
+          <View style={styles.statDivider} />
+          <Stat label="Active" value={pausedCount > 0 ? `${activeCount} · ${pausedCount} paused` : String(activeCount)} />
+          <View style={styles.statDivider} />
+          <Stat label="Next" value={nextUp?.nextMs != null ? shortDate(nextUp.nextMs) : 'None'} />
         </View>
+        {(monthlyIn > 0 || monthlyMoved > 0) && (
+          <Text style={styles.totalSub}>
+            {monthlyIn > 0 ? `Income ${formatCompact(monthlyIn)} a month` : ''}
+            {monthlyIn > 0 && monthlyMoved > 0 ? '  ·  ' : ''}
+            {monthlyMoved > 0 ? `Moved ${formatCompact(monthlyMoved)} a month` : ''}
+          </Text>
+        )}
       </Card>
 
       {([['Money out', outSubs], ['Money in', inSubs], ['Moved between your own', moveSubs]] as const).map(([title, rows]) => rows.length === 0 ? null : (
@@ -99,16 +103,25 @@ export function RecurringInventory({ subs, onOpen }: { subs: Sub[]; onOpen: (id:
   );
 }
 
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.stat}>
+      <Text style={styles.statLabel}>{label}</Text>
+      <Text style={styles.statValue} numberOfLines={1}>{value}</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  stats: { flexDirection: 'row', alignItems: 'center', marginTop: space.md },
+  stat: { flex: 1, alignItems: 'flex-start', gap: 2 },
+  statDivider: { width: 1, alignSelf: 'stretch', backgroundColor: alpha(colors.settle, 33), marginHorizontal: space.sm },
+  statLabel: { ...type.caption, color: colors.textMuted },
+  statValue: { ...type.labelSemi, color: colors.textPrimary },
   // Tinted settle, matching how a recurring concern is coloured elsewhere.
   totalCard: { backgroundColor: alpha(colors.settle, 8), borderColor: colors.settle },
-  totalRow: { flexDirection: 'row', alignItems: 'flex-start' },
-  totalLeft: { flex: 1 },
   totalLabel: { ...type.sectionLabel, color: colors.settle, marginBottom: space.xs },
-  totalSub: { ...type.caption, color: colors.textMuted, marginTop: space.xs },
-  totalRight: { alignItems: 'flex-end' },
-  totalCount: { ...type.caption, color: colors.textSecondary },
-  totalNext: { ...type.caption, color: colors.textMuted, marginTop: space.xs },
+  totalSub: { ...type.caption, color: colors.textMuted, marginTop: space.smd },
   count: { ...type.amountSM, color: colors.textSecondary },
   rowValue: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
 });

@@ -1091,3 +1091,42 @@ export async function getLedgerStats(db: SQLite.SQLiteDatabase): Promise<LedgerS
     hasIncome: (row?.incomes ?? 0) > 0,
   };
 }
+
+/**
+ * My own entries whose money went through no recorded place (`U-62`): no Paid from, or "Other",
+ * and not waiting for approval. These are what Money's "Paid from not set" line adds up.
+ * Someone else's entry is left out — its source is theirs to record.
+ */
+const UNSET_SOURCE_SQL = `
+  FROM txn t
+  WHERE t.is_deleted = 0 AND t.recur_freq IS NULL AND t.author_person_id IS NULL
+    AND (t.pay_method IS NULL OR t.pay_method = 'other')
+    AND ${NOT_AWAITING_APPROVAL}
+    AND (EXISTS (SELECT 1 FROM txn_payment p WHERE p.txn_id = t.id AND p.person_id = ?)
+      OR EXISTS (SELECT 1 FROM txn_share   s WHERE s.txn_id = t.id AND s.person_id = ?))`;
+
+export async function countUnsetSourceEntries(db: SQLite.SQLiteDatabase, meId: string): Promise<number> {
+  const row = await db.getFirstAsync<{ n: number }>(`SELECT COUNT(*) AS n ${UNSET_SOURCE_SQL}`, [meId, meId]);
+  return row?.n ?? 0;
+}
+
+/**
+ * Say where those entries' money went, all at once: each gets `method` as its Paid from, so the
+ * amount moves into that place for real — the entries now say so — rather than a balancing
+ * figure being invented. Returns how many changed.
+ */
+export async function setSourceForUnsetEntries(
+  db: SQLite.SQLiteDatabase, meId: string, method: PayMethod,
+): Promise<number> {
+  let n = 0;
+  await db.withTransactionAsync(async () => {
+    const rows = await db.getAllAsync<{ id: string }>(`SELECT t.id ${UNSET_SOURCE_SQL}`, [meId, meId]);
+    const now = Date.now();
+    for (const r of rows) {
+      await db.runAsync('UPDATE txn SET pay_method = ?, updated_at = ? WHERE id = ?', [method, now, r.id]);
+      await queueEntry(db, r.id);
+    }
+    n = rows.length;
+  });
+  return n;
+}

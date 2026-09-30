@@ -31,7 +31,7 @@ const PLACE_LABEL = { bank: 'Bank', cash: 'Cash', wallet: 'Wallet' } as const;
  * Credit headroom is in neither total: unused limit is permission to borrow, not money (`V2-12`).
  * `updatedAt` drives the staleness badge — these are figures you typed, with no bank feed behind them.
  */
-export function TotalMoneyCard({ money, byBucket, unattributed, inGoals, updatedAt, onEdit, onPayCardBill, onMoveToInvestments, assets, onManageAssets }: {
+export function TotalMoneyCard({ money, byBucket, unattributed, inGoals, updatedAt, onEdit, onPayCardBill, onMoveToInvestments, assets, onManageAssets, onSetUnattributed }: {
   money: TotalMoney;
   /** Per-bucket balances from `getCashPosition`. Absent until it has loaded. */
   byBucket?: Record<'bank' | 'cash' | 'wallet', number>;
@@ -46,6 +46,8 @@ export function TotalMoneyCard({ money, byBucket, unattributed, inGoals, updated
   /** The register behind the Investments figure, itemised. */
   assets?: { id: string; name: string; balance: number }[];
   onManageAssets?: () => void;
+  /** Say where the "Paid from not set" money went (`U-62`). */
+  onSetUnattributed?: () => void;
 }) {
   const negativeCash = money.cashAvailable < 0;
   const age = updatedAt != null ? Date.now() - updatedAt : null;
@@ -93,6 +95,7 @@ export function TotalMoneyCard({ money, byBucket, unattributed, inGoals, updated
         assetCount={assets?.length}
         creditLeft={money.creditLimit > 0 ? money.creditAvailable : undefined}
         onManageAssets={onManageAssets}
+        onSetUnattributed={onSetUnattributed}
       />
 
       {(onMoveToInvestments || (money.creditUsed > 0 && onPayCardBill)) && (

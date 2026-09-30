@@ -36,7 +36,7 @@ import { HealthSheet } from '../../src/components/finance/HealthSheet';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { HeaderIconButton } from '../../src/components/ui/HeaderIconButton';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
-import { healthBandColor } from '../../src/components/finance/home/helpers';
+import { greeting, healthBandColor } from '../../src/components/finance/home/helpers';
 import { loadHomeData, loadCatchUp, PREV_LABEL, PERIOD_LABEL, TXN_COUNT_PERIOD_LABEL, TARGET_FOR_TAB, type TabKey } from '../../src/lib/homeData';
 import { Card } from '../../src/components/ui/Card';
 
@@ -143,6 +143,7 @@ export default function DashboardScreen() {
     <View style={styles.container}>
       <ScreenHeader
         large
+        eyebrow={greeting()}
         title={meInfo?.name?.split(' ')[0] ?? 'BudgetSplit'}
         titleAccessory={<StreakBadge days={streak} />}
         right={(

@@ -27,6 +27,8 @@ type Props = {
   grow?: boolean;
   /** Caps the label width; it truncates rather than pushing the row wider. */
   maxWidth?: number;
+  /** `'sm'`: a 28pt pill with caption text, for a dense card (the budget counts, `U-62`). */
+  size?: 'md' | 'sm';
   accessibilityLabel?: string;
 };
 
@@ -45,21 +47,23 @@ type Props = {
  */
 export function Chip({
   label, icon, leading, selected, accent = colors.accent,
-  onPress, onRemove, chevron, grow, maxWidth, accessibilityLabel,
+  onPress, onRemove, chevron, grow, maxWidth, size = 'md', accessibilityLabel,
 }: Props) {
+  const sm = size === 'sm';
   const body = (
     <View
       style={[
         styles.chip,
+        sm && styles.chipSm,
         selected && { backgroundColor: alpha(accent, 20), borderColor: accent },
         maxWidth != null && { maxWidth },
       ]}
     >
-      {leading ?? (icon ? <Feather name={icon} size={14} color={selected ? accent : colors.textSecondary} /> : null)}
+      {leading ?? (icon ? <Feather name={icon} size={sm ? 12 : 14} color={selected ? accent : colors.textSecondary} /> : null)}
 
       {/* A chip that fills its row puts the label on the free width, so a trailing ⌄/✕
           sits at the far right edge like a dropdown — not hugging the end of the text. */}
-      <Text style={[styles.label, grow && styles.labelGrow, selected && { color: accent, ...type.labelSemi }]} numberOfLines={1}>
+      <Text style={[styles.label, sm && styles.labelSm, grow && styles.labelGrow, selected && { color: accent, ...(sm ? type.caption : type.labelSemi), fontFamily: 'Inter_600SemiBold' }]} numberOfLines={1}>
         {label}
       </Text>
 
@@ -83,7 +87,7 @@ export function Chip({
     <PressableScale
       onPress={onPress}
       {...(maxWidth ? fullTextOnHold(label) : {})}
-      hitSlop={{ top: 4, bottom: 4, left: 0, right: 0 }}
+      hitSlop={sm ? { top: 8, bottom: 8, left: 0, right: 0 } : { top: 4, bottom: 4, left: 0, right: 0 }}
       accessibilityLabel={accessibilityLabel ?? label}
       // Announce the selection, like every other choosable thing in `ui/`
       // (`ListRow`, `OptionRow`, `TabPills`). This was the one
@@ -118,7 +122,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
+  // Painted 28pt; `hitSlop` above makes up the tappable 44 (§6), the same trade as the 36pt size.
+  chipSm: { minHeight: 28, paddingHorizontal: space.sm, gap: space.xs },
   label: { ...type.label, color: colors.textSecondary, flexShrink: 1 },
+  labelSm: { ...type.caption },
   labelGrow: { flex: 1 },
   grow: { flex: 1 },
 });

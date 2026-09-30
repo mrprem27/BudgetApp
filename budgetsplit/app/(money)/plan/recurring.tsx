@@ -8,7 +8,8 @@ import { AppRefreshControl } from '../../../src/components/ui/AppRefreshControl'
 import { RecurringInventory } from '../../../src/components/finance/recurring/RecurringInventory';
 import { useScreenData } from '../../../src/hooks/useScreenData';
 import { useContentInset } from '../../../src/hooks/useContentInset';
-import { loadRecurringInventory } from '../../../src/lib/recurringData';
+import { loadRecurringInventory, loadStoppedRecurring } from '../../../src/lib/recurringData';
+import { StoppedRecurring } from '../../../src/components/finance/recurring/StoppedRecurring';
 import { backOr } from '../../../src/lib/nav';
 
 /**
@@ -22,8 +23,12 @@ import { backOr } from '../../../src/lib/nav';
 export default function RecurringScreen() {
   const router = useRouter();
   const bottomPad = useContentInset();
-  const { data, loading, error, refreshing, onRefresh, reload } = useScreenData(loadRecurringInventory, []);
-  const subs = data ?? [];
+  const { data, loading, error, refreshing, onRefresh, reload } = useScreenData(async (db) => {
+    const [active, stopped] = await Promise.all([loadRecurringInventory(db), loadStoppedRecurring(db)]);
+    return { active, stopped };
+  }, []);
+  const subs = data?.active ?? [];
+  const stopped = data?.stopped ?? [];
 
   if (error) {
     return (
@@ -55,6 +60,8 @@ export default function RecurringScreen() {
             <Text style={styles.footHint}>Tap a row to edit, pause or stop it.</Text>
           </>
         ) : null}
+        {/* Stopped rules were listed nowhere across groups; they sit behind one row here (`U-62`). */}
+        {!loading && <StoppedRecurring stopped={stopped} onOpen={id => router.push(`/recurring/${id}`)} />}
       </ScrollView>
     </View>
   );

@@ -16,7 +16,7 @@ const LABEL: Record<MoneySumLine['key'], string> = {
  * How your money adds up (`moneySumLines`), drawn once for Money's card and for the editor behind
  * it (`U-47`), so the two always show the same arithmetic. Invested opens the asset register.
  */
-export function MoneySum({ places, unattributed, inGoals, investments, creditUsed, assetCount, creditLeft, onManageAssets }: {
+export function MoneySum({ places, unattributed, inGoals, investments, creditUsed, assetCount, creditLeft, onManageAssets, onSetUnattributed }: {
   places: Record<MoneyPlace, number>;
   unattributed?: number;
   inGoals?: number;
@@ -26,6 +26,8 @@ export function MoneySum({ places, unattributed, inGoals, investments, creditUse
   /** Unused limit, shown as a hint on Card owed; never counted. */
   creditLeft?: number;
   onManageAssets?: () => void;
+  /** Opens "where did this go through?" for the unattributed line (`U-62`). */
+  onSetUnattributed?: () => void;
 }) {
   const { lines } = moneySumLines({ places, unattributed, inGoals, investments, creditUsed });
   return (
@@ -44,12 +46,12 @@ export function MoneySum({ places, unattributed, inGoals, investments, creditUse
             value={l.value}
             total={l.total}
             color={l.key === 'card' ? colors.expense : undefined}
-            onPress={l.key === 'invested' ? onManageAssets : undefined}
+            onPress={l.key === 'invested' ? onManageAssets : l.key === 'unattributed' ? onSetUnattributed : undefined}
             hint={l.key === 'invested' && assetCount ? `${assetCount} ${assetCount === 1 ? 'asset' : 'assets'}`
               : l.key === 'card' && creditLeft ? `${formatCompact(creditLeft)} left to borrow`
               : l.key === 'goals' ? 'Set aside, not spendable'
               // Entries with no Paid from: counted in the total, never guessed into a place (`U-57`).
-              : l.key === 'unattributed' ? 'Entries with no Paid from'
+              : l.key === 'unattributed' ? (onSetUnattributed ? 'Tap to say where it went' : 'Entries with no Paid from')
               : undefined}
           />
         );

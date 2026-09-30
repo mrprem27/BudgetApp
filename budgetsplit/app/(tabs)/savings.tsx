@@ -21,6 +21,7 @@ import { TotalMoneyCard } from '../../src/components/finance/plan/TotalMoneyCard
 import { MoneyEditorSheet } from '../../src/components/finance/plan/MoneyEditorSheet';
 import { PayCardBillSheet } from '../../src/components/finance/plan/PayCardBillSheet';
 import { MoveMoneySheet } from '../../src/components/finance/plan/MoveMoneySheet';
+import { UnsetSourceSheet } from '../../src/components/finance/plan/UnsetSourceSheet';
 import { AmountRow } from '../../src/components/ui/AmountRow';
 import { useAssets } from '../../src/hooks/useAssets';
 import { AssetsSection } from '../../src/components/finance/plan/AssetsSection';
@@ -103,6 +104,7 @@ export default function SavingsScreen() {
     showMoneyEditor, setShowMoneyEditor, handleSaveMoney,
     showPayCardBill, setShowPayCardBill, handlePayCardBill,
     showMoveInvest, setShowMoveInvest, handleMoveMoney,
+    unsetCount, openSetUnattributed, closeSetUnattributed, handleSetUnattributed,
     fundGoalId, setFundGoalId, fundGoalObj, fundAmt, setFundAmt, handleFundGoal,
     showNew, setShowNew, name, setName, target, setTarget,
     priority, setPriority, icon, setIcon, color, setColor,
@@ -156,8 +158,15 @@ export default function SavingsScreen() {
             onPayCardBill={() => setShowPayCardBill(true)}
             onMoveToInvestments={() => setShowMoveInvest(true)}
             onManageAssets={() => setTab('assets')}
+            onSetUnattributed={openSetUnattributed}
           />
         )}
+        <UnsetSourceSheet
+          count={unsetCount}
+          amount={unattributed ?? 0}
+          onPick={handleSetUnattributed}
+          onClose={closeSetUnattributed}
+        />
 
         {/* Directly under your money, the question you ask of it (`U-46`). The same card leads
             Goals, where the answer is often "save toward it". */}

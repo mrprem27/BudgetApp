@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, SectionList, Alert, TouchableOpacity } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
+import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { colors, type, space, radius, layout } from '../../src/theme';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
@@ -132,7 +133,8 @@ export default function PersonalScreen() {
    * the period moved you with other people. A card that stayed on today's balances while the list
    * below showed last month answered a question nobody had asked.
    */
-  const narrowed = filter !== 'personal' || filtersActive({ query, kind, from, to, personId, tags });
+  // Search finds rows; it does not change what the card is about (`U-62`) — only the filters do.
+  const narrowed = filter !== 'personal' || filtersActive({ query: '', kind, from, to, personId, tags });
   const totals = useMemo(() => activityTotals(filtered, myId), [filtered, myId]);
   const clearFilters = useCallback(() => {
     setFilter('personal'); setQuery(''); setKind(KIND_ANY); setRange('any');
@@ -248,11 +250,10 @@ export default function PersonalScreen() {
                     );
                   })()}
                 </View>
-              </View>
-              <View style={styles.summaryFoot}>
-                <Text style={styles.summaryFootText}>For the entries below</Text>
-                <TouchableOpacity onPress={openReports} hitSlop={10} accessibilityRole="button" accessibilityLabel="Open in Reports">
-                  <Text style={styles.summaryLink}>Open in Reports ›</Text>
+                {/* Reports sits at the end of the row, not in a footer under it (`U-62`): the
+                    card keeps one height, so turning a filter on never moves the list. */}
+                <TouchableOpacity onPress={openReports} hitSlop={10} style={styles.summaryGo} accessibilityRole="button" accessibilityLabel="Open these in Reports">
+                  <Feather name="pie-chart" size={18} color={colors.accent} />
                 </TouchableOpacity>
               </View>
             </Card>
@@ -337,13 +338,13 @@ export default function PersonalScreen() {
                   <EmptyState
                     icon="inbox"
                     title="Nothing here yet"
-                    body={narrowed ? 'No transactions match these filters.' : 'Your personal expenses & income will show here.'}
+                    body={narrowed || query.trim() ? 'No transactions match these filters.' : 'Your personal expenses & income will show here.'}
                     tint={colors.textSecondary}
                     // A filter hiding everything and an empty ledger need different
                     // ways out — clearing EVERY filter (it used to reset only
                     // Personal / Groups / All), or adding the first entry.
-                    actionLabel={narrowed ? 'Clear filters' : 'Add a transaction'}
-                    onAction={narrowed ? clearFilters : () => router.push('/add/quick')}
+                    actionLabel={narrowed || query.trim() ? 'Clear filters' : 'Add a transaction'}
+                    onAction={narrowed || query.trim() ? clearFilters : () => router.push('/add/quick')}
                   />
                 )
               }
@@ -436,13 +437,7 @@ const styles = StyleSheet.create({
   summaryAmt: { fontFamily: 'SpaceMono_400Regular', fontSize: 16, letterSpacing: -0.3 },
   summaryCardFiltered: { marginHorizontal: layout.screenPaddingH, marginBottom: space.md, paddingVertical: space.md },
   summaryRow: { flexDirection: 'row', alignItems: 'center' },
-  summaryFoot: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    marginTop: space.smd, paddingTop: space.sm, paddingHorizontal: space.md,
-    borderTopWidth: 1, borderTopColor: colors.border,
-  },
-  summaryFootText: { ...type.caption, color: colors.textMuted },
-  summaryLink: { ...type.labelSemi, color: colors.accent },
+  summaryGo: { width: 40, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center', borderLeftWidth: 1, borderLeftColor: colors.border },
 
 
   // No `gap` here: a date section's rows form ONE card, so any gap between them
