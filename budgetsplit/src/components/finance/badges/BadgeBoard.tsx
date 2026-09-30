@@ -14,9 +14,10 @@ export function badgeTint(b: Badge): string {
 }
 
 /**
- * The badge board (`U-65`): every badge as a small disc, greyed until earned, in colour once it
+ * The badge board (`U-65`): every badge as a small disc, dimmed until earned, in colour once it
  * is — and a warmer colour for each level climbed. The whole board opens the Badges screen,
- * where each one says what it means and how far you are.
+ * where each one says what it means and how far you are. Small discs (2026-09-30), so thirty fit
+ * in a few rows.
  */
 export function BadgeBoard({ badges, onOpen, compact }: { badges: Badge[]; onOpen?: () => void; compact?: boolean }) {
   if (badges.length === 0) return null;
@@ -31,12 +32,9 @@ export function BadgeBoard({ badges, onOpen, compact }: { badges: Badge[]; onOpe
       <View style={styles.grid}>
         {badges.map(b => (
           <View key={b.id} style={styles.cell} accessible accessibilityLabel={`${b.title}, ${b.level > 0 ? 'earned' : 'not yet'}`}>
-            <IconCircle
-              icon={b.icon}
-              size={compact ? 36 : 44}
-              color={badgeTint(b)}
-              bg={b.level > 0 ? undefined : colors.bgMuted}
-            />
+            <View style={b.level > 0 ? undefined : styles.dull}>
+              <IconCircle icon={b.icon} size={compact ? 28 : 32} color={badgeTint(b)} bg={b.level > 0 ? undefined : colors.bgMuted} />
+            </View>
           </View>
         ))}
       </View>
@@ -52,6 +50,8 @@ const styles = StyleSheet.create({
   head: { flexDirection: 'row', alignItems: 'center', gap: space.xs, marginBottom: space.smd },
   title: { ...type.sectionLabel, color: colors.textMuted, flex: 1 },
   count: { ...type.caption, color: colors.textSecondary },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.smd },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
+  // Not yet earned: there, but clearly not yours yet.
+  dull: { opacity: 0.35 },
   cell: { alignItems: 'center' },
 });

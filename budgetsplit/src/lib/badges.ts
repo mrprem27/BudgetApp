@@ -33,7 +33,17 @@ export type Badge = {
   progress: number;
 };
 
-export type BadgeRow = { date: number; spent: number; income: number };
+export type BadgeRow = {
+  date: number; spent: number; income: number;
+  /** The rest are optional so older callers and tests still build a row from three fields. */
+  kind?: 'expense' | 'income' | 'settlement';
+  category?: string;
+  /** In a shared group, not Personal. */
+  shared?: boolean;
+  hasNote?: boolean;
+  hasReceipt?: boolean;
+  tagCount?: number;
+};
 
 export type BadgeInputs = {
   nowMs: number;
@@ -49,6 +59,14 @@ export type BadgeInputs = {
   goalsCount: number;
   budgetPct: number | null;
   assetCount: number;
+  /** Everything below is optional: a caller that does not know it simply earns none of these. */
+  goalsSaved?: number;
+  /** An emergency goal's saved / target, when one exists. */
+  emergency?: { saved: number; target: number } | null;
+  recurringRules?: number;
+  /** Card owed now, and whether there is a card at all. */
+  card?: { used: number; limit: number } | null;
+  cashAvailable?: number | null;
 };
 
 const DAY = 86_400_000;
@@ -232,6 +250,175 @@ export function computeBadges(i: BadgeInputs): Badge[] {
     level: as.level, maxLevel: 3,
     status: i.assetCount === 0 ? 'Add an asset under Money' : plural(i.assetCount, 'asset'),
     progress: as.progress,
+  });
+
+  // ── More, 2026-09-30: every one a fact the ledger already holds ──────────────────
+  const inMonth = (d: number, y: number, mo: number) => { const x = new Date(d); return x.getFullYear() === y && x.getMonth() === mo; };
+  const thisMonth = i.rows.filter(r => inMonth(r.date, year, month));
+  const prevY = month === 0 ? year - 1 : year, prevM = month === 0 ? 11 : month - 1;
+
+  // This month
+  const spendDays = new Set(thisMonth.filter(r => r.spent > 0).map(r => dayKey(r.date)));
+  const noSpend = Math.max(0, today - spendDays.size);
+  badges.push({
+    id: 'noSpendDays', title: 'No-spend days', icon: 'moon', group: 'month',
+    explain: 'Days this month with no spending at all. Earned at 5. Starts again on the 1st.',
+    level: noSpend >= 5 ? 1 : 0, maxLevel: 1,
+    status: `${plural(noSpend, 'day')} without spending`, progress: Math.min(1, noSpend / 5),
+  });
+  const sameDayLast = i.rows.filter(r => inMonth(r.date, prevY, prevM) && new Date(r.date).getDate() <= today).reduce((t, r) => t + r.spent, 0);
+  const soFar = thisMonth.reduce((t, r) => t + r.spent, 0);
+  if (sameDayLast > 0) {
+    badges.push({
+      id: 'underLast', title: 'Less than last month', icon: 'trending-down', group: 'month',
+      explain: 'Your share of spending so far this month is below last month’s by the same date. Starts again on the 1st.',
+      level: soFar <= sameDayLast ? 1 : 0, maxLevel: 1,
+      status: soFar <= sameDayLast ? `${rupees(sameDayLast - soFar)} under last month` : `${rupees(soFar - sameDayLast)} over last month`,
+      progress: soFar <= sameDayLast ? 1 : Math.max(0, 1 - (soFar - sameDayLast) / sameDayLast),
+    });
+  }
+  const loggedDays = new Set(thisMonth.map(r => dayKey(r.date))).size;
+  badges.push({
+    id: 'dailyLogger', title: 'Twenty days logged', icon: 'check-square', group: 'month',
+    explain: 'An entry on 20 different days this month. Starts again on the 1st.',
+    level: loggedDays >= 20 ? 1 : 0, maxLevel: 1,
+    status: `${plural(loggedDays, 'day')} this month`, progress: Math.min(1, loggedDays / 20),
+  });
+  const noted = thisMonth.filter(r => r.hasNote).length;
+  badges.push({
+    id: 'explained', title: 'Every entry explained', icon: 'file-text', group: 'month',
+    explain: 'Most of this month’s entries (at least 8 in 10, from 5 entries) carry a note. Starts again on the 1st.',
+    level: thisMonth.length >= 5 && noted / thisMonth.length >= 0.8 ? 1 : 0, maxLevel: 1,
+    status: thisMonth.length === 0 ? 'No entries this month yet' : `${noted} of ${thisMonth.length} with a note`,
+    progress: thisMonth.length === 0 ? 0 : Math.min(1, noted / thisMonth.length / 0.8),
+  });
+  const receiptsMonth = thisMonth.filter(r => r.hasReceipt).length;
+  badges.push({
+    id: 'receiptsMonth', title: 'Receipts kept', icon: 'camera', group: 'month',
+    explain: 'Three entries this month with a photo of the receipt. Starts again on the 1st.',
+    level: receiptsMonth >= 3 ? 1 : 0, maxLevel: 1,
+    status: `${plural(receiptsMonth, 'receipt')} this month`, progress: Math.min(1, receiptsMonth / 3),
+  });
+  const incomeMonth = thisMonth.some(r => r.income > 0);
+  badges.push({
+    id: 'incomeLogged', title: 'Income logged', icon: 'download', group: 'month',
+    explain: 'At least one income entry this month, so the month has both sides. Starts again on the 1st.',
+    level: incomeMonth ? 1 : 0, maxLevel: 1,
+    status: incomeMonth ? 'Logged this month' : 'None this month yet', progress: incomeMonth ? 1 : 0,
+  });
+  if (i.hasShared) {
+    const settledMonth = thisMonth.some(r => r.kind === 'settlement' && r.shared);
+    badges.push({
+      id: 'settledMonth', title: 'Settled this month', icon: 'repeat', group: 'month',
+      explain: 'You paid someone back, or were paid back, this month. Starts again on the 1st.',
+      level: settledMonth ? 1 : 0, maxLevel: 1,
+      status: settledMonth ? 'Settled with someone' : 'No settle-up this month yet', progress: settledMonth ? 1 : 0,
+    });
+  }
+
+  // Milestones
+  const months = new Set(i.rows.map(r => { const d = new Date(r.date); return `${d.getFullYear()}-${d.getMonth()}`; })).size;
+  const mo = tiered(months, [3, 6, 12, 24]);
+  badges.push({
+    id: 'monthsTracked', title: 'Months tracked', icon: 'book-open', group: 'milestone',
+    explain: 'Months with at least one entry. Levels at 3, 6, 12 and 24.',
+    level: mo.level, maxLevel: 4, status: `${plural(months, 'month')}${mo.next ? ` · next at ${mo.next}` : ''}`, progress: mo.progress,
+  });
+  const cats = new Set(i.rows.filter(r => r.category && r.kind === 'expense').map(r => r.category)).size;
+  const ca = tiered(cats, [5, 10, 20]);
+  badges.push({
+    id: 'categories', title: 'Full picture', icon: 'grid', group: 'milestone',
+    explain: 'Different spending categories you have used. Levels at 5, 10 and 20.',
+    level: ca.level, maxLevel: 3, status: `${plural(cats, 'category', 'categories')}${ca.next ? ` · next at ${ca.next}` : ''}`, progress: ca.progress,
+  });
+  const tagged = i.rows.filter(r => (r.tagCount ?? 0) > 0).length;
+  const tg = tiered(tagged, [10, 50, 200]);
+  badges.push({
+    id: 'tagger', title: 'Tagger', icon: 'tag', group: 'milestone',
+    explain: 'Entries with at least one tag. Levels at 10, 50 and 200.',
+    level: tg.level, maxLevel: 3, status: `${plural(tagged, 'tagged entry', 'tagged entries')}${tg.next ? ` · next at ${tg.next}` : ''}`, progress: tg.progress,
+  });
+  const receipts = i.rows.filter(r => r.hasReceipt).length;
+  const rc = tiered(receipts, [5, 25, 100]);
+  badges.push({
+    id: 'receipts', title: 'Paper trail', icon: 'paperclip', group: 'milestone',
+    explain: 'Entries with a receipt photo. Levels at 5, 25 and 100.',
+    level: rc.level, maxLevel: 3, status: `${plural(receipts, 'receipt')}${rc.next ? ` · next at ${rc.next}` : ''}`, progress: rc.progress,
+  });
+  if (i.hasShared) {
+    const splits = i.rows.filter(r => r.shared && r.kind === 'expense').length;
+    const sp = tiered(splits, [5, 25, 100]);
+    badges.push({
+      id: 'splitter', title: 'Fair splitter', icon: 'users', group: 'milestone',
+      explain: 'Shared expenses you are part of. Levels at 5, 25 and 100.',
+      level: sp.level, maxLevel: 3, status: `${plural(splits, 'shared expense')}${sp.next ? ` · next at ${sp.next}` : ''}`, progress: sp.progress,
+    });
+    const settles = i.rows.filter(r => r.shared && r.kind === 'settlement').length;
+    const se = tiered(settles, [3, 10, 30]);
+    badges.push({
+      id: 'settler', title: 'Keeps it square', icon: 'check', group: 'milestone',
+      explain: 'Settle-ups with people. Levels at 3, 10 and 30.',
+      level: se.level, maxLevel: 3, status: `${plural(settles, 'settle-up')}${se.next ? ` · next at ${se.next}` : ''}`, progress: se.progress,
+    });
+  }
+  const gs = tiered(i.goalsCount, [1, 3, 5]);
+  badges.push({
+    id: 'goalSetter', title: 'Goal setter', icon: 'flag', group: 'milestone',
+    explain: 'Savings goals you have set. Levels at 1, 3 and 5.',
+    level: gs.level, maxLevel: 3, status: i.goalsCount === 0 ? 'Set a goal under Money' : plural(i.goalsCount, 'goal'), progress: gs.progress,
+  });
+  if (i.goalsSaved != null) {
+    const sv = tiered(i.goalsSaved, [1_000_000, 5_000_000, 10_000_000]);
+    badges.push({
+      id: 'saved', title: 'Saver', icon: 'dollar-sign', group: 'milestone',
+      explain: 'Put aside across your goals. Levels at ₹10,000, ₹50,000 and ₹1,00,000.',
+      level: sv.level, maxLevel: 3, status: `${rupees(i.goalsSaved)} in goals`, progress: sv.progress,
+    });
+  }
+  if (i.recurringRules != null) {
+    const ru = tiered(i.recurringRules, [1, 3, 5]);
+    badges.push({
+      id: 'autopilot', title: 'On autopilot', icon: 'refresh-cw', group: 'milestone',
+      explain: 'Bills and income set to repeat, so the app logs them for you. Levels at 1, 3 and 5.',
+      level: ru.level, maxLevel: 3, status: plural(i.recurringRules, 'repeating entry', 'repeating entries'), progress: ru.progress,
+    });
+  }
+
+  // Right now
+  if (i.emergency) {
+    const done = i.emergency.target > 0 && i.emergency.saved >= i.emergency.target;
+    badges.push({
+      id: 'emergency', title: 'Rainy-day fund', icon: 'umbrella', group: 'now',
+      explain: 'Your emergency goal is fully funded. Checked again every day.',
+      level: done ? 1 : 0, maxLevel: 1,
+      status: `${rupees(i.emergency.saved)} of ${rupees(i.emergency.target)}`,
+      progress: i.emergency.target > 0 ? Math.min(1, i.emergency.saved / i.emergency.target) : 0,
+    });
+  }
+  if (i.card && i.card.limit > 0) {
+    const clear = i.card.used <= 0;
+    badges.push({
+      id: 'cardClear', title: 'Card clear', icon: 'credit-card', group: 'now',
+      explain: 'Nothing owed on your credit card right now. Checked again every day.',
+      level: clear ? 1 : 0, maxLevel: 1,
+      status: clear ? 'Nothing owed' : `${rupees(i.card.used)} owed`,
+      progress: Math.max(0, 1 - i.card.used / i.card.limit),
+    });
+  }
+  if (i.cashAvailable != null) {
+    const black = i.cashAvailable >= 0;
+    badges.push({
+      id: 'inTheBlack', title: 'In the black', icon: 'thumbs-up', group: 'now',
+      explain: 'What you can spend is above zero: you have not spent past your cash. Checked again every day.',
+      level: black ? 1 : 0, maxLevel: 1,
+      status: black ? `${rupees(i.cashAvailable)} available` : `${rupees(i.cashAvailable)} past your cash`, progress: black ? 1 : 0,
+    });
+  }
+  badges.push({
+    id: 'planner', title: 'Planner', icon: 'sliders', group: 'now',
+    explain: 'A budget is set for this month, so spending has something to be measured against.',
+    level: i.budgetPct != null ? 1 : 0, maxLevel: 1,
+    status: i.budgetPct != null ? 'Budget set' : 'Set a budget under Money', progress: i.budgetPct != null ? 1 : 0,
   });
 
   return badges;

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { colors, type, space, layout } from '../../src/theme';
@@ -5,6 +6,7 @@ import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { SectionHeader } from '../../src/components/ui/SectionHeader';
 import { Card } from '../../src/components/ui/Card';
 import { Divider } from '../../src/components/ui/Divider';
+import { SectionCard } from '../../src/components/ui/SectionCard';
 import { IconCircle } from '../../src/components/ui/IconCircle';
 import { InfoLabel } from '../../src/components/ui/InfoLabel';
 import { AnimatedBar } from '../../src/components/ui/anim/AnimatedBar';
@@ -30,6 +32,8 @@ const SECTIONS: { group: BadgeGroup; title: string }[] = [
  */
 export default function BadgesScreen() {
   const router = useRouter();
+  // Fully earned badges wait in a closed box at the end; what is still in play leads (2026-09-30).
+  const [showEarned, setShowEarned] = useState(false);
   const bottomPad = useContentInset();
   const { data, error, refreshing, onRefresh, reload } = useScreenData((db) => loadBadges(db), []);
   const badges = data ?? [];
@@ -44,7 +48,7 @@ export default function BadgesScreen() {
         >
           <BadgeBoard badges={badges} />
           {SECTIONS.map(({ group, title }) => {
-            const list = badges.filter(b => b.group === group);
+            const list = badges.filter(b => b.group === group && !done(b));
             if (list.length === 0) return null;
             return (
               <View key={group}>
@@ -60,11 +64,31 @@ export default function BadgesScreen() {
               </View>
             );
           })}
+          {badges.some(done) && (
+            <SectionCard
+              title="Earned"
+              subtitle={`${badges.filter(done).length} at their top level`}
+              icon="award"
+              expanded={showEarned}
+              onToggle={() => setShowEarned(v => !v)}
+              style={styles.earned}
+            >
+              {badges.filter(done).map(b => (
+                <View key={b.id}>
+                  <Divider indent="text" />
+                  <BadgeRow badge={b} />
+                </View>
+              ))}
+            </SectionCard>
+          )}
         </ScrollView>
       )}
     </View>
   );
 }
+
+/** Earned all the way: a one-off earned, or a milestone at its last level. */
+const done = (b: Badge) => b.level >= b.maxLevel;
 
 function BadgeRow({ badge: b }: { badge: Badge }) {
   const tint = badgeTint(b);
@@ -103,4 +127,5 @@ const styles = StyleSheet.create({
   level: { ...type.caption },
   status: { ...type.caption, color: colors.textSecondary, marginTop: 2 },
   bar: { marginTop: space.sm },
+  earned: { marginTop: space.lg },
 });
