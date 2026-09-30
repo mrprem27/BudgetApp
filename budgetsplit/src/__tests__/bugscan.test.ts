@@ -1119,7 +1119,9 @@ describe('U-04 · Afford answers where you are typing', () => {
 
 describe('U-25/U-41 · a ⌄ only on chips that pick one value from a list', () => {
   /** Category, date and pay method in Add (`U-41`); never details, filters or pills. */
-  const PICKERS = new Set(['src/components/finance/CategoryField.tsx', 'src/components/finance/add/CategoryDatePills.tsx', 'src/components/finance/add/DetailChips.tsx']);
+  const PICKERS = new Set(['src/components/finance/CategoryField.tsx', 'src/components/finance/add/CategoryDatePills.tsx', 'src/components/finance/add/DetailChips.tsx',
+    // Split by items' Paid from: the same pay-method picker as Add (`U-69`).
+    'app/add/itemized.tsx']);
   const files = (dir: string): string[] => fs.readdirSync(dir, { withFileTypes: true }).flatMap(e =>
     e.isDirectory() ? files(`${dir}/${e.name}`) : /\.tsx$/.test(e.name) ? [`${dir}/${e.name}`] : []);
   it('sets chevron on no other chip', () => {

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  View, Text, TextInput, StyleSheet, TouchableOpacity,
+  View, Text, StyleSheet, TouchableOpacity,
   FlatList, Platform,
   ActionSheetIOS, ActivityIndicator,
 } from 'react-native';
@@ -22,11 +22,17 @@ import { CategoryPicker } from '../../src/components/finance/CategoryPicker';
 import { SheetModal } from '../../src/components/ui/SheetModal';
 import { Chip } from '../../src/components/ui/Chip';
 import { PayMethodSheet } from '../../src/components/finance/add/PayMethodSheet';
-import { PAY_METHOD_LABEL, AddKind } from '../../src/constants/enums';
+import { AddKind } from '../../src/constants/enums';
 import { haptic } from '../../src/lib/haptics';
 import { useItemizedForm, ITEMIZED_STEPS, ADJUSTMENT_LABELS } from '../../src/hooks/useItemizedForm';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 import { Card } from '../../src/components/ui/Card';
+import { Input } from '../../src/components/ui/Input';
+import { TabPills } from '../../src/components/ui/TabPills';
+import { Divider } from '../../src/components/ui/Divider';
+import { SectionHeader } from '../../src/components/ui/SectionHeader';
+import { SecondaryButton } from '../../src/components/ui/SecondaryButton';
+import { ItemFields, ItemGridHeader, ItemGridRow, GridAmountRow } from '../../src/components/finance/add/ItemGrid';
 import { backOr } from '../../src/lib/nav';
 
 /**
@@ -85,12 +91,16 @@ export default function ItemizedScreen() {
         </View>
       </Card>
 
-      {/* STEP 1: ITEMS */}
+      {/* STEP 1: ITEMS — one grid (`U-69`): the add fields, each item, and the totals share the
+          same columns (`ItemGrid`), so every figure lines up down the page. */}
       {f.step === 'items' && (
-        <KeyboardForm contentContainerStyle={styles.scroll}>
+        <KeyboardForm contentContainerStyle={styles.itemsScroll}>
           {Platform.OS === 'ios' && flags.receiptScan && (
-            <TouchableOpacity
-              style={styles.splitRestBtn}
+            <SecondaryButton
+              label={f.scanning ? 'Reading receipt…' : 'Scan receipt'}
+              icon="camera"
+              size="md"
+              disabled={f.scanning}
               onPress={() => {
                 if (f.scanning) return;
                 ActionSheetIOS.showActionSheetWithOptions(
@@ -101,188 +111,90 @@ export default function ItemizedScreen() {
                   },
                 );
               }}
-              disabled={f.scanning}
-              accessibilityRole="button"
-              accessibilityLabel="Scan receipt"
-            >
-              {f.scanning
-                ? <ActivityIndicator size="small" color={colors.accent} />
-                : <Feather name="camera" size={16} color={colors.accent} />}
-              <Text style={styles.splitRestText}>{f.scanning ? 'Reading receipt…' : 'Scan receipt'}</Text>
-            </TouchableOpacity>
+            />
           )}
 
-          <View style={styles.addCardHeader}>
-            <Feather name="plus" size={15} color={colors.accent} />
-            <Text style={styles.addCardHeaderText}>Add item</Text>
-          </View>
-          <View style={styles.addCard}>
-            <TextInput
-              style={styles.addNameInput}
-              placeholder="Item name"
-              placeholderTextColor={colors.textMuted}
-              value={f.newName}
-              onChangeText={f.setNewName}
-              returnKeyType="next"
+          <SectionHeader title="Add an item" first={!(Platform.OS === 'ios' && flags.receiptScan)} />
+          <Card padded style={styles.gap}>
+            <ItemFields
+              name={f.newName} qty={f.newQty} price={f.newPrice}
+              onName={f.setNewName} onQty={f.setNewQty} onPrice={f.setNewPrice}
+              onSubmit={f.addItem}
             />
-            <View style={styles.addRow2}>
-              <View style={styles.qtyWrap}>
-                <Text style={styles.miniLabel}>Qty</Text>
-                <TextInput
-                  style={styles.qtyInput}
-                  value={f.newQty}
-                  onChangeText={f.setNewQty}
-                  keyboardType="number-pad"
-                  placeholder="1"
-                  placeholderTextColor={colors.textMuted}
-                />
-              </View>
-              <View style={styles.priceWrap}>
-                <Text style={styles.miniLabel}>Unit price</Text>
-                <TextInput
-                  style={styles.priceInput}
-                  value={f.newPrice}
-                  onChangeText={f.setNewPrice}
-                  keyboardType="decimal-pad"
-                  placeholder="₹0"
-                  placeholderTextColor={colors.textMuted}
-                  onSubmitEditing={f.addItem}
-                />
-              </View>
-              <TouchableOpacity
-                style={[styles.addBtn, (!f.newName.trim() || !f.newPrice.trim()) && styles.addBtnDisabled]}
-                onPress={f.addItem}
-                disabled={!f.newName.trim() || !f.newPrice.trim()}
-                accessibilityRole="button"
-                accessibilityLabel="Add item"
-              >
-                <Feather name="plus" size={22} color={colors.bg} />
-              </TouchableOpacity>
-            </View>
-          </View>
+            <SecondaryButton label="Add item" icon="plus" size="md" onPress={f.addItem} disabled={!f.newName.trim() || !f.newPrice.trim()} />
+          </Card>
 
-          {f.items.length > 0 && (
+          {f.items.length === 0 ? (
+            <Text style={styles.hintText}>Add each line from the bill.</Text>
+          ) : (
             <>
-              <Text style={styles.sectionLabel}>LINE ITEMS</Text>
+              <SectionHeader title="Items" />
               <Card style={styles.card}>
-                {f.items.map((item, idx) => {
-                  const editing = f.editingId === item.id;
-                  return (
-                  <View key={item.id} style={[styles.itemRow, idx < f.items.length - 1 && styles.rowBorder]}>
-                    {editing ? (
-                      <View style={{ flex: 1, gap: space.xs }}>
-                        <TextInput
-                          style={styles.itemEditName}
-                          value={item.name}
-                          onChangeText={(t) => f.updateItem(item.id, { name: t })}
-                          placeholder="Item name"
-                          placeholderTextColor={colors.textMuted}
-                          accessibilityLabel="Item name"
+                <ItemGridHeader />
+                {f.items.map(item => (
+                  <View key={item.id}>
+                    <Divider indent="none" />
+                    {f.editingId === item.id ? (
+                      <View style={styles.editing}>
+                        <ItemFields
+                          name={item.name} qty={item.qty} price={item.unitPrice}
+                          onName={(t) => f.updateItem(item.id, { name: t })}
+                          onQty={(t) => f.updateItem(item.id, { qty: t })}
+                          onPrice={(t) => f.updateItem(item.id, { unitPrice: t })}
+                          onSubmit={() => f.setEditingId(null)}
+                          autoFocus
                         />
-                        <View style={styles.itemEditRow}>
-                          <TextInput
-                            style={styles.itemEditQty}
-                            value={item.qty}
-                            onChangeText={(t) => f.updateItem(item.id, { qty: t.replace(/[^0-9]/g, '') })}
-                            keyboardType="number-pad"
-                            placeholder="1"
-                            placeholderTextColor={colors.textMuted}
-                            accessibilityLabel="Quantity"
-                          />
-                          <Text style={styles.itemEditTimes}>×</Text>
-                          <View style={styles.itemEditPriceWrap}>
-                            <Text style={styles.itemEditRupee}>₹</Text>
-                            <TextInput
-                              style={styles.itemEditPrice}
-                              value={item.unitPrice}
-                              onChangeText={(t) => f.updateItem(item.id, { unitPrice: t.replace(/[^0-9.]/g, '') })}
-                              keyboardType="decimal-pad"
-                              placeholder="0"
-                              placeholderTextColor={colors.textMuted}
-                              accessibilityLabel="Unit price"
-                            />
-                          </View>
-                          <TouchableOpacity hitSlop={8} style={styles.itemDoneBtn} onPress={() => f.setEditingId(null)} accessibilityRole="button" accessibilityLabel="Done editing">
-                            <Feather name="check" size={16} color={colors.accent} />
-                          </TouchableOpacity>
-                        </View>
+                        <SecondaryButton label="Done" icon="check" size="sm" onPress={() => f.setEditingId(null)} />
                       </View>
                     ) : (
-                      <TouchableOpacity style={{ flex: 1 }} onPress={() => f.setEditingId(item.id)} accessibilityRole="button" accessibilityLabel={`Edit ${item.name}`}>
-                        <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
-                        {item.assignedTo.length > 0 ? (
-                          <View style={styles.itemAvatars}>
-                            <AvatarStack people={f.peopleFor(item.assignedTo)} size={20} max={4} />
-                          </View>
-                        ) : (
-                          <Text style={styles.itemSub} numberOfLines={1}>
-                            {item.qty} × {formatRupees(parseToPaise(item.unitPrice))} · tap to edit
-                          </Text>
-                        )}
-                      </TouchableOpacity>
+                      <ItemGridRow
+                        name={item.name}
+                        qty={Math.max(1, parseInt(item.qty, 10) || 1)}
+                        unitPaise={parseToPaise(item.unitPrice)}
+                        totalPaise={computeItemSubtotal(item)}
+                        below={item.assignedTo.length > 0 ? (
+                          <View style={styles.itemAvatars}><AvatarStack people={f.peopleFor(item.assignedTo)} size={20} max={4} /></View>
+                        ) : undefined}
+                        onPress={() => f.setEditingId(item.id)}
+                        onRemove={() => f.removeItem(item.id)}
+                      />
                     )}
-                    {!editing && <Text style={styles.itemTotal}>{formatRupees(computeItemSubtotal(item))}</Text>}
-                    <TouchableOpacity onPress={() => f.removeItem(item.id)} hitSlop={8} accessibilityLabel="Remove item">
-                      <Feather name="trash-2" size={16} color={colors.textMuted} />
-                    </TouchableOpacity>
                   </View>
+                ))}
+                <Divider indent="none" />
+                <GridAmountRow label="Subtotal" amount={f.subtotal} />
+                {f.adjustments.map((adj, i) => {
+                  const amt = adj.mode === 'percent'
+                    ? Math.round((f.subtotal * parseToPaise(adj.value)) / 10000)
+                    : parseToPaise(adj.value);
+                  return (
+                    <GridAmountRow
+                      key={i}
+                      label={`${adj.label}${adj.mode === 'percent' ? ` ${adj.value}%` : ''}`}
+                      amount={amt}
+                      signed={adj.type === 'discount' ? '−' : '+'}
+                      tone={adj.type === 'discount' ? colors.income : undefined}
+                      leading={(
+                        <TouchableOpacity onPress={() => f.removeAdjustment(i)} hitSlop={10} accessibilityRole="button" accessibilityLabel={`Remove ${adj.label}`}>
+                          <Feather name="x-circle" size={14} color={colors.textMuted} />
+                        </TouchableOpacity>
+                      )}
+                    />
                   );
                 })}
+                <Divider indent="none" />
+                <GridAmountRow label="Total" amount={f.total} strong />
               </Card>
-            </>
-          )}
 
-          {f.items.length > 0 && (
-            <Card style={styles.card}>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Subtotal</Text>
-                <Text style={styles.summaryVal}>{formatRupees(f.subtotal)}</Text>
-              </View>
-              {f.adjustments.map((adj, i) => {
-                const amt = adj.mode === 'percent'
-                  ? Math.round((f.subtotal * parseToPaise(adj.value)) / 10000)
-                  : parseToPaise(adj.value);
-                return (
-                  <View key={i} style={styles.summaryRow}>
-                    <TouchableOpacity onPress={() => f.removeAdjustment(i)} hitSlop={6} style={styles.adjChipRemove}>
-                      <Feather name="x-circle" size={13} color={colors.textMuted} />
-                      <Text style={styles.summaryLabel} numberOfLines={1}>
-                        {adj.label} {adj.mode === 'percent' ? `${adj.value}%` : ''}
-                      </Text>
-                    </TouchableOpacity>
-                    <Text style={[styles.summaryVal, { color: adj.type === 'discount' ? colors.income : colors.textPrimary }]}>
-                      {adj.type === 'discount' ? '−' : '+'}{formatRupees(amt)}
-                    </Text>
-                  </View>
-                );
-              })}
-              <View style={styles.summaryDivider} />
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryTotalLabel}>Total</Text>
-                <Text style={styles.summaryTotalVal}>{formatRupees(f.total)}</Text>
-              </View>
-            </Card>
-          )}
-
-          {f.items.length > 0 && (
-            <>
-              <Text style={styles.sectionLabel}>ADJUSTMENTS</Text>
-              <View style={styles.adjButtons}>
+              <View style={styles.chips}>
                 {([['tax', 'plus', 'Tax'], ['tip', 'plus', 'Tip'], ['service', 'percent', 'Service'], ['discount', 'minus', 'Discount']] as const).map(([t, ic, label]) => (
-                  <TouchableOpacity key={t} style={styles.adjBtn} onPress={() => f.openAdj(t)} accessibilityRole="button">
-                    <Feather name={ic} size={13} color={colors.accent} />
-                    <Text style={styles.adjBtnText}>{label}</Text>
-                  </TouchableOpacity>
+                  <Chip key={t} icon={ic} label={label} onPress={() => f.openAdj(t)} />
                 ))}
               </View>
             </>
           )}
 
-          {f.items.length === 0 && (
-            <Text style={styles.hintText}>Add each line on the bill, name, quantity and unit price.</Text>
-          )}
-
-          <PrimaryButton label="Next: Assign items" onPress={() => f.setStep('assign')} disabled={!f.canProceedItems} style={styles.nextBtn} />
+          <PrimaryButton label="Next: who had what" onPress={() => f.setStep('assign')} disabled={!f.canProceedItems} style={styles.nextBtn} />
         </KeyboardForm>
       )}
 
@@ -295,10 +207,7 @@ export default function ItemizedScreen() {
           // Each item's split has amount fields (AGENTS.md §6b).
           renderScrollComponent={assignScroll}
           ListHeaderComponent={
-            <TouchableOpacity style={styles.splitRestBtn} onPress={f.splitRestEqually} accessibilityRole="button">
-              <Feather name="users" size={15} color={colors.accent} />
-              <Text style={styles.splitRestText}>Split unassigned equally</Text>
-            </TouchableOpacity>
+            <SecondaryButton label="Split what's left equally" icon="users" size="md" onPress={f.splitRestEqually} style={styles.splitRest} />
           }
           renderItem={({ item }) => (
             <Card clip>
@@ -344,12 +253,13 @@ export default function ItemizedScreen() {
           ItemSeparatorComponent={() => <View style={styles.sep} />}
           ListFooterComponent={
             <>
+              <SectionHeader title="Each person" />
               <Card style={styles.card}>
                 {f.members.map((m, i) => (
-                  <View key={m.id} style={[styles.perPersonRow, i < f.members.length - 1 && styles.rowBorder]}>
-                    <MemberAvatar name={m.name} color={m.avatar_color} size={32} imageUri={m.image_uri} />
-                    <Text style={styles.perPersonName} numberOfLines={1}>{m.name}</Text>
-                    <Text style={styles.perPersonAmount}>{formatRupees(f.perPerson[m.id] ?? 0)}</Text>
+                  <View key={m.id}>
+                    {i > 0 && <Divider indent="none" />}
+                    <GridAmountRow label={m.name} amount={f.perPerson[m.id] ?? 0}
+                      leading={<MemberAvatar name={m.name} color={m.avatar_color} size={layout.iconCircle} imageUri={m.image_uri} />} />
                   </View>
                 ))}
               </Card>
@@ -370,9 +280,7 @@ export default function ItemizedScreen() {
                 </View>
               )}
               <View style={styles.navRow}>
-                <TouchableOpacity onPress={() => f.setStep('items')} style={styles.backBtn} accessibilityRole="button">
-                  <Text style={styles.backBtnText}>Back</Text>
-                </TouchableOpacity>
+                <SecondaryButton label="Back" onPress={() => f.setStep('items')} style={styles.backBtn} />
                 <PrimaryButton label="Next: Payers" onPress={() => f.setStep('payers')} disabled={!f.canProceedAssign} style={{ flex: 1 }} />
               </View>
             </>
@@ -383,21 +291,21 @@ export default function ItemizedScreen() {
       {/* STEP 3: PAYERS */}
       {f.step === 'payers' && (
         <KeyboardForm contentContainerStyle={styles.scroll}>
-          <Text style={styles.fieldLabel}>Who paid? Must equal total {formatRupees(f.total)}</Text>
+          <Text style={styles.fieldLabel}>Who paid the {formatRupees(f.total)}?</Text>
           <Card style={styles.card}>
             {f.members.map((m, i) => (
-              <View key={m.id} style={[styles.payerRow, i < f.members.length - 1 && styles.rowBorder]}>
-                <MemberAvatar name={m.name} color={m.avatar_color} size={36} imageUri={m.image_uri} />
-                <Text style={styles.payerName} numberOfLines={1}>{m.name}</Text>
-                <View style={styles.payerInputWrap}>
-                  <Text style={styles.rupee}>₹</Text>
-                  <TextInput
-                    style={styles.payerInput}
+              <View key={m.id}>
+                {i > 0 && <Divider indent="none" />}
+                <View style={styles.payerRow}>
+                  <MemberAvatar name={m.name} color={m.avatar_color} size={layout.iconCircle} imageUri={m.image_uri} />
+                  <Text style={styles.payerName} numberOfLines={1}>{m.name}</Text>
+                  <Input
+                    style={styles.payerField}
                     value={f.payerAmounts[m.id] ?? ''}
                     onChangeText={v => f.setPayerAmounts(prev => ({ ...prev, [m.id]: v }))}
-                    keyboardType="decimal-pad"
-                    placeholder="0"
-                    placeholderTextColor={colors.textMuted}
+                    amount
+                    placeholder="₹0"
+                    accessibilityLabel={`${m.name} paid`}
                   />
                 </View>
               </View>
@@ -408,9 +316,7 @@ export default function ItemizedScreen() {
           </Text>
 
           <View style={styles.navRow}>
-            <TouchableOpacity onPress={() => f.setStep('assign')} style={styles.backBtn} accessibilityRole="button">
-              <Text style={styles.backBtnText}>Back</Text>
-            </TouchableOpacity>
+            <SecondaryButton label="Back" onPress={() => f.setStep('assign')} style={styles.backBtn} />
             <PrimaryButton label="Review" onPress={() => f.setStep('review')} disabled={f.paymentRemainder !== 0 || f.payments.length === 0} style={{ flex: 1 }} />
           </View>
         </KeyboardForm>
@@ -428,20 +334,15 @@ export default function ItemizedScreen() {
           />
 
           <Text style={[styles.fieldLabel, { marginTop: space.sm }]}>Note</Text>
-          <TextInput
-            style={styles.noteInput}
-            placeholder="e.g. Dinner at Bikanervala (optional)"
-            placeholderTextColor={colors.textMuted}
-            value={f.note}
-            onChangeText={f.setNote}
-          />
+          <Input value={f.note} onChangeText={f.setNote} placeholder="Optional" accessibilityLabel="Note" />
 
           {/* Where the money came from — the same picker Quick Add uses. Credit card vs
               cash is not cosmetic: lib/cash books card spend as debt, not cash out. */}
           <Text style={[styles.fieldLabel, { marginTop: space.sm }]}>Paid from</Text>
           <Chip
             icon="credit-card"
-            label={PAY_METHOD_LABEL[f.payMethod]}
+            label={f.paidFromLabel}
+            chevron
             onPress={() => setShowPayMethod(true)}
           />
 
@@ -463,40 +364,33 @@ export default function ItemizedScreen() {
             </View>
           )}
 
-          <Text style={[styles.shareLabel, { marginTop: space.md }]}>YOUR SHARE</Text>
-          <View style={styles.shareCard}>
-            {f.members.filter(m => (f.perPerson[m.id] ?? 0) > 0).map((m, i, arr) => {
-              const isMe = m.is_me === 1;
-              return (
-                <View key={m.id} style={[styles.perPersonRow, i < arr.length - 1 && styles.shareRowBorder]}>
-                  <MemberAvatar name={m.name} color={m.avatar_color} size={32} imageUri={m.image_uri} />
-                  <Text style={[styles.perPersonName, isMe && styles.shareNameMe]} numberOfLines={1}>
-                    {m.name}{isMe ? ' (you)' : ''}
-                  </Text>
-                  <Text style={[styles.perPersonAmount, isMe && styles.shareAmountMe]}>{formatRupees(f.perPerson[m.id] ?? 0)}</Text>
-                </View>
-              );
-            })}
-          </View>
+          <Text style={[styles.fieldLabel, { marginTop: space.md }]}>Each person's share</Text>
+          <Card style={styles.card}>
+            {f.members.filter(m => (f.perPerson[m.id] ?? 0) > 0).map((m, i) => (
+              <View key={m.id}>
+                {i > 0 && <Divider indent="none" />}
+                <GridAmountRow label={m.is_me === 1 ? `${m.name} (you)` : m.name} amount={f.perPerson[m.id] ?? 0} strong={m.is_me === 1}
+                  leading={<MemberAvatar name={m.name} color={m.avatar_color} size={layout.iconCircle} imageUri={m.image_uri} />} />
+              </View>
+            ))}
+          </Card>
 
           <Text style={[styles.fieldLabel, { marginTop: space.md }]}>Paid by</Text>
           <Card style={styles.card}>
             {f.payments.map((p, i) => {
-              const m = f.members.find(m => m.id === p.personId);
+              const m = f.members.find(x => x.id === p.personId);
               return m ? (
-                <View key={p.personId} style={[styles.perPersonRow, i < f.payments.length - 1 && styles.rowBorder]}>
-                  <MemberAvatar name={m.name} color={m.avatar_color} size={32} imageUri={m.image_uri} />
-                  <Text style={styles.perPersonName} numberOfLines={1}>{m.name}</Text>
-                  <Text style={styles.perPersonAmount}>{formatRupees(p.amount)}</Text>
+                <View key={p.personId}>
+                  {i > 0 && <Divider indent="none" />}
+                  <GridAmountRow label={m.name} amount={p.amount}
+                    leading={<MemberAvatar name={m.name} color={m.avatar_color} size={layout.iconCircle} imageUri={m.image_uri} />} />
                 </View>
               ) : null;
             })}
           </Card>
 
           <View style={styles.navRow}>
-            <TouchableOpacity onPress={() => f.setStep('payers')} style={styles.backBtn} accessibilityRole="button">
-              <Text style={styles.backBtnText}>Back</Text>
-            </TouchableOpacity>
+            <SecondaryButton label="Back" onPress={() => f.setStep('payers')} style={styles.backBtn} />
             <PrimaryButton
               label="Log itemized expense"
               onPress={f.handleSave}
@@ -513,35 +407,28 @@ export default function ItemizedScreen() {
         visible={showPayMethod}
         onClose={() => setShowPayMethod(false)}
         value={f.payMethod}
-        onChange={f.setPayMethod}
+        onChange={f.setPaidFrom}
+        accounts={f.accounts}
+        accountId={f.accountId}
         kind={AddKind.Expense}
       />
 
       <SheetModal visible={f.showAdjModal} onClose={() => f.setShowAdjModal(false)} title={`Add ${ADJUSTMENT_LABELS[f.adjType]}`}>
-        <View style={styles.modeRow}>
-          {(['percent', 'flat'] as const).map(m => (
-            <TouchableOpacity
-              key={m}
-              style={[styles.modeBtn, f.adjMode === m && styles.modeBtnActive]}
-              onPress={() => f.setAdjMode(m)}
-              accessibilityRole="button"
-              accessibilityState={{ selected: f.adjMode === m }}
-            >
-              <Text style={[styles.modeBtnText, f.adjMode === m && { color: colors.bg }]}>
-                {m === 'percent' ? 'Percentage %' : 'Flat ₹'}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-        <TextInput
-          style={styles.adjInput}
+        {/* Pick exactly one: a segmented control, not two hand-built buttons (AGENTS §9). */}
+        <TabPills
+          tabs={[{ key: 'percent', label: 'Percent' }, { key: 'flat', label: 'Amount' }]}
+          active={f.adjMode}
+          onChange={(k) => f.setAdjMode(k as 'percent' | 'flat')}
+        />
+        <Input
+          style={styles.adjField}
           value={f.adjValue}
           onChangeText={f.setAdjValue}
-          keyboardType="decimal-pad"
-          placeholder={f.adjMode === 'percent' ? 'e.g. 5 (for 5%)' : 'Amount in ₹'}
-          placeholderTextColor={colors.textMuted}
+          amount
+          placeholder={f.adjMode === 'percent' ? '5%' : '₹0'}
           autoFocus
           onSubmitEditing={f.addAdjustment}
+          accessibilityLabel={f.adjMode === 'percent' ? 'Percent' : 'Amount'}
         />
         <PrimaryButton label="Add" onPress={f.addAdjustment} disabled={!f.adjValue.trim()} />
       </SheetModal>
@@ -580,67 +467,28 @@ const styles = StyleSheet.create({
   categoryChip: { flexDirection: 'row', alignItems: 'center', gap: space.xs, backgroundColor: colors.bgMuted, paddingHorizontal: space.sm, paddingVertical: 5, borderRadius: radius.pill },
   categoryChipText: { ...type.caption, color: colors.textSecondary, fontFamily: 'Inter_600SemiBold' },
   scroll: { padding: layout.screenPaddingH, paddingBottom: space.xxl, gap: space.md },
+  // No gap: `SectionHeader` owns its margins, and the two would add up (AGENTS §3).
+  itemsScroll: { padding: layout.screenPaddingH, paddingBottom: space.xxl },
+  gap: { gap: space.smd },
+  editing: { gap: space.sm, paddingVertical: space.smd },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginTop: space.md },
 
-  sectionLabel: { ...type.caption, color: colors.textMuted, letterSpacing: 0.5, marginBottom: -space.sm },
-  addCardHeader: { flexDirection: 'row', alignItems: 'center', gap: space.xs, marginBottom: -space.sm },
-  addCardHeaderText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
-  addCard: { backgroundColor: colors.accentMuted, borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.accent, borderStyle: 'dashed', padding: space.md, gap: space.sm },
   itemAvatars: { marginTop: 6 },
-  addNameInput: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: space.sm, borderWidth: 1, borderColor: colors.border },
-  addRow2: { flexDirection: 'row', gap: space.sm, alignItems: 'flex-end' },
-  qtyWrap: { width: 64, gap: space.xs },
-  priceWrap: { flex: 1, gap: space.xs },
-  miniLabel: { ...type.caption, color: colors.textMuted, marginLeft: 2 },
-  qtyInput: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, paddingHorizontal: space.sm, paddingVertical: space.sm, textAlign: 'center', borderWidth: 1, borderColor: colors.border },
-  priceInput: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: space.sm, borderWidth: 1, borderColor: colors.border },
-  addBtn: { width: 48, height: 44, backgroundColor: colors.accent, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
-  addBtnDisabled: { opacity: 0.4 },
 
   card: { paddingHorizontal: space.md },
-  rowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
-  itemRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md },
   itemName: { ...type.body, color: colors.textPrimary },
   itemSub: { ...type.caption, color: colors.textSecondary, marginTop: 2 },
-  itemTotal: { fontFamily: 'SpaceMono_400Regular', fontSize: 14, color: colors.textPrimary },
-  itemEditName: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.sm, paddingVertical: space.sm },
-  itemEditRow: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
-  itemEditQty: { width: 44, textAlign: 'center', ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, paddingVertical: space.sm },
-  itemEditTimes: { ...type.caption, color: colors.textMuted },
-  itemEditPriceWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: colors.bgInput, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.sm },
-  itemEditRupee: { ...type.body, color: colors.textMuted },
-  itemEditPrice: { flex: 1, ...type.body, color: colors.textPrimary, paddingVertical: space.sm },
-  itemDoneBtn: { width: 32, height: 32, borderRadius: radius.lg, backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center' },
 
-  summaryRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: space.sm },
-  summaryLabel: { ...type.body, color: colors.textSecondary, flexShrink: 1 },
-  summaryVal: { fontFamily: 'SpaceMono_400Regular', fontSize: 14, color: colors.textPrimary },
-  adjChipRemove: { flexDirection: 'row', alignItems: 'center', gap: space.xs, flexShrink: 1 },
-  summaryDivider: { height: 1, backgroundColor: colors.border },
-  summaryTotalLabel: { ...type.body, color: colors.textPrimary, fontFamily: 'Inter_600SemiBold' },
-  summaryTotalVal: { fontFamily: 'SpaceMono_400Regular', fontSize: 16, color: colors.accent },
 
-  adjButtons: { flexDirection: 'row', gap: space.sm },
-  adjBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.xs, paddingVertical: space.sm, borderRadius: radius.md, backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border },
-  adjBtnText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   hintText: { ...type.body, color: colors.textMuted, textAlign: 'center', paddingVertical: space.lg },
   nextBtn: { marginTop: space.sm },
 
-  splitRestBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, padding: space.md, borderRadius: radius.md, backgroundColor: colors.accentMuted, marginBottom: space.md },
-  splitRestText: { ...type.label, color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   assignItemHeader: { flexDirection: 'row', alignItems: 'center', padding: space.md },
   unassignedTag: { ...type.caption, color: colors.expense, backgroundColor: alpha(colors.expense, 13), paddingHorizontal: space.sm, paddingVertical: 3, borderRadius: radius.pill },
   splitBody: { paddingHorizontal: space.md, paddingBottom: space.md, gap: space.sm },
   splitRemainder: { ...type.caption, color: colors.healthAmber, marginTop: 2 },
   sep: { height: space.sm },
 
-  perPersonRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md },
-  perPersonName: { ...type.body, color: colors.textPrimary, flex: 1 },
-  perPersonAmount: { fontFamily: 'SpaceMono_400Regular', fontSize: 14, color: colors.textPrimary },
-  shareLabel: { ...type.caption, color: colors.settle, letterSpacing: 0.5, fontFamily: 'Inter_600SemiBold' },
-  shareCard: { backgroundColor: alpha(colors.settle, 10), borderRadius: radius.lg, borderWidth: 1, borderColor: alpha(colors.settle, 27), paddingHorizontal: space.md, marginTop: space.sm },
-  shareRowBorder: { borderBottomWidth: 1, borderBottomColor: alpha(colors.settle, 20) },
-  shareNameMe: { color: colors.accent, fontFamily: 'Inter_600SemiBold' },
-  shareAmountMe: { color: colors.accent },
   unassignedBanner: { backgroundColor: alpha(colors.expense, 9), borderRadius: radius.md, borderWidth: 1, borderColor: alpha(colors.expense, 33), padding: space.sm, gap: space.xs },
   unassignedBannerRow: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
   unassignedBannerText: { ...type.label, color: colors.expense, fontFamily: 'Inter_600SemiBold', flex: 1 },
@@ -648,23 +496,16 @@ const styles = StyleSheet.create({
   assignCtaText: { ...type.caption, color: colors.healthAmber, fontFamily: 'Inter_600SemiBold' },
 
   navRow: { flexDirection: 'row', gap: space.sm, marginTop: space.md },
-  backBtn: { height: 52, paddingHorizontal: space.lg, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
-  backBtnText: { ...type.button, color: colors.textSecondary },
+  splitRest: { marginBottom: space.md },
+  backBtn: { paddingHorizontal: space.lg },
 
   fieldLabel: { ...type.label, color: colors.textSecondary },
-  noteInput: { ...type.body, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, padding: space.md, borderWidth: 1, borderColor: colors.border },
   locRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.sm, paddingVertical: space.sm, paddingHorizontal: space.md, backgroundColor: colors.bgInput, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border },
   locText: { ...type.body, color: colors.textSecondary, flex: 1 },
   payerRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md },
   payerName: { ...type.body, color: colors.textPrimary, flex: 1 },
-  payerInputWrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.bgInput, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.sm, minWidth: 96 },
-  rupee: { ...type.body, color: colors.textMuted },
-  payerInput: { ...type.body, color: colors.textPrimary, flex: 1, textAlign: 'right', paddingVertical: space.sm, paddingLeft: 2 },
+  payerField: { width: 128 },
+  adjField: { marginVertical: space.md },
   remainderText: { ...type.label, textAlign: 'center', fontFamily: 'Inter_600SemiBold' },
 
-  modeRow: { flexDirection: 'row', gap: space.xs, backgroundColor: colors.bgMuted, borderRadius: radius.md, padding: 3 },
-  modeBtn: { flex: 1, paddingVertical: space.sm, alignItems: 'center', borderRadius: radius.sm },
-  modeBtnActive: { backgroundColor: colors.accent },
-  modeBtnText: { ...type.label, color: colors.textSecondary, fontFamily: 'Inter_600SemiBold' },
-  adjInput: { ...type.body, fontSize: 18, color: colors.textPrimary, backgroundColor: colors.bgInput, borderRadius: radius.md, padding: space.md, borderWidth: 1, borderColor: colors.border, textAlign: 'center' },
 });

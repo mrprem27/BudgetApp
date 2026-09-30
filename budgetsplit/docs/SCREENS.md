@@ -456,10 +456,10 @@ recurring-edit all run through Quick.
 
 ### 7.3 Itemized — `app/add/itemized.tsx`
 4-step wizard with progress dots (`ITEMIZED_STEPS`, titles from `STEP_TITLE`):
-1. **Items** ("Add items") — name/qty/price rows; live subtotal; **Scan receipt** (§7.4); four adjustment types.
-2. **Assign** ("Assign items") — assign each item to people ("Split unassigned equally" shortcut); per-person totals; unassigned banner.
-3. **Payers** ("Who paid?") — who paid how much; balanced/remaining indicator reading **"Must equal total ₹X"**.
-4. **Review** ("Review & save") — category, note, location, your-share + paid-by cards. **Save** → `insertItemizedTxn` / `updateItemizedTxn`, which persists `line_item` rows (with `split_mode`/`split_values`) and an `adjustments` JSON blob so the bill round-trips on edit.
+1. **Items** ("Add items") — **Scan receipt** (§7.4); an **Add an item** card (`ItemFields`: name, then qty and price each, the app's `Input`s, the same fields used to edit an item in place); an **Items** card laid out as one grid (`ItemGrid`: Item · Qty · Total, the price each under the name), then Subtotal, each tax / tip / discount, and Total in the same total column; Tax · Tip · Service · Discount as chips (`U-69`).
+2. **Assign** ("Assign items") — assign each item to people ("Split what's left equally"); **Each person** totals on the same grid column; unassigned banner.
+3. **Payers** ("Who paid?") — **"Who paid the ₹X?"**, one amount `Input` per person; balanced/remaining indicator.
+4. **Review** ("Review & save") — category, note, Paid from (named accounts, `U-68`), location, each person's share + paid-by cards on the grid column. **Save** → `insertItemizedTxn` / `updateItemizedTxn`, which persists `line_item` rows (with `split_mode`/`split_values`) and an `adjustments` JSON blob so the bill round-trips on edit.
 
 **Adjustments** are **Tax · Tip · Service · Discount** (`ADJUSTMENT_LABELS` in
 `src/hooks/useItemizedForm.ts` — `service` renders as "Service Charge"), each flat or %, applied

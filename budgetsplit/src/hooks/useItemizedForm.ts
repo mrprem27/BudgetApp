@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { listAccounts } from '../db/queries/accounts';
+import { paidFromLabel, type AccountChoice } from '../lib/paidFrom';
 import { saveFailureMessage } from '../lib/dbErrors';
 import { Alert } from 'react-native';
 import { File } from 'expo-file-system';
@@ -100,6 +102,10 @@ export function useItemizedForm(paramGroupId?: string, editId?: string) {
   // restaurant bill was booked as cash out in lib/cash — the exact bug the
   // recurring-materialize path documents having fixed.
   const [payMethod, setPayMethod] = useState<PayMethod>(PayMethod.Bank);
+  // Which account of that kind (`U-68`); the write keeps it only while it matches the kind.
+  const [accountId, setAccountId] = useState<string | undefined>(undefined);
+  const [accounts, setAccounts] = useState<AccountChoice[]>([]);
+  const setPaidFrom = useCallback((m: PayMethod, id?: string) => { setPayMethod(m); setAccountId(id); }, []);
   const [showAdjModal, setShowAdjModal] = useState(false);
   const [adjType, setAdjType] = useState<AdjustmentType>('tax');
   const [adjMode, setAdjMode] = useState<'flat' | 'percent'>('percent');
@@ -124,6 +130,9 @@ export function useItemizedForm(paramGroupId?: string, editId?: string) {
     setCapturingLoc(true);
     try { setPlace(await getCurrentPlace()); } finally { setCapturingLoc(false); }
   }
+
+  // Named accounts for Paid from, for a new bill and an edit alike.
+  useEffect(() => { listAccounts(db).then(setAccounts).catch(() => {}); }, [db]);
 
   useEffect(() => {
     if (isEditing) return;
@@ -167,6 +176,7 @@ export function useItemizedForm(paramGroupId?: string, editId?: string) {
           setSelectedCategory(cats.find(c => c.name === t.category) ?? cats[0] ?? null);
           setNote(t.note ?? '');
           if (t.pay_method) setPayMethod(t.pay_method);
+          setAccountId(t.account_id ?? undefined);
           setTxnDate(t.date);
           setAttachmentUri(t.attachment_uri ?? null);
           originalAttachmentUriRef.current = t.attachment_uri ?? null;
@@ -380,6 +390,7 @@ export function useItemizedForm(paramGroupId?: string, editId?: string) {
         category: selectedCategory?.name ?? 'Other',
         note: note.trim() || undefined,
         payMethod,
+        accountId,
         attachmentUri: attachmentUri ?? undefined,
         payments,
         shares,
@@ -435,7 +446,8 @@ export function useItemizedForm(paramGroupId?: string, editId?: string) {
     selectedGroupId, members, categories, setCategories, createCategory,
     selectedCategory, setSelectedCategory,
     note, setNote,
-    payMethod, setPayMethod,
+    payMethod, setPayMethod, accountId, accounts, setPaidFrom,
+    paidFromLabel: paidFromLabel(accounts, payMethod, accountId),
     txnDate, setTxnDate,
     // items
     items, editingId, setEditingId,

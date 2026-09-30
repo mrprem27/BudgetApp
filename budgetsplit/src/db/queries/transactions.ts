@@ -520,16 +520,16 @@ export async function insertItemizedTxn(
       // exactly that case, landing as NULL — "typed by hand".
       `INSERT INTO txn
          (id,group_id,kind,entry_mode,date,category,note,attachment_uri,tags,adjustments,
-          recur_freq,recur_interval,recur_end,tz,lat,lng,place_label,pay_method,currency,source,
+          recur_freq,recur_interval,recur_end,tz,lat,lng,place_label,pay_method,account_id,currency,source,
           is_deleted,created_at,updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?)`,
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?)`,
       [
         id, input.groupId, input.kind, 'itemized', input.date,
         input.category, input.note ?? null, input.attachmentUri ?? null,
         serializeTags(input.tags ?? []),
         input.adjustments && input.adjustments.length ? JSON.stringify(input.adjustments) : null,
         null, null, null, localTz(), input.lat ?? null, input.lng ?? null, input.placeLabel ?? null,
-        input.payMethod ?? null, input.currency ?? null, input.source ?? null, now, now,
+        input.payMethod ?? null, input.accountId ?? null, input.currency ?? null, input.source ?? null, now, now,
       ],
     );
     await alignAccount(db, 'txn', id);
@@ -626,6 +626,7 @@ export async function updateItemizedTxn(
         input.date, input.payMethod ?? null, input.currency ?? null, now, id,
       ],
     );
+    if (input.accountId !== undefined) await db.runAsync('UPDATE txn SET account_id = ? WHERE id = ?', [input.accountId, id]);
     await alignAccount(db, 'txn', id);
     await queueEntry(db, id);
     await db.runAsync('DELETE FROM line_item WHERE txn_id=?', [id]);
