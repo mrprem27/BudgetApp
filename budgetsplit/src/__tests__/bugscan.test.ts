@@ -1108,3 +1108,11 @@ describe('U-04 · Afford answers where you are typing', () => {
   });
 });
 
+describe('U-25 · no dropdown arrow on chips or pills', () => {
+  it('Chip has no chevron, and the pills that had one do not', () => {
+    for (const f of ['src/components/ui/Chip.tsx', 'src/components/finance/review/ReviewRowCard.tsx', 'src/components/finance/budget/BudgetAmountRow.tsx']) {
+      expect({ f, arrow: /chevron-down|chevron\?:/.test(fs.readFileSync(f, 'utf8')) }).toEqual({ f, arrow: false });
+    }
+  });
+});
+

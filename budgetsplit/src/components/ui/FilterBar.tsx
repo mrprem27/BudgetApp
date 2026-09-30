@@ -176,29 +176,29 @@ export function FilterBar({
           const opt = g.options.find(o => o.value === value) ?? g.options[0];
           const isDefault = value === g.options[0]?.value;
           return (
-            <Chip key={g.key} label={opt?.label ?? ''} selected={!isDefault} chevron maxWidth={180}
+            <Chip key={g.key} label={opt?.label ?? ''} selected={!isDefault} maxWidth={180}
               onPress={() => setPicker({ kind: 'group', key: g.key })} />
           );
         })}
         {onKind && (
           <Chip icon="layers" label={kindSet ? TXN_KIND_LABEL_PLURAL[kind as typeof TXN_KIND[number]] : 'Type'}
-            selected={kindSet} chevron={!kindSet} onRemove={kindSet ? () => onKind(KIND_ANY) : undefined}
+            selected={kindSet} onRemove={kindSet ? () => onKind(KIND_ANY) : undefined}
             onPress={() => setPicker({ kind: 'type' })} />
         )}
         {onRange && (
           <Chip icon="calendar" label={range === 'any' ? 'Date' : rangeLabel} maxWidth={200}
-            selected={range !== 'any'} chevron={range === 'any'}
+            selected={range !== 'any'}
             onRemove={range !== 'any' ? () => onRange('any', null, null) : undefined}
             onPress={() => setPicker({ kind: 'date' })} />
         )}
         {onPerson && people.length > 0 && (
           <Chip icon="user" label={person?.name ?? 'Who'} maxWidth={180}
-            selected={!!person} chevron={!person} onRemove={person ? () => onPerson(null) : undefined}
+            selected={!!person} onRemove={person ? () => onPerson(null) : undefined}
             onPress={() => setPicker({ kind: 'who' })} />
         )}
         {onTags && tagOptions.length > 0 && (
           <Chip icon="tag" label={tagsLabel} maxWidth={180}
-            selected={selectedTags.length > 0} chevron={selectedTags.length === 0}
+            selected={selectedTags.length > 0}
             onRemove={selectedTags.length > 0 ? () => onTags([]) : undefined}
             onPress={() => setPicker({ kind: 'tags' })} />
         )}

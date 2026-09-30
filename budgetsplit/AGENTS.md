@@ -295,15 +295,11 @@ existed before it, and four *survived* the first sweep — the Add screen ended 
 primitive-built chips stacked directly above hand-rolled pills of almost the same shape,
 which reads worse than plainly different controls do.
 
-A chip has **one** trailing affordance, and it says what tapping does:
-
-| Trailing | Means | Prop |
-|---|---|---|
-| `✕` | this value can be cleared | `onRemove` |
-| `⌄` | this opens a picker | `chevron` |
-| nothing | it's a toggle, or read-only | — |
-
-Never both — a chip showing `✕` and `⌄` claims to be each.
+A chip has **at most one** trailing affordance: `✕` (`onRemove`), meaning this value can be
+cleared. **No dropdown arrow** — removed 2026-09-30 (`U-25`): every chip that opens a picker already
+names its question with its label and icon, and an arrow on every chip was noise that also ate the
+width names were being cut off for. The same goes for hand-rolled pills. Arrows stay only where they
+show a *state*: expand/collapse.
 
 **The icon is identity, not state.** Every chip shows its own glyph in *every* state.
 Unset is when the user most needs to know what a control is, so a shared `+` glyph on

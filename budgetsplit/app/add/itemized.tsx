@@ -440,7 +440,6 @@ export default function ItemizedScreen() {
           <Chip
             icon="credit-card"
             label={PAY_METHOD_LABEL[f.payMethod]}
-            chevron
             onPress={() => setShowPayMethod(true)}
           />
 

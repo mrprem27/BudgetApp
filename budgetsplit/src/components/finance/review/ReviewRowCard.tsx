@@ -147,13 +147,11 @@ export const ReviewRowCard = React.memo(function ReviewRowCard({
         <TouchableOpacity style={styles.pill} onPress={() => onOpenCategory(row.id)} accessibilityRole="button" accessibilityLabel="Category">
           <IconCircle icon={asFeather(vis.icon, 'tag')} size={20} color={vis.color ?? colors.accent} iconSize={12} />
           <Text style={styles.pillText} numberOfLines={1}>{v.category || 'Category'}</Text>
-          <Feather name="chevron-down" size={12} color={colors.textMuted} />
         </TouchableOpacity>
         {hasGroups && v.kind !== 'income' && (
           <TouchableOpacity style={[styles.pill, isGroup && styles.pillGroup]} accessibilityState={{ selected: isGroup }} onPress={() => onOpenDest(row.id)} accessibilityRole="button" accessibilityLabel="Personal or group">
             <Feather name={isGroup ? 'users' : 'user'} size={12} color={isGroup ? colors.settle : colors.textSecondary} />
             <Text style={[styles.pillText, isGroup && { color: colors.settle }]} numberOfLines={1}>{groupName}</Text>
-            <Feather name="chevron-down" size={12} color={colors.textMuted} />
           </TouchableOpacity>
         )}
       </View>
@@ -191,7 +189,6 @@ export const ReviewRowCard = React.memo(function ReviewRowCard({
               <Text style={[styles.pillText, { color: other ? colors.settle : colors.expense }]} numberOfLines={1}>
                 {other ? `${inbound ? 'From' : 'To'} ${other.name}` : (inbound ? 'From whom?' : 'To whom?')}
               </Text>
-              <Feather name="chevron-down" size={12} color={colors.textMuted} />
             </TouchableOpacity>
           )}
         </View>
@@ -213,7 +210,6 @@ export const ReviewRowCard = React.memo(function ReviewRowCard({
           <Text style={[styles.pillText, v.payMethod !== '' && { color: colors.textPrimary }]} numberOfLines={1}>
             {v.payMethod ? PAY_METHOD_LABEL[v.payMethod] : 'Pay method'}
           </Text>
-          <Feather name="chevron-down" size={12} color={colors.textMuted} />
         </TouchableOpacity>
       </View>
 

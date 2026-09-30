@@ -64,7 +64,6 @@ export function FilterForm({ filters, onChange, onClear, onDone, onOpenCategorie
           <View style={styles.row}>
             <Chip
               grow
-              chevron
               icon="tag"
               label={categoryLabel(filters.categories)}
               selected={filters.categories.length > 0}
@@ -105,7 +104,6 @@ export function FilterForm({ filters, onChange, onClear, onDone, onOpenCategorie
         <View style={styles.row}>
           <Chip
             grow
-            chevron
             icon="calendar"
             label={dateLabel(filters.dateFrom, filters.dateTo)}
             selected={dateSet}

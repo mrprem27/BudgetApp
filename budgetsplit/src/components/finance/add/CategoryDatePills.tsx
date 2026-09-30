@@ -57,7 +57,6 @@ export function CategoryDatePills({
       {destination ? (
         <Chip
           grow
-          chevron
           label={destination.label}
           icon={destination.icon}
           onPress={destination.onPress}
@@ -66,7 +65,6 @@ export function CategoryDatePills({
       ) : (
         <Chip
           grow
-          chevron
           label={selectedCategory?.name ?? catWord}
           // A chosen category shows its own colour+glyph in a disc; an empty one shows
           // the neutral glyph for what's being asked for.
@@ -88,7 +86,6 @@ export function CategoryDatePills({
         where somebody adjusting when it happened already is.
       */}
       <Chip
-        chevron
         icon="calendar"
         label={`${isToday ? 'Today' : shortDate(new Date(txnDate))} · ${timeOfDay(txnDate)}`}
         maxWidth={200}

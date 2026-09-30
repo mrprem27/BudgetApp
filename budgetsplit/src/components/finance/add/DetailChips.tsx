@@ -103,7 +103,6 @@ export function DetailChips({
           icon={isIncome ? 'download' : 'credit-card'}
           selected
           accent={accent}
-          chevron
           onPress={onOpenPayMethod}
           accessibilityLabel={isIncome ? `Landed in ${PAY_METHOD_LABEL[payMethod]}` : `Paid by ${PAY_METHOD_LABEL[payMethod]}`}
         />
@@ -131,7 +130,6 @@ export function DetailChips({
             selected={recurEnabled}
             accent={accent}
             maxWidth={200}
-            chevron
             onPress={onOpenRecurring}
             accessibilityLabel={recurEnabled ? 'Repeats. Change or turn off' : 'Make this repeat'}
           />
@@ -148,7 +146,6 @@ export function DetailChips({
             selected={noteSet}
             accent={accent}
             maxWidth={200}
-            chevron={!noteSet}
             onPress={onOpenNote}
             onRemove={noteSet ? onClearNote : undefined}
             accessibilityLabel={noteSet ? `Note: ${note!.trim()}` : 'Add a note'}
@@ -164,7 +161,6 @@ export function DetailChips({
             selected={tags.length > 0}
             accent={accent}
             maxWidth={180}
-            chevron
             onPress={onOpenTags}
             accessibilityLabel={tags.length === 0 ? 'Add tags' : `Tags: ${tags.join(', ')}`}
           />
@@ -178,7 +174,6 @@ export function DetailChips({
             icon="paperclip"
             selected={!!attachmentUri}
             accent={accent}
-            chevron={!attachmentUri}
             onPress={onOpenAttachment}
             onRemove={attachmentUri ? onClearAttachment : undefined}
             accessibilityLabel={attachmentUri ? 'Receipt attached' : 'Attach a receipt'}
@@ -192,7 +187,6 @@ export function DetailChips({
             selected={!!place}
             accent={accent}
             maxWidth={180}
-            chevron={!place}
             // Pressable in both states. It used to go inert once a place was
             // captured, leaving the ✕ as the only way out — so a wrong reading
             // had to be cleared and re-taken rather than just re-tapped.

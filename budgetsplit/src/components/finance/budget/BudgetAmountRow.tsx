@@ -50,7 +50,6 @@ export function BudgetAmountRow({
           >
             <Feather name="repeat" size={11} color={colors.textSecondary} />
             <Text style={styles.cadenceText}>{CADENCE_LABEL[cadence]}</Text>
-            <Feather name="chevron-down" size={12} color={colors.textMuted} />
           </TouchableOpacity>
         ) : inherited ? (
           <TouchableOpacity
