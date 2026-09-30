@@ -42,7 +42,7 @@ import type { FeatherName } from '../constants/palette';
  */
 
 /** The four things `kind = 'settlement'` can mean. */
-export type SettlementKind = 'invest' | 'redeem' | 'card' | 'transfer';
+export type SettlementKind = 'invest' | 'redeem' | 'card' | 'adjust' | 'transfer';
 
 export type SettlementView = {
   kind: SettlementKind;
@@ -68,6 +68,8 @@ export type SettlementView = {
 export type SettlementRow = {
   asset_id?: string | null;
   pay_method?: string | null;
+  /** Read only to recognise a balance adjustment (`U-64`). */
+  category?: string | null;
   payments: ReadonlyArray<{ personId: string; amount: number }>;
   shares: ReadonlyArray<{ personId: string; amount: number }>;
 };
@@ -106,6 +108,21 @@ export function settlementView(row: SettlementRow, assetName?: string | null): S
           outbound: false,
           destination: assetName ?? null,
         };
+  }
+
+  // A balance adjustment (`recordBalanceAdjustment`): a place brought to what it really holds.
+  // Neither spending, income nor a debt — its sign is which way the place moved.
+  if (row.category === 'Balance adjustment') {
+    return {
+      kind: 'adjust',
+      label: 'Balance adjustments',
+      verb: 'Adjusted',
+      line: 'Balance adjustment',
+      icon: 'sliders',
+      tint: colors.textSecondary,
+      outbound,
+      destination: null,
+    };
   }
 
   // A card repayment is a settlement whose pay method is the card being repaid.

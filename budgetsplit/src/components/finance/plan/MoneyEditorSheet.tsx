@@ -36,7 +36,12 @@ export function MoneyEditorSheet({
   visible: boolean;
   onClose: () => void;
   initial: MoneyProfile & { cardDueDay?: number | null };
-  onSave: (p: MoneyProfileWrite) => void;
+  /**
+   * `adjustments`: per place, the gap between what you typed and what the app had, for a place
+   * whose balance has already moved since it was set — recorded as a Balance adjustment entry
+   * instead of rewriting the start (`U-64`).
+   */
+  onSave: (p: MoneyProfileWrite, adjustments?: Partial<Record<MoneyPlace, number>>) => void;
   /** Opens the asset register — where investments live now. */
   onManageAssets?: () => void;
   /**
@@ -97,10 +102,20 @@ export function MoneyEditorSheet({
   // The stored figure is the STARTING balance (each place = start + its movement since), so a
   // typed "today" becomes start = today − movement. Without `current` (nothing moved yet) the
   // two are the same.
+  //
+  // Once entries have moved a place, correcting it is a dated Balance adjustment entry rather
+  // than a rewritten start (`U-64`): the history under it keeps adding up, and the fix shows in
+  // the ledger. A place nothing has moved yet is still being set up, so its start just changes.
+  const moved = (k: MoneyPlace, openingOld: number) => !!current && current[k] !== openingOld;
   const opening = (k: MoneyPlace, openingOld: number) =>
-    untouched(k) ? openingOld : current ? openingFor(typed[k], current[k], openingOld) : typed[k];
+    untouched(k) || moved(k, openingOld) ? openingOld : current ? openingFor(typed[k], current[k], openingOld) : typed[k];
 
   function handleSave() {
+    const adjustments: Partial<Record<MoneyPlace, number>> = {};
+    const olds: Record<MoneyPlace, number> = { bank: initial.openingBank, cash: initial.openingCash, wallet: initial.openingWallet };
+    for (const k of ['bank', 'cash', 'wallet'] as MoneyPlace[]) {
+      if (!untouched(k) && moved(k, olds[k]) && current) adjustments[k] = typed[k] - current[k];
+    }
     onSave({
       openingBank: opening('bank', initial.openingBank),
       openingCash: opening('cash', initial.openingCash),
@@ -108,7 +123,7 @@ export function MoneyEditorSheet({
       creditLimit: limitPaise,
       creditUsed: usedPaise,
       cardDueDay: dueDay.trim() ? Number(dueDay) : null,
-    });
+    }, adjustments);
   }
 
   return (

@@ -12,7 +12,7 @@ import {
 } from '../db/queries/savings';
 import { setMoneyProfile } from '../db/queries/moneyProfile';
 import type { MoneyProfileWrite } from '../db/queries/moneyProfile';
-import { payCardBill } from '../db/queries/spendPower';
+import { payCardBill, recordBalanceAdjustment } from '../db/queries/spendPower';
 import { countUnsetSourceEntries, setSourceForUnsetEntries } from '../db/queries/transactions';
 import { getMe } from '../db/queries/persons';
 import type { PayMethod } from '../constants/enums';
@@ -105,8 +105,12 @@ export function useSavingsTab() {
     })();
   }, [db, reload]));
 
-  async function handleSaveMoney(p: MoneyProfileWrite) {
+  async function handleSaveMoney(p: MoneyProfileWrite, adjustments: Partial<Record<'bank' | 'cash' | 'wallet', number>> = {}) {
     await setMoneyProfile(db, p);
+    // Places that had already moved are corrected by an entry, not a new start (`U-64`).
+    for (const [place, delta] of Object.entries(adjustments) as ['bank' | 'cash' | 'wallet', number][]) {
+      await recordBalanceAdjustment(db, place, delta);
+    }
     haptic.success();
     setShowMoneyEditor(false);
     await reload();

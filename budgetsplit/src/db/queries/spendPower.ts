@@ -207,3 +207,39 @@ export async function payCardBill(db: SQLite.SQLiteDatabase, amountPaise: number
     shares: [],
   });
 }
+
+/** The category every balance adjustment carries — how `settlementView` tells one apart (`U-64`). */
+export const BALANCE_ADJUSTMENT_CATEGORY = 'Balance adjustment';
+
+/**
+ * Bring one place (bank, cash or wallet) to what it really holds (`U-64`): the gap between the
+ * app's figure and the real one is recorded as ONE personal entry, so history still adds up and
+ * the fix is visible, dated and undoable — rather than the starting balance being rewritten
+ * under every entry since.
+ *
+ * It is a settlement in the personal group with only me on it: money appearing (a share for me)
+ * or disappearing (a payment by me), from that place. So it is never spending or income (analysis
+ * excludes settlements), never a debt with anyone (only me), and it moves exactly that place
+ * (`BUCKET_FLOWS_SQL`: share − payment) and Spendable by the gap. Returns null for no gap.
+ */
+export async function recordBalanceAdjustment(
+  db: SQLite.SQLiteDatabase, place: 'bank' | 'cash' | 'wallet', deltaPaise: number,
+): Promise<string | null> {
+  if (!Number.isFinite(deltaPaise) || deltaPaise === 0) return null;
+  const me = await getMe(db);
+  if (!me) throw new Error('No current user');
+  const personal = personalGroupOf(await getAllGroups(db));
+  if (!personal) throw new Error('No personal group');
+  const amount = Math.abs(Math.round(deltaPaise));
+  return insertTxn(db, {
+    groupId: personal.id,
+    kind: 'settlement',
+    entryMode: 'quick',
+    date: Date.now(),
+    category: BALANCE_ADJUSTMENT_CATEGORY,
+    note: deltaPaise > 0 ? 'Balance corrected up' : 'Balance corrected down',
+    payMethod: place as PayMethod,
+    payments: deltaPaise < 0 ? [{ personId: me.id, amount }] : [],
+    shares: deltaPaise > 0 ? [{ personId: me.id, amount }] : [],
+  });
+}
