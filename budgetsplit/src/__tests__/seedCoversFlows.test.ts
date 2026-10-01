@@ -102,3 +102,33 @@ async function me(db: Awaited<ReturnType<typeof openTestDb>>): Promise<string> {
   const row = await db.getFirstAsync<{ id: string }>('SELECT id FROM person WHERE is_me = 1');
   return row!.id;
 }
+
+describe('the month is never empty (U-94)', () => {
+  const FAKE = { doNotFake: ['nextTick', 'setImmediate', 'clearImmediate', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'queueMicrotask'] as never };
+  afterEach(() => { jest.useRealTimers(); });
+
+  const monthSpend = async (db: Awaited<ReturnType<typeof openTestDb>>) => db.getAllAsync<{ category: string; d: number }>(
+    `SELECT t.category, t.date AS d FROM txn t JOIN budget_group g ON g.id = t.group_id
+      WHERE g.is_personal = 1 AND t.kind = 'expense' AND t.recur_freq IS NULL AND t.is_deleted = 0 AND t.date >= ? AND t.date <= ?`,
+    [new Date(2026, 9, 1).getTime(), Date.now()],
+  );
+
+  it('on the 1st, the starter set is there and nothing is dated after now', async () => {
+    jest.useFakeTimers({ now: new Date(2026, 9, 1, 9, 0).getTime(), ...FAKE });
+    const db = await openTestDb();
+    await loadDemoData(db);
+    const rows = await monthSpend(db);
+    expect(rows.map(r => r.category)).toEqual(expect.arrayContaining(['Rent', 'Groceries', 'Eating Out', 'Electricity']));
+    const future = await db.getAllAsync('SELECT id FROM txn WHERE recur_freq IS NULL AND is_deleted = 0 AND date > ?', [Date.now()]);
+    expect(future).toEqual([]);
+  });
+
+  it('mid-month, the starter set sits on its own days, once', async () => {
+    jest.useFakeTimers({ now: new Date(2026, 9, 20, 15, 0).getTime(), ...FAKE });
+    const db = await openTestDb();
+    await loadDemoData(db);
+    const rows = await monthSpend(db);
+    expect(rows.filter(r => r.category === 'Rent').map(r => new Date(r.d).getDate())).toEqual([2]);
+    expect(rows.filter(r => r.category === 'Groceries')).toHaveLength(3);
+  });
+});

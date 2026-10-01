@@ -192,6 +192,12 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
     if (day > todayDate) return null;
     const d = new Date(); d.setHours(hour, 0, 0, 0); d.setDate(day); return notFuture(d.getTime());
   };
+  /*
+   * The starter set (`U-94`): rent, a grocery run, a meal out and a bill, on their day when it
+   * has come and on today when it has not. Without it a month loaded in its first days held a
+   * salary and one chai, and Home, Budget and the report for the month all read as empty.
+   */
+  const starter = (day: number, hour = 10): number => thisMonth(Math.min(day, todayDate), hour)!;
   const recent = (day: number, hour = 10): number => {
     const d = new Date(); d.setHours(hour, 0, 0, 0); d.setDate(day <= todayDate ? day : todayDate - (day - todayDate));
     return notFuture(d.getTime());
@@ -235,15 +241,15 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
     date == null ? null : insertTxn(db, { groupId: personalId, kind: 'expense', entryMode: 'quick', date, category, note: o.note, payMethod: o.pay, lat: o.lat, lng: o.lng, placeLabel: o.place, attachmentUri: o.attach, payments: [{ personId: meId, amount: R(rupees) }], shares: [{ personId: meId, amount: R(rupees) }] });
 
   // This month — drives forecast, budgets (over/near/under) and shift teaser.
-  await exp('Rent', 22000, thisMonth(2), { note: 'Flat rent', pay: PayMethod.Bank });
-  await exp('Groceries', 3500, thisMonth(3), { place: 'BigBasket', pay: PayMethod.Bank });
+  await exp('Rent', 22000, starter(2, 8), { note: 'Flat rent', pay: PayMethod.Bank });
+  await exp('Groceries', 3500, starter(3, 11), { place: 'BigBasket', pay: PayMethod.Bank });
   await exp('Groceries', 3200, thisMonth(9), { place: 'DMart, HSR Layout', lat: 12.91, lng: 77.64 });
   await exp('Groceries', 2300, thisMonth(15), { pay: PayMethod.Bank });                         // → ₹9,000 vs ₹8,000 budget = OVER
-  await exp('Eating Out', 1200, thisMonth(4), { note: 'Dinner with friends', place: 'Truffles, Koramangala', lat: 12.93, lng: 77.62 });
+  await exp('Eating Out', 1200, starter(4, 20), { note: 'Dinner with friends', place: 'Truffles, Koramangala', lat: 12.93, lng: 77.62 });
   await exp('Eating Out', 900, thisMonth(11), { pay: PayMethod.Cash });
   await exp('Eating Out', 600, thisMonth(18), { note: 'Brunch' });                      // → ₹2,700 vs ₹3,000 = NEAR
   await exp('Fuel', 1500, thisMonth(6), { place: 'Indian Oil', pay: PayMethod.Bank });           // → under budget
-  await exp('Electricity', 2200, thisMonth(7), { note: 'BESCOM bill', attach: 'demo://receipt-bescom.pdf' });
+  await exp('Electricity', 2200, starter(7, 13), { note: 'BESCOM bill', attach: 'demo://receipt-bescom.pdf' });
   await exp('Shopping', 4500, thisMonth(8), { note: 'Winter clothes', place: 'Phoenix Mall' });
   await exp('Health & Pharmacy', 800, thisMonth(10), { pay: PayMethod.Cash });
   await exp('Chai & Snacks', 20, thisMonth(12));                                         // tiny-amount edge case

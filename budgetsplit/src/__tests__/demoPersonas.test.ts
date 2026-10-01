@@ -80,19 +80,20 @@ describe('demo data loaded early on the 1st still shows this month', () => {
     expect(future).toEqual([]);
   });
 
-  it('established: on the 1st, today is the 1st and nothing else is piled onto it', async () => {
+  it('established: on the 1st, the month holds the starter set and no more', async () => {
     const db = createTestDb();
     await loadDemoPersona(db as never, 'established');
     const start = new Date(2026, 9, 1).getTime();
     const rows = await (db as never as { getAllAsync: <T>(sql: string, p: unknown[]) => Promise<T[]> }).getAllAsync<{ category: string; kind: string }>(
       "SELECT t.category, t.kind FROM txn t JOIN budget_group g ON g.id = t.group_id WHERE g.is_personal = 1 AND t.recur_freq IS NULL AND t.is_deleted = 0 AND t.date >= ? AND t.date <= ?", [start, Date.now()],
     );
-    // The salary lands on the 1st and the daily chai is logged; rent (the 2nd) and three grocery
-    // runs (3rd, 9th, 15th) have not happened yet. They used to be clamped onto today.
+    // The salary, the daily chai and the starter set (`U-94`: rent, one grocery run, a meal out, a
+    // bill). The other two grocery runs (9th, 15th) and the rest of the month have not happened;
+    // all of it used to be clamped onto today.
     expect(rows.some(r => r.kind === 'income' && r.category === 'Salary')).toBe(true);
-    expect(rows.map(r => r.category)).not.toEqual(expect.arrayContaining(['Rent']));
-    expect(rows.filter(r => r.category === 'Groceries')).toEqual([]);
-    expect(rows.length).toBeLessThan(6);
+    expect(rows.filter(r => r.category === 'Rent')).toHaveLength(1);
+    expect(rows.filter(r => r.category === 'Groceries')).toHaveLength(1);
+    expect(rows.length).toBeLessThan(8);
   });
 
   it('established: mid-month, the month has its rent, its groceries and its income', async () => {
