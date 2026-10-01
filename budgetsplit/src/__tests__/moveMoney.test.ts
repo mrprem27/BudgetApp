@@ -3,6 +3,7 @@ import { getMoneyProfile, setMoneyProfile } from '../db/queries/moneyProfile';
 import { getCashPosition } from '../db/queries/savings';
 import { getTransactionsInRange } from '../db/queries/transactions';
 import { createTestDb, addPerson, addGroup, addMember, asDb } from './helpers/testDb';
+import { moveMoneySeed } from '../lib/moneySum';
 
 /**
  * One way to move money — from bank, cash, wallet or any asset, to any other.
@@ -129,25 +130,44 @@ describe('moveMoney', () => {
       expect(after.total).toBe(before.total);
     });
 
-    it('the whole amount, in the direction that clears it, is written on the entries instead', async () => {
-      // A move beside the entries double-counts if one of them is given a Paid from later, so
-      // clearing all of it writes no move: the entries take the place themselves.
+    it('the whole amount is a move too: two rows, the line at zero, the entries untouched', async () => {
       const { db } = await setup();
       entry(db, 'expense', 400000);
       const before = await lines(db);
-      expect(await moveMoney(asDb(db), bank, unset, 400000)).toEqual([]);
+      expect(await moveMoney(asDb(db), bank, unset, 400000)).toHaveLength(2);
       const after = await lines(db);
       expect(after.notSet).toBe(0);
       expect(after.bank).toBe(before.bank - 400000);
-      expect((db.raw.prepare("SELECT COUNT(*) AS n FROM txn WHERE kind = 'settlement'").get() as { n: number }).n).toBe(0);
-      expect((db.raw.prepare("SELECT pay_method FROM txn WHERE id = 'e-expense-400000'").get() as { pay_method: string }).pay_method).toBe('bank');
+      expect(after.total).toBe(before.total);
+      // The entry keeps what it was saved with: a move sits beside it and rewrites nothing, so no
+      // shared entry is stamped with a place and nobody is asked to approve anything again.
+      expect((db.raw.prepare("SELECT pay_method FROM txn WHERE id = 'e-expense-400000'").get() as { pay_method: string | null }).pay_method).toBeNull();
     });
 
-    it('the whole amount the wrong way round is an ordinary move', async () => {
+    it('if an entry is given a Paid from afterwards, total cash is still right and the line shows the difference', async () => {
       const { db } = await setup();
-      entry(db, 'income', 500000);
-      // Money sitting in Not set is cleared by moving it OUT; moving the same amount in is not that.
-      expect(await moveMoney(asDb(db), bank, unset, 500000)).toHaveLength(2);
+      entry(db, 'expense', 400000);
+      const before = await lines(db);
+      await moveMoney(asDb(db), bank, unset, 400000);
+      db.raw.prepare("UPDATE txn SET pay_method = 'bank' WHERE id = 'e-expense-400000'").run();
+      const after = await lines(db);
+      expect(after.total).toBe(before.total);
+      // Counted in Bank twice, and said so on the line, where it can be moved back.
+      expect(after.notSet).toBe(400000);
+      await moveMoney(asDb(db), unset, bank, 400000);
+      const fixed = await lines(db);
+      expect(fixed.notSet).toBe(0);
+      expect(fixed.bank).toBe(before.bank - 400000);
+    });
+
+    it('the sheet opens on that money, the right way round, with the amount filled in', () => {
+      const text = (p: number) => String(p / 100);
+      // Money with no place: out of Not set. Spending with no source: covered from the bank.
+      expect(moveMoneySeed(true, 500000, 'a1', text)).toEqual({ from: unset, to: bank, amount: '5000' });
+      expect(moveMoneySeed(true, -400000, 'a1', text)).toEqual({ from: bank, to: unset, amount: '4000' });
+      // Opened the ordinary way: bank to your first asset, or to cash with none, and no amount.
+      expect(moveMoneySeed(false, 500000, 'a1', text)).toEqual({ from: bank, to: { kind: 'asset', id: 'a1' }, amount: '' });
+      expect(moveMoneySeed(false, 0, undefined, text)).toEqual({ from: bank, to: cashB, amount: '' });
     });
 
     it('not to or from an asset, and not to itself; a refusal writes nothing', async () => {

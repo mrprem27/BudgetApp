@@ -7,7 +7,7 @@ import {
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { parseMonthKey, type ReportRange } from '../../src/lib/dateRange';
+import { parseMonthKey, type ReportRange, periodRunning } from '../../src/lib/dateRange';
 import { DateRangeSheet } from '../../src/components/ui/DateRangeSheet';
 import { shortDate } from '../../src/lib/dateFormat';
 import { useScreenData } from '../../src/hooks/useScreenData';
@@ -284,7 +284,9 @@ export default function ReportsScreen() {
         <>
           {/* Summary totals — Spent / Earned with vs-last-month deltas (design Screen 7) */}
           {(() => {
-            const prevLabel = range ? 'before' : format(subMonths(month, 1), 'MMM');
+            // A period still running is measured against the same days of the one before
+            // (`comparisonRange`), and says so: "vs Sep" read as the whole of September.
+            const prevLabel = `${range ? 'before' : format(subMonths(month, 1), 'MMM')}${periodRunning(month, range ?? undefined) ? ' to date' : ''}`;
             const delta = (cur: number, prev: number): { text: string; color: string; dir: 'up' | 'down' | 'flat' } => {
               if (prev <= 0) return { text: 'new', color: colors.textMuted, dir: 'flat' };
               const pct = Math.round(((cur - prev) / prev) * 100);

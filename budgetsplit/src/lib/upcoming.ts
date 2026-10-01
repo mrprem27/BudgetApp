@@ -94,6 +94,11 @@ export type UpcomingItem = {
   mode: RecurMode;
 };
 
+function calendarDaysBetween(fromMs: number, toMs: number): number {
+  const day = (ms: number) => { const d = new Date(ms); return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(); };
+  return Math.round((day(toMs) - day(fromMs)) / DAY_MS);
+}
+
 /**
  * Project the next upcoming expense occurrences from active recurring series,
  * soonest first. Pure and deterministic — `nowMs` is injected, never read from
@@ -146,7 +151,9 @@ export function buildUpcoming(
       groupId: txn.group_id,
       amount,
       dateMs: next,
-      daysUntil: Math.max(0, Math.round((next - nowMs) / DAY_MS)),
+      // Calendar days: rounding the hours put a bill due tomorrow evening "in 2 days" when seen
+      // in the morning, and one on the last day of the month outside a window that runs to it.
+      daysUntil: Math.max(0, calendarDaysBetween(nowMs, next)),
       kind: txn.kind,
       mode: asRecurMode(txn.recur_mode),
     });

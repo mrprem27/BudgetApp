@@ -36,7 +36,7 @@ export function useTxnFilters(extra = 0) {
   const reportsHref = useCallback((group?: string) => reportsHrefFor({ from, to, range }, group), [from, to, range]);
 
   return {
-    filters, noSearch, totalsRows, reportsHref,
+    filters, totalsRows, reportsHref,
     label: totalsRowLabel(dates, count),
     /** Anything but the search text is set. */
     narrowed: filtersActive(noSearch),

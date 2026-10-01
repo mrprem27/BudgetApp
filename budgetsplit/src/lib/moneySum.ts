@@ -51,3 +51,23 @@ export function moneySumLines(m: {
 export function openingFor(typed: number, current: number, opening: number): number {
   return typed - (current - opening);
 }
+
+type Place = { kind: 'bucket'; bucket: 'bank' | 'cash' | 'wallet' } | { kind: 'asset'; id: string } | { kind: 'unset' };
+
+/**
+ * What Move money opens on. Ordinarily bank → your first asset (the common "I bought an
+ * investment" case), or bank → cash with no assets. From the "Paid from not set" line it opens
+ * on that money (`U-99`): out of Not set when the line holds money, into it from the bank when
+ * it is spending with no source, with the whole amount filled in and yours to lower.
+ */
+export function moveMoneySeed(
+  fromUnsetLine: boolean, unattributed: number, firstAssetId: string | undefined, toInput: (paise: number) => string,
+): { from: Place; to: Place; amount: string } {
+  const bank: Place = { kind: 'bucket', bucket: 'bank' };
+  if (!fromUnsetLine) {
+    return { from: bank, to: firstAssetId ? { kind: 'asset', id: firstAssetId } : { kind: 'bucket', bucket: 'cash' }, amount: '' };
+  }
+  const unset: Place = { kind: 'unset' };
+  const amount = unattributed !== 0 ? toInput(Math.abs(unattributed)) : '';
+  return unattributed >= 0 ? { from: unset, to: bank, amount } : { from: bank, to: unset, amount };
+}

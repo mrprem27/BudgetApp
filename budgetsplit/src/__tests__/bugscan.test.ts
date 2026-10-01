@@ -821,7 +821,7 @@ describe('RV · review fixes: links land on the right Money section; Clear filte
   });
   it("the group ledger's Clear filters also clears tags", () => {
     expect(fs.readFileSync('src/hooks/useTxnFilters.ts', 'utf8')).toMatch(/setPersonId\(null\); setTags\(\[\]\);/);
-    expect(fs.readFileSync('src/components/finance/group/TransactionsTab.tsx', 'utf8')).toMatch(/onAction=\{\(\) => \{ setSearch\(''\); filter\.clear\(\); \}\}/);
+    expect(fs.readFileSync('src/components/finance/group/TransactionsTab.tsx', 'utf8')).toMatch(/onAction=\{filter\.clear\}/);
   });
   it('the asset list can be pulled to refresh on both screens', () => {
     expect(fs.readFileSync('app/(money)/assets.tsx', 'utf8')).toMatch(/AppRefreshControl refreshing=\{assets\.refreshing\}/);

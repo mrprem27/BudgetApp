@@ -196,6 +196,14 @@ describe('upcomingWindowDays: one window for the bell and the screen it opens', 
     expect(upcomingWindowDays(new Date(2026, 9, 25, 9).getTime())).toBe(14);
     expect(upcomingWindowDays(new Date(2026, 9, 31, 23).getTime())).toBe(14);
   });
+  it('a bill late on the last day of the month is inside a window that runs to it', () => {
+    // Days are calendar days: by hours, 1 Oct 08:00 to 31 Oct 21:30 rounded to 31, one past the window.
+    const now = new Date(2026, 9, 1, 8).getTime();
+    const rule: any = { id: 'r', kind: 'expense', category: 'Rent', note: null, recur_freq: 'monthly', recur_interval: 1, date: new Date(2026, 8, 30, 21, 30).getTime(), payments: [{ personId: 'me', amount: 1000 }], shares: [{ personId: 'me', amount: 1000 }] };
+    const rows = buildUpcoming([rule], 'me', now, 99, upcomingWindowDays(now));
+    expect(rows.map(r => r.daysUntil)).toContain(29);
+  });
+
   it('both loaders ask it, so the badge counts what the screen lists', () => {
     const fs = jest.requireActual('fs') as typeof import('fs');
     for (const f of ['src/lib/homeData.ts', 'src/lib/upcomingData.ts']) {

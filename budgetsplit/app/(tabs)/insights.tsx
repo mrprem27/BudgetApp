@@ -85,8 +85,6 @@ export default function InsightsScreen() {
   // Which section's sheet is up. One at a time, by construction.
   const [sheet, setSheet] = useState<Sheet>(null);
   const closeSheet = () => setSheet(null);
-  // The preferences read device settings when they mount, so they mount the first time they are opened.
-  const [prefsSeen, setPrefsSeen] = useState(false);
 
   const { data, loading, error: loadError, refreshing, onRefresh, reload } =
     useScreenData((db) => loadInsightsData(db), []);
@@ -271,7 +269,7 @@ export default function InsightsScreen() {
           <InsightTile
             key="prefs" icon="sliders" tint={decor.violet} title={TITLE.prefs}
             line="Pay cycle, safe to spend, defaults"
-            onPress={() => { setPrefsSeen(true); setSheet('prefs'); }}
+            onPress={() => setSheet('prefs')}
           />
           {attentionCount > 0 && (
             <InsightTile
@@ -570,19 +568,18 @@ export default function InsightsScreen() {
 
       {/* The answers the forecasts above are built on (`U-86`), in the colour Settings gives its
           Preferences. The pickers are rendered beside this sheet, not inside it, and it steps
-          aside while one is up: only one sheet can be on stage (`lib/sheetStage`). */}
-      {prefsSeen && (
-        <MoneyPreferences
-          tint={decor.violet}
-          wrap={(rows, pickerOpen) => (
-            <InsightSheet id="prefs" sheet={sheet} hidden={pickerOpen} onClose={closeSheet}
-            label="What the forecasts are built on"
-                info="Safe to spend, the month-end forecast and Can I afford all read these answers. Change one and they move with it.">
-              <Card clip>{rows}</Card>
-            </InsightSheet>
-          )}
-        />
-      )}
+          aside while one is up: only one sheet can be on stage (`lib/sheetStage`). Mounted with
+          the screen, so its rows have read their settings before the sheet can be opened. */}
+      <MoneyPreferences
+        tint={decor.violet}
+        wrap={(rows, pickerOpen) => (
+          <InsightSheet id="prefs" sheet={sheet} hidden={pickerOpen} onClose={closeSheet}
+          label="What the forecasts are built on"
+              info="Safe to spend, the month-end forecast and Can I afford all read these answers. Change one and they move with it.">
+            <Card clip>{rows}</Card>
+          </InsightSheet>
+        )}
+      />
     </View>
   );
 }

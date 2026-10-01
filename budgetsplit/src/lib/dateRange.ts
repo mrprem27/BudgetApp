@@ -69,5 +69,19 @@ export function comparisonRange(month: Date, range: ReportRange | undefined, now
     from: new Date(month.getFullYear(), month.getMonth() - 1, 1).getTime(),
     to: cur.from - 1,
   };
-  return cur.to > nowMs && nowMs >= cur.from ? { from: whole.from, to: Math.min(whole.to, whole.from + (nowMs - cur.from)) } : whole;
+  if (!(cur.to > nowMs && nowMs >= cur.from)) return whole;
+  // By calendar day, not by the clock: the period so far counts all of today, so the one before
+  // counts all of its matching day. Cut at this hour, a rent dated noon on the 10th was out of
+  // the comparison in the morning and in it by the afternoon.
+  const day = (ms: number) => { const d = new Date(ms); return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(); };
+  const daysIn = Math.round((day(nowMs) - day(cur.from)) / 86_400_000);
+  const f = new Date(whole.from);
+  return { from: whole.from, to: Math.min(whole.to, new Date(f.getFullYear(), f.getMonth(), f.getDate() + daysIn + 1).getTime() - 1) };
+}
+
+/** Is a report's period still running? Then its comparison is "to date", and has to say so. */
+export function periodRunning(month: Date, range: ReportRange | undefined, nowMs: number = Date.now()): boolean {
+  const to = range ? range.to : new Date(month.getFullYear(), month.getMonth() + 1, 1).getTime() - 1;
+  const from = range ? range.from : new Date(month.getFullYear(), month.getMonth(), 1).getTime();
+  return to > nowMs && nowMs >= from;
 }

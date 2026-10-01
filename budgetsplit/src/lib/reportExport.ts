@@ -1,4 +1,4 @@
-import { comparisonRange, type ReportRange } from './dateRange';
+import { comparisonRange, periodRunning, type ReportRange } from './dateRange';
 import type * as SQLite from 'expo-sqlite';
 import { format, startOfMonth, endOfMonth, differenceInCalendarDays } from 'date-fns';
 import { fullDate, monthLabel, shortDate } from './dateFormat';
@@ -82,9 +82,9 @@ export async function buildReportHtml(
   const fromMs = range ? range.from : startOfMonth(month).getTime();
   const toMs = range ? range.to : endOfMonth(month).getTime();
   // Measured against the same period the Reports screen uses (`comparisonRange`).
-  const running = toMs > Date.now();
+  const running = periodRunning(month, range);
   const before = comparisonRange(month, range);
-  const beforeName = `${range ? 'the period before' : format(new Date(before.from), 'MMMM')}${running ? ' by this point' : ''}`;
+  const beforeName = `${range ? 'the period before' : format(new Date(before.from), 'MMMM')}${running ? ' to date' : ''}`;
   const [me, persons, expenseCats] = await Promise.all([getMe(db), getAllPersons(db), getCategories(db, 'expense')]);
   const meId = me?.id ?? '';
   const nameOf = new Map(persons.map(p => [p.id, p.name]));
@@ -222,8 +222,9 @@ export async function buildReportHtml(
   };
 
   // Calendar days, today included: rounding elapsed time dropped today before noon, and the
-  // average over "1 day" sat beside bars for two.
-  const days = differenceInCalendarDays(Math.min(toMs, Date.now()), fromMs) + 1;
+  // average over "1 day" sat beside bars for two. Never under one: a period that starts after
+  // today would divide by zero.
+  const days = Math.max(1, differenceInCalendarDays(Math.min(toMs, Date.now()), fromMs) + 1);
   const busiest = [...byDay.values()].sort((a, b) => b.paise - a.paise)[0];
   const top = largest as { what: string; paise: number; date: number } | null;
   const facts = catTotal > 0 ? `

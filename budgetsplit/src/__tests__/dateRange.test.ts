@@ -47,7 +47,21 @@ describe('comparisonRange: what a report is measured against', () => {
     // Ten days into October: 1 to 10 September, not all thirty days of it.
     const r = comparisonRange(new Date(2026, 9, 5), undefined, at(2026, 9, 10, 12));
     expect(r.from).toBe(at(2026, 8, 1));
-    expect(r.to).toBe(at(2026, 8, 10, 12));
+    // To the END of the 10th: the period so far counts all of today, whatever the hour.
+    expect(r.to).toBe(at(2026, 8, 11) - 1);
+    expect(comparisonRange(new Date(2026, 9, 5), undefined, at(2026, 9, 10, 1)).to).toBe(r.to);
+  });
+
+  it('on the 1st it is the whole of the 1st, not the hours so far', () => {
+    // At 09:00 on 1 October the comparison was 1 September 00:00 to 09:00: nothing, so "new".
+    expect(comparisonRange(new Date(2026, 9, 1), undefined, at(2026, 9, 1, 9)).to).toBe(at(2026, 8, 2) - 1);
+  });
+
+  it('says when a period is still running, so its comparison can say "to date"', () => {
+    const { periodRunning } = jest.requireActual('../lib/dateRange') as typeof import('../lib/dateRange');
+    expect(periodRunning(new Date(2026, 9, 5), undefined, at(2026, 9, 10))).toBe(true);
+    expect(periodRunning(new Date(2026, 8, 5), undefined, at(2026, 9, 10))).toBe(false);
+    expect(periodRunning(new Date(2026, 10, 5), undefined, at(2026, 9, 10))).toBe(false); // not started
   });
 
   it('a custom period is measured against the equal span before it', () => {

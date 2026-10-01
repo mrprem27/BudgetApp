@@ -5,7 +5,7 @@ import { INVESTMENT_CATEGORY } from '../../constants/categories';
 import { BUCKET_PAY, PAY_METHOD_LABEL, PayMethod, type AssetBucket } from '../../constants/enums';
 import { getMe } from './persons';
 import { getAllGroups, personalGroupOf } from './groups';
-import { insertTxnRows, getUnsetSourceTotal, setSourceForUnsetEntries } from './transactions';
+import { insertTxnRows } from './transactions';
 import { queueDelete, queueUpsert } from './syncQueue';
 
 /**
@@ -352,12 +352,12 @@ const bucketName = (b: AssetBucket) => PAY_METHOD_LABEL[BUCKET_PAY[b]];
  *   Paid from. "Paid from not set" is the sum of movement on entries with none, so a row with
  *   none moves that line and the other row moves the place. Any part of it can be moved, either
  *   way: out of Not set when it holds money, into it when it is spending nobody sourced. Not to
- *   or from an asset: say which place it went through first. These rows are an adjustment beside
- *   the entries, not a correction of them: giving one of those entries a Paid from afterwards
- *   counts it in that place a second time, and the difference shows on the Not set line. So a
- *   move that clears the WHOLE amount writes no rows: the entries themselves take the place as
- *   their Paid from (`setSourceForUnsetEntries`), which leaves nothing to double. Decided here,
- *   over the rows that rewrite touches, so every caller gets it.
+ *   or from an asset: say which place it went through first. These rows are an adjustment
+ *   BESIDE the entries, never a rewrite of them: total cash stays right whatever happens, and if
+ *   one of those entries is given a Paid from later, the amount shows back on the Not set line to
+ *   be moved again. Rewriting the entries instead was tried twice the same day and removed: it
+ *   could not move a part, it stamped a place on shared-group entries (which makes the server ask
+ *   everyone named to approve them again), and "the whole amount" had two definitions.
  *
  * Net worth is flat in all of them, which is the rule this file exists for. Everything is
  * written in ONE transaction; a move that lands only its first half would drop net worth
@@ -406,11 +406,6 @@ export async function moveMoney(
   if (from.kind === 'unset' || to.kind === 'unset') {
     const place = from.kind === 'unset' ? to : from;
     if (place.kind !== 'bucket') throw new AssetError('unset-asset', 'Move it to Bank, Cash or Wallet first');
-    const total = await getUnsetSourceTotal(db, me.id);
-    if (amount === Math.abs(total) && (from.kind === 'unset') === (total > 0)) {
-      await setSourceForUnsetEntries(db, me.id, BUCKET_PAY[place.bucket]);
-      return [];
-    }
     const name = bucketName(place.bucket);
     const plain = (dir: Leg['dir'], bucket: AssetBucket | null, note: string): Leg => ({ dir, bucket, assetId: null, note, category: 'Other' });
     if (from.kind === 'unset') legs.push(plain('out', null, `Moved to ${name}`), plain('in', place.bucket, 'From money with no Paid from'));

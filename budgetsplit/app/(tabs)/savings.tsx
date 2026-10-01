@@ -27,6 +27,7 @@ import { AffordHeroCard } from '../../src/components/finance/plan/AffordHeroCard
 import { HeaderIconButton } from '../../src/components/ui/HeaderIconButton';
 import { Card } from '../../src/components/ui/Card';
 import { SectionHeader } from '../../src/components/ui/SectionHeader';
+import { moveMoneySeed } from '../../src/lib/moneySum';
 import { formatCompact, parseToPaise, paiseToInput } from '../../src/lib/money';
 
 import { addMonths, differenceInCalendarMonths } from 'date-fns';
@@ -111,12 +112,7 @@ export default function SavingsScreen() {
     allocation, setAllocation, frequency, setFrequency, newDate, setNewDate,
     resetNew, handleCreate, handleReorder, showReorderHint,
   } = useSavingsTab();
-  // What Move money opens on: bank → your first asset (the common "I bought an investment" case),
-  // or, from the "Paid from not set" line, that money (`U-99`): out of Not set when it holds some,
-  // into it from the bank when it is spending with no source, the whole amount filled in.
-  const BANK = { kind: 'bucket', bucket: 'bank' } as const, UNSET = { kind: 'unset' } as const;
-  const moveSeed = !moveUnset ? { from: BANK, to: assets[0] ? { kind: 'asset' as const, id: assets[0].id } : { kind: 'bucket' as const, bucket: 'cash' as const }, amount: '' }
-    : { ...(unattributed >= 0 ? { from: UNSET, to: BANK } : { from: BANK, to: UNSET }), amount: unattributed !== 0 ? paiseToInput(Math.abs(unattributed)) : '' };
+  const moveSeed = moveMoneySeed(moveUnset, unattributed, assets[0]?.id, paiseToInput);
 
   return (
     <View style={styles.container}>
