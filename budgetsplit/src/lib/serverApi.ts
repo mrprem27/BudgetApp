@@ -1,3 +1,4 @@
+import { track, setUsageFacts } from './usageEvents';
 import * as Device from 'expo-device';
 import { File } from 'expo-file-system';
 import { keychain, secureStorageAvailable } from './keychain';
@@ -238,6 +239,8 @@ export async function verifyMagicLink(token: string): Promise<ServerSession> {
   }
   const session: ServerSession = { token: data.sessionToken, user: data.user };
   await storeSession(session);
+  track('Signed in');
+  setUsageFacts({ signed_in: true });
   return session;
 }
 

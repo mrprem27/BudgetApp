@@ -895,6 +895,7 @@ export function useAddTxnForm(params: AddTxnParams) {
           payments: finalPayments, shares: finalShares,
         });
         haptic.success();
+        track('Entry saved', { kind, split: finalShares.length > 1, mode: opts?.onSaved ? 'voice' : 'typed', repeats: recurEnabled });
         refresh();
         showSpendConsequence();
         if (opts?.onSaved) opts.onSaved(newId);

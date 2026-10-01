@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type DependencyList } from 'react';
-import { useFocusEffect, usePathname } from 'expo-router';
+import { useFocusEffect, useSegments } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import type * as SQLite from 'expo-sqlite';
 import { useRefreshOnDataChange } from '../components/system/DataRefreshProvider';
 import { readDataStamp } from '../db/queries/dataStamp';
 import { recordLoad } from '../lib/loadTimes';
+import { track, routeOf, SLOW_LOAD_MS } from '../lib/usageEvents';
 
 /** A load newer than this, with nothing changed since, is shown again on focus without re-reading. */
 export const FRESH_FOR_MS = 5 * 60_000;
@@ -107,9 +108,10 @@ export function useScreenData<T>(
   // the loader runs, so a write that lands mid-load makes the next focus reload.
   const stamp = useRef<string | null>(null);
   const loadedAt = useRef(0);
-  // The route this screen mounted on. A ref: `usePathname` follows the whole app's current route,
-  // and a value that changed on every navigation would re-run every mounted screen's loader.
-  const path = useRef(usePathname()).current;
+  // The route this screen mounted on, by shape (`/group/[id]`). A ref: `useSegments` follows the
+  // whole app's current route, and a value that changed on every navigation would re-run every
+  // mounted screen's loader.
+  const path = useRef(routeOf(useSegments())).current;
 
   const run = useCallback(async (mode: 'load' | 'refresh') => {
     if (mode === 'refresh') setRefreshing(true);
@@ -117,7 +119,9 @@ export function useScreenData<T>(
     try {
       const before = await readDataStamp(db).catch(() => null);
       const result = await loaderRef.current(db);
-      recordLoad(path, Date.now() - started);
+      const ms = Date.now() - started;
+      recordLoad(path, ms);
+      if (ms >= SLOW_LOAD_MS) track('Slow load', { ms }, path);
       if (!mounted.current) return;
       stamp.current = before;
       loadedAt.current = started;
@@ -125,6 +129,7 @@ export function useScreenData<T>(
       setError(false);
     } catch {
       stamp.current = null;
+      track('Load failed', {}, path);
       if (mounted.current) setError(true);
     } finally {
       if (mounted.current) {

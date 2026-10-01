@@ -1,3 +1,4 @@
+import { setUsageFacts } from '../../src/lib/usageEvents';
 import { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, Alert, TouchableOpacity, ScrollView } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -62,6 +63,7 @@ export default function StorageScreen() {
             setBusy(true);
             try {
               const summary = await loadDemoPersona(db, persona);
+              setUsageFacts({ demo: true });
               // Turn every feature flag ON so all gated surfaces are visible for testing.
               (Object.keys(DEFAULTS) as FeatureKey[]).forEach(k => setFlag(k, true));
               refresh();
@@ -91,6 +93,7 @@ export default function StorageScreen() {
             setBusy(true);
             try {
               await resetToEmpty(db);
+              setUsageFacts({ demo: false });
               // Loading demo data flips every flag ON for testing, and nothing put
               // them back — so an "erase" left the tester's persona permanently
               // overwritten. There is no snapshot and no `clearFlag`, so the stored

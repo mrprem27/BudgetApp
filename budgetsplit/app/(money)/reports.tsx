@@ -1,3 +1,4 @@
+import { track } from '../../src/lib/usageEvents';
 import { useState, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
@@ -111,6 +112,7 @@ export default function ReportsScreen() {
     setExporting(true);
     try {
       const csv = await buildReportCsv(db, groups, month, range ?? undefined);
+      track('Exported', { format: 'csv' });
       const fileName = range
         ? `budgetsplit_${format(range.from, 'yyyy-MM-dd')}_${format(range.to, 'yyyy-MM-dd')}.csv`
         : `budgetsplit_${format(month, 'yyyy-MM')}.csv`;
@@ -134,6 +136,7 @@ export default function ReportsScreen() {
     setPdfExporting(true);
     try {
       const html = await buildReportHtml(db, summaries, month, range ?? undefined);
+      track('Exported', { format: 'pdf' });
       const { uri } = await Print.printToFileAsync({ html });
       if (!(await Sharing.isAvailableAsync())) {
         Alert.alert('Saved', `Sharing isn’t available here. The PDF was saved to:\n${uri}`);

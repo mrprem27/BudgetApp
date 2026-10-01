@@ -1,3 +1,4 @@
+import { track } from '../../lib/usageEvents';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { settings } from '../../lib/settings';
 import { Onboarding } from './Onboarding';
@@ -47,6 +48,7 @@ export function OnboardingGate({ children, initialDone }: Props) {
     } catch { /* fall through */ }
     try {
       await settings.setOnboardingDone(true);
+      track('Onboarding finished', { intent: (await settings.onboardingIntent().catch(() => null)) ?? 'unknown' });
     } finally {
       setStatus('done');
     }

@@ -1,3 +1,4 @@
+import { track, isCodeKey } from '../../lib/usageEvents';
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, Pressable, type LayoutChangeEvent } from 'react-native';
 import Animated, {
@@ -107,7 +108,11 @@ export function TabPills({ tabs, active, onChange, activeColor = colors.accent, 
         <Pressable
           key={t.key}
           style={[styles.pill, lg && styles.pillLg]}
-          onPress={() => onChange(t.key)}
+          onPress={() => {
+            // Which tab people open, by its key in code; a key that is not one is not sent.
+            if (t.key !== active && isCodeKey(t.key)) track('Tab', { value: t.key });
+            onChange(t.key);
+          }}
           hitSlop={{ top: 6, bottom: 6 }}
           accessibilityRole="tab"
           accessibilityState={{ selected: i === index }}

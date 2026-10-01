@@ -128,7 +128,7 @@ client never comes. Steps 2 and 3 are only worth doing when a web client is actu
 
 **App**
 
-- `src/lib` is 145 files in one folder: pure rules, screen loaders, writes, parsers, device
+- `src/lib` is 147 files in one folder: pure rules, screen loaders, writes, parsers, device
   wrappers and on-screen copy side by side. Three subfolders exist (`engine`, `sync`,
   `ocrProviders`); the rest is flat.
 - `src/components/finance` has 15 subfolders and still 29 loose files beside them.

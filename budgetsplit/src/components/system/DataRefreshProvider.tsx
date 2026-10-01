@@ -1,3 +1,4 @@
+import { track } from '../../lib/usageEvents';
 import React, { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef } from 'react';
 
 /**
@@ -14,9 +15,15 @@ import React, { createContext, useContext, useState, useCallback, useEffect, use
  * calls refresh() several times) collapses into a single version bump one frame
  * later, so the invalidation fans out once instead of N times.
  */
-type DataRefreshValue = { version: number; refresh: () => void };
+type DataRefreshValue = {
+  version: number;
+  /** After a write the user made. */
+  refresh: () => void;
+  /** After a change nobody on this phone made: sync, the foreground catch-up. Same reload, no `Saved` event. */
+  refreshQuietly: () => void;
+};
 
-const Ctx = createContext<DataRefreshValue>({ version: 0, refresh: () => {} });
+const Ctx = createContext<DataRefreshValue>({ version: 0, refresh: () => {}, refreshQuietly: () => {} });
 
 // One frame's worth of quiet time — long enough to swallow a synchronous burst of
 // writes, short enough to feel instant.
@@ -25,18 +32,27 @@ const COALESCE_MS = 32;
 export function DataRefreshProvider({ children }: { children: React.ReactNode }) {
   const [version, setVersion] = useState(0);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Whether the burst being coalesced holds a write the user made.
+  const byUser = useRef(false);
 
-  const refresh = useCallback(() => {
+  const bump = useCallback((user: boolean) => {
+    if (user) byUser.current = true;
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => {
       timer.current = null;
+      // Every write in the app ends here, so this one line measures "did something" on every
+      // screen, present and future (`docs/SPEC-ANALYTICS.md`).
+      if (byUser.current) track('Saved');
+      byUser.current = false;
       setVersion(v => v + 1);
     }, COALESCE_MS);
   }, []);
+  const refresh = useCallback(() => bump(true), [bump]);
+  const refreshQuietly = useCallback(() => bump(false), [bump]);
 
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
 
-  const value = useMemo(() => ({ version, refresh }), [version, refresh]);
+  const value = useMemo(() => ({ version, refresh, refreshQuietly }), [version, refresh, refreshQuietly]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 

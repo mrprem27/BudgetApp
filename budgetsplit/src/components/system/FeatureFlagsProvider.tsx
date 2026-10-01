@@ -1,3 +1,4 @@
+import { track, setUsageFacts } from '../../lib/usageEvents';
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { loadFlags, setFlag as persistFlag, DEFAULTS, type FeatureFlags, type FeatureKey } from '../../lib/featureFlags';
 import { BrandedLoader } from './BrandedLoader';
@@ -48,6 +49,7 @@ export function FeatureFlagsProvider({ children, initialFlags }: Props) {
   const set = useCallback((key: FeatureKey, value: boolean) => {
     setFlags(prev => ({ ...prev, [key]: value }));
     persistFlag(key, value).catch(() => {}); // best-effort persist
+    track('Feature switched', { feature: key, on: value });
   }, []);
 
   /**
@@ -62,6 +64,11 @@ export function FeatureFlagsProvider({ children, initialFlags }: Props) {
     try { setFlags(await loadFlags()); } catch { /* keep what we have */ }
     try { setLevel(await loadLevel()); } catch { /* keep what we have */ }
   }, []);
+
+  // Which level and which features this install has on, sent with every usage event.
+  useEffect(() => {
+    if (ready) setUsageFacts({ level, features: (Object.keys(flags) as FeatureKey[]).filter(k => flags[k]) });
+  }, [flags, level, ready]);
 
   return <Ctx.Provider value={{ flags, level, setFlag: set, reload, ready }}>{children}</Ctx.Provider>;
 }

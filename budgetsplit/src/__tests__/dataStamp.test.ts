@@ -47,7 +47,7 @@ describe('a screen regaining focus re-reads only when something changed (U-02)',
     expect(run.indexOf('readDataStamp(db)')).toBeLessThan(run.indexOf('loaderRef.current(db)'));
   });
   it('the route is captured once: a value that follows navigation would reload every mounted screen', () => {
-    expect(src).toMatch(/useRef\(usePathname\(\)\)\.current/);
+    expect(src).toMatch(/useRef\(routeOf\(useSegments\(\)\)\)\.current/);
   });
 });
 

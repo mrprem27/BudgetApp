@@ -1,3 +1,4 @@
+import { sendUsageFacts } from '../../src/lib/usageFactsData';
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform, AppState, Alert } from 'react-native';
 import { Tabs, useRouter } from 'expo-router';
@@ -95,7 +96,9 @@ function AppTabBar({ state, navigation }: { state: any; navigation: any }) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { flags } = useFeatureFlags();
-  const { refresh } = useDataRefresh();
+  // Everything this layout reloads for is the system's doing (sync, a new day, the catch-up),
+  // so none of it counts as the user saving something.
+  const { refreshQuietly: refresh } = useDataRefresh();
   const db = useSQLiteContext();
   const [scanPay, setScanPay] = useState(false);
   const [showHint, setShowHint] = useState(false);
@@ -110,8 +113,10 @@ function AppTabBar({ state, navigation }: { state: any; navigation: any }) {
   // Lives here rather than in the root layout because that sits ABOVE
   // DataRefreshProvider and so cannot signal the screens to reload.
   useEffect(() => {
+    sendUsageFacts(db).catch(() => {});
     const sub = AppState.addEventListener('change', state => {
       if (state !== 'active') return;
+      sendUsageFacts(db).catch(() => {});
       // The root layout's catch-up may have posted a rule, and the day may have turned since the
       // screens loaded ("Today", Safe-to-Spend) — a foreground fires no screen's focus effect.
       // A tick first: the root's listener was registered earlier and starts the run.

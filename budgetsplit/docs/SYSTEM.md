@@ -216,7 +216,7 @@ into a personal cost, and `E-54`, which converts everything into one position.
 | The user's UPI app | A `upi://pay` intent | Tapping Pay via UPI | `FE-17` |
 | WhatsApp | A drafted message, composed not sent | Tapping the reminder | `FE-20` |
 | The OS share sheet | A CSV / PDF / backup file the user chose to export | Export | — |
-| Mixpanel | Anonymous usage: which screens open (by route shape, never ids) and four actions with a closed list of keys — entry saved (kind), Afford checked (verdict, frequency), import committed (row count). Never amounts, names, notes or categories (`lib/usageEvents.ts`, `U-24`) | While the app is used | `EXPO_PUBLIC_MIXPANEL_TOKEN` + Settings → Share anonymous usage (on by default) |
+| Mixpanel | Anonymous usage, a closed list of events each with a closed list of keys (`lib/usageEvents.ts`, `SPEC-ANALYTICS.md`, `U-24`): which screens open and for how long (by route shape, never ids), which tabs, that something was saved, a load that failed or was slow, and a few named actions (entry saved: kind, split, how; Afford checked; import committed; feature or level changed; onboarding finished; signed in; exported). With each: app version, platform, level, which features are on, how many entries as a band, signed in or not. Never amounts, names, notes or categories; no account id, no location | While the app is used | `EXPO_PUBLIC_MIXPANEL_TOKEN` + Settings → Share anonymous usage (on by default) |
 
 Nothing else. No crash reporter, no ad network, no advertising identifier. Receipt
 photos never sync (`SYNC-F4`); balances never travel (`E-50`).
@@ -225,7 +225,7 @@ photos never sync (`SYNC-F4`); balances never travel (`E-50`).
 
 One SQLite database, `budgetsplit.db`, opened by `SQLiteProvider` at the root. It is the single
 source of truth — there is no Redux, no React Query, no in-memory mirror. Reads go through
-`src/db/queries/` (30 modules); pure logic lives in `src/lib/` (145 modules) and touches neither
+`src/db/queries/` (30 modules); pure logic lives in `src/lib/` (147 modules) and touches neither
 React nor the database.
 
 **Foreign keys are OFF** on every connection (`applyConnectionPragmas`). Every `REFERENCES` clause
