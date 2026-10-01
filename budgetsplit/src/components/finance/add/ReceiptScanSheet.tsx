@@ -6,6 +6,7 @@ import { SheetModal } from '../../ui/SheetModal';
 import { PrimaryButton } from '../../ui/PrimaryButton';
 import { formatRupees, parseToPaise } from '../../../lib/money';
 import type { ParsedLineItem } from '../../../lib/ocrProviders';
+import { DEV_TOOLS_ENABLED } from '../../../constants/devTools';
 import { alpha } from '../../../theme';
 
 /**
@@ -25,6 +26,7 @@ export function ReceiptScanSheet({
   candidates,
   onAddItems,
   fellBack = false,
+  fellBackWhy,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -33,6 +35,8 @@ export function ReceiptScanSheet({
   onAddItems: (drafts: ParsedLineItem[]) => void;
   /** Cloud scanning failed and the on-device reader covered for it (`V2-13`). */
   fellBack?: boolean;
+  /** What the cloud reader came back with. Shown in a pilot build only (`U-102`). */
+  fellBackWhy?: string;
 }) {
   const [selected, setSelected] = useState<Set<number>>(new Set());
 
@@ -59,6 +63,10 @@ export function ReceiptScanSheet({
           <Feather name="wifi-off" size={14} color={colors.healthAmber} />
           <Text style={styles.fallbackText}>Cloud scanning wasn’t available, so this was read on your device. Check the items below, on-device reading misses more.</Text>
         </View>
+      )}
+      {/* Why, for whoever is testing: the same text is in the API log on the dev screen. */}
+      {fellBack && DEV_TOOLS_ENABLED && !!fellBackWhy && (
+        <Text style={styles.fallbackWhy} selectable>{fellBackWhy}</Text>
       )}
       {rawText !== null && (
         <>
@@ -110,6 +118,7 @@ const styles = StyleSheet.create({
   rawText: { fontFamily: 'SpaceMono_400Regular', fontSize: 12, color: colors.textSecondary, lineHeight: 17 },
   fallbackNote: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm, backgroundColor: alpha(colors.healthAmber, 13), borderRadius: radius.md, borderWidth: 1, borderColor: alpha(colors.healthAmber, 33), padding: space.sm, marginBottom: space.md },
   fallbackText: { ...type.caption, color: colors.healthAmber, flex: 1, lineHeight: 16 },
+  fallbackWhy: { ...type.caption, color: colors.textMuted, marginBottom: space.sm },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.smd, paddingHorizontal: space.sm, borderRadius: radius.md, marginBottom: space.xs },
   rowOn: { backgroundColor: colors.bgMuted },
   rowName: { ...type.bodySemi, color: colors.textPrimary, flex: 1 },

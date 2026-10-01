@@ -511,30 +511,44 @@ off** (`dimWhenOff: false`): dimming would read as "scanning is disabled", which
 ### Money — `app/(tabs)/savings.tsx` (route name stays `savings`)
 **Question:** "What can I spend, what do I own, and what am I saving for?"
 
-Three sections as `TabPills` under the header — one thing each:
-- **Overview** — *Now*: Available money (Bank / Cash / Wallet, credit), then the *Can I afford this?*
-  card (`AffordHeroCard`, `U-46`). *This month*: the overspend consent prompt and Coming up. The
-  month-end forecast is **not** here — it lives in Insights.
+**Header:** "Money" (large), with one action at the right: **Recurring** *(flag `recurring`)* →
+`/plan/recurring`. Afford is a card in the body, not a header action (`U-12`, `U-46`); Insights and
+Reports are reached from the Insights tab.
+
+Three sections as `TabPills` under the header, one thing each (Goals only with `savingsGoals`):
+
+- **Overview**
+  1. **TotalMoneyCard** — the hero is what you can spend now (cash only), with a staleness badge
+     when the balances have not been updated in a while. Under it the sum, line by line
+     (`MoneySum`): Bank, Cash, Wallet (each opens Accounts, `U-68`), **Paid from not set** when
+     entries were saved without a Paid from, **In goals**, then Invested (opens Assets), the card
+     owed and net worth. Unused credit limit is in neither figure (`V2-12`). Actions on the card:
+     **Edit** → `MoneyEditorSheet` (today's balances, the same sum live, `U-47`), **Move money** →
+     `MoveMoneySheet`, **Card bill paid** → `PayCardBillSheet` when a card is owed.
+  2. **Paid from not set** opens Move money on that amount, filled in (`U-99`): out of Not set when
+     the line holds money, into it from the bank when it is spending with no source. Any part of it
+     can move; each move is two rows beside the entries, and total cash never changes.
+  3. **AffordHeroCard** *(flag `affordCheck`)* → `/afford`.
+  4. **This month** — only when cash is short: the overspend prompt. `proposeOverspendRaid` names
+     which unlocked goals could cover it and asks **Use savings** / **Keep goals**; nothing moves
+     until you agree, and a confirmation offers **Undo** (`V2-10`). The charges due this month are
+     not listed here: they are the Upcoming screen's, behind Home's bell (`U-96`). The month-end
+     forecast is on Insights.
 - **Assets** — `AssetsSection`, the same component `/assets` renders: a sum card, each asset a line
   (colour dot, name, kind, worth, ›) and `= Worth`; archived ones below; **Add asset** and **Move money**
   as one pair at the end (`U-45`). An asset's page signs movements from the asset's side, settle colour.
-- **Goals** — the same Afford card first, then drag-rankable goals by priority, fund / new goal (every
-  amount in `AmountRow`).
+- **Goals** — the same Afford card first, then the goals by priority (Emergency, Need, Want), each
+  list a `DraggableList` (drag sets which fills first within its priority → `reorderGoals`). A
+  **GoalCard** shows icon, name, deadline, saved against target and what it needs a month; tap →
+  `/savings/{id}`. **New** → the goal sheet (name, target, priority, icon, colour, an amount and how
+  often, a target date; every amount in `AmountRow`) → `insertGoal`. Finished goals sink below the
+  active ones.
 
 ### States
 - **Loading:** none.
 - **Error:** `ErrorState` + retry.
-- **Empty:** goals list gets an `EmptyState` "No savings goals yet"; the rest of the screen still renders.
-- **Full:** money card + insights + goals + upcoming + forecast. Pull-to-refresh throughout.
-
-1. **ScreenHeader** "Plan" (large) + month pill.
-2. **Header actions** (top-right, **not pills**) — a glyph with its **label underneath**: `Insights` *(flag `insights`, `/insights`)* · `Reports` *(flag `reports`, `/reports`)* · `Recurring` *(flag `recurring`, `/plan/recurring`)* · `Afford` *(flag `affordCheck`, `/afford`; the accessibility label keeps the full "Can I afford?")*. They were bare icons until `OV-16`. `/insights` and `/reports` have labelled entries elsewhere (Home ×2, and a Settings row); `/afford` has **none**, and `/plan/recurring`'s only other entry is a recovery link on `SC-41`'s not-found state — so the rail was the discovery path for both, and onboarding's summary closes by sending the user to one of them by name ("Recurring · Plan"). The label sits under the glyph rather than beside it because four labels plus a 28pt "Plan" overflow the row on a small phone; it costs ~16pt of header height once and moves no content. Reminders lives in Settings. Reports is **also** still in Settings → Reports & export; it was reachable *only* from there, which is where you look for an export, not for last month's numbers (`V2-08`).
-3. **TotalMoneyCard** (`getTotalMoney`/`getMoneyProfile`) — hero is **Available Money** = spendable cash only. Below it: **Net worth** (cash + investments − credit *used*) and **Credit headroom**, labelled *"borrowing, not money"*. Tap **edit** → **MoneyEditorSheet**: today's Bank / Cash / Wallet, the card, then the same sum live (`MoneySum`, `U-47`) with Invested as a line that opens Assets. The card's sum has an **In goals** line when goals hold money. (`V2-12`: the hero used to be one figure adding cash + investments + *unused credit*, so a ₹2L card limit read as ₹2L of money. Unused limit is neither an asset nor a debt, so it is now in neither figure.)
-4. **Overspend consent prompt** — when cash is negative, `proposeOverspendRaid` names which unlocked goals *could* cover it and asks: **Use savings** / **Keep goals**. Nothing moves until you agree; `applyOverspendRaid` then writes exactly the withdrawals shown (never a recomputed plan), and a confirmation offers **Undo** → `undoOverspendRaid`. Declining leaves cash negative, which is the honest picture. (`V2-10`: this used to happen automatically during app boot with an after-the-fact notice.)
-5. **Savings insights** card: opportunity-cost / habit nudges.
-6. **Goals** *(flag `savingsGoals`)*: `DraggableList` (drag = funding priority → `reorderGoals` writes `sort_order`); each **GoalCard** → icon, name, deadline, saved/target bar, needed/contribution per month. Tap → `/savings/{id}`. **New** → goal sheet (name, target, icon, colour, allocation + frequency, target-date) → `insertGoal`. Completed goals sink below the active list with a distinct card.
-7. *(removed, `U-96`: the charges due this month are the Upcoming screen's, behind Home's bell.)*
-8. **plan/ForecastCard** — month-end projection (a distinct component from the Home `home/ForecastCard`).
+- **Empty:** the Goals section gets an `EmptyState` "No savings goals yet"; the rest still renders.
+- **Full:** as above. Pull-to-refresh on every section (Assets refreshes its own data).
 
 ### Goal detail — `app/(money)/savings/[id].tsx`
 SVG progress ring; Saved/Remaining/Goal tiles; monthly-contribution card with nudge;

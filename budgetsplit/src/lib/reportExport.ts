@@ -7,7 +7,7 @@ import { settlementView } from './settlementView';
 import { getMe, getAllPersons } from '../db/queries/persons';
 import { GROUP_EXPORT_HEADER } from './importParse';
 import { rowLine } from './groupExport';
-import { formatRupees, formatRupeesShort, formatCompact, formatChangeMagnitude } from './money';
+import { formatRupees, formatRupeesShort, formatCompact, formatChangeMagnitude, periodChange } from './money';
 import { computeDonutWedges, type DonutSeg } from './donut';
 import { foldUncategorized } from './categoryFold';
 import { getCategories } from '../db/queries/categories';
@@ -187,10 +187,10 @@ export async function buildReportHtml(
     else if (t.kind === 'income') receivedBefore += myIncomeOf(t, meId);
   }
   const against = (now: number, then: number) => {
-    if (then <= 0) return `nothing in ${beforeName} to compare`;
-    const pct = ((now - then) / then) * 100;
-    if (Math.round(pct) === 0) return `the same as ${beforeName}`;
-    return pct > 100 ? `${formatChangeMagnitude(pct)} ${beforeName}` : `${formatChangeMagnitude(pct)} ${pct > 0 ? 'more' : 'less'} than ${beforeName}`;
+    const c = periodChange(now, then);
+    if (c.kind === 'none') return `nothing in ${beforeName} to compare`;
+    if (c.kind === 'same') return `the same as ${beforeName}`;
+    return c.pct > 100 ? `${formatChangeMagnitude(c.pct)} ${beforeName}` : `${formatChangeMagnitude(c.pct)} ${c.pct > 0 ? 'more' : 'less'} than ${beforeName}`;
   };
 
   const spent = summaries.reduce((t, s) => t + s.expense, 0);

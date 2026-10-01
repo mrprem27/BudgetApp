@@ -19,6 +19,8 @@ export interface ReceiptScanResult {
   provider?: 'gemini' | 'device';
   /** True when the configured cloud provider failed and `device` covered for it. */
   fellBack?: boolean;
+  /** Why the cloud reader did not answer, when `fellBack`. Shown only where dev tools are on. */
+  fellBackWhy?: string;
 }
 
 export interface ReceiptExtractor {

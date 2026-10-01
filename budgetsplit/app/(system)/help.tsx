@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Share, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { colors, type, space, layout, alpha } from '../../src/theme';
@@ -11,6 +11,16 @@ import { SectionCard } from '../../src/components/ui/SectionCard';
 import { Divider } from '../../src/components/ui/Divider';
 import { Collapse } from '../../src/components/ui/anim/Collapse';
 import { backOr } from '../../src/lib/nav';
+import { Card } from '../../src/components/ui/Card';
+import { ListRow } from '../../src/components/ui/ListRow';
+import { SheetModal } from '../../src/components/ui/SheetModal';
+import { Input } from '../../src/components/ui/Input';
+import { PrimaryButton } from '../../src/components/ui/PrimaryButton';
+import { AppSwitch } from '../../src/components/ui/AppSwitch';
+import { buildFeedbackReport } from '../../src/lib/feedbackReport';
+import { loadTimeSummary } from '../../src/lib/loadTimes';
+import { apiLog } from '../../src/lib/apiLog';
+import appJson from '../../app.json';
 
 type Item = { icon: keyof typeof Feather.glyphMap; color: string; title: string; body: string };
 type Section = { title: string; illustration: { icons: Array<{ name: keyof typeof Feather.glyphMap; bg: string; color: string }> }; items: Item[] };
@@ -247,11 +257,32 @@ export default function HelpScreen() {
   const router = useRouter();
   const [openSection, setOpenSection] = useState<string | null>('Getting Started');
   const [openItem, setOpenItem] = useState<string | null>('Adding your first expense');
+  // Feedback (`U-104`): what you write, shared through whatever app you choose. There is no
+  // address to send it to from here on purpose; the pilot is people who know each other.
+  const [showFeedback, setShowFeedback] = useState(false);
+  const [feedback, setFeedback] = useState('');
+  const [withDetails, setWithDetails] = useState(true);
+  const sendFeedback = () => {
+    const message = buildFeedbackReport({
+      text: feedback, includeDetails: withDetails,
+      appVersion: appJson.expo.version, platform: Platform.OS,
+      loads: loadTimeSummary(), calls: apiLog(),
+    });
+    Share.share({ message }).then(() => { setShowFeedback(false); setFeedback(''); }).catch(() => {});
+  };
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Help & Guide" onBack={() => backOr(router, '/(tabs)')} />
+      <ScreenHeader title="Help & Feedback" onBack={() => backOr(router, '/(tabs)')} />
       <ScrollView contentContainerStyle={styles.scroll}>
+        <Card clip style={styles.feedbackCard}>
+          <ListRow
+            icon="message-square"
+            title="Send feedback"
+            subtitle="What broke, what confused you, what you wanted"
+            onPress={() => setShowFeedback(true)}
+          />
+        </Card>
         {/* The app's one collapsible (`SectionCard`, `DQ-17`), not a third pattern of its own. */}
         {SECTIONS.map(section => {
           const lead = section.illustration.icons[0];
@@ -291,11 +322,37 @@ export default function HelpScreen() {
           );
         })}
       </ScrollView>
+
+      <SheetModal visible={showFeedback} onClose={() => setShowFeedback(false)} title="Send feedback">
+        <Input
+          value={feedback}
+          onChangeText={setFeedback}
+          placeholder="What happened, and what did you expect?"
+          multiline
+          autoFocus
+          accessibilityLabel="Your feedback"
+          style={styles.feedbackInput}
+        />
+        <View style={styles.detailsRow}>
+          <View style={styles.detailsText}>
+            <Text style={styles.detailsLabel}>Include technical details</Text>
+            <Text style={styles.detailsHint}>The build, slow screens and failed calls. No amounts or names.</Text>
+          </View>
+          <AppSwitch value={withDetails} onValueChange={setWithDetails} accessibilityLabel="Include technical details" />
+        </View>
+        <PrimaryButton label="Share" onPress={sendFeedback} disabled={!feedback.trim()} />
+      </SheetModal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  feedbackCard: { marginBottom: space.md },
+  feedbackInput: { marginBottom: space.md },
+  detailsRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, marginBottom: space.md },
+  detailsText: { flex: 1 },
+  detailsLabel: { ...type.body, color: colors.textPrimary },
+  detailsHint: { ...type.caption, color: colors.textMuted, marginTop: 2 },
   container: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: layout.screenPaddingH, paddingBottom: space.lg },
   items: { paddingHorizontal: space.md },

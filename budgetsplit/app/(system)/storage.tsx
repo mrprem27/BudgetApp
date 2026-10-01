@@ -1,6 +1,6 @@
 import { setUsageFacts } from '../../src/lib/usageEvents';
 import { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, Alert, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Alert, TouchableOpacity, ScrollView, Share } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useScreenData } from '../../src/hooks/useScreenData';
@@ -18,6 +18,8 @@ import { Divider } from '../../src/components/ui/Divider';
 import { formatBytes } from '../../src/lib/storage';
 import { DEV_TOOLS_ENABLED } from '../../src/constants/devTools';
 import { loadTimeSummary, clearLoadTimes } from '../../src/lib/loadTimes';
+import { apiLog, clearApiLog, apiLogText, apiFailed, apiServiceLabel, apiStatusLabel } from '../../src/lib/apiLog';
+import { timeOfDay } from '../../src/lib/dateFormat';
 import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 import { DEFAULTS, FEATURE_KEYS, type FeatureKey } from '../../src/lib/featureFlags';
@@ -35,7 +37,10 @@ export default function StorageScreen() {
   const [busy, setBusy] = useState(false);
   // Which screens are slow on this phone, in milliseconds (`U-02`). Re-read each time this opens.
   const [loads, setLoads] = useState(loadTimeSummary);
-  useFocusEffect(useCallback(() => { setLoads(loadTimeSummary()); }, []));
+  // What the receipt scan and the account server came back with (`U-102`), newest first.
+  const [calls, setCalls] = useState(apiLog);
+  const [openCall, setOpenCall] = useState<number | null>(null);
+  useFocusEffect(useCallback(() => { setLoads(loadTimeSummary()); setCalls(apiLog()); }, []));
 
   // Defense in depth: the only entry point (the 7-tap gesture in Settings → About)
   // carries the same gate, but this screen can replace or erase a user's entire
@@ -212,6 +217,40 @@ export default function StorageScreen() {
             <Text style={styles.eraseText}>Erase all data</Text>
           </TouchableOpacity>
 
+          <Text style={styles.devTitle}>API LOG</Text>
+          <Text style={styles.note}>
+            Every call to the receipt scan and the account server since the app opened, newest first. Tap a failed one to read what came back.
+          </Text>
+          {calls.length === 0 ? (
+            <Text style={styles.note}>Nothing yet. Scan a receipt or sync, then come back here.</Text>
+          ) : (
+            <>
+              <Card clip>
+                {calls.map((c, i) => {
+                  const failed = apiFailed(c);
+                  return (
+                    <View key={`${c.at}-${i}`}>
+                      {i > 0 && <Divider indent="none" />}
+                      <ListRow
+                        title={`${apiServiceLabel(c.service)} · ${c.what}`}
+                        subtitle={`${timeOfDay(c.at)} · ${c.ms} ms`}
+                        value={<Text style={[styles.callStatus, { color: failed ? colors.expense : colors.income }]}>{apiStatusLabel(c)}</Text>}
+                        chevron={false}
+                        onPress={c.detail ? () => setOpenCall(o => (o === i ? null : i)) : undefined}
+                        accessibilityLabel={`${apiServiceLabel(c.service)}, ${c.what}, ${failed ? 'failed' : 'worked'}, ${apiStatusLabel(c)}`}
+                      />
+                      {openCall === i && !!c.detail && <Text style={styles.callDetail} selectable>{c.detail}</Text>}
+                    </View>
+                  );
+                })}
+              </Card>
+              <View style={styles.callActions}>
+                <SecondaryButton label="Share log" size="sm" onPress={() => { Share.share({ message: apiLogText(calls) }).catch(() => {}); }} />
+                <SecondaryButton label="Clear" size="sm" onPress={() => { clearApiLog(); setCalls([]); setOpenCall(null); }} />
+              </View>
+            </>
+          )}
+
           <Text style={styles.devTitle}>SCREEN LOADS</Text>
           <Text style={styles.note}>
             How long each screen took to read its data since the app opened, slowest first. Use the app, then come back here.
@@ -250,6 +289,9 @@ const styles = StyleSheet.create({
   note: { ...type.caption, color: colors.textMuted, lineHeight: 18, textAlign: 'center' },
   devSection: { gap: space.md, marginTop: space.lg, paddingTop: space.lg, borderTopWidth: 1, borderTopColor: colors.border },
   devTitle: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, fontFamily: 'Inter_600SemiBold', textAlign: 'center' },
+  callStatus: { ...type.amountSM },
+  callDetail: { ...type.caption, color: colors.textSecondary, paddingHorizontal: space.md, paddingBottom: space.md, lineHeight: 18 },
+  callActions: { flexDirection: 'row', gap: space.sm },
   eraseBtn: { height: 52, borderWidth: 1, borderColor: colors.expense, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: space.sm, width: '100%' },
   eraseDisabled: { opacity: 0.4 },
   eraseText: { ...type.button, color: colors.expense },

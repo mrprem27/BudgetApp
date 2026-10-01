@@ -141,12 +141,54 @@ rather than by being fixed, and that is worth exactly one read to avoid rediscov
 ## 2 · Device pass
 
 Nothing below has ever rendered on a device. **Load demo data first**
-(Settings → tap the version row 7× → Load demo data) — an empty app hides most
-layout problems. Note the "tap 7×" hint is now `__DEV__`-only, and `app/(system)/storage.tsx`
-is reachable only in a dev build.
+(Settings → About → tap the version row 7× → Load demo data) — an empty app hides most
+layout problems. That screen is reachable in pilot builds while `DEV_TOOLS_ENABLED` is on
+(`constants/devTools`); it also holds the two logs a tester reports from: **API LOG** and
+**SCREEN LOADS**.
 
 Run it in two once-per-session passes as well: **Reduce Motion on**, and
 **Hide amounts on**.
+
+### 2.0 The V1 test round — what a tester does, and how they report (2026-10-01)
+
+For you and the few friends on the pilot build. About twenty minutes. Each step says what should
+happen; anything else is a finding.
+
+**Before you start.** Note which build it is (TestFlight, or a development build: a development
+build is several times slower, so its load times are not the app's). Load demo data, or use your
+own if you have a month of it.
+
+| # | Do this | You should see |
+|---|---|---|
+| 1 | Open Home. Tap the bell. | Two tiles (Safe to spend, Month end). Upcoming lists every charge due this month; the bell's number is the number of rows. |
+| 2 | Tap +, add a ₹250 expense to yourself. | Saved in one screen. Home's month figure and Personal's row go up by 250. |
+| 3 | Open a shared group, add a ₹900 expense split equally among three. | "Your share" up by 300, "Group total" by 900. Your Personal spending up by 300, not 900. |
+| 4 | In that group pick the date filter "Last month". | The row under the header reads "Last month" and changes. Its Reports button opens last month for this group. Typing in search changes the list, never the row. |
+| 5 | Tap +, Split by items, Scan receipt, photograph a bill. | Items come back to tick. If it says it was read on your device, the line under that note says why the cloud did not answer. |
+| 6 | Group → Members. Flip Simplify. Record one payment. | The list of payments changes with the switch, and the line under it says which you are looking at. The balance updates on save. |
+| 7 | Money → tap "Paid from not set" (if the line is there) → move part of it to Cash. | Move money opens with the whole amount filled in. After a part-move, Cash goes up by that part, the line down by it, and the total does not change. |
+| 8 | Insights → open every tile. In "How your money works" change how you are paid. | Each tile opens a sheet. A picker opens over the preferences, and closing it brings the preferences back. **The screen must never be stuck.** |
+| 9 | Insights → Reports → PDF, for last month, then this month. | A ring and a bar chart are drawn. The four figures match the Reports screen. This month's comparison says "to date". |
+| 10 | Settings → your card. Change your name and photo. | Profile opens in sections. The new name shows in Settings straight away. Every badge sits under your card in Settings. |
+| 11 | Add a monthly recurring expense due in three days. | It is on the bell's Upcoming list as "in 3 days", and in Money → Recurring. |
+| 12 | With an account: sign in, add an entry, open the second phone. | The entry arrives within a few seconds. An entry from someone on "review" waits for you and moves none of your numbers until accepted. |
+| 13 | Close the app fully and reopen it. | Everything is where you left it. |
+| 14 | Switch on Reduce Motion, then Hide amounts, and repeat 1, 8 and 10. | Nothing jumps; amounts on Home are masked. |
+
+**How to report.** Settings → Help & Feedback → **Send feedback**. Write what you did, what you
+saw and what you expected, one problem per message, and leave "Include technical details" on: it
+attaches the build, the slowest screens and any call that failed, and no amounts or names. It
+opens the share sheet, so it goes through whatever app you already use.
+
+**When a scan or sync fails.** Settings → About → tap the version 7× → **API LOG**. The failed
+call is in red; tap it for what the server (or Google, behind the receipt scan) answered.
+**Share log** sends the lot. **SCREEN LOADS**, below it, is which screens were slow, in
+milliseconds.
+
+**Check first, changed on 2026-10-01** (none seen on a phone yet): the Insights tiles and the
+preferences sheet stepping aside for its pickers (`U-91`); the PDF's charts (`U-95`); Profile and
+the badges in Settings (`U-92`); the group row following filters (`U-97`); Move money from "Paid
+from not set" (`U-99`); Upcoming to month-end (`U-96`); the Simplify switch (`U-98`).
 
 ### 2.1 Changed by the pre-pilot consistency pass — highest risk, verify first
 

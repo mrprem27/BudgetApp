@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, ScrollView, Switch } from 'react-native';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { AppSwitch } from '../../ui/AppSwitch';
 import { Feather } from '@expo/vector-icons';
 import { monthShort } from '../../../lib/dateFormat';
 import { colors, type, space, layout } from '../../tokens';
@@ -147,11 +148,9 @@ export function MembersTab({ members, net, settlements, personMap, simplifyOn, o
               // the list says what the current setting means.
               <View style={styles.simplify}>
                 <Text style={styles.simplifyLabel}>Simplify</Text>
-                <Switch
+                <AppSwitch
                   value={simplifyOn}
                   onValueChange={onToggleSimplify}
-                  trackColor={{ true: colors.accent, false: colors.bgMuted }}
-                  thumbColor={colors.textPrimary}
                   accessibilityLabel={`Simplify debts, ${simplifyOn ? 'on: fewest possible payments' : 'off: every direct debt'}`}
                 />
               </View>

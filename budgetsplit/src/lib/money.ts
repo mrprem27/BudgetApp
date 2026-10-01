@@ -290,3 +290,15 @@ export function splitByMode(
 export function currencySymbol(code?: string | null): string {
   return (CURRENCY_MAP[(code ?? DEFAULT_CURRENCY) as CurrencyCode] ?? CURRENCY_MAP[DEFAULT_CURRENCY]).symbol;
 }
+
+/**
+ * How a period's figure stands against the one before it. One rule for the Reports screen and
+ * its PDF, which drew the line between "the same" and a change in different places (under 2% on
+ * the screen, a rounded 0% in the PDF). `none`: nothing before to compare with.
+ */
+export type PeriodChange = { kind: 'none' } | { kind: 'same' } | { kind: 'change'; pct: number };
+export function periodChange(now: number, before: number): PeriodChange {
+  if (before <= 0) return { kind: 'none' };
+  const pct = ((now - before) / before) * 100;
+  return Math.abs(pct) < 2 ? { kind: 'same' } : { kind: 'change', pct };
+}

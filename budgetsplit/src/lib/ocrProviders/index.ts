@@ -74,7 +74,7 @@ export function withDeviceFallback(primary: ReceiptExtractor): ReceiptExtractor 
       } catch (cloudError) {
         try {
           const local = await deviceExtractor.extractLineItems(imageUri);
-          return { ...local, provider: 'device' as const, fellBack: true };
+          return { ...local, provider: 'device' as const, fellBack: true, fellBackWhy: cloudError instanceof Error ? cloudError.message : String(cloudError) };
         } catch {
           throw cloudError;
         }

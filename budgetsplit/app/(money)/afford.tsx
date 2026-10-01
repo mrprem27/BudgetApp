@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, Switch } from 'react-native';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity } from 'react-native';
+import { AppSwitch } from '../../src/components/ui/AppSwitch';
 import { KeyboardForm } from '../../src/components/ui/KeyboardForm';
 import { useRouter } from 'expo-router';
 import { useScreenData } from '../../src/hooks/useScreenData';
@@ -160,7 +161,7 @@ export default function AffordScreen() {
               title="Can wait"
               subtitle="Find the first comfortable date"
               chevron={false}
-              value={<Switch value={canWait} onValueChange={setCanWait} trackColor={{ true: colors.accent, false: colors.bgMuted }} thumbColor={colors.textPrimary} accessibilityLabel="Can wait" />}
+              value={<AppSwitch value={canWait} onValueChange={setCanWait} accessibilityLabel="Can wait" />}
             />
           </Card>
 

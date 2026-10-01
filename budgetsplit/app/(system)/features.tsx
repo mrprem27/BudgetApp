@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Switch, Alert, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity } from 'react-native';
+import { AppSwitch } from '../../src/components/ui/AppSwitch';
 import { useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import * as Location from 'expo-location';
@@ -350,7 +351,7 @@ export default function FeaturesScreen() {
                       <Text style={styles.label}>{m.label}</Text>
                       <Text style={styles.caption}>{m.caption}</Text>
                     </View>
-                    <Switch value={m.value} onValueChange={m.onChange} trackColor={{ true: colors.accent, false: colors.bgMuted }} thumbColor={colors.textPrimary} accessibilityLabel={m.label} />
+                    <AppSwitch value={m.value} onValueChange={m.onChange} accessibilityLabel={m.label} />
                   </View>
                 </View>
               ))}

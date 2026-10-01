@@ -441,6 +441,7 @@ export default function ItemizedScreen() {
         rawText={f.scanResult?.rawText ?? null}
         candidates={f.scanResult?.candidates ?? []}
         fellBack={f.scanResult?.fellBack ?? false}
+        fellBackWhy={f.scanResult?.fellBackWhy}
         onAddItems={(drafts) => { f.addItems(drafts); f.setShowScanSheet(false); }}
       />
 

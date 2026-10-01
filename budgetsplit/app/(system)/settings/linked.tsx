@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert, ActivityIndicator, Switch, Share } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Alert, ActivityIndicator, Share } from 'react-native';
+import { AppSwitch } from '../../../src/components/ui/AppSwitch';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { format } from 'date-fns';
 import { shortDate } from '../../../src/lib/dateFormat';
@@ -382,12 +383,10 @@ export default function LinkedPeopleScreen() {
                             : 'Off. They can’t see your number.'}
                         </Text>
                       </View>
-                      <Switch
+                      <AppSwitch
                         value={link.sharingMyPhone}
                         onValueChange={(v) => handleShareToggle(link, v)}
                         disabled={busy === link.id}
-                        trackColor={{ false: colors.bgMuted, true: colors.accent }}
-                        thumbColor={colors.onAccent}
                       />
                     </View>
                     <View style={styles.unlinkRow}>

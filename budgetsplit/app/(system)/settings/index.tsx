@@ -1,8 +1,8 @@
 import { useState, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, Switch, TouchableOpacity,
-  ScrollView, Alert
+  View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert
 } from 'react-native';
+import { AppSwitch } from '../../../src/components/ui/AppSwitch';
 import { useSQLiteContext } from 'expo-sqlite';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -440,7 +440,7 @@ function ToggleRow({ icon, tint = colors.accent, label, value, onValueChange }: 
     <View style={styles.toggleRow}>
       <IconCircle icon={icon} color={tint} size={layout.iconCircle} />
       <Text style={styles.toggleLabel}>{label}</Text>
-      <Switch value={value} onValueChange={onValueChange} trackColor={{ true: colors.accent, false: colors.bgMuted }} thumbColor={colors.textPrimary} accessibilityLabel={label} />
+      <AppSwitch value={value} onValueChange={onValueChange} accessibilityLabel={label} />
     </View>
   );
 }

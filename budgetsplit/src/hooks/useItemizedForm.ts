@@ -123,7 +123,7 @@ export function useItemizedForm(paramGroupId?: string, editId?: string) {
   // unlinked — a ref (not state) since nothing should re-render off it.
   const originalAttachmentUriRef = useRef<string | null>(null);
   const [scanning, setScanning] = useState(false);
-  const [scanResult, setScanResult] = useState<{ rawText: string | null; candidates: ParsedLineItem[]; fellBack?: boolean } | null>(null);
+  const [scanResult, setScanResult] = useState<{ rawText: string | null; candidates: ParsedLineItem[]; fellBack?: boolean; fellBackWhy?: string } | null>(null);
   const [showScanSheet, setShowScanSheet] = useState(false);
 
   async function captureLocation() {

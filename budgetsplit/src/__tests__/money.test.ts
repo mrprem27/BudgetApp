@@ -154,3 +154,18 @@ describe('formatChangeMagnitude', () => {
     expect(formatChangeMagnitude(Infinity)).toBe('0%');
   });
 });
+
+describe('periodChange: a figure against the period before (one rule for Reports and its PDF)', () => {
+  const { periodChange } = jest.requireActual('../lib/money') as typeof import('../lib/money');
+  it('has nothing to compare with when the period before was empty', () => {
+    expect(periodChange(5000, 0)).toEqual({ kind: 'none' });
+  });
+  it('calls anything under 2% the same', () => {
+    expect(periodChange(10100, 10000)).toEqual({ kind: 'same' });
+    expect(periodChange(9850, 10000)).toEqual({ kind: 'same' });
+  });
+  it('is a change otherwise, signed', () => {
+    expect(periodChange(12500, 10000)).toEqual({ kind: 'change', pct: 25 });
+    expect(periodChange(5000, 10000)).toEqual({ kind: 'change', pct: -50 });
+  });
+});

@@ -1,4 +1,5 @@
 import * as FileSystem from 'expo-file-system/legacy';
+import { recordApi } from '../apiLog';
 import type { ParsedLineItem, ReceiptExtractor, ReceiptScanResult } from './types';
 
 const SCAN_TIMEOUT_MS = 60_000;
@@ -43,6 +44,8 @@ export const geminiExtractor: ReceiptExtractor = {
     // ends here and the device reader covers for it (`withDeviceFallback`).
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), SCAN_TIMEOUT_MS);
+    const started = Date.now();
+    const log = (status: number, detail?: string) => recordApi({ service: 'scan', what: 'Read receipt', status, ms: Date.now() - started, detail });
     let response: Response;
     try {
       response = await fetch(proxyUrl, {
@@ -52,17 +55,23 @@ export const geminiExtractor: ReceiptExtractor = {
         signal: controller.signal,
       });
     } catch (e) {
-      throw new Error(controller.signal.aborted ? 'Cloud scan took too long.' : `Cloud scan could not connect: ${e instanceof Error ? e.message : String(e)}`);
+      const why = controller.signal.aborted ? 'Cloud scan took too long.' : `Cloud scan could not connect: ${e instanceof Error ? e.message : String(e)}`;
+      log(0, why);
+      throw new Error(why);
     } finally {
       clearTimeout(timer);
     }
 
     if (!response.ok) {
+      // The proxy's body names what went wrong upstream: `{ error, detail }`, where `detail` is
+      // Google's own answer. The log keeps it; the message keeps the first of it.
       const detail = await response.text().catch(() => '');
+      log(response.status, detail);
       throw new Error(`Cloud scan failed (${response.status})${detail ? `: ${detail.slice(0, 200)}` : ''}`);
     }
 
     const data = await response.json();
+    log(response.status);
     const items = Array.isArray(data?.items) ? data.items.filter(isParsedLineItem) : [];
     return { rawText: null, candidates: items };
   },

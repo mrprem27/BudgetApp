@@ -1,6 +1,7 @@
 import { track, setUsageFacts } from './usageEvents';
 import * as Device from 'expo-device';
 import { File } from 'expo-file-system';
+import { recordApi } from './apiLog';
 import { keychain, secureStorageAvailable } from './keychain';
 
 /**
@@ -163,16 +164,27 @@ async function send(path: string, options: SendOptions = {}): Promise<Response> 
   }
   if (options.token) headers.authorization = `Bearer ${options.token}`;
 
+  // Every call lands in the dev screen's log (`lib/apiLog`): the route and what came back, never
+  // what was sent.
+  const started = Date.now();
+  const log = (status: number, detail?: string) =>
+    recordApi({ service: 'server', what: `${options.method ?? 'GET'} ${path}`, status, ms: Date.now() - started, detail });
   let response: Response;
   try {
     response = await fetch(`${base}${path}`, { method: options.method ?? 'GET', headers, body });
-  } catch {
+  } catch (e) {
+    log(0, e instanceof Error ? e.message : String(e));
     // No connectivity, DNS failure, or the Worker is down. One message, because
     // the user's next move is the same in all three cases.
     throw new ServerRequestError(0, 'Could not reach the server. Check your connection and try again.');
   }
 
-  if (response.ok) return response;
+  if (response.ok) { log(response.status); return response; }
+
+  // The error body is read once, as text: the log keeps it as it came, and the error is built
+  // from the same text.
+  const raw = await response.text().catch(() => '');
+  log(response.status, raw);
 
   // 401 means the token is dead server-side; keeping it locally would show a
   // signed-in screen that fails every action. Clear first, then report.
@@ -181,8 +193,8 @@ async function send(path: string, options: SendOptions = {}): Promise<Response> 
     throw new ServerAuthError();
   }
 
-  const detail = await response.json().catch(() => null) as
-    (Record<string, unknown> & { error?: string; code?: string }) | null;
+  let detail: (Record<string, unknown> & { error?: string; code?: string }) | null = null;
+  try { detail = raw ? JSON.parse(raw) : null; } catch { detail = null; }
   throw new ServerRequestError(
     response.status,
     detail?.error ?? `The server returned an error (${response.status}).`,

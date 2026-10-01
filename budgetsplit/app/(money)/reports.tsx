@@ -11,7 +11,6 @@ import { parseMonthKey, type ReportRange, periodRunning } from '../../src/lib/da
 import { DateRangeSheet } from '../../src/components/ui/DateRangeSheet';
 import { shortDate } from '../../src/lib/dateFormat';
 import { useScreenData } from '../../src/hooks/useScreenData';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import * as Print from 'expo-print';
@@ -24,7 +23,7 @@ import { TrendBars } from '../../src/components/finance/TrendBars';
 import { colors, type, space, radius, layout, alpha } from '../../src/theme';
 
 import { utilLabel, budgetHealth } from '../../src/lib/budget';
-import { formatCompact } from '../../src/lib/money';
+import { formatCompact, periodChange } from '../../src/lib/money';
 import { buildReportCsv, buildReportHtml } from '../../src/lib/reportExport';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { AmountText } from '../../src/components/ui/AmountText';
@@ -45,7 +44,6 @@ export default function ReportsScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
   const bottomPad = useContentInset();
-  const insets = useSafeAreaInsets();
   // Seeded from a deep link (`?month=yyyy-MM`) — Personal opens it on a filtered month (`U-52`).
   const { month: monthParam, from: fromParam, to: toParam, group: groupParam } = useLocalSearchParams<{ month?: string; from?: string; to?: string; group?: string }>();
   // One group's report, when opened from that group (`U-88`); the chip under the month clears it.
@@ -287,20 +285,17 @@ export default function ReportsScreen() {
             // A period still running is measured against the same days of the one before
             // (`comparisonRange`), and says so: "vs Sep" read as the whole of September.
             const prevLabel = `${range ? 'before' : format(subMonths(month, 1), 'MMM')}${periodRunning(month, range ?? undefined) ? ' to date' : ''}`;
-            const delta = (cur: number, prev: number): { text: string; color: string; dir: 'up' | 'down' | 'flat' } => {
-              if (prev <= 0) return { text: 'new', color: colors.textMuted, dir: 'flat' };
-              const pct = Math.round(((cur - prev) / prev) * 100);
-              if (Math.abs(pct) < 2) return { text: `same as ${prevLabel}`, color: colors.textMuted, dir: 'flat' };
-              return { text: `${pct > 0 ? '+' : ''}${pct}% vs ${prevLabel}`, color: pct > 0 ? colors.expense : colors.income, dir: pct > 0 ? 'up' : 'down' };
+            // More spending is the bad direction and more income the good one; the rule for what
+            // counts as a change is shared with the PDF (`periodChange`).
+            const delta = (cur: number, prev: number, moreIs: string, lessIs: string, sameIs: string): { text: string; color: string; dir: 'up' | 'down' | 'flat' } => {
+              const c = periodChange(cur, prev);
+              if (c.kind === 'none') return { text: 'new', color: colors.textMuted, dir: 'flat' };
+              if (c.kind === 'same') return { text: `same as ${prevLabel}`, color: sameIs, dir: 'flat' };
+              const pct = Math.round(c.pct);
+              return { text: `${pct > 0 ? '+' : ''}${pct}% vs ${prevLabel}`, color: pct > 0 ? moreIs : lessIs, dir: pct > 0 ? 'up' : 'down' };
             };
-            const earnedDelta = (cur: number, prev: number): { text: string; color: string; dir: 'up' | 'down' | 'flat' } => {
-              if (prev <= 0) return { text: 'new', color: colors.textMuted, dir: 'flat' };
-              const pct = Math.round(((cur - prev) / prev) * 100);
-              if (Math.abs(pct) < 2) return { text: `same as ${prevLabel}`, color: colors.income, dir: 'flat' };
-              return { text: `${pct > 0 ? '+' : ''}${pct}% vs ${prevLabel}`, color: pct > 0 ? colors.income : colors.expense, dir: pct > 0 ? 'up' : 'down' };
-            };
-            const ds = delta(monthSpent, prevSpent);
-            const de = earnedDelta(monthEarned, prevEarned);
+            const ds = delta(monthSpent, prevSpent, colors.expense, colors.income, colors.textMuted);
+            const de = delta(monthEarned, prevEarned, colors.income, colors.expense, colors.income);
             return (
               <View style={styles.summaryRow}>
                 <Card padded style={styles.summaryCard}>

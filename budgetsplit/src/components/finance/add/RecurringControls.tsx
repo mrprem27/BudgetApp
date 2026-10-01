@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, Switch, Keyboard } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, Keyboard } from 'react-native';
+import { AppSwitch } from '../../ui/AppSwitch';
 import { Feather } from '@expo/vector-icons';
 import { fullDate } from '../../../lib/dateFormat';
 import { TabPills } from '../../ui/TabPills';
@@ -69,11 +70,10 @@ export function RecurringControls({
     return (
       <View style={styles.scheduleRow}>
         <Text style={styles.fieldLabel}>Repeat this</Text>
-        <Switch
+        <AppSwitch
           value={enabled}
           onValueChange={setEnabled}
-          trackColor={{ true: colors.settle, false: colors.bgMuted }}
-          thumbColor={colors.textPrimary}
+          tint={colors.settle}
           accessibilityLabel="Repeat on a schedule"
         />
       </View>
@@ -103,11 +103,10 @@ export function RecurringControls({
         <IconCircle icon="repeat" size={22} color={colors.settle} iconSize={12} />
         <Text style={styles.recurTitle}>{freqSummary}</Text>
         <View style={{ marginLeft: 'auto' }}>
-          <Switch
+          <AppSwitch
             value={enabled}
             onValueChange={setEnabled}
-            trackColor={{ true: colors.settle, false: colors.bgMuted }}
-            thumbColor={colors.textPrimary}
+            tint={colors.settle}
             accessibilityLabel="Repeat on a schedule"
           />
         </View>
