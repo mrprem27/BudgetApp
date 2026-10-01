@@ -20,7 +20,6 @@ import { TotalMoneyCard } from '../../src/components/finance/plan/TotalMoneyCard
 import { MoneyEditorSheet } from '../../src/components/finance/plan/MoneyEditorSheet';
 import { PayCardBillSheet } from '../../src/components/finance/plan/PayCardBillSheet';
 import { MoveMoneySheet } from '../../src/components/finance/plan/MoveMoneySheet';
-import { UnsetSourceSheet } from '../../src/components/finance/plan/UnsetSourceSheet';
 import { AmountRow } from '../../src/components/ui/AmountRow';
 import { useAssets } from '../../src/hooks/useAssets';
 import { AssetsSection } from '../../src/components/finance/plan/AssetsSection';
@@ -28,7 +27,7 @@ import { AffordHeroCard } from '../../src/components/finance/plan/AffordHeroCard
 import { HeaderIconButton } from '../../src/components/ui/HeaderIconButton';
 import { Card } from '../../src/components/ui/Card';
 import { SectionHeader } from '../../src/components/ui/SectionHeader';
-import { formatCompact, parseToPaise } from '../../src/lib/money';
+import { formatCompact, parseToPaise, paiseToInput } from '../../src/lib/money';
 
 import { addMonths, differenceInCalendarMonths } from 'date-fns';
 import { monthLabel } from '../../src/lib/dateFormat';
@@ -88,6 +87,8 @@ export default function SavingsScreen() {
   const contentInset = useContentInset({ tabBar: true });
   const { flags } = useFeatureFlags();
   const [tab, setTab] = useState<MoneyTab>('overview');
+  // Move money opened from the "Paid from not set" line, so it opens on that money.
+  const [moveUnset, setMoveUnset] = useState(false);
   const assetsData = useAssets();
   // A link can open a section (`/savings?tab=goals`) — "Save toward it in a goal" must land on goals.
   const { tab: tabParam } = useLocalSearchParams<{ tab?: string }>();
@@ -104,13 +105,13 @@ export default function SavingsScreen() {
     showMoneyEditor, setShowMoneyEditor, handleSaveMoney,
     showPayCardBill, setShowPayCardBill, handlePayCardBill, cardBillAccounts,
     showMoveInvest, setShowMoveInvest, handleMoveMoney,
-    unsetCount, openSetUnattributed, closeSetUnattributed, handleSetUnattributed,
     fundGoalId, setFundGoalId, fundGoalObj, fundAmt, setFundAmt, handleFundGoal,
     showNew, setShowNew, name, setName, target, setTarget,
     priority, setPriority, icon, setIcon, color, setColor,
     allocation, setAllocation, frequency, setFrequency, newDate, setNewDate,
     resetNew, handleCreate, handleReorder, showReorderHint,
   } = useSavingsTab();
+  const notSet = unattributed ?? 0;
 
   return (
     <View style={styles.container}>
@@ -156,18 +157,12 @@ export default function SavingsScreen() {
             assets={assets}
             onEdit={() => setShowMoneyEditor(true)}
             onPayCardBill={() => setShowPayCardBill(true)}
-            onMoveToInvestments={() => setShowMoveInvest(true)}
+            onMoveToInvestments={() => { setMoveUnset(false); setShowMoveInvest(true); }}
             onManageAssets={() => setTab('assets')}
             onManageAccounts={() => router.push('/accounts')}
-            onSetUnattributed={openSetUnattributed}
+            onSetUnattributed={() => { setMoveUnset(true); setShowMoveInvest(true); }}
           />
         )}
-        <UnsetSourceSheet
-          count={unsetCount}
-          amount={unattributed ?? 0}
-          onPick={handleSetUnattributed}
-          onClose={closeSetUnattributed}
-        />
 
         {/* Directly under your money, the question you ask of it (`U-46`). The same card leads
             Goals, where the answer is often "save toward it". */}
@@ -329,14 +324,19 @@ export default function SavingsScreen() {
       />
 
       {/* Opens as bank → your first asset (the common "I bought an investment" case); ⇅ flips it,
-          and any place can be either end. */}
+          and any place can be either end. From the "Paid from not set" line it opens on that money
+          instead (`U-99`): out of Not set when it holds some, into it from the bank when it is
+          spending with no source, the whole amount filled in and yours to lower. */}
       <MoveMoneySheet
         visible={showMoveInvest}
         onClose={() => setShowMoveInvest(false)}
         assets={assets}
         bucketBalances={byBucket}
-        from={{ kind: 'bucket', bucket: 'bank' }}
-        to={assets[0] ? { kind: 'asset', id: assets[0].id } : { kind: 'bucket', bucket: 'cash' }}
+        unset={notSet}
+        from={moveUnset && notSet >= 0 ? { kind: 'unset' } : { kind: 'bucket', bucket: 'bank' }}
+        to={moveUnset ? (notSet >= 0 ? { kind: 'bucket', bucket: 'bank' } : { kind: 'unset' })
+          : assets[0] ? { kind: 'asset', id: assets[0].id } : { kind: 'bucket', bucket: 'cash' }}
+        amount={moveUnset && notSet !== 0 ? paiseToInput(Math.abs(notSet)) : ''}
         onMove={handleMoveMoney}
       />
 

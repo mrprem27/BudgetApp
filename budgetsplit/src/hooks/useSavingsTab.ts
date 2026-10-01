@@ -13,7 +13,6 @@ import {
 import { setMoneyProfile } from '../db/queries/moneyProfile';
 import type { MoneyProfileWrite } from '../db/queries/moneyProfile';
 import { payCardBill, recordBalanceAdjustment } from '../db/queries/spendPower';
-import { countUnsetSourceEntries, setSourceForUnsetEntries } from '../db/queries/transactions';
 import { getMe } from '../db/queries/persons';
 import type { PayMethod } from '../constants/enums';
 import { Alert } from 'react-native';
@@ -51,7 +50,6 @@ export function useSavingsTab() {
   }, [showPayCardBill, db]);
   const [showMoveInvest, setShowMoveInvest] = useState(false);
   // "Paid from not set": how many of my entries, while its sheet is open (`U-62`).
-  const [unsetCount, setUnsetCount] = useState<number | null>(null);
   const [fundGoalId, setFundGoalId] = useState<string | null>(null);
   const [fundAmt, setFundAmt] = useState('');
 
@@ -127,22 +125,6 @@ export function useSavingsTab() {
     await payCardBill(db, amountPaise, undefined, accounts);
     haptic.success();
     setShowPayCardBill(false);
-    await reload();
-    refresh();
-  }
-
-  async function openSetUnattributed() {
-    const me = await getMe(db);
-    if (me) setUnsetCount(await countUnsetSourceEntries(db, me.id));
-  }
-
-  /** Every entry of mine with no Paid from takes `method`, so the amount lands in that place. */
-  async function handleSetUnattributed(method: PayMethod) {
-    const me = await getMe(db);
-    if (!me) return;
-    await setSourceForUnsetEntries(db, me.id, method);
-    haptic.success();
-    setUnsetCount(null);
     await reload();
     refresh();
   }
@@ -253,7 +235,6 @@ export function useSavingsTab() {
     showMoneyEditor, setShowMoneyEditor, handleSaveMoney,
     showPayCardBill, setShowPayCardBill, handlePayCardBill, cardBillAccounts,
     showMoveInvest, setShowMoveInvest, handleMoveMoney,
-    unsetCount, openSetUnattributed, closeSetUnattributed: () => setUnsetCount(null), handleSetUnattributed,
     // fund a goal
     fundGoalId, setFundGoalId, fundGoalObj, fundAmt, setFundAmt, handleFundGoal,
     // new-goal form

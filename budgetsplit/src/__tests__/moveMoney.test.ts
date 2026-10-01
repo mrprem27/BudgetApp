@@ -85,6 +85,60 @@ describe('moveMoney', () => {
     expect(after.worth).toBe(before.worth);
   });
 
+  /*
+   * "Paid from not set" as a place (`U-99`): the line is the movement on entries with no Paid
+   * from, so a row with none moves the line and its pair moves the place. Any part of it, either way.
+   */
+  describe('not set ↔ a place', () => {
+    const unset = { kind: 'unset' } as const;
+    const lines = async (db: ReturnType<typeof createTestDb>) => {
+      const c = await getCashPosition(asDb(db));
+      return { notSet: c.unattributed ?? 0, bank: c.byBucket?.bank ?? 0, cashBucket: c.byBucket?.cash ?? 0, total: c.available };
+    };
+    /** An entry of mine with no Paid from: income raises the line, an expense lowers it. */
+    const entry = (db: ReturnType<typeof createTestDb>, kind: 'income' | 'expense', paise: number) => {
+      const me = (db.raw.prepare('SELECT id FROM person WHERE is_me = 1').get() as { id: string }).id;
+      const g = (db.raw.prepare('SELECT id FROM budget_group WHERE is_personal = 1').get() as { id: string }).id;
+      const id = `e-${kind}-${paise}`;
+      db.raw.prepare("INSERT INTO txn (id, group_id, kind, entry_mode, date, category, pay_method, is_deleted, created_at, updated_at) VALUES (?, ?, ?, 'quick', ?, 'Other', NULL, 0, ?, ?)").run(id, g, kind, Date.now() - 1000, Date.now(), Date.now());
+      db.raw.prepare('INSERT INTO txn_payment (txn_id, person_id, amount) VALUES (?, ?, ?)').run(id, me, paise);
+      if (kind === 'expense') db.raw.prepare('INSERT INTO txn_share (txn_id, person_id, amount) VALUES (?, ?, ?)').run(id, me, paise);
+    };
+
+    it('part of it moves to cash; the rest stays, and total cash does not change', async () => {
+      const { db } = await setup();
+      entry(db, 'income', 500000);
+      const before = await lines(db);
+      expect(before.notSet).toBe(500000);
+      await moveMoney(asDb(db), unset, cashB, 200000);
+      const after = await lines(db);
+      expect(after.notSet).toBe(300000);
+      expect(after.cashBucket).toBe(before.cashBucket + 200000);
+      expect(after.total).toBe(before.total);
+    });
+
+    it('spending with no source is covered from a place, and the line comes back to zero', async () => {
+      const { db } = await setup();
+      entry(db, 'expense', 400000);
+      const before = await lines(db);
+      expect(before.notSet).toBe(-400000);
+      await moveMoney(asDb(db), bank, unset, 400000);
+      const after = await lines(db);
+      expect(after.notSet).toBe(0);
+      expect(after.bank).toBe(before.bank - 400000);
+      expect(after.total).toBe(before.total);
+    });
+
+    it('not to or from an asset, and not to itself; a refusal writes nothing', async () => {
+      const { db } = await setup();
+      const gold = await insertAsset(asDb(db), { name: 'Gold', balance: 1000 });
+      await expect(moveMoney(asDb(db), unset, asset(gold.id), 100)).rejects.toMatchObject({ reason: 'unset-asset' });
+      await expect(moveMoney(asDb(db), asset(gold.id), unset, 100)).rejects.toMatchObject({ reason: 'unset-asset' });
+      await expect(moveMoney(asDb(db), unset, unset, 100)).rejects.toMatchObject({ reason: 'same-place' });
+      expect((db.raw.prepare("SELECT COUNT(*) AS n FROM txn WHERE kind = 'settlement'").get() as { n: number }).n).toBe(0);
+    });
+  });
+
   it('refuses the same place, a non-positive amount, and overdrawing an asset', async () => {
     const { db } = await setup();
     const a = await insertAsset(asDb(db), { name: 'A', balance: 1000 });

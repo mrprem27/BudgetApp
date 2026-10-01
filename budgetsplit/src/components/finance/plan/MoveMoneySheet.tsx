@@ -20,7 +20,7 @@ import type { Asset, MoveEndpoint } from '../../../db/queries/assets';
 const BUCKET_PAY: Record<AssetBucket, PayMethod> = { bank: PayMethod.Bank, cash: PayMethod.Cash, wallet: PayMethod.Wallet };
 
 /** A stable key for an endpoint, for comparing and for React. */
-export const endpointKey = (e: MoveEndpoint) => (e.kind === 'bucket' ? `b:${e.bucket}` : `a:${e.id}`);
+export const endpointKey = (e: MoveEndpoint) => (e.kind === 'bucket' ? `b:${e.bucket}` : e.kind === 'asset' ? `a:${e.id}` : 'unset');
 
 type Place = {
   key: string;
@@ -47,9 +47,12 @@ type Side = 'from' | 'to';
  * it; tapping it opens the full list right there (a sheet inside a sheet fights over
  * `lib/sheetStage.ts`, so the list opens in place). Picking the place already chosen on the
  * other side swaps the two, and so does the ⇅ between them.
+ *
+ * "Not set" is a place here too while it holds anything (`U-99`): the money on entries with no
+ * Paid from. Any part of it moves to Bank, Cash or Wallet, or is covered from one of them.
  */
 export function MoveMoneySheet({
-  visible, onClose, assets, bucketBalances, from: initialFrom, to: initialTo, busy, onMove,
+  visible, onClose, assets, bucketBalances, unset = 0, from: initialFrom, to: initialTo, amount: initialAmount = '', busy, onMove,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -57,9 +60,13 @@ export function MoveMoneySheet({
   assets: Pick<Asset, 'id' | 'name' | 'kind' | 'balance'>[];
   /** Today's balance in bank / cash / wallet, shown beside each when given. */
   bucketBalances?: Partial<Record<AssetBucket, number>>;
+  /** What entries with no Paid from add up to. Non-zero makes "Not set" a place in the list. */
+  unset?: number;
   /** What the sheet opens on. */
   from: MoveEndpoint;
   to: MoveEndpoint;
+  /** The amount it opens with, as typed text; empty by default. */
+  amount?: string;
   busy?: boolean;
   onMove: (from: MoveEndpoint, to: MoveEndpoint, amountPaise: number) => void;
 }) {
@@ -69,11 +76,11 @@ export function MoveMoneySheet({
   const [picking, setPicking] = useState<Side | null>(null);
 
   // Seed on open only — `assets` is rebuilt on every reload and must not blank a half-typed amount.
-  const seed = useRef({ from: initialFrom, to: initialTo });
-  seed.current = { from: initialFrom, to: initialTo };
+  const seed = useRef({ from: initialFrom, to: initialTo, amount: initialAmount });
+  seed.current = { from: initialFrom, to: initialTo, amount: initialAmount };
   useEffect(() => {
     if (!visible) return;
-    setFrom(seed.current.from); setTo(seed.current.to); setAmount(''); setPicking(null);
+    setFrom(seed.current.from); setTo(seed.current.to); setAmount(seed.current.amount); setPicking(null);
   }, [visible]);
 
   const places: Place[] = [
@@ -84,6 +91,9 @@ export function MoveMoneySheet({
     ...assets.map((a): Place => ({
       key: `a:${a.id}`, label: a.name, icon: ASSET_KIND_ICON[a.kind], balance: a.balance, endpoint: { kind: 'asset', id: a.id },
     })),
+    ...(unset !== 0 || initialFrom.kind === 'unset' || initialTo.kind === 'unset'
+      ? [{ key: 'unset', label: 'Not set', icon: 'help-circle', balance: unset, endpoint: { kind: 'unset' } } satisfies Place]
+      : []),
   ];
   const find = (e: MoveEndpoint) => places.find(p => p.key === endpointKey(e));
   const fromPlace = find(from), toPlace = find(to);
@@ -91,7 +101,9 @@ export function MoveMoneySheet({
 
   const paise = parseToPaise(amount);
   const overdraw = !!fromAsset && paise > fromAsset.balance;
-  const valid = paise > 0 && !overdraw && endpointKey(from) !== endpointKey(to) && !!fromPlace && !!toPlace;
+  // Money with no Paid from has to land in a place before it can be invested.
+  const unsetToAsset = (from.kind === 'unset' && to.kind === 'asset') || (from.kind === 'asset' && to.kind === 'unset');
+  const valid = paise > 0 && !overdraw && !unsetToAsset && endpointKey(from) !== endpointKey(to) && !!fromPlace && !!toPlace;
 
   const pick = (side: Side, e: MoveEndpoint) => {
     if (side === 'from') { if (endpointKey(e) === endpointKey(to)) setTo(from); setFrom(e); }
@@ -152,6 +164,7 @@ export function MoveMoneySheet({
           <AmountRow icon="arrow-right" label="Amount" value={amount} onChangeText={setAmount} autoFocus={!picking} />
         </Card>
         {overdraw && <Text style={styles.error}>{fromAsset?.name} only holds {formatRupees(fromAsset?.balance ?? 0)}.</Text>}
+        {unsetToAsset && <Text style={styles.error}>Move it to Bank, Cash or Wallet first.</Text>}
 
         <View style={styles.summary}>
           <InfoLabel

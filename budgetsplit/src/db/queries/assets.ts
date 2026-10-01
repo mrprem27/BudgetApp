@@ -56,7 +56,7 @@ export type Asset = {
 /** Refusals a caller must handle. Thrown, not returned, because every one of
  *  these means the write did not happen and the UI must say so. */
 export class AssetError extends Error {
-  constructor(readonly reason: 'no-asset' | 'no-me' | 'no-personal-group' | 'bad-amount' | 'insufficient' | 'same-place', message: string) {
+  constructor(readonly reason: 'no-asset' | 'no-me' | 'no-personal-group' | 'bad-amount' | 'insufficient' | 'same-place' | 'unset-asset', message: string) {
     super(message);
     this.name = 'AssetError';
   }
@@ -321,10 +321,14 @@ export async function transferFromAsset(
   return id;
 }
 
-/** One end of a move: a money bucket, or an asset from the register. */
+/**
+ * One end of a move: a money bucket, an asset from the register, or `unset` — the money on
+ * entries with no Paid from, which Money shows as its own line (`U-99`).
+ */
 export type MoveEndpoint =
   | { kind: 'bucket'; bucket: AssetBucket }
-  | { kind: 'asset'; id: string };
+  | { kind: 'asset'; id: string }
+  | { kind: 'unset' };
 
 const BUCKET_PAY: Record<AssetBucket, PayMethod> = {
   bank: PayMethod.Bank, cash: PayMethod.Cash, wallet: PayMethod.Wallet,
@@ -347,7 +351,13 @@ const BUCKET_LABEL: Record<AssetBucket, string> = { bank: 'Bank', cash: 'Cash', 
  * - bucket → bucket (the ATM case): a row out of one, a row into the other — bucket
  *   balances move, total cash does not.
  *
- * Net worth is flat in all four, which is the rule this file exists for. Everything is
+ * - not set ↔ bucket (`U-99`): the same two rows as the ATM case, with one of them carrying no
+ *   Paid from. "Paid from not set" is the sum of movement on entries with none, so a row with
+ *   none moves that line and the other row moves the place. Any part of it can be moved, either
+ *   way: out of Not set when it holds money, into it when it is spending nobody sourced. Not to
+ *   or from an asset: say which place it went through first.
+ *
+ * Net worth is flat in all of them, which is the rule this file exists for. Everything is
  * written in ONE transaction; a move that lands only its first half would drop net worth
  * by the amount with a correct-looking row behind it. An asset never goes negative — the
  * same SQL guard as `transferFromAsset`, checked again inside the transaction.
@@ -366,7 +376,7 @@ export async function moveMoney(
   }
   const same = from.kind === to.kind && (from.kind === 'bucket'
     ? from.bucket === (to as { bucket: AssetBucket }).bucket
-    : from.id === (to as { id: string }).id);
+    : from.kind === 'asset' ? from.id === (to as { id: string }).id : true);
   if (same) throw new AssetError('same-place', 'Pick two different places');
 
   const amount = Math.round(amountPaise);
@@ -376,7 +386,7 @@ export async function moveMoney(
   if (!personal) throw new AssetError('no-personal-group', 'No personal group');
 
   const load = async (e: MoveEndpoint) => {
-    if (e.kind === 'bucket') return null;
+    if (e.kind !== 'asset') return null;
     const a = await getAssetById(db, e.id);
     if (!a) throw new AssetError('no-asset', 'That asset no longer exists');
     return a;
@@ -387,10 +397,22 @@ export async function moveMoney(
   }
 
   /** A leg is one settlement row: money leaving a place (`out`, payments only) or arriving (`in`, shares only). */
-  type Leg = { dir: 'out' | 'in'; bucket: AssetBucket; assetId: string | null; note: string; category: string };
+  // `bucket: null` is a row with no Paid from: it moves the "not set" line and no place.
+  type Leg = { dir: 'out' | 'in'; bucket: AssetBucket | null; assetId: string | null; note: string; category: string };
   const via = opts.via ?? 'bank';
   const legs: Leg[] = [];
-  if (from.kind === 'bucket' && toAsset) {
+  if (from.kind === 'unset' || to.kind === 'unset') {
+    const place = from.kind === 'unset' ? to : from;
+    if (place.kind !== 'bucket') throw new AssetError('unset-asset', 'Move it to Bank, Cash or Wallet first');
+    const name = BUCKET_LABEL[place.bucket];
+    if (from.kind === 'unset') {
+      legs.push({ dir: 'out', bucket: null, assetId: null, note: `Moved to ${name}`, category: 'Other' });
+      legs.push({ dir: 'in', bucket: place.bucket, assetId: null, note: 'From money with no Paid from', category: 'Other' });
+    } else {
+      legs.push({ dir: 'out', bucket: place.bucket, assetId: null, note: 'For entries with no Paid from', category: 'Other' });
+      legs.push({ dir: 'in', bucket: null, assetId: null, note: `Covered from ${name}`, category: 'Other' });
+    }
+  } else if (from.kind === 'bucket' && toAsset) {
     legs.push({ dir: 'out', bucket: from.bucket, assetId: toAsset.id, note: `Moved to ${toAsset.name}`, category: INVESTMENT_CATEGORY });
   } else if (fromAsset && to.kind === 'bucket') {
     legs.push({ dir: 'in', bucket: to.bucket, assetId: fromAsset.id, note: `Moved from ${fromAsset.name}`, category: INVESTMENT_CATEGORY });
@@ -415,7 +437,7 @@ export async function moveMoney(
         date: opts.date ?? now,
         category: leg.category,
         note: leg.note,
-        payMethod: BUCKET_PAY[leg.bucket],
+        payMethod: leg.bucket ? BUCKET_PAY[leg.bucket] : undefined,
         assetId: leg.assetId ?? undefined,
         payments: leg.dir === 'out' ? [{ personId: me.id, amount }] : [],
         shares: leg.dir === 'in' ? [{ personId: me.id, amount }] : [],
