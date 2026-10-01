@@ -1,33 +1,41 @@
-# HANDOFF — 2026-10-01, later (read first; continue from here)
+# HANDOFF — 2026-10-01, night (read first; continue from here)
 
 Branch `claude/branch-selection-gi7lyy`. **Commits ahead of origin, NOT pushed** (push needs the
-`mrprem27` account switch, see Rules). Server deployed after the folder split (U-84).
-Gates at the last full run: 3,004 tests green, tsc clean for the app. Nothing from today has
-been seen on a phone. Tracker: 304 items (95 open), 95 in §11.
+`mrprem27` account switch, see Rules). Server deployed after the folder split (U-84); nothing server-side
+changed since but its README. Gates at the last full run: 3,026 tests green, tsc clean for the app.
+Nothing from today has been seen on a phone. Tracker: 310 items (94 open), 101 in §11.
 
-## Built today, all committed (the why is in FINDINGS §11, U-71 to U-95)
-Everything in the earlier handoff, plus: **Profile screen** (U-92: `/settings/account` is Profile; Settings'
-top card is the profile row and one badge row) · **demo starter set** (U-94: rent, groceries, a meal, a bill
-exist from the 1st) · **report PDF rebuilt** (U-95: header, four figures against the period before, facts,
-ring with matching legend, bars with average, by-group table, entries; no flex, sized SVG).
+## Built today, all committed (the why is in FINDINGS §11, U-71 to U-101)
+Earlier: speed, budget and recurring cards, person page, Members tab, report PDF, analytics, Android readiness.
+This session: **Profile screen** in sections, every badge under the profile row in Settings (U-92) · **demo
+starter set** (U-94) · **report PDF rebuilt** as a statement (U-95) · Upcoming listed once, to month-end, the
+bell on the same window (U-96) · group totals follow the filters (U-97) · Simplify is a switch (U-98) ·
+**Not set is a place in Move money** (U-99) · **Insights as tiles**, one sheet each (U-91) · consistency
+pass, app and server (U-100) · then code review, simplify, code review again, all findings applied.
 
 ## Open — next, in order
-1. **U-91 Insights as tiles** (plan + the one-sheet-at-a-time constraint in FINDINGS). Not started.
-2. **U-93** the group row's labels: waiting on the user's choice.
-3. **The PDF on the phone:** charts were reported missing or broken there before the rebuild; the cause was
-   not reproduced (headless Chrome renders it). If they are still missing, ask for a screenshot.
-4. **Speed, step 5** (`docs/SPEC-SPEED-PDF-READS-FOLDERS.md` §1): per-group reads on Groups (73 queries),
-   Reports (96), budget summary (16). Wants the user's SCREEN LOADS numbers from the dev screen first.
-5. **Waiting on the user:** Mixpanel project token + service account · Android build route (Android Studio
-   here, or EAS; no JDK / SDK on this Mac, no `eas.json`) · whether to push · phone pass on everything above.
-6. Later, agreed: the pure split for the v1 budget / reports / money reads, `src/shared`, `src/lib` by
-   area after the phone pass.
+1. **The phone pass on today's work.** Most worth looking at: the Insights preferences sheet stepping aside
+   for its pickers; the PDF's charts (reported missing on the phone before the rebuild, never reproduced);
+   Profile; the group totals row with filters on.
+2. **U-101** `SCREENS.md`'s Money section still describes the old Plan screen. A doc rewrite.
+3. **Speed, step 5** (`docs/SPEC-SPEED-PDF-READS-FOLDERS.md` §1): Reports read 565 ms on the user's phone,
+   build type unknown. Check with a release build before cutting its per-group reads.
+4. **Parked by the user:** stop editing balances directly and record an adjustment entry instead (as Fold does).
+5. **Waiting on the user:** Mixpanel project token + service account · Android build route · whether to push.
+6. **Known and not fixed** (from the reviews, outside today's diff): Settings computes every badge on each
+   focus (spec step 4); a sheet opened from inside a sheet needs its caller to hide the parent by hand, in
+   four places (a stack in `lib/sheetStage` would remove that; wants a device); seven hand-configured
+   switches with no shared toggle primitive; Reports and its PDF word "same as last month" by different
+   thresholds.
 7. Needs the phone / user: U-16, U-20, W1-28/29/32 spacing, D-01–D-03 UPI, live updates with two
    signed-in phones, receipt scan after rebuild.
 8. Waiting outside repo: Workers Paid (DQ-95 → DQ-105, DQ-107), Apple (B-02, push, TestFlight), Brevo key
    (B-07), privacy/store (B-08, B-10, B-13), merge to main (B-19).
 
 ## Rules learned this session
+A SQL statement over `txn` must show its two exclusions (`recur_freq IS NULL`, `NOT_AWAITING_APPROVAL`) in its own
+template, or `txnInvariant` / `approvalInvariant` fail: do not split the WHERE into a second constant.
+Do not rewrite Paid from on entries in bulk: a shared entry's update makes the server re-ask approvals.
 To look at the PDF without a phone: a throwaway jest test (`freshPhone` + `loadDemoData` + `loadReportsData` +
 `buildReportHtml`, write the HTML out), then headless Chrome `--print-to-pdf`; delete the test after.
 Tracker counts only via script (recount rows + Closed lists; §0 summary table is unguarded). New route →
