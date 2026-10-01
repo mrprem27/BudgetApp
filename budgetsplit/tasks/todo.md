@@ -1,48 +1,32 @@
-# HANDOFF — 2026-10-01 (read first; continue from here)
+# HANDOFF — 2026-10-01, evening (read first; continue from here)
 
-Branch `claude/branch-selection-gi7lyy`, pushed. Plan: `docs/SPEC-SERVER-WEBAPP.md` §7; readiness per
-module: `docs/TRACKER.md` §0a. Tests 2,933 green, tsc clean (app + `server/api`). Servers deployed:
-API (fresh D1 `feba219a…`, live hub, `/v1`, nightly cron) and receipt proxy (U-70 fix).
+Branch `claude/branch-selection-gi7lyy`. **15 commits ahead of origin, NOT pushed** (push needs the
+`mrprem27` account switch, see Rules). Working tree clean. Server deployed after the folder split (U-84).
+Gates at the last full run: 3,000 tests green, tsc clean for app and `server/api`. Nothing from today has
+been seen on a phone. Tracker: 302 items (96 open), 93 in §11.
 
-## Done this session (committed)
-1a named accounts (U-68) · receipt scan qty/503 fix (U-70) · 1b card bill bank→card (DQ-109) · 1c closed on
-defaults · 2a live updates (DQ-108) · 2b cleanup cron · 2c `/v1` reads (DQ-104) · Paid from on every row
-(DQ-18) · one red on Home (DQ-12) · Help SectionCard (DQ-17) · backOr everywhere (OV-10) · itemize grid
-(U-69) · bottom space via `useContentInset` + guard · Budget/Recurring boxed (SectionCard), Expand all in top
-card, one top-card size · Stopped recurring = own view · recurring search + sort (Next/Newest/Amount) ·
-Groups search (≥5) · Personal "Friends" + "This month · N filters" · **badges ~30** (`lib/badges.ts`),
-smaller dimmed board, Earned box collapsed at bottom of Badges screen.
-
-## Done 2026-10-01 (NOT committed yet)
-U-71 to U-75 are now rows (TRACKER §11 + FINDINGS; 299 items (93 open), 90 in §11) · **U-76** section icons from one map
-(`sectionIcon` in `constants/categories`; Categories, budget editor, Budget tab boxes) · **U-77** Home hero
-padding one step down · **U-78** `HeaderIconButton showLabel` on Recurring (Money) and Reports (Insights) ·
-**U-75 follow-up**: six more badges (36 at most), board disc 24pt everywhere · **U-79** person page redone
-(balance card, one options card, header Edit; `usePersonEdit` shared with Friends) · **U-80** Budget/Recurring
-decluttered (no recurring search/sort, Stopped = closed box on the page, tinted card back, Expand all on the
-card's last line, section bar only when open) · **U-81** demo data no longer future-dated before 10:00/12:00 · **U-82** Home loader split
-(`loadHomeBase` + `loadHomePeriod`): a pill tap is 6 to 22 queries, was 90 to 106 · **U-83** Search off Home,
-Personal opens on All · Recurring tab = plain list + "All recurring"; Money's page = search, sort chips, Stopped
-box · Budget + Recurring share `SummaryCard` · badge board smaller again · Search screen DELETED (Personal on All replaces it) ·
-PDF has a category ring + spend bars · demo data sensible by day / month / year (`thisMonth` null, `recent`).
+## Built today, all committed (the why is in FINDINGS §11, U-71 to U-90)
+Speed (U-02 part, U-82) · one top card for Budget and Recurring, Budget period dropdown, Recurring tab vs
+full page (U-80, U-89) · person page (U-79) · Members tab (U-90) · totals row + group-scoped Reports (U-88) ·
+profile + account card, preferences on Insights (U-85, U-86) · report PDF with charts (U-19) · demo data
+(U-81) · Search screen deleted (U-83) · server folders (U-84) · analytics rebuilt (`docs/SPEC-ANALYTICS.md`)
+· Android code readiness (`docs/SPEC-ANDROID.md`) · section boxes open instantly (flicker) · sheets scroll
+to their bottom edge.
 
 ## Open — next, in order
-00. **Two specs built 2026-10-01, both waiting on the user:** `docs/SPEC-ANALYTICS.md` (needs a Mixpanel project
-   token in `.env` + a service account for `scripts/usage-report.js`) and `docs/SPEC-ANDROID.md` (code ready,
-   never built: no JDK / Android SDK on this Mac; Android Studio or EAS, user's pick).
-0. **`docs/SPEC-SPEED-PDF-READS-FOLDERS.md`**, answered 2026-10-01 (release build; PDF = Reports export; v1
-   endpoints later; server folders now). Built: speed steps 0 to 4, the PDF (U-19), the server split (U-84, NOT
-   deployed). Open: speed step 5 (per-group reads) after the user's load times from the dev screen; the pure
-   split for v1; `src/shared`; `src/lib` by area after the phone pass.
-1. Person page (U-79): user review on phone.
-3. Lag elsewhere (user, 2026-10-01): U-02 full reload on every focus, and the engine snapshot's ~40 queries
-   (Home, Money, Afford, Badges). Needs the user to name the slow screens, and a release build to judge.
-4. Budget/Recurring (U-80), badges + labelled header buttons: user review on phone (board wrap at 36, pill width beside the large title).
-4. Needs the phone / user: U-16, U-20, W1-28/29/32 spacing, U-02 perf, D-01–D-03 UPI,
-   live updates with two signed-in phones, receipt scan after rebuild (60 s timeout needs new build).
-5. Waiting outside repo: Workers Paid (DQ-95 → DQ-105 server repeat posting, DQ-107 queues), Apple
-   (B-02, push notifications, TestFlight), Brevo key (B-07), privacy/store (B-08, B-10, B-13), merge to main (B-19),
-   Android native project (V-07), `/v1` budget/reports/money reads (need shared lib first).
+1. **U-92 Profile screen** (the user's most recent ask; plan in FINDINGS). Not started.
+2. **U-91 Insights as tiles** (plan + the one-sheet-at-a-time constraint in FINDINGS). Not started.
+3. **U-93** the group row's labels: waiting on the user's choice.
+4. **Speed, step 5** (`docs/SPEC-SPEED-PDF-READS-FOLDERS.md` §1): per-group reads on Groups (73 queries),
+   Reports (96), budget summary (16). Wants the user's SCREEN LOADS numbers from the dev screen first.
+5. **Waiting on the user:** Mixpanel project token + service account · Android build route (Android Studio
+   here, or EAS; no JDK / SDK on this Mac, no `eas.json`) · whether to push · phone pass on everything above.
+6. Later, agreed: the pure split for the v1 budget / reports / money reads, `src/shared`, `src/lib` by
+   area after the phone pass.
+7. Needs the phone / user: U-16, U-20, W1-28/29/32 spacing, D-01–D-03 UPI, live updates with two
+   signed-in phones, receipt scan after rebuild.
+8. Waiting outside repo: Workers Paid (DQ-95 → DQ-105, DQ-107), Apple (B-02, push, TestFlight), Brevo key
+   (B-07), privacy/store (B-08, B-10, B-13), merge to main (B-19).
 
 ## Rules learned this session
 Tracker counts only via script (recount rows + Closed lists; §0 summary table is unguarded). New route →
