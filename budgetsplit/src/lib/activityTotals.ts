@@ -31,3 +31,25 @@ export function activityTotals(rows: readonly TotalsRow[], meId: string): Activi
   }
   return { spent, income };
 }
+
+/**
+ * A group's spending since `fromMs`: my share, and the whole group's (`U-88`, the row under a
+ * group's header). Spending only; a transfer or an entry waiting for approval is neither.
+ */
+export function groupSpend(
+  rows: readonly {
+    kind: string; date: number; pendingApproval?: boolean; is_deleted?: number | boolean | null;
+    shares: ReadonlyArray<{ personId: string; amount: number }>;
+  }[],
+  meId: string,
+  fromMs: number,
+): { mine: number; everyone: number } {
+  let mine = 0, everyone = 0;
+  for (const t of rows) {
+    if (t.kind !== 'expense' || t.pendingApproval || t.is_deleted || t.date < fromMs) continue;
+    mine += myShareOf(t, meId);
+    everyone += t.shares.reduce((s, x) => s + x.amount, 0);
+  }
+  return { mine, everyone };
+}
+

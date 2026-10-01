@@ -1,4 +1,4 @@
-import { activityTotals, type TotalsRow } from '../lib/activityTotals';
+import { activityTotals, groupSpend, type TotalsRow } from '../lib/activityTotals';
 
 const ME = 'me';
 const row = (r: Partial<TotalsRow> & Pick<TotalsRow, 'kind'>): TotalsRow =>
@@ -41,3 +41,24 @@ describe('activityTotals (U-52)', () => {
     expect(t).toEqual({ spent: 0, income: 0 });
   });
 });
+
+describe('groupSpend: a group\'s month, mine and everyone\'s (U-88)', () => {
+  const at = (d: number) => new Date(2026, 9, d, 12).getTime();
+  const from = new Date(2026, 9, 1).getTime();
+  const three = [{ personId: ME, amount: 300 }, { personId: 'a', amount: 300 }, { personId: 'b', amount: 300 }];
+  it('adds my share and the whole bill, this month only', () => {
+    expect(groupSpend([
+      { kind: 'expense', date: at(3), shares: three },
+      { kind: 'expense', date: at(5), shares: [{ personId: 'a', amount: 500 }] },      // not mine at all
+      { kind: 'expense', date: new Date(2026, 8, 30).getTime(), shares: three },        // last month
+    ], ME, from)).toEqual({ mine: 300, everyone: 1400 });
+  });
+  it('leaves out transfers, deleted entries and entries waiting for me', () => {
+    expect(groupSpend([
+      { kind: 'settlement', date: at(3), shares: [{ personId: 'a', amount: 900 }] },
+      { kind: 'expense', date: at(3), shares: three, is_deleted: 1 },
+      { kind: 'expense', date: at(3), shares: three, pendingApproval: true },
+    ], ME, from)).toEqual({ mine: 0, everyone: 0 });
+  });
+});
+

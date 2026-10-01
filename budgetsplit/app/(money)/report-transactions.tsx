@@ -71,8 +71,8 @@ const TYPE_TABS = [
  */
 export default function ReportTransactionsScreen() {
   const router = useRouter();
-  const { month: monthParam, category, from: fromParam, to: toParam } =
-    useLocalSearchParams<{ month?: string; category?: string; from?: string; to?: string }>();
+  const { month: monthParam, category, from: fromParam, to: toParam, group: groupParam } =
+    useLocalSearchParams<{ month?: string; category?: string; from?: string; to?: string; group?: string }>();
   // A custom period from Reports (`U-60`): the list covers exactly it, and the month arrows go.
   const range = fromParam && toParam && Number.isFinite(+fromParam) && Number.isFinite(+toParam)
     ? { from: +fromParam, to: +toParam } : undefined;
@@ -88,7 +88,7 @@ export default function ReportTransactionsScreen() {
   const [sort, setSort] = useState<SortKey>('date');
   const listPad = useContentInset();
 
-  const { data, loading, error: loadError, refreshing, onRefresh, reload } = useScreenData((db) => loadReportTransactions(db, month, range), [monthKey, range?.from, range?.to]);
+  const { data, loading, error: loadError, refreshing, onRefresh, reload } = useScreenData((db) => loadReportTransactions(db, month, range, groupParam), [monthKey, range?.from, range?.to, groupParam]);
 
   const myId = data?.myId ?? '';
   const personalId = data?.personalId ?? null;

@@ -71,7 +71,8 @@ function buildSummary(group: BudgetGroup, txns: TxnWithSplits[], meId: string): 
  * budget bars are left out (empty / null) — a trend of months says nothing about an arbitrary
  * span, and budgets are monthly limits that a span of 40 days cannot be measured against.
  */
-export async function loadReportsData(db: SQLite.SQLiteDatabase, month: Date, range?: ReportRange) {
+/** `groupId`: one group's report (opened from that group's row); omitted, everything you are in. */
+export async function loadReportsData(db: SQLite.SQLiteDatabase, month: Date, range?: ReportRange, groupId?: string | null) {
       /*
        * Archived groups included, so the page adds up to itself.
        *
@@ -89,7 +90,9 @@ export async function loadReportsData(db: SQLite.SQLiteDatabase, month: Date, ra
       const [live, archived, me] = await Promise.all([
         getAllGroups(db), getArchivedGroups(db), getMe(db),
       ]);
-      const grps = [...live, ...archived];
+      const everyGroup = [...live, ...archived];
+      const grps = groupId ? everyGroup.filter(g => g.id === groupId) : everyGroup;
+      const scope = groupId ?? null;
       // Every figure below is my share (see `buildSummary`).
       const meId = me?.id ?? '';
 
@@ -120,12 +123,12 @@ export async function loadReportsData(db: SQLite.SQLiteDatabase, month: Date, ra
             ]);
             return { summary: buildSummary(g, gTxns, meId), analytics: an };
           })),
-          getTransactionsInRange(db, null, yFrom, yTo),
-          getTransactionsInRange(db, null, fromMs, toMs),
+          getTransactionsInRange(db, scope, yFrom, yTo),
+          getTransactionsInRange(db, scope, fromMs, toMs),
           getCategories(db, 'expense'),
-          getTransactionsInRange(db, null, pStart, pEnd),
+          getTransactionsInRange(db, scope, pStart, pEnd),
           Promise.all(trendMonths.map((m) =>
-            getTransactionsInRange(db, null, startOfMonth(m).getTime(), endOfMonth(m).getTime()))),
+            getTransactionsInRange(db, scope, startOfMonth(m).getTime(), endOfMonth(m).getTime()))),
         ]);
 
       const sums: GroupSummary[] = perGroup.map((r) => r.summary);
@@ -216,7 +219,10 @@ export async function loadReportsData(db: SQLite.SQLiteDatabase, month: Date, ra
         analyticsByGroup: anMap,
         // My Budget for the selected month — the one figure the Personal group's
         // (absent) bar would otherwise have tried to be.
-        myBudget: range ? null : await getMyGlobalBudgetSummary(db, meId, { now: month }),
+        // My Budget spans every group, so it has no place on one group's report.
+        myBudget: range || scope ? null : await getMyGlobalBudgetSummary(db, meId, { now: month }),
+        /** The one group this report covers, when it covers one. */
+        scopeGroup: scope ? grps[0] ?? null : null,
         yearIncome: yIncome,
         yearExpense: yExpense,
         yearTopCat: topCat,
@@ -238,12 +244,12 @@ export type ReportSort = 'date' | 'amount';
  * archived groups too: their entries are in the month, and an unnamed row reads
  * as Personal.
  */
-export async function loadReportTransactions(db: SQLite.SQLiteDatabase, month: Date, range?: ReportRange) {
+export async function loadReportTransactions(db: SQLite.SQLiteDatabase, month: Date, range?: ReportRange, groupId?: string | null) {
   const [live, archived, me, txns, knownCats] = await Promise.all([
     getAllGroups(db),
     getArchivedGroups(db),
     getMe(db),
-    getTransactionsInRange(db, null, range ? range.from : startOfMonth(month).getTime(), range ? range.to : endOfMonth(month).getTime()),
+    getTransactionsInRange(db, groupId ?? null, range ? range.from : startOfMonth(month).getTime(), range ? range.to : endOfMonth(month).getTime()),
     // Only needed to resolve the folded "Others" filter — the category *list* is gone,
     // because the pie chart you arrived from is the category picker.
     getCategories(db, 'expense'),

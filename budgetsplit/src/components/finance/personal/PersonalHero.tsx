@@ -1,5 +1,4 @@
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { View, Text, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, type, space, radius, layout } from '../../tokens';
 import { alpha } from '../../../theme';
@@ -7,6 +6,7 @@ import { formatCompact } from '../../../lib/money';
 import { oweView } from '../../../lib/owe';
 import { kindColor } from '../../../lib/kindTheme';
 import { MemberAvatar } from '../MemberAvatar';
+import { LedgerTotalsRow } from '../LedgerTotalsRow';
 import type { ActivityTotals } from '../../../lib/activityTotals';
 
 /**
@@ -26,8 +26,8 @@ export function PersonalHero({ name, color, imageUri, owe, owed, totals, periodL
   owe: number;
   owed: number;
   totals: ActivityTotals;
-  /** What the row covers — "This month", "This month · 2 filters". */
-  periodLabel: string;
+  /** Why the row is not simply this month ("Last month", "2 filters"); null while it is. */
+  periodLabel: string | null;
   onReports: () => void;
 }) {
   const net = owed - owe;
@@ -55,28 +55,14 @@ export function PersonalHero({ name, color, imageUri, owe, owed, totals, periodL
         </Text>
       </View>
 
-      <View style={styles.row}>
-        <View style={styles.rowBody}>
-          <Text style={styles.period}>{periodLabel}</Text>
-          <View style={styles.stats}>
-            <Stat label="Spent" value={formatCompact(totals.spent)} tint={kindColor('expense')} />
-            <View style={styles.divider} />
-            <Stat label="Income" value={formatCompact(totals.income)} tint={kindColor('income')} />
-          </View>
-        </View>
-        <TouchableOpacity onPress={onReports} style={styles.go} hitSlop={6} accessibilityRole="button" accessibilityLabel="Open these in Reports">
-          <Feather name="pie-chart" size={18} color={colors.accent} />
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-}
-
-function Stat({ label, value, tint }: { label: string; value: string; tint: string }) {
-  return (
-    <View style={styles.stat}>
-      <Text style={styles.statLabel}>{label}</Text>
-      <Text style={[styles.statValue, { color: tint }]} numberOfLines={1}>{value}</Text>
+      <LedgerTotalsRow
+        label={periodLabel}
+        onReports={onReports}
+        stats={[
+          { label: 'Spent', value: formatCompact(totals.spent), tint: kindColor('expense') },
+          { label: 'Income', value: formatCompact(totals.income), tint: kindColor('income') },
+        ]}
+      />
     </View>
   );
 }
@@ -93,13 +79,4 @@ const styles = StyleSheet.create({
   label: { ...type.caption, color: colors.textMuted },
   net: { ...type.amountLG },
   sub: { ...type.caption, color: colors.textSecondary, marginTop: space.sm },
-  row: { ...card, flexDirection: 'row', alignItems: 'stretch' },
-  rowBody: { flex: 1, paddingVertical: space.sm, paddingHorizontal: space.md },
-  period: { ...type.caption, color: colors.textMuted, marginBottom: 2 },
-  stats: { flexDirection: 'row', alignItems: 'center' },
-  stat: { flex: 1, gap: 2 },
-  statLabel: { ...type.caption, color: colors.textMuted },
-  statValue: { ...type.amountSM },
-  divider: { width: 1, alignSelf: 'stretch', backgroundColor: colors.border, marginHorizontal: space.sm },
-  go: { width: layout.touchMin, alignItems: 'center', justifyContent: 'center', borderLeftWidth: 1, borderLeftColor: colors.border },
 });

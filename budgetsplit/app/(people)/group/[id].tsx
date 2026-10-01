@@ -25,6 +25,9 @@ import { HeaderIconButton } from '../../../src/components/ui/HeaderIconButton';
 import { SheetModal } from '../../../src/components/ui/SheetModal';
 import { FAB } from '../../../src/components/ui/FAB';
 import { SettingsRow, settingsRowDivider } from '../../../src/components/ui/SettingsRow';
+import { formatCompact } from '../../../src/lib/money';
+import { LedgerTotalsRow } from '../../../src/components/finance/LedgerTotalsRow';
+import { groupSpend } from '../../../src/lib/activityTotals';
 import { GroupHeaderCard } from '../../../src/components/finance/group/GroupHeaderCard';
 import { TransactionsTab } from '../../../src/components/finance/group/TransactionsTab';
 import { BudgetTab } from '../../../src/components/finance/group/BudgetTab';
@@ -175,6 +178,9 @@ export default function GroupDetailScreen() {
       setTrusting(false);
     }
   }
+  // This month in this group: my share and everyone's, for the row under the header.
+  const monthStart = useMemo(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1).getTime(); }, []);
+  const monthSpend = useMemo(() => groupSpend(txns, meId, monthStart), [txns, meId, monthStart]);
   const totalSpent = useMemo(
     () => settled.filter(t => t.kind === 'expense' && !t.is_deleted).reduce((s, t) => s + t.shares.reduce((a, x) => a + x.amount, 0), 0),
     [settled],
@@ -235,6 +241,19 @@ export default function GroupDetailScreen() {
         })()}
         onSettle={(personId) => router.push(`/add/quick?kind=transfer&to=${personId}`)}
       />
+
+      {/* The same row Personal has under its card (`U-88`): this month in this group, and
+          Reports opened on this group. "Group total" stands where Personal has Income, because
+          income is never booked to a shared group and would read zero in every one. */}
+      <View style={styles.totals}>
+        <LedgerTotalsRow
+          onReports={() => router.push(`/reports?group=${id}`)}
+          stats={[
+            { label: 'Your share', value: formatCompact(monthSpend.mine), tint: colors.expense },
+            { label: 'Group total', value: formatCompact(monthSpend.everyone), tint: colors.textPrimary },
+          ]}
+        />
+      </View>
 
       {/* `TabPills`, not a local copy of it. This strip was a byte-for-byte
           duplicate of that component's intent at different values (borderRadius 10
@@ -377,6 +396,7 @@ export default function GroupDetailScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
+  totals: { marginHorizontal: layout.screenPaddingH, marginBottom: space.md },
   tabs: { marginHorizontal: layout.screenPaddingH, marginBottom: space.sm },
   menuCard: { backgroundColor: colors.bgInput, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
   archiveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, paddingVertical: space.md, marginTop: space.sm },

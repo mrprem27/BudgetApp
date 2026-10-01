@@ -1,3 +1,4 @@
+import { Chip } from '../../src/components/ui/Chip';
 import { track } from '../../src/lib/usageEvents';
 import { useState, useMemo } from 'react';
 import {
@@ -46,7 +47,9 @@ export default function ReportsScreen() {
   const bottomPad = useContentInset();
   const insets = useSafeAreaInsets();
   // Seeded from a deep link (`?month=yyyy-MM`) — Personal opens it on a filtered month (`U-52`).
-  const { month: monthParam, from: fromParam, to: toParam } = useLocalSearchParams<{ month?: string; from?: string; to?: string }>();
+  const { month: monthParam, from: fromParam, to: toParam, group: groupParam } = useLocalSearchParams<{ month?: string; from?: string; to?: string; group?: string }>();
+  // One group's report, when opened from that group (`U-88`); the chip under the month clears it.
+  const [groupId, setGroupId] = useState<string | null>(groupParam ?? null);
   const [month, setMonth] = useState(() => parseMonthKey(monthParam));
   /*
    * A month by default; a custom period when you pick one (`U-60`). The month selector stays
@@ -70,12 +73,12 @@ export default function ReportsScreen() {
   const { data, loading, stale, error, refreshing, onRefresh, reload } = useScreenData(async (db) => {
     const startedAt = Date.now();
     try {
-      return await loadReportsData(db, month, range ?? undefined);
+      return await loadReportsData(db, month, range ?? undefined, groupId);
     } finally {
       const elapsed = Date.now() - startedAt;
       if (elapsed < 450) await new Promise(r => setTimeout(r, 450 - elapsed));
     }
-  }, [month, range?.from, range?.to]);
+  }, [month, range?.from, range?.to, groupId]);
 
   const groups = data?.groups ?? [];
   const summaries = data?.summaries ?? [];
@@ -249,6 +252,13 @@ export default function ReportsScreen() {
         )}
       </View>
 
+      {/* Opened from a group: every figure below is that group's, and this says so. ✕ widens it. */}
+      {groupId && data?.scopeGroup && (
+        <View style={styles.scopeRow}>
+          <Chip label={data.scopeGroup.name} icon="users" selected onRemove={() => setGroupId(null)} accessibilityLabel={`Showing ${data.scopeGroup.name} only. Show everything`} />
+        </View>
+      )}
+
       {/*
         * `stale` as well as `loading`, and Reports is the ONLY screen that needs it.
         *
@@ -331,7 +341,7 @@ export default function ReportsScreen() {
                     total={pieTotal}
                     // Center "View →" opens the month-scoped transaction drill-down
                     // for the selected category.
-                    onOpen={(seg) => router.push(`/report-transactions?${range ? `from=${range.from}&to=${range.to}` : `month=${format(month, 'yyyy-MM')}`}&category=${encodeURIComponent(seg.name)}`)}
+                    onOpen={(seg) => router.push(`/report-transactions?${range ? `from=${range.from}&to=${range.to}` : `month=${format(month, 'yyyy-MM')}`}${groupId ? `&group=${groupId}` : ''}&category=${encodeURIComponent(seg.name)}`)}
                     selectedName={selectedCat}
                   onSelect={(seg) => setSelectedCat(seg ? seg.name : null)}
                 />
@@ -504,6 +514,7 @@ export default function ReportsScreen() {
 }
 
 const styles = StyleSheet.create({
+  scopeRow: { flexDirection: 'row', marginBottom: space.md },
   container: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: layout.screenPaddingH, gap: space.md },
   exportRow: { flexDirection: 'row', gap: space.xs },

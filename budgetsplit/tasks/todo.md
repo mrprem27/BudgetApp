@@ -14,7 +14,7 @@ Groups search (≥5) · Personal "Friends" + "This month · N filters" · **badg
 smaller dimmed board, Earned box collapsed at bottom of Badges screen.
 
 ## Done 2026-10-01 (NOT committed yet)
-U-71 to U-75 are now rows (TRACKER §11 + FINDINGS; 296 items (93 open), 87 in §11) · **U-76** section icons from one map
+U-71 to U-75 are now rows (TRACKER §11 + FINDINGS; 297 items (93 open), 88 in §11) · **U-76** section icons from one map
 (`sectionIcon` in `constants/categories`; Categories, budget editor, Budget tab boxes) · **U-77** Home hero
 padding one step down · **U-78** `HeaderIconButton showLabel` on Recurring (Money) and Reports (Insights) ·
 **U-75 follow-up**: six more badges (36 at most), board disc 24pt everywhere · **U-79** person page redone
