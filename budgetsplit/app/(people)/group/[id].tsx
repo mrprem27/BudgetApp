@@ -323,6 +323,7 @@ export default function GroupDetailScreen() {
           rules={recurringRules}
           skips={recurSkips}
           meId={meId}
+          spentThisYear={data?.recurringSpent ?? 0}
           onAdd={() => router.push(`/add/quick?groupId=${id}&kind=expense&repeat=1`)}
           onOpenRule={(ruleId) => router.push(`/recurring/${ruleId}`)}
         />

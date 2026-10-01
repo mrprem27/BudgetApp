@@ -1,3 +1,4 @@
+import { loadRecurringSpentThisYear } from './recurringData';
 import type * as SQLite from 'expo-sqlite';
 import { getMyActivity, type MyActivityItem } from '../db/queries/transactions';
 import { getAllGroups } from '../db/queries/groups';
@@ -22,7 +23,8 @@ export async function loadPersonal(db: SQLite.SQLiteDatabase, meId: string) {
   const recurringRules = personal ? await getRecurringForGroup(db, personal.id) : [];
   const recurSkips = await getSkipsMap(db, recurringRules.map(r => r.id));
   // Owe / Lent — single source of truth (netted per person).
-  return { persons, activity, groups, budget, recurringRules, recurSkips, summary: { owe: exp.owe, lent: exp.owed } };
+  const recurringSpent = personal ? await loadRecurringSpentThisYear(db, personal.id) : 0;
+  return { persons, activity, groups, budget, recurringRules, recurSkips, recurringSpent, summary: { owe: exp.owe, lent: exp.owed } };
 }
 
 export type ActivityScope = 'personal' | 'groups' | 'all';

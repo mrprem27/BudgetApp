@@ -26,8 +26,10 @@ import type { RecurringSub as Sub } from '../../../lib/recurringData';
  * No actions on the list — a row opens the rule, where Edit, Skip, Pause and Stop live. Four
  * permanent buttons per row once took ~29% of the screen for maintenance nobody was doing.
  */
-export function RecurringInventory({ subs, onOpen, onSeeAll, tools }: {
+export function RecurringInventory({ subs, spentThisYear, onOpen, onSeeAll, tools }: {
   subs: Sub[];
+  /** My share of what repeat rules have actually posted since 1 January (`getRecurringSpent`). */
+  spentThisYear: number;
   onOpen: (id: string) => void;
   /**
    * A Recurring tab (a group's, Personal's): the plain list. Boxes are always open, nothing to
@@ -74,9 +76,9 @@ export function RecurringInventory({ subs, onOpen, onSeeAll, tools }: {
           : undefined}
       >
         <View style={styles.stats}>
-          {/* "Yearly", not "Spent this year": it is the monthly figure times twelve, what these
-              rules cost over a year, not what has left your account since January. */}
-          <Stat label="Yearly" value={formatCompact(monthlyOut * 12)} />
+          {/* From the ledger: what these rules have actually posted since January. It was the
+              monthly figure times twelve, a projection wearing a total's clothes. */}
+          <Stat label="Spent this year" value={formatCompact(spentThisYear)} />
           <View style={styles.statDivider} />
           <Stat label="Active" value={String(activeCount)} />
           <View style={styles.statDivider} />
@@ -88,7 +90,7 @@ export function RecurringInventory({ subs, onOpen, onSeeAll, tools }: {
             <>
               <View style={styles.statDivider} />
               <TouchableOpacity style={styles.seeAll} onPress={onSeeAll} hitSlop={10} accessibilityRole="link" accessibilityLabel="All recurring">
-                <Text style={styles.seeAllText}>All recurring</Text>
+                <Text style={styles.seeAllText}>All</Text>
                 <Feather name="chevron-right" size={14} color={colors.accent} />
               </TouchableOpacity>
             </>

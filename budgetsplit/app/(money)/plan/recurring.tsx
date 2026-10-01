@@ -9,7 +9,7 @@ import { RecurringBrowser } from '../../../src/components/finance/recurring/Recu
 import { KeyboardForm } from '../../../src/components/ui/KeyboardForm';
 import { useScreenData } from '../../../src/hooks/useScreenData';
 import { useContentInset } from '../../../src/hooks/useContentInset';
-import { loadRecurringInventory, loadStoppedRecurring } from '../../../src/lib/recurringData';
+import { loadRecurringInventory, loadStoppedRecurring, loadRecurringSpentThisYear } from '../../../src/lib/recurringData';
 import { backOr } from '../../../src/lib/nav';
 
 /**
@@ -24,8 +24,8 @@ export default function RecurringScreen() {
   const router = useRouter();
   const bottomPad = useContentInset();
   const { data, loading, error, refreshing, onRefresh, reload } = useScreenData(async (db) => {
-    const [active, stopped] = await Promise.all([loadRecurringInventory(db), loadStoppedRecurring(db)]);
-    return { active, stopped };
+    const [active, stopped, spentThisYear] = await Promise.all([loadRecurringInventory(db), loadStoppedRecurring(db), loadRecurringSpentThisYear(db)]);
+    return { active, stopped, spentThisYear };
   }, []);
   const subs = data?.active ?? [];
   const stopped = data?.stopped ?? [];
@@ -51,6 +51,7 @@ export default function RecurringScreen() {
           <RecurringBrowser
             active={subs}
             stopped={stopped}
+            spentThisYear={data?.spentThisYear ?? 0}
             onOpen={id => router.push(`/recurring/${id}`)}
             empty={
               <EmptyState

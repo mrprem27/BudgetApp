@@ -552,3 +552,23 @@ export async function splitRecurringSeries(
  * already exists in the group within ±24h — used to warn about accidental
  * double entries before saving.
  */
+
+/**
+ * What repeat rules have actually cost me since `fromMs`: my share of the expenses they posted
+ * (entries with a `parent_recur_id`), in one group or in all of them. The figure on the Recurring
+ * card: real entries from the ledger, not the monthly amount times twelve.
+ */
+export async function getRecurringSpent(
+  db: SQLite.SQLiteDatabase, meId: string, fromMs: number, toMs: number, groupId?: string | null,
+): Promise<number> {
+  const row = await db.getFirstAsync<{ total: number | null }>(
+    `SELECT SUM(s.amount) AS total
+       FROM txn t JOIN txn_share s ON s.txn_id = t.id AND s.person_id = ?
+      WHERE t.parent_recur_id IS NOT NULL AND t.recur_freq IS NULL AND t.kind = 'expense'
+        AND t.is_deleted = 0 AND t.date >= ? AND t.date <= ?
+        AND (? IS NULL OR t.group_id = ?)
+        AND ${NOT_AWAITING_APPROVAL}`,
+    [meId, fromMs, toMs, groupId ?? null, groupId ?? null],
+  );
+  return row?.total ?? 0;
+}

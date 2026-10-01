@@ -363,6 +363,7 @@ export default function PersonalScreen() {
               rules={recurringRules}
               skips={recurSkips}
               meId={me.id}
+              spentThisYear={data?.recurringSpent ?? 0}
               onAdd={() => addPersonal(true)}
               onOpenRule={(ruleId) => router.push(`/recurring/${ruleId}`)}
             />

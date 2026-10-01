@@ -1,3 +1,4 @@
+import { loadRecurringSpentThisYear } from './recurringData';
 import type * as SQLite from 'expo-sqlite';
 import {
   getAllGroups, getArchivedGroups, unarchiveGroup, archiveGroupSafe, insertGroup, listableGroups,
@@ -173,7 +174,8 @@ export async function loadGroupHub(db: SQLite.SQLiteDatabase, id: string) {
     recurringRules = await getRecurringForGroup(db, id);
     recurSkips = await getSkipsMap(db, recurringRules.map(r => r.id));
   }
-  return { group, txns, members, me, net, catStatus, analytics, recurringRules, recurSkips, ctx, overrideCount };
+  const recurringSpent = recurringRules.length > 0 ? await loadRecurringSpentThisYear(db, id) : 0;
+  return { group, txns, members, me, net, catStatus, analytics, recurringRules, recurSkips, recurringSpent, ctx, overrideCount };
 }
 
 export { setSimplifyDebt, setTrustState, setCategoryBudgets };

@@ -1,6 +1,6 @@
 import type * as SQLite from 'expo-sqlite';
 import { getTxnById, type TxnWithSplits } from '../db/queries/transactions';
-import { getSkipsMap, getAllRecurringRules } from '../db/queries/recurring';
+import { getSkipsMap, getAllRecurringRules, getRecurringSpent } from '../db/queries/recurring';
 import { getMe } from '../db/queries/persons';
 import { nextUnskippedOccurrence } from './recurrence';
 import { myShareOrTotal, myIncomeOf, txnTotal } from './splitMath';
@@ -120,3 +120,11 @@ export function findRecurring(subs: readonly RecurringSub[], query: string, sort
   if (sort === 'amount') return hit.sort((a, b) => b.amount - a.amount);
   return hit;
 }
+
+/** My share of what repeat rules have posted since 1 January, in one group or in all (`groupId` omitted). */
+export async function loadRecurringSpentThisYear(db: SQLite.SQLiteDatabase, groupId?: string | null, now: number = Date.now()): Promise<number> {
+  const me = await getMe(db);
+  if (!me) return 0;
+  return getRecurringSpent(db, me.id, new Date(new Date(now).getFullYear(), 0, 1).getTime(), now, groupId);
+}
+

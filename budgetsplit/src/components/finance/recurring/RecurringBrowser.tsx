@@ -22,8 +22,9 @@ const TOOLS_FROM = 4;
  * at the end. A Recurring tab is the plain list instead (`RecurringTab`): active and paused
  * rules and a link here. The host owns the scroll view and the empty state.
  */
-export function RecurringBrowser({ active, stopped, onOpen, empty }: {
+export function RecurringBrowser({ active, stopped, spentThisYear, onOpen, empty }: {
   active: RecurringSub[];
+  spentThisYear: number;
   stopped: RecurringSub[];
   onOpen: (id: string) => void;
   /** Shown when there are no live rules at all. */
@@ -44,6 +45,7 @@ export function RecurringBrowser({ active, stopped, onOpen, empty }: {
           {shown.length > 0 ? (
             <RecurringInventory
               subs={shown}
+              spentThisYear={spentThisYear}
               onOpen={onOpen}
               tools={tools ? (
                 <View style={styles.sorts}>

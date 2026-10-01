@@ -16,6 +16,8 @@ type Props = {
   /** Skipped occurrence dates per rule — keeps "next charge" honest. */
   skips?: Map<string, Set<number>>;
   meId: string;
+  /** What this ledger's rules have posted since January, my share. */
+  spentThisYear: number;
   /** The empty state's way in. The screen's + already adds one everywhere else. */
   onAdd: () => void;
   onOpenRule: (ruleId: string) => void;
@@ -33,7 +35,7 @@ type Props = {
  * The plain view (2026-10-01): what is active or paused here, and a link to Money's Recurring
  * page, where search, sorting and stopped rules live.
  */
-export function RecurringTab({ rules, skips, meId, onAdd, onOpenRule, refreshing, onRefresh }: Props) {
+export function RecurringTab({ rules, skips, meId, spentThisYear, onAdd, onOpenRule, refreshing, onRefresh }: Props) {
   const router = useRouter();
   const bottomPad = useContentInset({ fab: true });
   const now = Date.now();
@@ -49,7 +51,7 @@ export function RecurringTab({ rules, skips, meId, onAdd, onOpenRule, refreshing
     >
       {subs.length === 0
         ? <NoRecurring onAdd={onAdd} />
-        : <RecurringInventory subs={subs} onOpen={onOpenRule} onSeeAll={() => router.push('/plan/recurring')} />}
+        : <RecurringInventory subs={subs} spentThisYear={spentThisYear} onOpen={onOpenRule} onSeeAll={() => router.push('/plan/recurring')} />}
     </ScrollView>
   );
 }
