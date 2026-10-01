@@ -47,8 +47,6 @@ export function RecurringInventory({ subs, onOpen, onSeeAll, tools }: {
   const live = (rows: Sub[]) => rows.filter(s => !s.paused);
   const monthly = (rows: Sub[]) => live(rows).reduce((s, x) => s + recurringMonthlyEquivalent(x.amount, x.freq, x.interval), 0);
   const monthlyOut = monthly(outSubs);
-  const monthlyIn = monthly(inSubs);
-  const monthlyMoved = monthly(moveSubs);
   const activeCount = live(subs).length;
   const pausedCount = subs.length - activeCount;
   const nextUp = subs.find(s => s.nextMs != null);
@@ -68,14 +66,9 @@ export function RecurringInventory({ subs, onOpen, onSeeAll, tools }: {
         style={styles.totalCard}
         label={<SummaryLabel color={colors.settle}>Spending a month · your share</SummaryLabel>}
         amount={<AmountText paise={monthlyOut} size="lg" forceColor={colors.textPrimary} />}
-        // The card's last line: what else repeats on the left, Expand all on the right.
-        foot={tools ?? ((monthlyIn > 0 || monthlyMoved > 0) ? (
-          <Text style={styles.totalSub} numberOfLines={1}>
-            {monthlyIn > 0 ? `Income ${formatCompact(monthlyIn)} a month` : ''}
-            {monthlyIn > 0 && monthlyMoved > 0 ? '  ·  ' : ''}
-            {monthlyMoved > 0 ? `Moved ${formatCompact(monthlyMoved)} a month` : ''}
-          </Text>
-        ) : undefined)}
+        // The card's last line: the page's sort chips (when it has them), and Expand all.
+        // It also read "Income … a month · Moved … a month"; dropped 2026-10-01 as noise here.
+        foot={tools}
         expand={!brief && sections.length > 1
           ? { open: closed.size === 0, onPress: () => setClosed(closed.size === 0 ? new Set(sections.map(([t]) => t)) : new Set()) }
           : undefined}
@@ -176,7 +169,6 @@ const styles = StyleSheet.create({
   statValue: { ...type.labelSemi, color: colors.textPrimary },
   // Tinted settle, matching how a recurring concern is coloured elsewhere.
   totalCard: { backgroundColor: alpha(colors.settle, 8), borderColor: colors.settle },
-  totalSub: { ...type.caption, color: colors.textMuted },
   seeAll: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   seeAllText: { ...type.labelSemi, color: colors.accent },
   count: { ...type.amountSM, color: colors.textSecondary },
