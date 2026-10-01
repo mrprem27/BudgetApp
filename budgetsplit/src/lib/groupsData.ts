@@ -14,7 +14,6 @@ import { budgetHealth, isGlobalBudgetGroup, getMyGlobalBudgetSummary, getCategor
 import { getTransactionsForGroup } from '../db/queries/transactions';
 import { getRecurringForGroup, getSkipsMap } from '../db/queries/recurring';
 import { getCategoryBudgetRows, setCategoryBudgets } from '../db/queries/categoryBudgets';
-import type { BudgetAnalytics } from './analytics';
 
 /** What turning splitting off would hide: shared groups, and money still unsettled either way. */
 export async function splittingFootprint(db: SQLite.SQLiteDatabase): Promise<{ shared: number; outstanding: number }> {
@@ -152,21 +151,20 @@ export async function loadGroupHub(db: SQLite.SQLiteDatabase, id: string) {
   let ctx: Awaited<ReturnType<typeof getGroupContext>> | null = null;
   let overrideCount = 0;
   let catStatus: CategoryBudgetStatus[] = [];
-  let analytics: BudgetAnalytics | null = null;
   let recurringRules: Awaited<ReturnType<typeof getRecurringForGroup>> = [];
   let recurSkips = new Map<string, Set<number>>();
   if (group) {
     const meId = me?.id ?? '';
-    const [cs, an, gctx, budgetRows] = await Promise.all([
+    // The Budget tab loads its own figures per period (`BudgetPeriodView`); what stays here is
+    // this month's lines, which the re-plan check reads.
+    const [cs, gctx, budgetRows] = await Promise.all([
       getCategoryBudgetStatus(db, group, { meId }),
-      getBudgetAnalytics(db, group, { meId }),
       getGroupContext(db, id, meId),
       getCategoryBudgetRows(db, id),
     ]);
     ctx = gctx;
     overrideCount = budgetRows.filter(r => r.person_id === meId && r.amount > 0).length;
     catStatus = cs;
-    analytics = an;
     // Paused rules stay listed, same as the global screen: hiding them made a
     // rule paused from its own screen vanish from the tab you came back to, with
     // Resume reachable only by remembering the deep link.
@@ -175,7 +173,7 @@ export async function loadGroupHub(db: SQLite.SQLiteDatabase, id: string) {
     recurSkips = await getSkipsMap(db, recurringRules.map(r => r.id));
   }
   const recurringSpent = recurringRules.length > 0 ? await loadRecurringSpentThisYear(db, id) : 0;
-  return { group, txns, members, me, net, catStatus, analytics, recurringRules, recurSkips, recurringSpent, ctx, overrideCount };
+  return { group, txns, members, me, net, catStatus, recurringRules, recurSkips, recurringSpent, ctx, overrideCount };
 }
 
 export { setSimplifyDebt, setTrustState, setCategoryBudgets };

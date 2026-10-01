@@ -67,7 +67,6 @@ export default function GroupDetailScreen() {
   const me = data?.me ?? null;
   const net = data?.net ?? {};
   const catStatus = data?.catStatus ?? [];
-  const analytics = data?.analytics ?? null;
   const recurringRules = data?.recurringRules ?? [];
   const recurSkips = data?.recurSkips;
   const meId = me?.id ?? '';
@@ -283,9 +282,7 @@ export default function GroupDetailScreen() {
 
       {activeTab === 'budget' && (
         <BudgetTab
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          analytics={analytics}
+          groupId={id}
           catStatus={catStatus}
           onOpenBudget={() => router.push(`/group/${id}/budget`)}
           groupName={group.name}

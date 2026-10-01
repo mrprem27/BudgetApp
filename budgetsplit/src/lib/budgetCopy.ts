@@ -76,15 +76,22 @@ export const budgetCaption = (opts: {
   scope: 'group' | 'global';
   allocated: string;
   overrideCount?: number;
+  /** The period the Budget tab is showing; monthly when omitted. */
+  period?: BudgetPeriod;
 }): string => {
+  const when = PERIOD_WORDS[opts.period ?? 'monthly'];
   if (opts.scope === 'global') {
-    return `of ${opts.allocated} this month · your share across personal and every group`;
+    return `of ${opts.allocated} ${when} · your share across personal and every group`;
   }
   const n = opts.overrideCount ?? 0;
   return n > 0
-    ? `of ${opts.allocated} for you this month · your own in ${n} ${n === 1 ? 'category' : 'categories'}`
-    : `of ${opts.allocated} per person this month`;
+    ? `of ${opts.allocated} for you ${when} · your own in ${n} ${n === 1 ? 'category' : 'categories'}`
+    : `of ${opts.allocated} per person ${when}`;
 };
+
+type BudgetPeriod = 'daily' | 'monthly' | 'yearly';
+/** A period as the words a sentence needs. */
+export const PERIOD_WORDS: Record<BudgetPeriod, string> = { daily: 'today', monthly: 'this month', yearly: 'this year' };
 
 /**
  * The invested line, under the spend figure. `DQ-26`.
@@ -99,8 +106,8 @@ export const budgetCaption = (opts: {
  * figure does not have. `budgetCaption` is directly above it for the same reason
  * this lives here rather than inline — one file owns the budget's sentences.
  */
-export const budgetInvestedCaption = (amount: string): string =>
-  `plus ${amount} moved to assets this month · kept, not spent`;
+export const budgetInvestedCaption = (amount: string, period: BudgetPeriod = 'monthly'): string =>
+  `plus ${amount} moved to assets ${PERIOD_WORDS[period]} · kept, not spent`;
 
 /** The editor's hint line, per scope and level. */
 export const budgetEditorHint = (opts: {

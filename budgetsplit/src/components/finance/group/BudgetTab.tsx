@@ -2,18 +2,15 @@ import { View, StyleSheet } from 'react-native';
 import { colors } from '../../tokens';
 import { useContentInset } from '../../../hooks/useContentInset';
 import type { CategoryBudgetStatus } from '../../../lib/budget';
-import type { BudgetAnalytics } from '../../../lib/analytics';
-import { formatCompact } from '../../../lib/money';
 import { Chip } from '../../ui/Chip';
 import { EmptyState } from '../../ui/EmptyState';
-import { BudgetList } from '../budget/BudgetList';
+import { BudgetPeriodView } from '../budget/BudgetPeriodView';
 import { budgetCaption, budgetEmptyBody, budgetEmptyCta } from '../../../lib/budgetCopy';
 import { planRebalance } from '../../../lib/rebalance';
 
 type Props = {
-  refreshing: boolean;
-  onRefresh: () => void;
-  analytics: BudgetAnalytics | null;
+  groupId: string;
+  /** This month's lines, for the re-plan check only; the tab reads its own figures per period. */
   catStatus: CategoryBudgetStatus[];
   /**
    * Open this group's budget editor.
@@ -43,28 +40,16 @@ type Props = {
  * overspent row.
  */
 export function BudgetTab({
-  analytics, catStatus, onOpenBudget, onRebalance, refreshing, onRefresh,
+  groupId, catStatus, onOpenBudget, onRebalance,
   canEditGroupDefault = false, overrideCount = 0, groupName,
 }: Props) {
   const bottomPad = useContentInset({ fab: true });
 
   return (
-    <BudgetList
-      rows={catStatus}
-      spent={analytics?.totalSpent ?? 0}
-      allocated={analytics?.totalAllocated ?? 0}
-      pct={analytics?.utilizationPct ?? null}
-      pooledAllocated={analytics?.pooledAllocated ?? 0}
-      pooledCount={analytics?.pooledCount ?? 0}
-      invested={analytics?.invested ?? 0}
-      caption={budgetCaption({
-        scope: 'group',
-        allocated: formatCompact(analytics?.totalAllocated ?? 0),
-        overrideCount,
-      })}
+    <BudgetPeriodView
+      groupId={groupId}
+      caption={(allocated, period) => budgetCaption({ scope: 'group', allocated, overrideCount, period })}
       onEdit={onOpenBudget}
-      refreshing={refreshing}
-      onRefresh={onRefresh}
       bottomPad={bottomPad}
       empty={
         <EmptyState
@@ -75,7 +60,7 @@ export function BudgetTab({
           onAction={onOpenBudget}
         />
       }
-      rowExtra={(c) => (
+      rowExtra={(c, period) => (
         /*
          * V2-07: a red bar used to be the whole response to an overrun.
          *
@@ -86,7 +71,8 @@ export function BudgetTab({
          *
          * A `Chip`, not a fourth hand-rolled pill weight on one screen (§9).
          */
-        c.remaining < 0 && canEditGroupDefault && onRebalance && planRebalance(catStatus, c.category)
+        // A re-plan moves this MONTH's headroom, so it is offered on the monthly view only.
+        period === 'monthly' && c.remaining < 0 && canEditGroupDefault && onRebalance && planRebalance(catStatus, c.category)
           ? (
             // `alignSelf` on a wrapper: the row is a column, so a bare chip would
             // stretch to full width and stop reading as a pill.

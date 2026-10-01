@@ -535,3 +535,70 @@ export async function getMyGlobalBudgetSummary(
     rows: await globalStatusRows(db, meId, budgets, now),
   };
 }
+
+/** A budget read at one period (`U-89`): the Budget tab's Daily / Monthly / Yearly switch. */
+export type BudgetView = {
+  target: Period;
+  /** Lines that roll up into `target`, as their cost over one such period. */
+  allocated: number;
+  /** My spend over `target`'s window so far, in the categories those lines cover. */
+  spent: number;
+  pct: number | null;
+  /** Lines set for a LONGER period than `target`: not in the figures, and named as such. */
+  pooled: number;
+  pooledCount: number;
+  invested: number;
+  /** One row per category, at `target`. */
+  rows: CategoryBudgetStatus[];
+};
+
+/**
+ * One row per category at `target`, from its lines and the spend in `target`'s window. Pure.
+ *
+ * The rule is `budgetKind`'s: a line counts in a period at or coarser than its own. A daily
+ * line fills the month and the year (× the days in each); a monthly line fills the year (× 12);
+ * nothing fills downward, because a month's rent is not a thirtieth of itself each day. A
+ * category whose only lines are coarser than `target` has no row here.
+ */
+export function budgetRowsAt(
+  lines: readonly { category: string; cadence: BudgetCadence; amount: number }[],
+  spendByCategory: Readonly<Record<string, number>>,
+  target: Period,
+  on: Date,
+): CategoryBudgetStatus[] {
+  const allocated = new Map<string, number>();
+  for (const l of lines) {
+    const v = budgetEquivalent(l.cadence, l.amount, target, on);
+    if (v !== null) allocated.set(l.category, (allocated.get(l.category) ?? 0) + v);
+  }
+  return sortStatusRows([...allocated.entries()].map(([category, amount]) => {
+    const spent = spendByCategory[category] ?? 0;
+    const pct = amount > 0 ? Math.round((spent / amount) * 100) : null;
+    return { category, cadence: target, allocated: amount, spent, remaining: amount - spent, pct, health: budgetHealth(pct) };
+  }));
+}
+
+/**
+ * A budget at one period: My Budget (`groupId` null: my share across every group) or one
+ * group's (my share inside it). Headline and rows come from the same lines, the same window and
+ * the same spend map, so they cannot disagree.
+ */
+export async function getBudgetView(
+  db: SQLite.SQLiteDatabase,
+  meId: string,
+  groupId: string | null,
+  target: Period,
+  now: Date = new Date(),
+): Promise<BudgetView> {
+  const budgets = groupId ? await getCategoryBudgets(db, groupId, meId) : await getMyGlobalBudgetRows(db, meId);
+  if (budgets.length === 0) return { target, allocated: 0, spent: 0, pct: null, pooled: 0, pooledCount: 0, invested: 0, rows: [] };
+  const roll = rollUpBudgets(budgets, target, now);
+  const w = windowForCadence(target, now);
+  const detail = await getCategorySpendingDetail(db, groupId, w.from, w.to, meId);
+  const rows = foldBudgetStatuses(budgetRowsAt(budgets, detail.byCategory, target, now), await knownCategoryNames(db));
+  // The rows ARE the rate categories, so their spend is the headline's numerator.
+  const spent = rows.reduce((t, r) => t + r.spent, 0);
+  const pct = roll.amount > 0 ? Math.round((spent / roll.amount) * 100) : null;
+  return { target, allocated: roll.amount, spent, pct, pooled: roll.pooled, pooledCount: roll.pooledCount, invested: detail.invested, rows };
+}
+

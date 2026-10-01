@@ -2,9 +2,10 @@ import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { colors, type, space, layout } from '../../tokens';
 import { healthColor } from '../group/helpers';
-import { budgetHealth, utilLabel, type CategoryBudgetStatus } from '../../../lib/budget';
+import { budgetHealth, utilLabel, type CategoryBudgetStatus, type Period } from '../../../lib/budget';
 import { formatCompact } from '../../../lib/money';
-import { budgetInvestedCaption } from '../../../lib/budgetCopy';
+import { budgetInvestedCaption, PERIOD_WORDS } from '../../../lib/budgetCopy';
+import { TabPills } from '../../ui/TabPills';
 import { categorySection, sectionIcon, SECTION_ORDER } from '../../../constants/categories';
 import { BudgetBar } from '../BudgetBar';
 import { BudgetCategoryRow } from '../BudgetCategoryRow';
@@ -17,6 +18,13 @@ import { AppRefreshControl } from '../../ui/AppRefreshControl';
 import { haptic } from '../../../lib/haptics';
 import { sectionSummary } from '../../../lib/budgetSections';
 import { InfoLabel } from '../../ui/InfoLabel';
+
+const PERIODS: { key: Period; label: string }[] = [
+  { key: 'daily', label: 'Daily' },
+  { key: 'monthly', label: 'Monthly' },
+  { key: 'yearly', label: 'Yearly' },
+];
+const PERIOD_BY: Record<Period, string> = { daily: 'by the day', monthly: 'by the month', yearly: 'by the year' };
 
 /** `'all'` = no filter. The other three mirror `CategoryBudgetStatus.health`. */
 type StatusFilter = 'all' | 'over' | 'near' | 'ontrack';
@@ -35,6 +43,9 @@ type Props = {
   invested?: number;
   /** The one line that genuinely differs between the two callers. */
   caption: string;
+  /** The period every figure here is read at (`U-89`). Always on show, above the card. */
+  period: Period;
+  onPeriod: (p: Period) => void;
   onEdit: () => void;
   /** Shown instead of everything when `rows` is empty — the copy is role-dependent. */
   empty: React.ReactNode;
@@ -78,7 +89,7 @@ type Props = {
  */
 export function BudgetList({
   rows, spent, allocated, pct, pooledAllocated = 0, pooledCount = 0, invested = 0,
-  caption, onEdit, empty, rowExtra, refreshing, onRefresh, bottomPad,
+  caption, period, onPeriod, onEdit, empty, rowExtra, refreshing, onRefresh, bottomPad,
 }: Props) {
   const [filter, setFilter] = useState<StatusFilter>('all');
   // Sections start collapsed, each header carrying its own spent / budget (`U-55`): the whole
@@ -120,7 +131,35 @@ export function BudgetList({
     </ScrollView>
   );
 
-  if (rows.length === 0) return scroll(empty);
+  /*
+   * Daily / Monthly / Yearly, always there: a budget cannot be judged without saying over what.
+   * A line counts in its own period and every longer one (a daily limit fills the month and the
+   * year, a monthly one fills the year), never a shorter one (`budgetKind`).
+   */
+  const periods = (
+    <View style={styles.periods}>
+      <TabPills tabs={PERIODS} active={period} onChange={k => onPeriod(k as Period)} size="sm" />
+    </View>
+  );
+
+  // No budget at all: the host's empty state, and nothing to switch between.
+  if (rows.length === 0 && pooledCount === 0) return scroll(empty);
+  // Budgets exist, but none can be read at this period (monthly limits, seen by the day).
+  if (rows.length === 0) {
+    return scroll(
+      <>
+        {periods}
+        <EmptyState
+          icon="clock"
+          title={`Nothing budgeted ${PERIOD_BY[period]}`}
+          body={`${pooledCount} ${pooledCount === 1 ? 'budget is' : 'budgets are'} set for a longer period, ${formatCompact(pooledAllocated)} in all. A longer limit is not divided into shorter ones.`}
+          tint={colors.textSecondary}
+          actionLabel="Edit budget"
+          onAction={onEdit}
+        />
+      </>,
+    );
+  }
 
   const health = budgetHealth(pct);
   const shownSections = SECTION_ORDER.filter(sec => (bySection.get(sec)?.length ?? 0) > 0);
@@ -137,6 +176,7 @@ export function BudgetList({
 
   return scroll(
     <>
+      {periods}
       <SummaryCard
         /* What the figure is measured against, and what it leaves out, sit behind the ⓘ
            (`U-55`, AGENTS §14): three caption lines under the hero made the card read as a
@@ -152,12 +192,12 @@ export function BudgetList({
                 <Text style={styles.caption}>{caption}</Text>
                 {pooledCount > 0 && (
                   <Text style={styles.caption}>
-                    Plus {formatCompact(pooledAllocated)} in {pooledCount} yearly/one-time{' '}
-                    {pooledCount === 1 ? 'budget' : 'budgets'}, not counted in this month.
+                    Plus {formatCompact(pooledAllocated)} in {pooledCount}{' '}
+                    {pooledCount === 1 ? 'budget' : 'budgets'} set for a longer period, not counted {PERIOD_WORDS[period]}.
                   </Text>
                 )}
                 {invested > 0 && (
-                  <Text style={styles.caption}>{budgetInvestedCaption(formatCompact(invested))}</Text>
+                  <Text style={styles.caption}>{budgetInvestedCaption(formatCompact(invested), period)}</Text>
                 )}
               </View>
             }
@@ -274,6 +314,7 @@ function CountChip({ count, label, tint, active, onPress }: {
 
 const styles = StyleSheet.create({
   content: { paddingHorizontal: layout.screenPaddingH, paddingTop: space.xs },
+  periods: { marginBottom: space.md },
   headLabel: { ...type.sectionLabel, color: colors.textMuted },
   spent: { ...type.amountLG },
   pct: { ...type.amountSM },

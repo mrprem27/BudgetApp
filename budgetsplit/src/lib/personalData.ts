@@ -4,17 +4,16 @@ import { getMyActivity, type MyActivityItem } from '../db/queries/transactions';
 import { getAllGroups } from '../db/queries/groups';
 import { getAllPersons } from '../db/queries/persons';
 import { getMyExposure } from '../db/queries/balances';
-import { getMyGlobalBudgetSummary } from './budget';
 import { getRecurringForGroup, getSkipsMap } from '../db/queries/recurring';
 
 /** Everything the Personal screen shows: my activity across groups, my budget, and owe/lent. */
 export async function loadPersonal(db: SQLite.SQLiteDatabase, meId: string) {
-  const [activity, persons, groups, exp, budget] = await Promise.all([
+  // No budget here: the Budget tab loads its own, per period (`BudgetPeriodView`).
+  const [activity, persons, groups, exp] = await Promise.all([
     getMyActivity(db, meId),
     getAllPersons(db),
     getAllGroups(db),
     getMyExposure(db, meId),
-    getMyGlobalBudgetSummary(db, meId),
   ]);
   // The Personal group's OWN rules — the same list a group's Recurring tab shows for that group.
   // (Every rule everywhere is Money → Recurring; this is not that list again.)
@@ -24,7 +23,7 @@ export async function loadPersonal(db: SQLite.SQLiteDatabase, meId: string) {
   const recurSkips = await getSkipsMap(db, recurringRules.map(r => r.id));
   // Owe / Lent — single source of truth (netted per person).
   const recurringSpent = personal ? await loadRecurringSpentThisYear(db, personal.id) : 0;
-  return { persons, activity, groups, budget, recurringRules, recurSkips, recurringSpent, summary: { owe: exp.owe, lent: exp.owed } };
+  return { persons, activity, groups, recurringRules, recurSkips, recurringSpent, summary: { owe: exp.owe, lent: exp.owed } };
 }
 
 export type ActivityScope = 'personal' | 'groups' | 'all';

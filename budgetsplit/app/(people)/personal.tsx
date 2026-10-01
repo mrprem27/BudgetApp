@@ -15,7 +15,7 @@ import { singleMonthKey } from '../../src/lib/dateRange';
 import { TransactionRow } from '../../src/components/finance/TransactionRow';
 import { TxnCell } from '../../src/components/finance/TxnCell';
 import { SectionHeader } from '../../src/components/ui/SectionHeader';
-import { BudgetList } from '../../src/components/finance/budget/BudgetList';
+import { BudgetPeriodView } from '../../src/components/finance/budget/BudgetPeriodView';
 import { budgetCaption } from '../../src/lib/budgetCopy';
 import { EmptyState } from '../../src/components/ui/EmptyState';
 import { ErrorState } from '../../src/components/ui/ErrorState';
@@ -30,7 +30,6 @@ import { useScreenData } from '../../src/hooks/useScreenData';
 import { useContentInset } from '../../src/hooks/useContentInset';
 import { useStore } from '../../src/store';
 import { groupByDate } from '../../src/lib/txnGrouping';
-import { formatCompact } from '../../src/lib/money';
 import { haptic } from '../../src/lib/haptics';
 import { buildGroupExportCsv } from '../../src/lib/groupExport';
 import { shareCsv, csvFileSlug } from '../../src/lib/shareCsv';
@@ -94,11 +93,6 @@ export default function PersonalScreen() {
   const people = useMemo(() => persons.map(p => ({ id: p.id, name: p.name })), [persons]);
   const activity = data?.activity ?? [];
   const groups = data?.groups ?? [];
-  // `getMyGlobalBudgetSummary` is the canonical answer to "how am I doing against
-  // my budget" — it carries the overview figures as well as the rows. This screen
-  // used `getMyGlobalBudgetStatus`, which returns rows only, which is why it had no
-  // overview to render.
-  const budget = data?.budget ?? null;
   const summary = data?.summary ?? { owe: 0, lent: 0 };
   const recurringRules = data?.recurringRules ?? [];
   const recurSkips = data?.recurSkips;
@@ -331,18 +325,10 @@ export default function PersonalScreen() {
               group tab at a lower level of finish, missing the overview and the
               filters entirely. */}
           {tab === 'budget' && (
-            <BudgetList
-              rows={budget?.rows ?? []}
-              spent={budget?.spent ?? 0}
-              allocated={budget?.allocated ?? 0}
-              pct={budget?.pct ?? null}
-              pooledAllocated={budget?.pooled ?? 0}
-              pooledCount={budget?.pooledCount ?? 0}
-              invested={budget?.invested ?? 0}
-              caption={budgetCaption({ scope: 'global', allocated: formatCompact(budget?.allocated ?? 0) })}
+            <BudgetPeriodView
+              groupId={null}
+              caption={(allocated, period) => budgetCaption({ scope: 'global', allocated, period })}
               onEdit={openBudgetEditor}
-              refreshing={refreshing}
-              onRefresh={onRefresh}
               bottomPad={bottomPad}
               empty={
                 <EmptyState
