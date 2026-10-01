@@ -170,10 +170,13 @@ export default function PersonalScreen() {
   const filterGroups = useMemo(() => [{
     key: 'scope',
     title: 'Show',
+    // The first option is the bar's resting state (`FilterBar` treats it as "nothing chosen"),
+    // so it has to be the one the screen opens on. With Personal first, All drew as a filter
+    // you had picked, with a ✕, on a screen you had only just opened.
     options: [
+      { label: 'All', value: DEFAULT_SCOPE },
       { label: 'Personal', value: 'personal' },
       { label: 'Groups', value: 'groups' },
-      { label: 'All', value: 'all' },
     ],
   }], []);
   const filterSelected = useMemo(() => ({ scope: filter }), [filter]);

@@ -124,3 +124,13 @@ describe('a transaction ledger filters through one predicate', () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe("Personal opens on All, and All is the bar's resting state", () => {
+  it('lists the default scope first, which is what FilterBar draws as "nothing chosen"', () => {
+    const src = readFileSync(join(__dirname, '..', '..', 'app', '(people)', 'personal.tsx'), 'utf8');
+    expect(src).toMatch(/const DEFAULT_SCOPE: ActivityScope = 'all';/);
+    const options = src.slice(src.indexOf("key: 'scope'"), src.indexOf('const filterSelected'));
+    expect(options.indexOf('value: DEFAULT_SCOPE')).toBeGreaterThan(0);
+    expect(options.indexOf('value: DEFAULT_SCOPE')).toBeLessThan(options.indexOf("value: 'personal'"));
+  });
+});
