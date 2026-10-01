@@ -53,7 +53,7 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     textTransform: 'uppercase',
     letterSpacing: 1,
-    fontWeight: '700',
+    fontFamily: 'Inter_600SemiBold',
     marginBottom: space.sm,
   },
   inner: { flexDirection: 'row', alignItems: 'center', gap: space.md },

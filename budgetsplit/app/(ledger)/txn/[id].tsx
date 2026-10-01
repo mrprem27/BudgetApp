@@ -521,7 +521,7 @@ const styles = StyleSheet.create({
   deleteBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, paddingVertical: space.md, marginTop: space.sm },
   deleteText: { ...type.body, color: colors.expense, fontFamily: 'Inter_600SemiBold' },
 
-  receiptLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, fontWeight: '700', marginTop: space.xs },
+  receiptLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, fontFamily: 'Inter_600SemiBold', marginTop: space.xs },
   attachCard: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   attachThumb: { width: 56, height: 56, borderRadius: radius.sm, backgroundColor: colors.bgMuted },
   attachThumbGone: { alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border },

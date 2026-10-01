@@ -247,7 +247,7 @@ const styles = StyleSheet.create({
   deniedSub: { ...type.caption, color: colors.textSecondary },
   deniedCta: { backgroundColor: alpha(colors.expense, 13), borderWidth: 1, borderColor: colors.expense, borderRadius: radius.sm, paddingHorizontal: space.md, paddingVertical: space.sm, alignSelf: 'flex-start' },
   deniedCtaText: { ...type.label, color: colors.expense, fontFamily: 'Inter_600SemiBold' },
-  sectionLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, fontWeight: '700', marginTop: space.md, marginBottom: space.xs },
+  sectionLabel: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, fontFamily: 'Inter_600SemiBold', marginTop: space.md, marginBottom: space.xs },
   typeRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, padding: space.md },
   typeRowBorder: { borderTopWidth: 1, borderTopColor: colors.border },
   typeIcon: { width: 32, textAlign: 'center', flexShrink: 0 },

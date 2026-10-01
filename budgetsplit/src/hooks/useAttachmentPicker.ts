@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
-import { Alert, Platform, ActionSheetIOS } from 'react-native';
+import { Alert } from 'react-native';
+import { choosePhotoSource } from './photoSource';
 import { pickAttachment, AttachmentStorageError } from '../lib/attachment';
 import { freeBytes } from '../lib/deviceStorage';
 import { storageVerdict, storageAdvice, allowsAttachments } from '../lib/storage';
@@ -11,8 +12,7 @@ type Opts = {
 };
 
 /**
- * Opens the receipt picker: camera or library on iOS via an action sheet, camera
- * directly on Android.
+ * Opens the receipt picker: camera or library, on both platforms (`choosePhotoSource`).
  *
  * The picking *interaction* used to live inside `AttachmentRow`, so it was only
  * reachable by rendering that row. The Add screen now offers a receipt chip
@@ -65,13 +65,6 @@ export function useAttachmentPicker({ onPicked, onOpenStorageSettings }: Opts) {
       return;
     }
 
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        { options: ['Cancel', 'Take Photo', 'Choose from Library'], cancelButtonIndex: 0 },
-        (i) => { if (i === 1) attach('camera'); if (i === 2) attach('gallery'); },
-      );
-    } else {
-      attach('camera');
-    }
+    choosePhotoSource(attach);
   }, [onPicked, onOpenStorageSettings]);
 }

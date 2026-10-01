@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  FlatList, Platform,
-  ActionSheetIOS, ActivityIndicator,
+  FlatList,
+  ActivityIndicator,
 } from 'react-native';
 import { KeyboardForm, keyboardAwareScroll } from '../../src/components/ui/KeyboardForm';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -26,6 +26,8 @@ import { AddKind } from '../../src/constants/enums';
 import { haptic } from '../../src/lib/haptics';
 import { useItemizedForm, ITEMIZED_STEPS, ADJUSTMENT_LABELS } from '../../src/hooks/useItemizedForm';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
+import { receiptScanAvailable } from '../../src/lib/ocrProviders';
+import { choosePhotoSource } from '../../src/hooks/photoSource';
 import { Card } from '../../src/components/ui/Card';
 import { Input } from '../../src/components/ui/Input';
 import { TabPills } from '../../src/components/ui/TabPills';
@@ -50,6 +52,10 @@ export default function ItemizedScreen() {
 
   const f = useItemizedForm(paramGroupId, editId);
   const { flags } = useFeatureFlags();
+  // Scan where a receipt can be read: on this phone (iOS), or by the cloud reader when it is on.
+  const [scanOk, setScanOk] = useState(false);
+  useEffect(() => { receiptScanAvailable().then(setScanOk).catch(() => {}); }, []);
+  const canScan = flags.receiptScan && scanOk;
   const [showPayMethod, setShowPayMethod] = useState(false);
 
   return (
@@ -97,26 +103,19 @@ export default function ItemizedScreen() {
           same columns (`ItemGrid`), so every figure lines up down the page. */}
       {f.step === 'items' && (
         <KeyboardForm contentContainerStyle={[styles.itemsScroll, { paddingBottom: bottomPad }]}>
-          {Platform.OS === 'ios' && flags.receiptScan && (
+          {canScan && (
             <SecondaryButton
               label={f.scanning ? 'Reading receipt…' : 'Scan receipt'}
               icon="camera"
               size="md"
               disabled={f.scanning}
               onPress={() => {
-                if (f.scanning) return;
-                ActionSheetIOS.showActionSheetWithOptions(
-                  { options: ['Cancel', 'Take Photo', 'Choose from Library'], cancelButtonIndex: 0 },
-                  (i) => {
-                    if (i === 1) f.handleScanReceipt('camera');
-                    if (i === 2) f.handleScanReceipt('gallery');
-                  },
-                );
+                if (!f.scanning) choosePhotoSource(f.handleScanReceipt);
               }}
             />
           )}
 
-          <SectionHeader title="Add an item" first={!(Platform.OS === 'ios' && flags.receiptScan)} />
+          <SectionHeader title="Add an item" first={!canScan} />
           <Card padded style={styles.gap}>
             <ItemFields
               name={f.newName} qty={f.newQty} price={f.newPrice}

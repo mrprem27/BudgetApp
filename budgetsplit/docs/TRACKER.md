@@ -90,7 +90,7 @@ on something outside the repo; none of it stops a phone test.
 
 **To test on a phone:** build from `ios/` in Xcode (or `npx expo run:ios --device`); `.env` already
 points at the live API and receipt proxy. Without the paid Apple account (`B-02`) a free Apple ID
-installs for 7 days at a time. Android has no native project yet (`V-07`). Then `U-10`: your pass,
+installs for 7 days at a time. Android: the code is ready and unbuilt (`V-07`, `SPEC-ANDROID.md`). Then `U-10`: your pass,
 and every remark becomes a `U-` row.
 
 **The remaining `DECIDE` rows close on their default** (the last column in §3) unless you say

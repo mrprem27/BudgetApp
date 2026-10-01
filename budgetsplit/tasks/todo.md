@@ -27,6 +27,9 @@ box · Budget + Recurring share `SummaryCard` · badge board smaller again · Se
 PDF has a category ring + spend bars · demo data sensible by day / month / year (`thisMonth` null, `recent`).
 
 ## Open — next, in order
+00. **Two specs built 2026-10-01, both waiting on the user:** `docs/SPEC-ANALYTICS.md` (needs a Mixpanel project
+   token in `.env` + a service account for `scripts/usage-report.js`) and `docs/SPEC-ANDROID.md` (code ready,
+   never built: no JDK / Android SDK on this Mac; Android Studio or EAS, user's pick).
 0. **`docs/SPEC-SPEED-PDF-READS-FOLDERS.md`**, answered 2026-10-01 (release build; PDF = Reports export; v1
    endpoints later; server folders now). Built: speed steps 0 to 4, the PDF (U-19), the server split (U-84, NOT
    deployed). Open: speed step 5 (per-group reads) after the user's load times from the dev screen; the pure

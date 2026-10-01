@@ -1,5 +1,6 @@
 import { settings } from '../settings';
 import { deviceExtractor } from './device';
+import { ocrAvailable } from '../ocr';
 import { geminiExtractor } from './gemini';
 import type { ReceiptExtractor } from './types';
 
@@ -34,7 +35,18 @@ export type { ReceiptExtractor, ReceiptScanResult, ParsedLineItem } from './type
  */
 export async function getReceiptExtractor(): Promise<ReceiptExtractor> {
   const provider = await settings.ocrProvider();
-  return provider === 'device' ? deviceExtractor : withDeviceFallback(geminiExtractor);
+  if (provider === 'device') return deviceExtractor;
+  // A phone with no reader of its own (Android, until ML Kit) has nothing to fall back to.
+  return ocrAvailable ? withDeviceFallback(geminiExtractor) : geminiExtractor;
+}
+
+/**
+ * Whether a receipt can be read here at all: the phone reads it itself, or the cloud reader is
+ * the chosen one. False on Android with Cloud Receipt Scanning off, where a scan button could
+ * only fail.
+ */
+export async function receiptScanAvailable(): Promise<boolean> {
+  return ocrAvailable || (await settings.ocrProvider()) !== 'device';
 }
 
 /**

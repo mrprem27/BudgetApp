@@ -6,9 +6,9 @@
  * alongside the parsed result (see ReceiptScanSheet) so a miss is easy to catch
  * and fix manually, rather than silently wrong.
  */
-import { recognizeText } from 'expo-ocr';
+import { recognizeText, ocrAvailable } from 'expo-ocr';
 
-export { recognizeText };
+export { recognizeText, ocrAvailable };
 
 const AMOUNT_REGEX = /(?:total|amount|grand\s*total|net|balance|due)[:\s]*(?:₹|rs\.?|inr)?\s*([\d,]+\.?\d{0,2})/i;
 const AMOUNT_FALLBACK = /₹\s*([\d,]+\.?\d{0,2})/;

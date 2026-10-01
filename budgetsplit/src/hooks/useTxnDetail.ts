@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Alert, Platform, ActionSheetIOS } from 'react-native';
+import { Alert } from 'react-native';
+import { choosePhotoSource } from './photoSource';
 import { useSQLiteContext } from 'expo-sqlite';
 import { disputesFor } from '../db/queries/approval';
 import { useRouter } from 'expo-router';
@@ -126,14 +127,7 @@ export function useTxnDetail(id: string) {
   }
 
   function chooseReceiptSource() {
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        { options: ['Cancel', 'Take photo', 'Choose from library'], cancelButtonIndex: 0 },
-        (i) => { if (i === 1) attachReceipt('camera'); if (i === 2) attachReceipt('gallery'); },
-      );
-    } else {
-      attachReceipt('camera');
-    }
+    choosePhotoSource(attachReceipt);
   }
 
   function removeReceipt() {

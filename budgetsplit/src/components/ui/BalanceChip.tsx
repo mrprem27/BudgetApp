@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Platform } from 'react-native';
 import { space } from '../tokens';
 import { formatCompact } from '../../lib/money';
 import { oweView } from '../../lib/owe';
@@ -24,5 +24,7 @@ export function BalanceChip({ net }: Props) {
 
 const styles = StyleSheet.create({
   chip: { borderRadius: 8, paddingHorizontal: space.sm, paddingVertical: space.xs, flexShrink: 0 },
-  text: { fontFamily: 'SpaceMono_400Regular', fontSize: 13, letterSpacing: -0.5, fontWeight: '700' },
+  // Bold on iOS only, where it is drawn over the loaded face. Android answers a weight a custom
+  // family does not have by dropping the family, so the figure would lose its mono face there.
+  text: { fontFamily: 'SpaceMono_400Regular', fontSize: 13, letterSpacing: -0.5, ...Platform.select({ ios: { fontWeight: '700' as const } }) },
 });
