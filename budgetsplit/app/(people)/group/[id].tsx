@@ -180,10 +180,6 @@ export default function GroupDetailScreen() {
   // This month in this group: my share and everyone's, for the row under the header.
   const monthStart = useMemo(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1).getTime(); }, []);
   const monthSpend = useMemo(() => groupSpend(txns, meId, monthStart), [txns, meId, monthStart]);
-  const totalSpent = useMemo(
-    () => settled.filter(t => t.kind === 'expense' && !t.is_deleted).reduce((s, t) => s + t.shares.reduce((a, x) => a + x.amount, 0), 0),
-    [settled],
-  );
 
   const TABS: { key: TabKey; label: string }[] = [
     { key: 'transactions', label: 'Expenses' },
@@ -298,8 +294,6 @@ export default function GroupDetailScreen() {
           onRefresh={onRefresh}
           members={members}
           net={net}
-          meId={meId}
-          totalSpent={totalSpent}
           settlements={settlements}
           personMap={personMap}
           simplifyOn={simplifyOn}
