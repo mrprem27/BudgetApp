@@ -7,7 +7,8 @@ jest.mock('../db/queries/transactions', () => ({
 // The report CSV is the group export scoped to a month, so it reads `getMe` for
 // the Direction column the same way.
 jest.mock('../db/queries/persons', () => ({
-  getMe: jest.fn(async () => ({ id: 'p1' })),
+  getMe: jest.fn(async () => ({ id: 'p1', name: 'Prem' })),
+  getAllPersons: jest.fn(async () => [{ id: 'p1', name: 'Prem' }, { id: 'p2', name: 'Asha' }, { id: 'p3', name: 'Ravi' }]),
 }));
 
 import { getTransactionsInRange } from '../db/queries/transactions';
@@ -154,7 +155,7 @@ describe('buildReportHtml', () => {
   });
 
   it('skips groups with no transactions rather than printing an empty table', async () => {
-    mockRange.mockResolvedValueOnce([]).mockResolvedValueOnce([txn()]);
+    mockRange.mockResolvedValueOnce([]).mockResolvedValueOnce([txn()]).mockResolvedValue([]);
     const html = await buildReportHtml(db, [summary('Empty', 0, 0), summary('Full', 0, 25000)], MONTH);
     expect(html).not.toContain('<h2>Empty</h2>');
     expect(html).toContain('<h2>Full</h2>');
@@ -176,7 +177,7 @@ describe('buildReportHtml', () => {
     ]);
     const html = await buildReportHtml(db, [summary('Trip', 1000, 25000)], MONTH);
     expect(html).toMatch(/>\+₹/);
-    expect(html).toMatch(/>-₹/);
+    expect(html).toMatch(/>−₹/);
   });
 
   it('sorts transactions newest first', async () => {
@@ -204,7 +205,8 @@ describe('buildReportHtml', () => {
       txn({ id: 'b', note: 'solo' }),
     ]);
     const html = await buildReportHtml(db, [summary('Flat', 0, 65000)], MONTH);
-    const row = (note: string) => html.split('<tr>').find(r => r.includes(note))!;
+    // The entries, not the facts over them (the largest expense names its note too).
+    const row = (note: string) => html.slice(html.indexOf('<h2>')).split('<tr>').find(r => r.includes(note))!;
     // The split dinner: ₹1,200 as the whole bill, ₹400 as mine. It printed ₹1,200 under a ₹650 total.
     expect(row('dinner')).toContain('₹1,200');
     expect(row('dinner')).toContain('−₹400');
@@ -225,7 +227,13 @@ describe('buildReportHtml', () => {
     expect(transfers).toContain('paid Asha');
     expect(spending).not.toContain('paid Asha');
     // Moved is what I moved (₹500), not two friends settling between themselves.
-    expect(html).toMatch(/Moved<\/span><span class="box-value"[^>]*>₹500\.00</);
+    expect(html).toMatch(/Moved<\/span><span class="kpi-value">₹500</);
+    // Who paid whom, signed from my side: mine is money out, theirs carries no sign at all.
+    const row = (note: string) => transfers.split('<tr>').find(r => r.includes(note))!;
+    expect(row('paid Asha')).toContain('You paid Asha');
+    expect(row('paid Asha')).toContain('−₹500.00');
+    expect(row('theirs')).toContain('Asha paid Ravi');
+    expect(row('theirs')).toContain('>₹700.00');
   });
 
   it('leads with the categories, by my share', async () => {
@@ -234,6 +242,17 @@ describe('buildReportHtml', () => {
     const where = html.slice(html.indexOf('Where it went'), html.indexOf('<h2>'));
     expect(where.indexOf('Fuel')).toBeLessThan(where.indexOf('Food'));
     expect(where).toContain('75%');
+  });
+
+  it('measures the four figures against the period before (U-95)', async () => {
+    const jan = txn({ id: 'now' });
+    const dec = txn({ id: 'then', date: new Date(2025, 11, 10, 12).getTime(), payments: [{ personId: 'p1', amount: 20000 }], shares: [{ personId: 'p1', amount: 20000 }] });
+    mockRange.mockImplementation(async (_db, _g, from) => (from >= new Date(2026, 0, 1).getTime() ? [jan] : [dec]));
+    const html = await buildReportHtml(db, [summary('Me', 0, 25000)], MONTH);
+    expect(html).toContain('25% more than December');
+    expect(html).toContain('nothing in December to compare'); // received
+    expect(html).toContain('Prepared for Prem');
+    expect(html).toContain('Largest category');
   });
 
   it('names a custom period correctly when it is empty', async () => {
@@ -247,20 +266,25 @@ describe('buildReportHtml', () => {
       txn({ id: 'b', category: 'Fuel', date: new Date(2026, 0, 20, 12).getTime() }),
     ]);
     const html = await buildReportHtml(db, [summary('Me', 0, 50000)], MONTH);
-    expect(html.match(/<svg/g)).toHaveLength(2);
+    expect(html.match(/<svg class="(ring|bars)"/g)).toHaveLength(2);
+    // Every chart carries its own size: one without a height was at the mercy of the print renderer.
+    expect(html.match(/<svg class="\w+" xmlns="[^"]+" width="\d+" height="\d+"/g)).toHaveLength(html.match(/<svg/g)!.length);
+    expect(html).not.toMatch(/display:\s*flex/);
     // Two slices, each an arc with real coordinates.
-    expect(html.match(/<path d="M [\d.]+ [\d.]+ A 56 56/g)).toHaveLength(2);
+    expect(html.match(/<path d="M [\d.]+ [\d.]+ A 64 64/g)).toHaveLength(2);
     expect(html).not.toMatch(/NaN/);
     // January: a bar for the 10th and the 20th, nothing external to load.
-    expect(html.match(/<rect /g)).toHaveLength(2);
+    expect(html.match(/<rect class="bar"/g)).toHaveLength(2);
     expect(html).not.toMatch(/<script|src=["']http/i);
   });
 
   it('one category is a whole ring, and no spending draws no charts', async () => {
     mockRange.mockResolvedValue([txn()]);
     const one = await buildReportHtml(db, [summary('Me', 0, 25000)], MONTH);
-    expect(one).toMatch(/<circle [^>]*stroke-width="20"/);
+    expect(one).toMatch(/<circle [^>]*stroke-width="24"/);
     expect(one).not.toMatch(/NaN/);
+    // One day of spending is not a chart.
+    expect(one).not.toMatch(/<svg class="bars"/);
     mockRange.mockResolvedValue([txn({ kind: 'income' })]);
     expect(await buildReportHtml(db, [summary('Me', 25000, 0)], MONTH)).not.toMatch(/<svg/);
   });
