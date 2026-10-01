@@ -1,17 +1,15 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, type LayoutChangeEvent } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useSQLiteContext } from 'expo-sqlite';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 import { useScreenData } from '../../src/hooks/useScreenData';
 import { LineChart } from 'react-native-gifted-charts';
 import { getDate, getDaysInMonth } from 'date-fns';
 import { monthLabel } from '../../src/lib/dateFormat';
-import { colors, type, space, layout, alpha } from '../../src/theme';
+import { colors, type, space, layout, radius, alpha } from '../../src/theme';
 import { categoryVisual } from '../../src/constants/categories';
 import { asFeather, decor } from '../../src/constants/palette';
 import { HeaderIconButton } from '../../src/components/ui/HeaderIconButton';
-import { useExportAll } from '../../src/hooks/useExportAll';
 import { Card } from '../../src/components/ui/Card';
 import { ListRow } from '../../src/components/ui/ListRow';
 import { Divider } from '../../src/components/ui/Divider';
@@ -24,11 +22,14 @@ import { MoneyPreferences } from '../../src/components/finance/settings/MoneyPre
 import { SheetModal } from '../../src/components/ui/SheetModal';
 import { InfoLabel } from '../../src/components/ui/InfoLabel';
 import { InsightTile, InsightGrid } from '../../src/components/finance/insights/InsightTile';
+import { PressableScale } from '../../src/components/ui/PressableScale';
+import { SectionHeader } from '../../src/components/ui/SectionHeader';
+import { Feather } from '@expo/vector-icons';
 import { EmptyState } from '../../src/components/ui/EmptyState';
 import { ErrorState } from '../../src/components/ui/ErrorState';
 import { AppRefreshControl } from '../../src/components/ui/AppRefreshControl';
 import { InsightText } from '../../src/components/finance/InsightText';
-import { SampleNote } from '../../src/components/finance/SampleNote';
+import { LOW_SAMPLE_TXNS } from '../../src/components/finance/SampleNote';
 import { BudgetBar } from '../../src/components/finance/BudgetBar';
 import { healthColor, recColor } from '../../src/components/finance/group/helpers';
 
@@ -67,20 +68,20 @@ const isDuplicateRec = (id: string) =>
 type Sheet = 'outlook' | 'attention' | 'forecast' | 'shifts' | 'whatif' | 'savings' | 'prefs' | null;
 /** Each section's name, said once: on its tile and on the sheet the tile opens. */
 const TITLE: Record<Exclude<Sheet, null>, string> = {
+  // Short enough to fit half a row on a small phone: "Changed vs last month" was cut to
+  // "Changed vs last m…", which lost the one word that said what it was.
   outlook: 'Cash outlook',
   prefs: 'How your money works',
   attention: 'Needs attention',
-  forecast: 'Month-end forecast',
-  shifts: 'Changed vs last month',
-  whatif: 'What if I cut back?',
+  forecast: 'Month end',
+  shifts: 'What changed',
+  whatif: 'What if',
   savings: 'Ways to save',
 };
 
 export default function InsightsScreen() {
   const router = useRouter();
-  const db = useSQLiteContext();
   const { flags } = useFeatureFlags();
-  const { exporting, exportAll } = useExportAll(db);
   const [cutPct, setCutPct] = useState(20);
   // Which section's sheet is up. One at a time, by construction.
   const [sheet, setSheet] = useState<Sheet>(null);
@@ -135,6 +136,9 @@ export default function InsightsScreen() {
   // The same figure and words as Home's month-end tile (`forecastTile`), not a second phrasing of it.
   const forecast = hasForecast ? forecastTile({ projected, budget }) : null;
 
+  // What the projections rest on, said behind the headline's (i) rather than as a line of its own.
+  const sampleLine = txnCount <= 0 ? '' : ` Based on ${txnCount} ${txnCount === 1 ? 'entry' : 'entries'} this month${txnCount < LOW_SAMPLE_TXNS ? ', so it will sharpen as you log more' : ''}.`;
+
   const attentionCount = drivers.length + notes.length;
   const overTotal = drivers.reduce((s, d) => s + d.over, 0);
   const nothingYet = !loading && !hasBudget && attentionCount === 0 && shifts.length === 0
@@ -150,7 +154,8 @@ export default function InsightsScreen() {
       <ScreenHeader
         large
         title="Insights"
-        right={<HeaderIconButton icon="pie-chart" color={colors.accent} label="Reports" showLabel onPress={() => router.push('/reports')} />}
+        // The one way into Reports from here, so it is the thing the Reports switch turns off.
+        right={flags.reports ? <HeaderIconButton icon="pie-chart" color={colors.accent} label="Reports" showLabel onPress={() => router.push('/reports')} /> : undefined}
       />
       {loadError ? (
         <ErrorState onRetry={reload} />
@@ -210,40 +215,36 @@ export default function InsightsScreen() {
                     <BudgetBar pct={pctUsed} health={budgetHealth(pctUsed)} height={10} />
                   </View>
                   <Divider indent="none" />
-                  <Text style={[styles.verdict, { color: overspend ? colors.expense : colors.income }]}>
-                    {overspend
-                      ? `At this pace you'll be ${formatCompact(projected - budget)} over by month-end`
-                      : `At this pace you'll finish with ${formatCompact(budget - projected)} to spare`}
-                  </Text>
-                  <Text style={styles.pace}>
-                    You're averaging {formatCompact(dailyAvg)}/day · your budget allows {formatCompact(budgetPerDay)}/day
-                  </Text>
+                  {/* The verdict is the line; how it is reached (your pace, the budget's, how many
+                      entries it rests on) is behind the (i), not three more lines under it. */}
+                  <View style={styles.verdictRow}>
+                    <InfoLabel
+                      label={overspend
+                        ? `At this pace you'll be ${formatCompact(projected - budget)} over by month-end`
+                        : `At this pace you'll finish with ${formatCompact(budget - projected)} to spare`}
+                      labelStyle={[styles.verdict, { color: overspend ? colors.expense : colors.income }]}
+                      info={`You're averaging ${formatCompact(dailyAvg)} a day; your budget allows ${formatCompact(budgetPerDay)} a day.${sampleLine}`}
+                      accessibilityLabel="How this is worked out"
+                    />
+                  </View>
                 </>
               ) : (
                 <>
                   <Text style={styles.heroSub}>spent so far · {formatCompact(projected)} projected by month-end</Text>
                   <Divider indent="none" />
-                  {/* Without a budget every section below is a description with
-                      nothing to measure against, so the way to fix that is the
-                      card's own action rather than a line of advice. */}
-                  <Text style={styles.pace}>
-                    Set a budget and this becomes “on track” or “over by ₹X” instead of just a number.
-                  </Text>
+                  {/* Without a budget every section below is a description with nothing to
+                      measure against, so the way to fix that is the card's own action. */}
+                  <View style={styles.verdictRow}>
+                    <InfoLabel
+                      label="No budget to measure this against"
+                      labelStyle={styles.noBudget}
+                      info={`Set a budget and this becomes “on track” or “over by ₹X” instead of just a number.${sampleLine}`}
+                    />
+                  </View>
                   <View style={styles.heroCta}>
                     <Chip label="Set a budget" icon="target" onPress={() => router.push('/budget')} />
                   </View>
                 </>
-              )}
-
-              {/* One note for the whole screen — every projection below shares the sample. It
-                  sat centred between two cards, belonging to neither; it qualifies the figures in
-                  this card first, so it closes it, left-aligned with the text above (`U-58`). */}
-              {!loading && (
-                <SampleNote
-                  txnCount={txnCount}
-                  lowSampleHint="Projections below will sharpen as you log more."
-                  style={styles.sampleNote}
-                />
               )}
             </Card>
         )}
@@ -266,18 +267,13 @@ export default function InsightsScreen() {
               onPress={() => setSheet('outlook')}
             />
           )}
-          <InsightTile
-            key="prefs" icon="sliders" tint={decor.violet} title={TITLE.prefs}
-            line="Pay cycle, safe to spend, defaults"
-            onPress={() => setSheet('prefs')}
-          />
           {attentionCount > 0 && (
             <InsightTile
               key="attention" icon="alert-triangle" tint={colors.expense} title={TITLE.attention}
               figure={overTotal > 0 ? formatCompact(overTotal) : String(attentionCount)}
               figureColor={colors.expense}
               // The amount is the overruns'; the count beside it has to be theirs too, not the notes'.
-              line={overTotal > 0 ? `over, in ${drivers.length} ${drivers.length === 1 ? 'category' : 'categories'}` : attentionCount === 1 ? 'thing to look at' : 'things to look at'}
+              line={overTotal > 0 ? `over budget in ${drivers.length} ${drivers.length === 1 ? 'category' : 'categories'}` : attentionCount === 1 ? 'thing to look at' : 'things to look at'}
               onPress={() => setSheet('attention')}
             />
           )}
@@ -295,7 +291,7 @@ export default function InsightsScreen() {
               key="shifts" icon="repeat" tint={decor.orange} title={TITLE.shifts}
               figure={`${shifts[0].pct > 0 ? '+' : ''}${shifts[0].pct}%`}
               figureColor={shifts[0].pct > 5 ? colors.expense : shifts[0].pct < -5 ? colors.income : undefined}
-              line={shifts.length === 1 ? shifts[0].cat : `${shifts[0].cat}, and ${shifts.length - 1} more`}
+              line={shifts.length === 1 ? `${shifts[0].cat} vs last month` : `${shifts[0].cat} vs last month, and ${shifts.length - 1} more`}
               onPress={() => setSheet('shifts')}
             />
           )}
@@ -304,7 +300,7 @@ export default function InsightsScreen() {
               key="whatif" icon="scissors" tint={decor.pink} title={TITLE.whatif}
               figure={formatCompact(cutSaving)}
               figureColor={colors.income}
-              line={`a month, with ${cutPct}% less ${whatIf.name}`}
+              line={`a month, spending ${cutPct}% less on ${whatIf.name}`}
               onPress={() => setSheet('whatif')}
             />
           )}
@@ -316,20 +312,19 @@ export default function InsightsScreen() {
               onPress={() => setSheet('savings')}
             />
           )}
-          {/* Reports and export live here, with the numbers they are built from, not in Settings. */}
-          {flags.reports && (
-            <InsightTile
-              key="reports" icon="pie-chart" tint={colors.settle} title="Reports"
-              line="Month by month, drill down, CSV and PDF"
-              onPress={() => router.push('/reports')}
-            />
-          )}
-          <InsightTile
-            key="export" icon="database" tint={colors.textSecondary} title="Export all data"
-            line={exporting ? 'Preparing your file…' : 'Every transaction as one CSV'}
-            onPress={exporting ? () => {} : exportAll}
-          />
         </InsightGrid>
+
+        {/* Not a tile: it holds no figure, it is where the figures are configured. So it is a
+            button of its own, full width, with the settings glyph (yours, 2026-10-01). Reports is
+            the header's action, and Export all data is on Profile with your other data. */}
+        <PressableScale style={styles.prefs} onPress={() => setSheet('prefs')} accessibilityLabel={`${TITLE.prefs}. Pay cycle, safe to spend, defaults. Open`}>
+          <IconCircle icon="settings" size={layout.avatarSize} color={decor.violet} />
+          <View style={styles.prefsText}>
+            <Text style={styles.prefsTitle}>{TITLE.prefs}</Text>
+            <Text style={styles.prefsSub}>Pay cycle, safe to spend, defaults</Text>
+          </View>
+          <Feather name="chevron-right" size={18} color={colors.textMuted} />
+        </PressableScale>
       </ScrollView>
       )}
 
@@ -572,11 +567,16 @@ export default function InsightsScreen() {
           the screen, so its rows have read their settings before the sheet can be opened. */}
       <MoneyPreferences
         tint={decor.violet}
-        wrap={(rows, pickerOpen) => (
+        wrap={(sections, pickerOpen) => (
           <InsightSheet id="prefs" sheet={sheet} hidden={pickerOpen} onClose={closeSheet}
-          label="What the forecasts are built on"
-              info="Safe to spend, the month-end forecast and Can I afford all read these answers. Change one and they move with it.">
-            <Card clip>{rows}</Card>
+            label="What the forecasts are built on"
+            info="Safe to spend, the month-end forecast and Can I afford all read these answers. Change one and they move with it.">
+            {sections.map((sec, i) => (
+              <View key={sec.title}>
+                <SectionHeader title={sec.title} first={i === 0} />
+                <Card clip>{sec.rows}</Card>
+              </View>
+            ))}
           </InsightSheet>
         )}
       />
@@ -650,6 +650,15 @@ const styles = StyleSheet.create({
   sheetIntro: { marginBottom: space.md },
   sheetIntroLabel: { ...type.bodySemi, color: colors.textPrimary },
   sheetFoot: { marginTop: space.md },
+  verdictRow: { marginTop: space.md },
+  noBudget: { ...type.bodySemi, color: colors.textSecondary },
+  prefs: {
+    flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.md, marginTop: space.xs,
+    borderRadius: radius.lg, borderWidth: 1, backgroundColor: alpha(decor.violet, 8), borderColor: alpha(decor.violet, 25),
+  },
+  prefsText: { flex: 1, minWidth: 0 },
+  prefsTitle: { ...type.bodySemi, color: colors.textPrimary },
+  prefsSub: { ...type.caption, color: colors.textMuted, marginTop: 2 },
   sampleNote: { textAlign: 'left', marginTop: space.md, marginBottom: 0 },
   outlookAmt: { ...type.amountSM },
 
@@ -659,7 +668,7 @@ const styles = StyleSheet.create({
   heroSub: { ...type.caption, color: colors.textMuted, marginTop: 2 },
   heroBar: { marginTop: space.md, marginBottom: space.md },
   heroCta: { alignSelf: 'flex-start', marginTop: space.md },
-  verdict: { ...type.bodySemi, marginTop: space.md },
+  verdict: { ...type.bodySemi },
   pace: { ...type.caption, color: colors.textMuted, marginTop: space.xs, lineHeight: 17 },
 
   over: { ...type.amountSM, color: colors.expense },

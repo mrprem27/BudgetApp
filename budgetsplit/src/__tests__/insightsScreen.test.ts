@@ -74,7 +74,10 @@ describe('the sections are tiles that open a sheet, built from the design system
   it('every section is an InsightTile in one grid, and none is a collapsed row', () => {
     // A column of collapsed `SectionCard`s gave nine sections the same weight and no figure.
     expect(code).toContain('<InsightGrid>');
-    expect((code.match(/<InsightTile/g) ?? []).length).toBeGreaterThanOrEqual(8);
+    // Six sections with a figure. The preferences are a button of their own, Reports is the
+    // header's action, and Export all data is on Profile.
+    expect((code.match(/<InsightTile/g) ?? []).length).toBe(6);
+    expect(code).toMatch(/<PressableScale style=\{styles\.prefs\} onPress=\{\(\) => setSheet\('prefs'\)\}/);
     expect(code).not.toMatch(/<SectionCard|styles\.secLabel|styles\.secCard|styles\.chartCard/);
   });
 
@@ -84,7 +87,9 @@ describe('the sections are tiles that open a sheet, built from the design system
     expect((code.match(/<InsightSheet id="/g) ?? []).length).toBe(7);
     expect((code.match(/<SheetModal /g) ?? []).length).toBe(1);
     expect(code).toMatch(/title=\{TITLE\[id\]\}/);
-    expect((code.match(/title=\{TITLE\.\w+\}/g) ?? []).length).toBe(7);
+    // Six tiles, and the preferences button names itself from the same list.
+    expect((code.match(/title=\{TITLE\.\w+\}/g) ?? []).length).toBe(6);
+    expect(code).toMatch(/\{TITLE\.prefs\}/);
   });
 
   it('the preferences sheet steps aside while one of its pickers is up', () => {
@@ -93,8 +98,27 @@ describe('the sections are tiles that open a sheet, built from the design system
     expect(code).toMatch(/<InsightSheet id="prefs" sheet=\{sheet\} hidden=\{pickerOpen\}/);
     expect(code).toMatch(/visible=\{sheet === id && !hidden\}/);
     const prefs = readFileSync(join(__dirname, '..', 'components', 'finance', 'settings', 'MoneyPreferences.tsx'), 'utf8');
-    expect(prefs).toMatch(/\{wrap\(rows, showPayMethod \|\| showCadence \|\| money\.open\)\}/);
+    expect(prefs).toMatch(/\{wrap\(sections, showPayMethod \|\| showCadence \|\| money\.open\)\}/);
     expect(prefs).toMatch(/\{money\.sheets\}/);
+  });
+
+  it('every tile is one size, and nothing in one is cut off', () => {
+    const tile = readFileSync(join(__dirname, '..', 'components', 'finance', 'insights', 'InsightTile.tsx'), 'utf8');
+    // A fixed height (a minimum let a short tile sit lower than its neighbour), a title that
+    // shrinks before it truncates, and two lines for the sentence under the figure.
+    expect(tile).toMatch(/tile: \{[^}]*height: 148/);
+    expect(tile).not.toMatch(/minHeight/);
+    expect(tile).toMatch(/styles\.title\} numberOfLines=\{1\} adjustsFontSizeToFit/);
+    expect(tile).toMatch(/styles\.line\} numberOfLines=\{2\}/);
+    // The names are keywords short enough for half a row.
+    for (const [, name] of code.matchAll(/^\s+(?:outlook|attention|forecast|shifts|whatif|savings): '([^']+)'/gm)) {
+      expect({ name, fits: name.length <= 16 }).toEqual({ name, fits: true });
+    }
+  });
+
+  it('the headline says its verdict once, with the working behind an (i)', () => {
+    expect((code.match(/<InfoLabel/g) ?? []).length).toBeGreaterThanOrEqual(3);
+    expect(code).not.toMatch(/<SampleNote|styles\.pace\}>\s*You're averaging/);
   });
 
   it('says the month-end figure the way Home does', () => {

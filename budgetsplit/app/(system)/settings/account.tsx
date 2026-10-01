@@ -35,6 +35,7 @@ import {
 } from '../../../src/lib/serverApi';
 import { backOr } from '../../../src/lib/nav';
 import { saveMyName } from '../../../src/lib/settingsData';
+import { useExportAll } from '../../../src/hooks/useExportAll';
 import { replacePersonPhoto } from '../../../src/lib/personWrites';
 import { useDataRefresh } from '../../../src/components/system/DataRefreshProvider';
 
@@ -60,6 +61,7 @@ export default function AccountScreen() {
   const { refresh } = useDataRefresh();
   const { session, ready, configured, reload } = useServerSession();
   const me = useStore(s => s.me);
+  const { exporting, exportAll } = useExportAll(db);
   const [showName, setShowName] = useState(false);
   const [nameText, setNameText] = useState('');
 
@@ -229,6 +231,17 @@ export default function AccountScreen() {
       <SectionHeader title="Your data" />
       <Card clip style={styles.card}>
         <SettingsRow icon="shield" label="Backup & restore" value="Encrypted" tint={TINT.data} onPress={() => router.push('/settings/backup')} />
+        <Divider indent="text" />
+        {/* Was a tile at the foot of Insights, with a line of text for its loading state. It is
+            your data leaving the phone as a file, so it sits with the backup (yours, 2026-10-01). */}
+        <SettingsRow
+          icon="download"
+          label={exporting ? 'Preparing your file…' : 'Export all data'}
+          value={exporting ? undefined : 'One CSV'}
+          tint={TINT.data}
+          onPress={exporting ? undefined : exportAll}
+          right={exporting ? <ActivityIndicator size="small" color={TINT.data} /> : undefined}
+        />
       </Card>
     </>
   );

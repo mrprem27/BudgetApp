@@ -54,7 +54,7 @@ type Sheet = 'cycle' | 'day' | 'ahead' | 'keep' | 'amount' | null;
  * (`lib/sheetStage`), and a sheet rendered inside another's content is unmounted with it, so a
  * caller that shows the rows in a sheet has to render these pickers beside that sheet, not in it.
  */
-export function useMoneySettingsRows(tint: string): { rows: ReactNode; sheets: ReactNode; open: boolean } {
+export function useMoneySettingsRows(tint: string): { payRow: ReactNode; safeRows: ReactNode; sheets: ReactNode; open: boolean } {
   const { refresh } = useDataRefresh();
   const [s, setS] = useState<MoneySettings>(DEFAULT_MONEY_SETTINGS);
   const [sheet, setSheet] = useState<Sheet>(null);
@@ -69,11 +69,14 @@ export function useMoneySettingsRows(tint: string): { rows: ReactNode; sheets: R
 
   const keepValue = s.keepAside === 'custom' ? formatCompact(s.keepAsideAmount) : KEEP.find(k => k.key === s.keepAside)!.label;
 
-  const rows = (
+  // Handed back by section (`MoneyPreferences` gives each its own heading), so a row's label
+  // does not have to repeat what its section already says.
+  const payRow = (
+    <SettingsRow icon="calendar" label="Pay cycle" tint={tint} value={cycleValue(s)} onPress={() => setSheet('cycle')} />
+  );
+  const safeRows = (
     <>
-      <SettingsRow icon="calendar" label="How you're paid" tint={tint} value={cycleValue(s)} onPress={() => setSheet('cycle')} />
-      <View style={settingsRowDivider} />
-      <SettingsRow icon="eye" label="Safe to spend looks ahead" tint={tint} value={AHEAD.find(a => a.key === s.lookAhead)!.label.replace('Until my ', '').replace('The next ', '')} onPress={() => setSheet('ahead')} />
+      <SettingsRow icon="eye" label="Looks ahead" tint={tint} value={AHEAD.find(a => a.key === s.lookAhead)!.label.replace('Until my ', '').replace('The next ', '')} onPress={() => setSheet('ahead')} />
       <View style={settingsRowDivider} />
       <SettingsRow icon="shield" label="Keep aside" tint={tint} value={keepValue} onPress={() => setSheet('keep')} />
     </>
@@ -130,7 +133,7 @@ export function useMoneySettingsRows(tint: string): { rows: ReactNode; sheets: R
       </SheetModal>
     </>
   );
-  return { rows, sheets, open: sheet !== null };
+  return { payRow, safeRows, sheets, open: sheet !== null };
 }
 
 const styles = StyleSheet.create({

@@ -13,6 +13,8 @@ import { settings } from '../../../lib/settings';
 import { asBudgetCadence, asPayMethod, PayMethod, PAY_METHOD_LABEL } from '../../../constants/enums';
 import type { BudgetCadence } from '../../../db/queries/categoryBudgets';
 
+export type PreferenceSection = { title: string; rows: ReactNode };
+
 const CADENCE_LABELS: Record<BudgetCadence, string> = { daily: 'Daily', monthly: 'Monthly', yearly: 'Yearly' };
 const CADENCE_KEYS = Object.keys(CADENCE_LABELS) as BudgetCadence[];
 
@@ -22,14 +24,14 @@ const CADENCE_KEYS = Object.keys(CADENCE_LABELS) as BudgetCadence[];
  * (`U-86`), beside the forecasts these answers drive; it was Settings' Preferences section,
  * a screen away from anything it changes.
  *
- * The rows are shown in the caller's sheet (`U-91`): `wrap` gets the rows and whether one of
- * their pickers is open, and the pickers are rendered beside whatever it returns. A sheet inside
+ * The rows are shown in the caller's sheet (`U-91`), in sections: `wrap` gets the sections and
+ * whether one of their pickers is open, and the pickers are rendered beside whatever it returns. A sheet inside
  * another sheet's content dies with it (`lib/sheetStage`), so the caller hides its own sheet while a
  * picker is up and shows it again after.
  */
 export function MoneyPreferences({ tint, wrap }: {
   tint: string;
-  wrap: (rows: ReactNode, pickerOpen: boolean) => ReactNode;
+  wrap: (sections: PreferenceSection[], pickerOpen: boolean) => ReactNode;
 }) {
   const money = useMoneySettingsRows(tint);
   const [defaultCadence, setDefaultCadence] = useState<BudgetCadence>('monthly');
@@ -60,25 +62,32 @@ export function MoneyPreferences({ tint, wrap }: {
     await settings.setDefaultCadence(c);
   }
 
-  const rows = (
-    <>
-      <ListRow
-        leading={<PayMethodDisc method={defaultPay} size={layout.iconCircle} color={tint} />}
-        title="Usually paid from"
-        value={PAY_METHOD_LABEL[defaultPay]}
-        onPress={() => setShowPayMethod(true)}
-        accessibilityLabel="Usually paid from"
-      />
-      <View style={settingsRowDivider} />
-      <SettingsRow icon="repeat" label="Default budget cadence" tint={tint} value={CADENCE_LABELS[defaultCadence]} onPress={() => setShowCadence(true)} />
-      <View style={settingsRowDivider} />
-      {money.rows}
-    </>
-  );
+  // Three sections, each one question: how money comes in, what Safe to spend holds back, and
+  // what a new entry or budget starts on.
+  const sections: PreferenceSection[] = [
+    { title: 'How you are paid', rows: money.payRow },
+    { title: 'Safe to spend', rows: money.safeRows },
+    {
+      title: 'Defaults',
+      rows: (
+        <>
+          <ListRow
+            leading={<PayMethodDisc method={defaultPay} size={layout.iconCircle} color={tint} />}
+            title="Usually paid from"
+            value={PAY_METHOD_LABEL[defaultPay]}
+            onPress={() => setShowPayMethod(true)}
+            accessibilityLabel="Usually paid from"
+          />
+          <View style={settingsRowDivider} />
+          <SettingsRow icon="repeat" label="Budget cadence" tint={tint} value={CADENCE_LABELS[defaultCadence]} onPress={() => setShowCadence(true)} />
+        </>
+      ),
+    },
+  ];
 
   return (
     <>
-      {wrap(rows, showPayMethod || showCadence || money.open)}
+      {wrap(sections, showPayMethod || showCadence || money.open)}
       {money.sheets}
 
       {/* Reuses the Add screen's own picker, so the tiles here are the tiles the

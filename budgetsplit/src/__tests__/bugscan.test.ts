@@ -552,10 +552,13 @@ describe('UI-1 · every tab has the same header and the same action buttons', ()
       expect(fs.readFileSync(`app/(tabs)/${tab}.tsx`, 'utf8')).not.toMatch(/ProfileButton|router\.push\('\/settings'\)/);
     }
   });
-  it('Reports and export are on Insights, not in Settings', () => {
-    expect(fs.readFileSync('app/(tabs)/insights.tsx', 'utf8')).toMatch(/Export all data/);
+  it('Reports is reached from Insights; Export all data is on Profile with your other data', () => {
+    expect(fs.readFileSync('app/(tabs)/insights.tsx', 'utf8')).toMatch(/router\.push\('\/reports'\)/);
+    // Export was a tile at the foot of Insights; it is a file of your data, so it sits beside the backup.
+    expect(fs.readFileSync('app/(tabs)/insights.tsx', 'utf8')).not.toMatch(/exportAll/);
+    expect(fs.readFileSync('app/(system)/settings/account.tsx', 'utf8')).toMatch(/Export all data/);
     const settings = fs.readFileSync('app/(system)/settings/index.tsx', 'utf8');
-    expect(settings).not.toMatch(/Reports & export|Export all data/);
+    expect(settings).not.toMatch(/Reports & export|exportAll/);
   });
 });
 
@@ -721,7 +724,7 @@ describe('A · Money has three sections, and the forecast lives in Insights', ()
   });
   it('Money no longer carries the month-end forecast', () => {
     expect(money).not.toMatch(/ForecastCard|forecastMonthEnd/);
-    expect(fs.readFileSync('app/(tabs)/insights.tsx', 'utf8')).toMatch(/Month-end forecast/);
+    expect(fs.readFileSync('app/(tabs)/insights.tsx', 'utf8')).toMatch(/forecast: 'Month end'/);
   });
 });
 

@@ -1354,19 +1354,25 @@ budget** chip, because every section below needs something to measure against. I
 filled `budget / projected`, making the filled part your *budget* and the empty part the
 overspend — inverted from `BudgetBar` and Home's `ForecastCard`.
 
-Below it, a two-column grid of tiles (`finance/insights/InsightTile`, `U-91`), each in its own
-colour with the one figure the section comes down to, each opening a sheet that starts with what
-the section is and an (i) for how it is worked out. A section with nothing to say has no tile.
-Cash outlook · How your money works (the preferences; its pickers open beside the sheet, which
-steps aside while one is up) · then:
+The headline says its verdict once; the pace behind it and how many entries it rests on are behind
+an (i) on that line (`U-105`).
+
+Below it, a two-column grid of tiles (`finance/insights/InsightTile`, `U-91`, `U-105`), all one
+height, each in its own colour with a keyword, the one figure the section comes down to and a
+sentence under it. Each opens a sheet that starts with what the section is and an (i) for how it is
+worked out. A section with nothing to say has no tile. Cash outlook, then:
 
 - **Needs attention** — over-budget categories worst-first (tap → `/category/{name}`), then the
   rule-engine notes that aren't repeats. `over-*`, `projected` and `ontrack` are filtered out:
   the first duplicated the driver rows, the second is the headline's own sentence, and the third
   fired once *per group*, so four groups printed "All budgets are on track" four times.
-- **Month-end forecast** — the line chart (x-axis labels sized so they don't truncate).
-- **Changed vs last month** · **What if I cut back?** (`10% · 20% · 30%` chips) · **Ways to save**.
-- **Reports** (→ `/reports`) and **Export all data** are tiles too; they open nothing, they go.
+- **Month end** — the forecast's line chart (x-axis labels sized so they don't truncate).
+- **What changed** (vs last month) · **What if** (`10% · 20% · 30%` chips) · **Ways to save**.
+
+Under the grid, **How your money works**: a full-width button with the settings glyph, opening the
+preferences in three sections (How you are paid; Safe to spend; Defaults). Its pickers open beside
+the sheet, which steps aside while one is up. **Reports** is the header's action *(flag `reports`)*.
+**Export all data** is on Profile, under Your data.
 
 Donut / trend / owe-owed / recurring analytics live in **Reports**, not here — insights has one
 home.

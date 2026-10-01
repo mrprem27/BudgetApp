@@ -2,8 +2,8 @@
 
 Branch `claude/branch-selection-gi7lyy`. **Commits ahead of origin, NOT pushed** (push needs the
 `mrprem27` account switch, see Rules). Server deployed after the folder split (U-84); nothing server-side
-changed since but its README. Gates at the last full run: 3,026 tests green, tsc clean for the app.
-Nothing from today has been seen on a phone. Tracker: 310 items (94 open), 101 in §11.
+changed since but its README. Gates at the last full run: 3,040 tests green, tsc clean for the app.
+Nothing from today has been seen on a phone. Tracker: 314 items (93 open), 105 in §11.
 
 ## Built today, all committed (the why is in FINDINGS §11, U-71 to U-101)
 Earlier: speed, budget and recurring cards, person page, Members tab, report PDF, analytics, Android readiness.
@@ -11,25 +11,25 @@ This session: **Profile screen** in sections, every badge under the profile row 
 starter set** (U-94) · **report PDF rebuilt** as a statement (U-95) · Upcoming listed once, to month-end, the
 bell on the same window (U-96) · group totals follow the filters (U-97) · Simplify is a switch (U-98) ·
 **Not set is a place in Move money** (U-99) · **Insights as tiles**, one sheet each (U-91) · consistency
-pass, app and server (U-100) · then code review, simplify, code review again, all findings applied.
+pass, app and server (U-100) · then code review, simplify, code review again, all findings applied ·
+SCREENS' Money section rewritten (U-101) · **API log** on the dev screen (U-102) · one switch component and
+one comparison rule (U-103) · **Send feedback** and the V1 test round (U-104) · Insights reworked after
+the user saw the tiles (U-105).
 
 ## Open — next, in order
-1. **The phone pass on today's work.** Most worth looking at: the Insights preferences sheet stepping aside
-   for its pickers; the PDF's charts (reported missing on the phone before the rebuild, never reproduced);
-   Profile; the group totals row with filters on.
-2. **U-101** `SCREENS.md`'s Money section still describes the old Plan screen. A doc rewrite.
-3. **Speed, step 5** (`docs/SPEC-SPEED-PDF-READS-FOLDERS.md` §1): Reports read 565 ms on the user's phone,
+1. **The V1 test round**: `docs/RELEASE_CHECKLIST.md` §2.0, fourteen steps. Testers report through Help &
+   Feedback → Send feedback; a failed scan or sync is explained in the dev screen's API LOG (U-102, U-104).
+   Most worth looking at: the Insights preferences sheet stepping aside for its pickers; the PDF's charts
+   (reported missing on the phone before the rebuild, never reproduced); Profile; the tiles' sizes (U-105).
+2. **Speed, step 5** (`docs/SPEC-SPEED-PDF-READS-FOLDERS.md` §1): Reports read 565 ms on the user's phone,
    build type unknown. Check with a release build before cutting its per-group reads.
-4. **Parked by the user:** stop editing balances directly and record an adjustment entry instead (as Fold does).
-5. **Waiting on the user:** Mixpanel project token + service account · Android build route · whether to push.
-6. **Known and not fixed** (from the reviews, outside today's diff): Settings computes every badge on each
-   focus (spec step 4); a sheet opened from inside a sheet needs its caller to hide the parent by hand, in
-   four places (a stack in `lib/sheetStage` would remove that; wants a device); seven hand-configured
-   switches with no shared toggle primitive; Reports and its PDF word "same as last month" by different
-   thresholds.
-7. Needs the phone / user: U-16, U-20, W1-28/29/32 spacing, D-01–D-03 UPI, live updates with two
+3. **Parked by the user:** stop editing balances directly and record an adjustment entry instead (as Fold does).
+4. **Waiting on the user:** Mixpanel project token + service account · Android build route · whether to push.
+5. **Known and not fixed:** a sheet opened from inside a sheet needs its caller to hide the parent by hand, in
+   four places (a stack in `lib/sheetStage` would remove that; it is the freeze-prone part and wants a device).
+6. Needs the phone / user: U-16, U-20, W1-28/29/32 spacing, D-01–D-03 UPI, live updates with two
    signed-in phones, receipt scan after rebuild.
-8. Waiting outside repo: Workers Paid (DQ-95 → DQ-105, DQ-107), Apple (B-02, push, TestFlight), Brevo key
+7. Waiting outside repo: Workers Paid (DQ-95 → DQ-105, DQ-107), Apple (B-02, push, TestFlight), Brevo key
    (B-07), privacy/store (B-08, B-10, B-13), merge to main (B-19).
 
 ## Rules learned this session

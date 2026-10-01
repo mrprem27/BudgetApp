@@ -1,8 +1,8 @@
 # TRACKER.md — what is left
 
-`Last verified: 2026-10-01 (§11, through `U-104`; 2026-09-30 for §0, §1, §9–§10 and every row whose status changed; the rest as of 2026-09-07) · Guarded by: trackerIntegrity.test.ts · countClaims.test.ts · docIdGraph.test.ts`
+`Last verified: 2026-10-01 (§11, through `U-105`; 2026-09-30 for §0, §1, §9–§10 and every row whose status changed; the rest as of 2026-09-07) · Guarded by: trackerIntegrity.test.ts · countClaims.test.ts · docIdGraph.test.ts`
 
-**313 items, 93 of them still open.** One row each: what it is, and where it stands.
+**314 items, 93 of them still open.** One row each: what it is, and where it stands.
 Nothing else. **This is the V1 tracker** — start at §0.
 
 **The evidence is not here.** Why each item exists, what it costs, what breaks if you touch it, and
@@ -29,7 +29,7 @@ is defined in two places.
 | §6 · Debt — `D-` | **7** | 11 |
 | §7 · Accepted — `A-` | **1** | 11 |
 | §9 · Deferred from V1 — `V-` | **7** | 7 |
-| §11 · Open from the last pass, and your feedback — `U-` | **8** | 104 |
+| §11 · Open from the last pass, and your feedback — `U-` | **8** | 105 |
 
 §8 (parked scope) and §10 (built but easy to forget) carry no ids.
 
@@ -319,7 +319,7 @@ testing or describing the app. Where one needs action, the id says where.
 ---
 ## §11 · Open from the last pass, and your feedback — `U-`
 
-**104 items: 7 `OPEN`, 1 `BLOCKED`, 96 `DONE`.** From the 2026-09-30 pass (`SPEC-BUGSCAN.md` Pass 2) and your answers and feedback the same night. Evidence in `FINDINGS.md` §11.
+**105 items: 7 `OPEN`, 1 `BLOCKED`, 97 `DONE`.** From the 2026-09-30 pass (`SPEC-BUGSCAN.md` Pass 2) and your answers and feedback the same night. Evidence in `FINDINGS.md` §11.
 
 | | What | Status | Default if never decided |
 |---|---|---|---|
@@ -332,4 +332,4 @@ testing or describing the app. Where one needs action, the id says where.
 | `U-68` | Named accounts: built (balances, Accounts screen, Paid from picks one); waits on the phone check | `OPEN` |  |
 | `U-69` | Split by items stays its own screen, tidied: input structure, copy, spacing, alignment and a proper grid | `OPEN` |  |
 
-**Closed (96), detail in `FINDINGS.md`:** `U-01` `U-03` `U-04` `U-05` `U-06` `U-11` `U-12` `U-17` `U-21` `U-14` `U-25` `U-26` `U-27` `U-28` `U-29` `U-30` `U-32` `U-15` `U-33` `U-35` `U-36` `U-37` `U-34` `U-38` `U-39` `U-40` `U-41` `U-42` `U-43` `U-13` `U-44` `U-45` `U-46` `U-22` `U-23` `U-07` `U-08` `U-47` `U-48` `U-49` `U-50` `U-51` `U-52` `U-53` `U-54` `U-55` `U-56` `U-57` `U-58` `U-59` `U-60` `U-61` `U-62` `U-63` `U-64` `U-65` `U-66` `U-67` `U-70` `U-31` `U-71` `U-72` `U-73` `U-74` `U-75` `U-76` `U-77` `U-78` `U-79` `U-80` `U-81` `U-09` `U-82` `U-19` `U-83` `U-84` `U-85` `U-86` `U-87` `U-88` `U-89` `U-90` `U-91` `U-92` `U-93` `U-94` `U-95` `U-96` `U-97` `U-98` `U-99` `U-100` `U-101` `U-102` `U-103` `U-104`
+**Closed (97), detail in `FINDINGS.md`:** `U-01` `U-03` `U-04` `U-05` `U-06` `U-11` `U-12` `U-17` `U-21` `U-14` `U-25` `U-26` `U-27` `U-28` `U-29` `U-30` `U-32` `U-15` `U-33` `U-35` `U-36` `U-37` `U-34` `U-38` `U-39` `U-40` `U-41` `U-42` `U-43` `U-13` `U-44` `U-45` `U-46` `U-22` `U-23` `U-07` `U-08` `U-47` `U-48` `U-49` `U-50` `U-51` `U-52` `U-53` `U-54` `U-55` `U-56` `U-57` `U-58` `U-59` `U-60` `U-61` `U-62` `U-63` `U-64` `U-65` `U-66` `U-67` `U-70` `U-31` `U-71` `U-72` `U-73` `U-74` `U-75` `U-76` `U-77` `U-78` `U-79` `U-80` `U-81` `U-09` `U-82` `U-19` `U-83` `U-84` `U-85` `U-86` `U-87` `U-88` `U-89` `U-90` `U-91` `U-92` `U-93` `U-94` `U-95` `U-96` `U-97` `U-98` `U-99` `U-100` `U-101` `U-102` `U-103` `U-104` `U-105`
