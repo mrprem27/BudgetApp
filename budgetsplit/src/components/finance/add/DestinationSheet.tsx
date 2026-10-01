@@ -3,6 +3,7 @@ import { View } from 'react-native';
 import { SheetModal } from '../../ui/SheetModal';
 import { SectionHeader } from '../../ui/SectionHeader';
 import { PrimaryButton } from '../../ui/PrimaryButton';
+import { Chip } from '../../ui/Chip';
 import { PersonPicker } from '../PersonPicker';
 import { GroupGrid, type GroupTile } from '../GroupGrid';
 import { asFeather } from '../../../constants/palette';
@@ -12,6 +13,8 @@ import type { BudgetGroup } from '../../../db/queries/groups';
 
 /** Personal plus your three most-used groups sit in the first block. */
 const USUAL_COUNT = 4;
+/** The people you split with most: two rows of the picker's four. */
+const USUAL_PEOPLE = 8;
 
 type Props = {
   visible: boolean;
@@ -40,9 +43,11 @@ type Props = {
 /**
  * The destination picker behind the Add screen's header.
  *
- * Every group is listed as a tile (`GroupGrid`, `U-23`) — a sheet scrolls, so nothing is hidden —
- * but the ones you use most come first, and the top few sit in their own block so the usual answer
- * is one glance away. "Just with people" below is the shared people grid (`PersonPicker`, `U-22`).
+ * The groups you use most come first, and the top few are what the sheet opens on; the rest are
+ * one tap away under "More groups", and the same for people ("More people"), both ordered by how
+ * often you have used them lately (yours, 2026-10-01: the usual answer is one of a few, and the
+ * rest was a wall to scroll past). A fold opens by itself when what is chosen is inside it.
+ * "Just with people" is the shared people grid (`PersonPicker`, `U-22`).
  */
 export function DestinationSheet({
   visible, onClose, groups, selectedId, onSelect,
@@ -67,6 +72,21 @@ export function DestinationSheet({
     sub: g.is_personal === 1 ? 'Only you' : (g.member_count ?? 0) > 1 ? `With ${(g.member_count ?? 1) - 1}` : undefined,
   }));
   const pick = (id: string) => { onClose(); if (id !== selectedId) onSelect(id); };
+
+  const moreGroups = groups.slice(USUAL_COUNT);
+  const usualPeople = people.slice(0, USUAL_PEOPLE);
+  const morePeople = people.slice(USUAL_PEOPLE);
+  const [showGroups, setShowGroups] = useState(false);
+  const [showPeople, setShowPeople] = useState(false);
+  // Each time it opens: folded, unless what is already chosen sits in the fold.
+  useEffect(() => {
+    if (!visible) return;
+    setShowGroups(moreGroups.some(g => g.id === selectedId));
+    setShowPeople(morePeople.some(p => selectedPersonIds.includes(p.id)));
+  }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps
+  const fold = (open: boolean, n: number, set: (v: boolean) => void, what: string) => (
+    <Chip size="sm" label={open ? 'Hide' : `Show ${n}`} onPress={() => set(!open)} accessibilityLabel={`${open ? 'Hide' : 'Show'} ${n} more ${what}`} />
+  );
   const renderGroups = (list: BudgetGroup[]) => (
     <GroupGrid items={tiles(list)} selectedId={selectedId} onSelect={pick} accent={accent} />
   );
@@ -74,10 +94,10 @@ export function DestinationSheet({
   return (
     <SheetModal visible={visible} onClose={onClose} title="Where does this go?">
       {renderGroups(groups.slice(0, USUAL_COUNT))}
-      {groups.length > USUAL_COUNT && (
+      {moreGroups.length > 0 && (
         <>
-          <SectionHeader title="More groups" />
-          {renderGroups(groups.slice(USUAL_COUNT))}
+          <SectionHeader title="More groups" right={fold(showGroups, moreGroups.length, setShowGroups, 'groups')} />
+          {showGroups && renderGroups(moreGroups)}
         </>
       )}
 
@@ -89,7 +109,13 @@ export function DestinationSheet({
       {people.length > 0 && onSelectPeople && (
         <>
           <SectionHeader title="Or just with people" />
-          <PersonPicker persons={people} selected={picked} onToggle={toggle} />
+          <PersonPicker persons={usualPeople} selected={picked} onToggle={toggle} />
+          {morePeople.length > 0 && (
+            <>
+              <SectionHeader title="More people" right={fold(showPeople, morePeople.length, setShowPeople, 'people')} />
+              {showPeople && <PersonPicker persons={morePeople} selected={picked} onToggle={toggle} />}
+            </>
+          )}
           {picked.length > 0 && !unchanged && (
             <View style={styles.confirm}>
               <PrimaryButton

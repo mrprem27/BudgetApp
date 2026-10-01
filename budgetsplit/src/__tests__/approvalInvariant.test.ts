@@ -91,6 +91,11 @@ const ALLOWLIST: { file: string; contains: string; why: string }[] = [
     why: 'getGroupsByRecentUse orders a group picker by recency. Not money, and a peer entry genuinely is recent activity in that group.',
   },
   {
+    file: 'persons.ts',
+    contains: 'FROM txn t JOIN txn_share s ON s.txn_id = t.id',
+    why: 'getPeopleByRecentUse orders a people picker by recency. Not money, and someone who just put you on an entry genuinely is recent.',
+  },
+  {
     file: 'transactions.ts',
     contains: 'SELECT tags, category FROM txn',
     why: 'The tag vocabulary. Counts tag names for a picker, never money.',

@@ -364,10 +364,11 @@ export type RecurState = typeof RECUR_STATE[number];
 // --- Groups / splitting --------------------------------------------------
 
 /** `budget_group.default_split CHECK(... IN ('equal','exact','percent','shares'))`. */
-export const SPLIT_MODE = ['equal', 'exact', 'percent', 'shares'] as const;
+// In the order a picker offers them: what most splits are, then the next most used (yours, 2026-10-01).
+export const SPLIT_MODE = ['equal', 'shares', 'exact', 'percent'] as const;
 export type SplitMode = typeof SPLIT_MODE[number];
 export const SPLIT_MODE_LABEL: Record<SplitMode, string> = {
-  equal: 'Equal', exact: 'Exact', percent: 'Percent', shares: 'Shares',
+  equal: 'Equal', shares: 'Shares', exact: 'Exact', percent: 'Percent',
 };
 /** Sentence-form phrasing ("Splits <phrase>") — same set, prose register. */
 export const SPLIT_MODE_PHRASE: Record<SplitMode, string> = {

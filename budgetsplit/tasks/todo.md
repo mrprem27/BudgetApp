@@ -2,8 +2,8 @@
 
 Branch `claude/branch-selection-gi7lyy`. **Commits ahead of origin, NOT pushed** (push needs the
 `mrprem27` account switch, see Rules). Server deployed after the folder split (U-84); nothing server-side
-changed since but its README. Gates at the last full run: 3,040 tests green, tsc clean for the app.
-Nothing from today has been seen on a phone. Tracker: 314 items (93 open), 105 in §11.
+changed since but its README. Gates at the last full run: 3,049 tests green, tsc clean for the app.
+Nothing from today has been seen on a phone. Tracker: 318 items (93 open), 109 in §11.
 
 ## Built today, all committed (the why is in FINDINGS §11, U-71 to U-101)
 Earlier: speed, budget and recurring cards, person page, Members tab, report PDF, analytics, Android readiness.
@@ -14,7 +14,9 @@ bell on the same window (U-96) · group totals follow the filters (U-97) · Simp
 pass, app and server (U-100) · then code review, simplify, code review again, all findings applied ·
 SCREENS' Money section rewritten (U-101) · **API log** on the dev screen (U-102) · one switch component and
 one comparison rule (U-103) · **Send feedback** and the V1 test round (U-104) · Insights reworked after
-the user saw the tiles (U-105).
+the user saw the tiles (U-105) · Split by items reworked, with the shared split editor (U-106) · usual groups
+and people first, the rest folded (U-107) · a sheet drags by its handle wherever its list is scrolled (U-108) ·
+two more badges (U-109).
 
 ## Open — next, in order
 1. **The V1 test round**: `docs/RELEASE_CHECKLIST.md` §2.0, fourteen steps. Testers report through Help &

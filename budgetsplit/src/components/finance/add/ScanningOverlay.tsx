@@ -11,6 +11,9 @@ import { IconCircle } from '../../ui/IconCircle';
  * everything (header, total card, add-item card) and, being an opaque View on
  * top, blocks every underlying touch for the duration of the scan.
  */
+/** The camera disc; the rings start at its size. */
+const MARK = 72;
+
 export function ScanningOverlay({ visible }: { visible: boolean }) {
   const ring1 = useRef(new Animated.Value(0)).current;
   const ring2 = useRef(new Animated.Value(0)).current;
@@ -46,13 +49,18 @@ export function ScanningOverlay({ visible }: { visible: boolean }) {
 
   return (
     <View style={styles.overlay}>
-      <Animated.View style={[styles.ring, ringStyle(ring1)]} />
-      <Animated.View style={[styles.ring, ringStyle(ring2)]} />
-      <Animated.View style={{ transform: [{ scale: iconPulse }] }}>
-        <IconCircle icon="camera" color={colors.accent} size={72} />
-      </Animated.View>
+      {/* The rings and the camera share one box, so they share one centre. The rings were
+          positioned against the whole overlay and so drew round the middle of the screen, while
+          the camera sat above it, pushed up by the two lines of text under it. */}
+      <View style={styles.mark}>
+        <Animated.View style={[styles.ring, ringStyle(ring1)]} />
+        <Animated.View style={[styles.ring, ringStyle(ring2)]} />
+        <Animated.View style={{ transform: [{ scale: iconPulse }] }}>
+          <IconCircle icon="camera" color={colors.accent} size={MARK} />
+        </Animated.View>
+      </View>
       <Text style={styles.title}>Scanning your receipt…</Text>
-      <Text style={styles.subtitle}>This can take a few seconds</Text>
+      <Text style={styles.subtitle}>Reading the items. This can take a few seconds.</Text>
     </View>
   );
 }
@@ -64,10 +72,12 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     zIndex: 9999, elevation: 9999,
   },
+  mark: { width: MARK, height: MARK, alignItems: 'center', justifyContent: 'center' },
   ring: {
-    position: 'absolute', width: 72, height: 72, borderRadius: 36,
+    position: 'absolute', top: 0, left: 0, width: MARK, height: MARK, borderRadius: MARK / 2,
     borderWidth: 2, borderColor: colors.accent,
   },
-  title: { ...type.subheading, color: colors.textPrimary, marginTop: space.lg },
-  subtitle: { ...type.body, color: colors.textSecondary, marginTop: space.xs },
+  // Clear of the rings at their widest (2.2× the mark).
+  title: { ...type.subheading, color: colors.textPrimary, marginTop: MARK * 0.6 + space.lg, textAlign: 'center' },
+  subtitle: { ...type.body, color: colors.textSecondary, marginTop: space.xs, textAlign: 'center', paddingHorizontal: space.xl },
 });

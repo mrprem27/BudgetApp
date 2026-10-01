@@ -248,6 +248,26 @@ export async function getAllPersons(db: SQLite.SQLiteDatabase): Promise<Person[]
 }
 
 /**
+ * People ordered for a "who is this with?" picker: you first, then whoever has been on the most
+ * entries in the last 60 days, the latest breaking ties, then by name. The people picker listed
+ * everyone by name, so the three you split with every week sat among twenty you rarely do; this
+ * mirrors `getGroupsByRecentUse`. Count, not amount, for the same reason as there.
+ */
+export async function getPeopleByRecentUse(db: SQLite.SQLiteDatabase, nowMs: number = Date.now()): Promise<Person[]> {
+  return db.getAllAsync<Person>(
+    `SELECT p.* FROM person p
+     LEFT JOIN (
+       SELECT s.person_id, MAX(t.date) AS last_used, SUM(CASE WHEN t.date >= ? THEN 1 ELSE 0 END) AS recent_count
+         FROM txn t JOIN txn_share s ON s.txn_id = t.id
+        WHERE t.is_deleted = 0 AND t.recur_freq IS NULL
+        GROUP BY s.person_id
+     ) u ON u.person_id = p.id
+     ORDER BY p.is_me DESC, COALESCE(u.recent_count, 0) DESC, COALESCE(u.last_used, 0) DESC, p.name ASC`,
+    [nowMs - 60 * 86_400_000],
+  );
+}
+
+/**
  * Everyone `personId` could be combined with ("Same person as…", `DQ-94` part 2,
  * task P3): every other real person, except one already linked to a DIFFERENT
  * account — `combinePeople` refuses that pair, so the picker never offers it.

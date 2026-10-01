@@ -170,23 +170,38 @@ export function DraggableSheet({ onClose, title, children, scroll = true, dragBo
   }, [exiting, translateY]);
 
   const nativeGesture = useMemo(() => Gesture.Native(), []);
-  const pan = useMemo(
-    () => Gesture.Pan()
+  /*
+   * Two drags, because they answer to different things.
+   *
+   * - The HANDLE (the grabber and the title row) always moves the sheet. It is the explicit
+   *   "drag me" control, so where the list below happens to be scrolled has nothing to do with it.
+   * - The BODY moves the sheet only while its list is at the top; further down, a downward drag
+   *   is the list scrolling back up.
+   *
+   * It was one pan over the whole sheet, gated on the scroll position: scroll a list a little
+   * and the handle stopped working until you scrolled back to the top (yours, 2026-10-01).
+   */
+  const { handlePan, bodyPan } = useMemo(() => {
+    const make = (needsTop: boolean) => Gesture.Pan()
       .activeOffsetY(12)
       .onUpdate((e) => {
         'worklet';
-        if (e.translationY > 0 && scrollY.value <= 0) translateY.value = e.translationY;
+        if (e.translationY > 0 && (!needsTop || scrollY.value <= 0)) translateY.value = e.translationY;
       })
       .onEnd((e) => {
         'worklet';
-        if (scrollY.value <= 0 && (e.translationY > DISMISS_DY || e.velocityY > DISMISS_VY)) {
+        if ((!needsTop || scrollY.value <= 0) && (e.translationY > DISMISS_DY || e.velocityY > DISMISS_VY)) {
           runOnJS(animateClose)();
         } else {
           translateY.value = withSpring(0, { damping: 30, stiffness: 300 });
         }
-      })
-      .simultaneousWithExternalGesture(nativeGesture),
-    [nativeGesture], // eslint-disable-line react-hooks/exhaustive-deps
+      });
+    return { handlePan: make(false), bodyPan: make(true).simultaneousWithExternalGesture(nativeGesture) };
+  }, [nativeGesture]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The list scrolls natively while the body's pan watches for a pull from its top.
+  const scrollGesture = useMemo(
+    () => (dragBody ? Gesture.Simultaneous(bodyPan, nativeGesture) : nativeGesture),
+    [dragBody, bodyPan, nativeGesture],
   );
 
   const backdropStyle = useAnimatedStyle(() => ({
@@ -215,14 +230,16 @@ export function DraggableSheet({ onClose, title, children, scroll = true, dragBo
       ) : null}
     </View>
   );
+  const fixed = <Pressable style={[styles.content, styles.fixedBody]} onPress={Keyboard.dismiss} accessible={false}>{children}</Pressable>;
+  const fixedBody = dragBody ? <GestureDetector gesture={bodyPan}>{fixed}</GestureDetector> : fixed;
   const sheet = (
     // A scrolling body carries the bottom space INSIDE its content, so rows scroll to the sheet's
     // own edge. With the space on the sheet instead, the scroll area stopped short of it and a
     // long list was sliced by a hard line above an empty band (half an avatar, then nothing).
     <Animated.View style={[styles.sheet, !scroll && { paddingBottom: bottomPad }, sheetStyle]}>
-      {dragBody ? header : <GestureDetector gesture={pan}>{header}</GestureDetector>}
+      <GestureDetector gesture={handlePan}>{header}</GestureDetector>
         {scroll ? (
-          <GestureDetector gesture={nativeGesture}>
+          <GestureDetector gesture={scrollGesture}>
             <ScrollView
               ref={scrollRef}
               keyboardShouldPersistTaps="handled"
@@ -241,7 +258,7 @@ export function DraggableSheet({ onClose, title, children, scroll = true, dragBo
           // in the scrolling variant — a number pad has no return key.
           // `flexShrink`: a list inside shrinks to the sheet's max height and scrolls, so anything
           // below it (a filter's Apply) stays on screen instead of being pushed past the edge.
-          <Pressable style={[styles.content, styles.fixedBody]} onPress={Keyboard.dismiss} accessible={false}>{children}</Pressable>
+          fixedBody
         )}
     </Animated.View>
   );
@@ -263,7 +280,7 @@ export function DraggableSheet({ onClose, title, children, scroll = true, dragBo
         style={styles.wrap}
         pointerEvents="box-none"
       >
-        {dragBody ? <GestureDetector gesture={pan}>{sheet}</GestureDetector> : sheet}
+        {sheet}
       </KeyboardAvoidingView>
     </View>
   );

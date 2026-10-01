@@ -1125,7 +1125,7 @@ describe('U-25/U-41 · a ⌄ only on chips that pick one value from a list', () 
   /** Category, date and pay method in Add (`U-41`); never details, filters or pills. */
   const PICKERS = new Set(['src/components/finance/CategoryField.tsx', 'src/components/finance/add/CategoryDatePills.tsx', 'src/components/finance/add/DetailChips.tsx',
     // Split by items' Paid from: the same pay-method picker as Add (`U-69`).
-    'app/add/itemized.tsx',
+    'app/add/itemized.tsx', 'src/components/finance/add/SplitEditor.tsx',
     // The Budget tab's period: one value from three (`U-89`).
     'src/components/finance/budget/BudgetList.tsx']);
   const files = (dir: string): string[] => fs.readdirSync(dir, { withFileTypes: true }).flatMap(e =>
@@ -1334,5 +1334,45 @@ describe('CP-1 · no em dash reaches the screen through an escape', () => {
   it('Help had 31 of them, written as \\u2014 where a scan for the character never looked', () => {
     const offenders = [...walk('app'), ...walk('src/components')].filter(f => fs.readFileSync(f, 'utf8').includes('\\u2014'));
     expect(offenders).toEqual([]);
+  });
+});
+
+describe('SH-2 · a sheet can always be dragged by its handle', () => {
+  const fs = jest.requireActual('fs') as typeof import('fs');
+  const src = fs.readFileSync('src/components/ui/DraggableSheet.tsx', 'utf8');
+  it('the handle has a drag of its own that does not ask where the list is scrolled', () => {
+    // One pan over the whole sheet was gated on the scroll position, so a list scrolled a little
+    // left the handle dead until it was scrolled back to the top.
+    expect(src).toMatch(/handlePan: make\(false\)/);
+    expect(src).toMatch(/<GestureDetector gesture=\{handlePan\}>\{header\}<\/GestureDetector>/);
+  });
+  it('the body still only drags the sheet from the top of its list', () => {
+    expect(src).toMatch(/bodyPan: make\(true\)\.simultaneousWithExternalGesture\(nativeGesture\)/);
+    expect(src).toMatch(/!needsTop \|\| scrollY\.value <= 0/);
+  });
+});
+
+describe('IT-1 · Split by items: one way forward per step, and people chosen by name', () => {
+  const fs = jest.requireActual('fs') as typeof import('fs');
+  const screen = fs.readFileSync('app/add/itemized.tsx', 'utf8');
+  const editor = fs.readFileSync('src/components/finance/add/SplitEditor.tsx', 'utf8');
+  it('no step has a Back beside its Next; the header arrow steps back', () => {
+    expect(screen).not.toMatch(/label="Back"/);
+    expect(screen).toMatch(/f\.setStep\(ITEMIZED_STEPS\[stepIndex - 1\]\)/);
+  });
+  it('saves from one place', () => {
+    expect((screen.match(/onPress=\{f\.handleSave\}/g) ?? []).length).toBe(1);
+  });
+  it('the add row is under the list, and the adjustments share one line', () => {
+    expect(screen.indexOf('<ItemGridHeader />')).toBeLessThan(screen.indexOf('title="Add an item"'));
+    expect(screen).toMatch(/adjRow: \{ flexDirection: 'row', gap/);
+    expect(screen).not.toMatch(/adjRow: \{[^}]*flexWrap/);
+  });
+  it('Equal is names to tap; the other modes are the form; the mode is one dropdown, Equal first', () => {
+    const { SPLIT_MODE } = jest.requireActual('../constants/enums') as typeof import('../constants/enums');
+    expect([...SPLIT_MODE]).toEqual(['equal', 'shares', 'exact', 'percent']);
+    expect(editor).not.toMatch(/<TabPills/);
+    expect(editor).toMatch(/mode === 'equal' \? \(/);
+    expect(editor).toMatch(/label=\{SPLIT_MODE_LABEL\[mode\]\}\s*chevron/);
   });
 });

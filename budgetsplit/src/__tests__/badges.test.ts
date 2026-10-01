@@ -98,3 +98,33 @@ describe('bestStreak', () => {
     expect(bestStreak([])).toBe(0);
   });
 });
+
+describe('the two added badges (2026-10-01)', () => {
+  const month = (m: number, spent: number, income: number): BadgeRow => day(m, 5, spent, income);
+
+  it('"Months in a row" is the run up to now, and one month behind ends it', () => {
+    // June behind; July, August and September ahead: a run of three.
+    const run = byId({ rows: [month(5, 900, 500), month(6, 400, 500), month(7, 400, 500), month(8, 400, 500)] }).monthsInRow;
+    expect(run.status).toBe('3 months running · next at 6');
+    expect(run.level).toBe(2);
+    // A good run broken last month is over, whatever came before it.
+    expect(byId({ rows: [month(5, 400, 500), month(6, 400, 500), month(7, 900, 500)] }).monthsInRow.status).toBe('0 months running · next at 2');
+  });
+
+  it('a month still under way that is not ahead yet does not break the run', () => {
+    // September (now) has spending and no income so far; July and August were ahead.
+    const run = byId({ rows: [month(6, 400, 500), month(7, 400, 500), day(8, 3, 300, 0)] }).monthsInRow;
+    expect(run.status).toBe('2 months running · next at 3');
+  });
+
+  it('"More than one income" counts kinds of income, not income entries', () => {
+    const rows: BadgeRow[] = [
+      { ...day(8, 1, 0, 500), category: 'Salary' }, { ...day(7, 1, 0, 500), category: 'Salary' },
+      { ...day(8, 9, 0, 200), category: 'Freelance' }, { ...day(8, 10, 300, 0), category: 'Food' },
+    ];
+    const b = byId({ rows }).incomeSources;
+    expect(b.status).toBe('2 kinds of income · next at 3');
+    expect(b.level).toBe(1);
+    expect(byId({ rows: rows.slice(0, 2) }).incomeSources.level).toBe(0);
+  });
+});

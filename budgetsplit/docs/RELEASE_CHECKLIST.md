@@ -164,7 +164,7 @@ own if you have a month of it.
 | 2 | Tap +, add a ₹250 expense to yourself. | Saved in one screen. Home's month figure and Personal's row go up by 250. |
 | 3 | Open a shared group, add a ₹900 expense split equally among three. | "Your share" up by 300, "Group total" by 900. Your Personal spending up by 300, not 900. |
 | 4 | In that group pick the date filter "Last month". | The row under the header reads "Last month" and changes. Its Reports button opens last month for this group. Typing in search changes the list, never the row. |
-| 5 | Tap +, Split by items, Scan receipt, photograph a bill. | Items come back to tick. If it says it was read on your device, the line under that note says why the cloud did not answer. |
+| 5 | Tap +, Split by items, Scan receipt (on the "Add an item" header), photograph a bill. Then Next: give one item to two people by tapping their names, and change another to Shares from the dropdown. | The scanning rings pulse round the camera. Items come back to tick; if it says it was read on your device, the line under that note says why. Equal is names to tap, with what each pays; other modes show a field per person. Each step has one button at the foot; the header arrow steps back. |
 | 6 | Group → Members. Flip Simplify. Record one payment. | The list of payments changes with the switch, and the line under it says which you are looking at. The balance updates on save. |
 | 7 | Money → tap "Paid from not set" (if the line is there) → move part of it to Cash. | Move money opens with the whole amount filled in. After a part-move, Cash goes up by that part, the line down by it, and the total does not change. |
 | 8 | Insights → open every tile. In "How your money works" change how you are paid. | Each tile opens a sheet. A picker opens over the preferences, and closing it brings the preferences back. **The screen must never be stuck.** |
@@ -172,7 +172,8 @@ own if you have a month of it.
 | 10 | Settings → your card. Change your name and photo. | Profile opens in sections. The new name shows in Settings straight away. Every badge sits under your card in Settings. |
 | 11 | Add a monthly recurring expense due in three days. | It is on the bell's Upcoming list as "in 3 days", and in Money → Recurring. |
 | 12 | With an account: sign in, add an entry, open the second phone. | The entry arrives within a few seconds. An entry from someone on "review" waits for you and moves none of your numbers until accepted. |
-| 13 | Close the app fully and reopen it. | Everything is where you left it. |
+| 13 | Open any long sheet (Where does this go?), scroll its list down a little, then drag the sheet down by its handle. | The sheet follows your finger and closes, wherever the list is scrolled. |
+| 13a | Close the app fully and reopen it. | Everything is where you left it. |
 | 14 | Switch on Reduce Motion, then Hide amounts, and repeat 1, 8 and 10. | Nothing jumps; amounts on Home are masked. |
 
 **How to report.** Settings → Help & Feedback → **Send feedback**. Write what you did, what you
@@ -188,7 +189,7 @@ milliseconds.
 **Check first, changed on 2026-10-01** (none seen on a phone yet): the Insights tiles and the
 preferences sheet stepping aside for its pickers (`U-91`); the PDF's charts (`U-95`); Profile and
 the badges in Settings (`U-92`); the group row following filters (`U-97`); Move money from "Paid
-from not set" (`U-99`); Upcoming to month-end (`U-96`); the Simplify switch (`U-98`).
+from not set" (`U-99`); Upcoming to month-end (`U-96`); the Simplify switch (`U-98`); Split by items and the split editor everywhere (`U-106`); the sheet handle (`U-108`).
 
 ### 2.1 Changed by the pre-pilot consistency pass — highest risk, verify first
 

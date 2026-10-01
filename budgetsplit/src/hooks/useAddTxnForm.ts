@@ -10,7 +10,7 @@ import { DEFAULT_CURRENCY, type CurrencyCode } from '../constants/currencies';
 import {
   getAllGroups, getGroupById, getGroupsByRecentUse, getOrCreatePairGroup, getOrCreatePeopleSetGroup, isPeopleSet, listableGroups,
 } from '../db/queries/groups';
-import { getGroupMembers, getMe, getAllPersons } from '../db/queries/persons';
+import { getGroupMembers, getMe, getPeopleByRecentUse } from '../db/queries/persons';
 import { getFriendBalances } from '../db/queries/balances';
 import { computeTransferScopes, planAllGroupsSettlement, type TransferScopes } from '../lib/settleScope';
 import { getCategoriesByFrequency, type CategoryKind } from '../db/queries/categories';
@@ -313,7 +313,8 @@ export function useAddTxnForm(params: AddTxnParams) {
   }, []);
 
   // Transfer: load everyone, default the payer to me, recompute scopes on change.
-  useEffect(() => { getAllPersons(db).then(setAllPersons).catch(() => {}); }, [db]);
+  // Most-used first, so a picker can show the usual few and fold the rest away.
+  useEffect(() => { getPeopleByRecentUse(db).then(setAllPersons).catch(() => {}); }, [db]);
 
   /**
    * The asset register, and the one Invest opens on.

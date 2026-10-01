@@ -1,5 +1,4 @@
 import { View, Text, StyleSheet } from 'react-native';
-import { Feather } from '@expo/vector-icons';
 import { colors, type, space } from '../../tokens';
 import { IconCircle } from '../../ui/IconCircle';
 import { PressableScale } from '../../ui/PressableScale';
@@ -18,7 +17,9 @@ export function badgeTint(b: Badge): string {
  * is — and a warmer colour for each level climbed. The whole board opens the Badges screen,
  * where each one says what it means and how far you are.
  *
- * Small on purpose, and smaller twice over (`U-75`): 20pt discs, three rows for thirty-six.
+ * Small on purpose, and smaller twice over (`U-75`): 20pt discs, a few rows for all of them.
+ * No arrow beside the count: the whole board opens Badges, and an arrow on one line of it said
+ * only that line did.
  * `bare` drops the card, for a caller that puts the board inside a card of its own (Settings' top
  * card, directly under the profile row, `U-92`).
  */
@@ -33,7 +34,6 @@ export function BadgeBoard({ badges, onOpen, bare }: { badges: Badge[]; onOpen?:
       <View style={styles.head}>
         <Text style={styles.title}>Badges</Text>
         <Text style={styles.count}>{earned} of {badges.length}</Text>
-        {onOpen && <Feather name="chevron-right" size={16} color={colors.textMuted} />}
       </View>
       <View style={styles.grid}>
         {badges.map(b => (

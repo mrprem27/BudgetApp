@@ -453,6 +453,36 @@ export function computeBadges(i: BadgeInputs): Badge[] {
     level: pd.level, maxLevel: 3, status: `${plural(paydays, 'income entry', 'income entries')}${pd.next ? ` · next at ${pd.next}` : ''}`, progress: pd.progress,
   });
 
+  // Months in a row, ending now, where money in covered your share of spending. `goodYear` counts
+  // them anywhere in the year; this is the run, which one bad month ends. A month still under way
+  // that is not ahead yet does not break it: the run is counted to last month until it is.
+  const byMonth = new Map<number, { spent: number; income: number }>();
+  for (const r of i.rows) {
+    const d = new Date(r.date);
+    const k = d.getFullYear() * 12 + d.getMonth();
+    const t = byMonth.get(k) ?? { spent: 0, income: 0 };
+    byMonth.set(k, { spent: t.spent + r.spent, income: t.income + r.income });
+  }
+  const good = (k: number) => { const t = byMonth.get(k); return !!t && t.income > 0 && t.income >= t.spent; };
+  const monthNow = year * 12 + month;
+  let run = 0;
+  for (let k = good(monthNow) ? monthNow : monthNow - 1; good(k); k--) run++;
+  const rn = tiered(run, [2, 3, 6, 12]);
+  badges.push({
+    id: 'monthsInRow', title: 'Months in a row', icon: 'bar-chart', group: 'milestone',
+    explain: 'Months in a row, up to now, where money in covered your share of spending. One month behind ends the run. Levels at 2, 3, 6 and 12.',
+    level: rn.level, maxLevel: 4, status: `${plural(run, 'month')} running${rn.next ? ` · next at ${rn.next}` : ''}`, progress: rn.progress,
+  });
+
+  // Different kinds of income you have logged: a salary alone is one.
+  const sources = new Set(i.rows.filter(r => r.income > 0 && r.category).map(r => r.category)).size;
+  const sr = tiered(sources, [2, 3, 4]);
+  badges.push({
+    id: 'incomeSources', title: 'More than one income', icon: 'layers', group: 'milestone',
+    explain: 'Different kinds of income you have logged: salary, freelance, interest and so on. Levels at 2, 3 and 4.',
+    level: sr.level, maxLevel: 3, status: `${plural(sources, 'kind')} of income${sr.next ? ` · next at ${sr.next}` : ''}`, progress: sr.progress,
+  });
+
   const loggedToday = days.has(dayKey(i.nowMs));
   badges.push({
     id: 'loggedToday', title: 'Logged today', icon: 'edit', group: 'now',
