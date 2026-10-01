@@ -249,8 +249,9 @@ export async function getBudgetAnalytics(
   const totalMonthSpent = Object.values(monthSpend).reduce((s, v) => s + v, 0);
   const priorMonthTotal = Object.values(prevMonthSpend).reduce((s, v) => s + v, 0);
   const daysInMonth = getDaysInMonth(now);
-  // One forecast model everywhere: credibility-weighted blend (lib/forecast),
-  // not a raw linear run-rate. Floors at spend-so-far; 0 before day 3.
+  // A GROUP's month-end, by the credibility-weighted blend (lib/forecast), not a raw linear
+  // run-rate. Floors at spend-so-far; 0 before day 3. Home and Insights forecast the whole month
+  // from the engine's everyday rate (`monthEndFromEngine`), which has no per-group form.
   const projectedMonthEnd = forecastMonthEnd(totalMonthSpent, dayOfMonth, daysInMonth, priorMonthTotal).projected;
   // Compared against `projectedMonthEnd`, so it must be everything that applies to a
   // month. Filtering to `cadence === 'monthly'` was half-right: it correctly dropped

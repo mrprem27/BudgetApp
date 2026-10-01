@@ -132,8 +132,8 @@ export function BudgetEditor({ scope, groupId, focusCategory }: {
               {/* Pools are excluded from the figure above on purpose (₹24k/yr is not
                   ₹2k/mo), so they are named here rather than vanishing from it. */}
               {e.rollup.pooledCount > 0
-                ? ` · plus ${formatCompact(e.rollup.pooled)} in ${e.rollup.pooledCount} yearly/one-time`
-                : ' · one-time not counted'}
+                ? ` · plus ${formatCompact(e.rollup.pooled)} in ${e.rollup.pooledCount} yearly`
+                : ''}
             </Text>
           </Card>
 

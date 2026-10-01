@@ -2,7 +2,7 @@ import { Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { ModalHeader } from '../../ui/ModalHeader';
 import { colors, type } from '../../tokens';
 import { formatCompact } from '../../../lib/money';
-import { PAY_METHOD_LABEL, SPLIT_MODE_LABEL, TRANSFER_SCOPE_ALL, AddKind } from '../../../constants/enums';
+import { PAY_METHOD_LABEL, SPLIT_MODE_LABEL, TRANSFER_SCOPE_ALL, AddKind, ADD_KIND_LABEL } from '../../../constants/enums';
 import type { useAddTxnForm } from '../../../hooks/useAddTxnForm';
 import type { QuickAddSheet } from './QuickAddSheets';
 
@@ -57,9 +57,11 @@ function destinationOf(f: Form): { label: string; sheet: QuickAddSheet; a11y: st
 
 function titleOf(f: Form): string {
   if (f.isRecurEdit) return 'Edit recurring';
-  const noun = f.kind === AddKind.Income ? 'income' : f.kind === AddKind.Transfer ? 'settlement' : 'expense';
-  if (f.isEditing) return `Edit ${noun}`;
-  return f.kind === AddKind.Transfer ? 'Settle up' : f.kind === AddKind.Income ? 'Add income' : 'Add expense';
+  // The kind's own name, the one on its pill: "settlement" appeared nowhere else in the app, a new
+  // transfer was titled "Settle up" under a pill reading Transfer, and Invest was titled an expense.
+  const noun = ADD_KIND_LABEL[f.kind].toLowerCase();
+  if (f.isEditing) return f.kind === AddKind.Invest ? 'Edit investment' : `Edit ${noun}`;
+  return f.kind === AddKind.Transfer || f.kind === AddKind.Invest ? ADD_KIND_LABEL[f.kind] : `Add ${noun}`;
 }
 
 /** ✕ · title + destination · Save. */

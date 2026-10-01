@@ -403,7 +403,7 @@ export default function ReportsScreen() {
                 </View>
                 <View style={styles.metricDivider} />
                 <View style={styles.metric}>
-                  <Text style={styles.metricLabel}>Expense</Text>
+                  <Text style={styles.metricLabel}>Spent</Text>
                   <AmountText paise={s.expense} size="sm" forceColor={colors.expense} compact />
                 </View>
                 <View style={styles.metricDivider} />
@@ -480,7 +480,7 @@ export default function ReportsScreen() {
               </View>
               <View style={styles.metricDivider} />
               <View style={styles.metric}>
-                <Text style={styles.metricLabel}>Saved</Text>
+                <Text style={styles.metricLabel}>Net</Text>
                 <AmountText paise={yearIncome - yearExpense} size="sm" compact />
               </View>
             </View>

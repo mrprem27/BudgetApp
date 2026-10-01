@@ -1317,3 +1317,19 @@ describe('a scrolling sheet runs to its own bottom edge', () => {
     expect(src).toMatch(/contentContainerStyle=\{\[styles\.content, \{ paddingBottom: bottomPad \}\]\}/);
   });
 });
+
+describe('CP-1 · no em dash reaches the screen through an escape', () => {
+  const fs = jest.requireActual('fs') as typeof import('fs');
+  const path = jest.requireActual('path') as typeof import('path');
+  const walk = (dir: string, out: string[] = []): string[] => {
+    for (const e of fs.readdirSync(dir)) {
+      const full = path.join(dir, e);
+      if (fs.statSync(full).isDirectory()) walk(full, out); else if (full.endsWith('.tsx')) out.push(full);
+    }
+    return out;
+  };
+  it('Help had 31 of them, written as \\u2014 where a scan for the character never looked', () => {
+    const offenders = [...walk('app'), ...walk('src/components')].filter(f => fs.readFileSync(f, 'utf8').includes('\\u2014'));
+    expect(offenders).toEqual([]);
+  });
+});

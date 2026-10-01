@@ -9,6 +9,8 @@ import { GROUP_EXPORT_HEADER } from './importParse';
 import { rowLine } from './groupExport';
 import { formatRupees, formatRupeesShort, formatCompact, formatChangeMagnitude } from './money';
 import { computeDonutWedges, type DonutSeg } from './donut';
+import { foldUncategorized } from './categoryFold';
+import { getCategories } from '../db/queries/categories';
 import { txnTotal, myShareOf, myIncomeOf } from './splitMath';
 import type { BudgetGroup } from '../db/queries/groups';
 
@@ -58,7 +60,7 @@ export async function buildReportCsv(
  * A printable report as a self-contained light-themed HTML document (`U-19`, rebuilt `U-95`).
  *
  * Read top to bottom like a statement: who and when, four figures (spent / received / net /
- * moved, never one across them) each against the period before, four facts, where it went, when
+ * moved, never one across them; the words are the screens': Spent, Income, Net, Moved) each against the period before, four facts, where it went, when
  * it went, the groups side by side, then every entry.
  *
  * Every amount is YOUR SHARE, the basis of the figures above it. The rows used to print the whole
@@ -149,7 +151,7 @@ export async function buildReportHtml(
 
     groupRows.push({ name: s.group.name, entries: ledger.length, spent: s.expense, received: s.income });
     const line = ledger.length === 0 ? 'Transfers only'
-      : [`Spent ${formatRupees(s.expense)}`, s.income > 0 ? `received ${formatRupees(s.income)}` : '', `${ledger.length} ${ledger.length === 1 ? 'entry' : 'entries'}`].filter(Boolean).join(' · ');
+      : [`Spent ${formatRupees(s.expense)}`, s.income > 0 ? `income ${formatRupees(s.income)}` : '', `${ledger.length} ${ledger.length === 1 ? 'entry' : 'entries'}`].filter(Boolean).join(' · ');
     body += `
           <div class="group-head"><h2>${esc(s.group.name)}</h2><div class="group-line">${line}</div></div>
           ${entries ? `<table class="rows">
@@ -198,18 +200,21 @@ export async function buildReportHtml(
   const kpis = `
           <table class="kpi"><tr>
             ${kpi('Spent', formatRupeesShort(spent), against(spent, spentBefore), RED)}
-            ${kpi('Received', formatRupeesShort(received), against(received, receivedBefore), GREEN)}
+            ${kpi('Income', formatRupeesShort(received), against(received, receivedBefore), GREEN)}
             ${kpi('Net', `${net < 0 ? MINUS : ''}${formatRupeesShort(Math.abs(net))}`, netLine, TEAL)}
             ${kpi('Moved', formatRupeesShort(moved), 'transfers, not spending', VIOLET)}
           </tr></table>`;
 
-  const cats = Object.entries(byCategory).sort((a, b) => b[1] - a[1]);
+  // Names not in your catalog are one bucket, as on the Reports screen (`foldUncategorized`): a
+  // friend's "Poker Night" was its own slice here and "Everything else" there.
+  const known = new Set((await getCategories(db, 'expense')).map(c => c.name));
+  const cats = Object.entries(foldUncategorized(byCategory, known)).sort((a, b) => b[1] - a[1]);
   const catTotal = cats.reduce((t, [, v]) => t + v, 0);
-  // The ring holds six names at most; the rest are one "Other" slice, named under the table.
+  // The ring holds six names at most; the rest are one slice, named under the table.
   const ring = cats.slice(0, RING_MAX).map(([name, paise], i) => ({ name, paise, color: SERIES[i] }));
   const others = cats.slice(RING_MAX);
   const rest = others.reduce((t, [, v]) => t + v, 0);
-  if (rest > 0) ring.push({ name: others.length === 1 ? others[0][0] : 'Other', paise: rest, color: SERIES[RING_MAX] });
+  if (rest > 0) ring.push({ name: others.length === 1 ? others[0][0] : SMALLER, paise: rest, color: SERIES[RING_MAX] });
   /** A share as text: a real amount never prints as 0%. */
   const pctOf = (v: number, of: number) => {
     const pct = of > 0 ? Math.round((v / of) * 100) : 0;
@@ -235,7 +240,7 @@ export async function buildReportHtml(
               <thead><tr><th>Category</th><th class="num">Amount</th><th class="num">Share</th><th></th></tr></thead>
               <tbody>${ring.map(seg => `<tr><td><span class="dot" style="border-color:${seg.color}"></span>${esc(seg.name)}</td>${num(formatRupees(seg.paise))}${num(pctOf(seg.paise, catTotal), MUTED)}<td class="meter-cell">${meterSvg(seg.paise / catTotal, seg.color)}</td></tr>`).join('')}</tbody>
             </table>
-            ${others.length > 1 ? `<p class="others">Other is ${others.map(([name, v]) => `${esc(name)} ${formatRupeesShort(v)}`).join(' · ')}</p>` : ''}</td>
+            ${others.length > 1 ? `<p class="others">${SMALLER}: ${others.map(([name, v]) => `${esc(name)} ${formatRupeesShort(v)}`).join(' · ')}</p>` : ''}</td>
           </tr></table>` : '';
 
   const bars = barsSvg(spendBuckets(spendAt, fromMs, Math.min(toMs, Date.now())));
@@ -244,7 +249,7 @@ export async function buildReportHtml(
   const groups = groupRows.length > 1 ? `
           <div class="keep"><h3>By group</h3>
           <table class="rows">
-            <thead><tr><th>Group</th><th class="num">Entries</th><th class="num">Received</th><th class="num">Spent</th><th class="num">Share</th><th></th></tr></thead>
+            <thead><tr><th>Group</th><th class="num">Entries</th><th class="num">Income</th><th class="num">Spent</th><th class="num">Share</th><th></th></tr></thead>
             <tbody>${groupRows.map(g => `<tr><td>${esc(g.name)}</td>${num(String(g.entries), MUTED)}${num(g.received > 0 ? formatRupees(g.received) : '–', g.received > 0 ? INK : MUTED)}${num(g.spent > 0 ? formatRupees(g.spent) : '–', g.spent > 0 ? INK : MUTED)}${num(pctOf(g.spent, spent), MUTED)}<td class="meter-cell">${meterSvg(spent > 0 ? g.spent / spent : 0, TEAL)}</td></tr>`).join('')}</tbody>
           </table></div>` : '';
 
@@ -319,6 +324,8 @@ const CSS = `
 // ── Charts, as inline SVG: the PDF is printed from HTML, so a chart is markup, not a library ──
 
 const RING_MAX = 6;
+/** The ring's last slice: every category past the sixth. Not "Everything else", which is the app's name for categories you have not adopted. */
+const SMALLER = 'Smaller categories';
 /** Print-safe series colours, darkest first; the seventh is the "Other" slice. */
 /** Every bar but the tallest: the same teal, lighter. */
 const BAR = '#7FB5AF';

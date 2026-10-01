@@ -55,7 +55,7 @@ export const overrideIsPrivate =
  */
 export const budgetEmptyBody = (canEditGroupDefault: boolean, groupName: string): string =>
   canEditGroupDefault
-    ? `Give a category a limit, one-time, daily, monthly or yearly. ${perPersonMeans} `
+    ? `Give a category a limit, daily, monthly or yearly. ${perPersonMeans} `
       + PERIOD_RESETS
     : `Set your own limits for this group. ${overrideMeans(groupName)} ${overrideIsPrivate}`;
 

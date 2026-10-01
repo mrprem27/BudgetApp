@@ -38,7 +38,7 @@ export function SummaryStage({
     rows.push({
       icon: 'trending-up', tint: colors.income,
       title: `Salary ${formatRupeesShort(incomeNum * 100)}, next on ${fullDate(firstPayDate)}`,
-      where: 'Recurring · Plan',
+      where: 'Recurring · Money',
     });
   }
   if (budgetNum > 0) {

@@ -11,6 +11,11 @@ jest.mock('../db/queries/persons', () => ({
   getAllPersons: jest.fn(async () => [{ id: 'p1', name: 'Prem' }, { id: 'p2', name: 'Asha' }, { id: 'p3', name: 'Ravi' }]),
 }));
 
+// Every category these tests use is in the catalog; `Mystery` is the one that is not.
+jest.mock('../db/queries/categories', () => ({
+  getCategories: jest.fn(async () => ['Food', 'Fuel', 'Older', 'Newer', '<b>Food</b>', 'Rent', 'Travel', 'Bills', 'Gym', 'Books'].map(name => ({ name }))),
+}));
+
 import { getTransactionsInRange } from '../db/queries/transactions';
 import { buildReportCsv, buildReportHtml, spendBuckets, type PdfSummary } from '../lib/reportExport';
 import { splitCsvLine, GROUP_EXPORT_HEADER, isBudgetSplitExport, parseBudgetSplitExport } from '../lib/importParse';
@@ -253,6 +258,16 @@ describe('buildReportHtml', () => {
     expect(html).toContain('nothing in December to compare'); // received
     expect(html).toContain('Prepared for Prem');
     expect(html).toContain('Largest category');
+  });
+
+  it('folds a category you have not adopted into Everything else, as the Reports screen does', async () => {
+    mockRange.mockResolvedValue([txn({ id: 'a', category: 'Food' }), txn({ id: 'b', category: 'Mystery', note: 'theirs' })]);
+    const html = await buildReportHtml(db, [summary('Flat', 0, 50000)], MONTH);
+    const where = html.slice(html.indexOf('Where it went'), html.indexOf('<h2>'));
+    expect(where).toContain('Everything else');
+    expect(where).not.toContain('Mystery');
+    // The entry itself keeps the name it was written with.
+    expect(html.slice(html.indexOf('<h2>'))).toContain('Mystery');
   });
 
   it('names a custom period correctly when it is empty', async () => {

@@ -456,11 +456,3 @@ export type AuditAction = typeof AUDIT_ACTION[number];
 
 export const AUDIT_ENTITY_TYPE = ['txn', 'group', 'member', 'budget', 'recurring', 'settlement'] as const;
 export type AuditEntityType = typeof AUDIT_ENTITY_TYPE[number];
-
-// --- Search (UI scope, not stored) ---------------------------------------
-
-export const SEARCH_SOURCE = ['all', 'personal', 'groups'] as const;
-export type SearchSource = typeof SEARCH_SOURCE[number];
-export const SEARCH_SOURCE_LABEL: Record<SearchSource, string> = {
-  all: 'All', personal: 'Personal', groups: 'Groups',
-};

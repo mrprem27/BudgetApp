@@ -357,7 +357,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
           onBack={() => setStage('income')}
           {...(stepPosition('money') ?? {})}
           title="What do you have right now?"
-          subtitle="Sets up Available Money on the Plan screen, and what's yours to spend on Home. Rough numbers are fine."
+          subtitle="Sets up Available Money on the Money tab, and what's yours to spend on Home. Rough numbers are fine."
           footer={
             <StepFooter
               primaryLabel="Continue"
@@ -398,7 +398,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
               ))}
             </Card>
           </Collapse>
-          <Text style={styles.helpLine}>Tick only what you have, anything you skip can be added later in Plan → Your money.</Text>
+          <Text style={styles.helpLine}>Tick only what you have, anything you skip can be added later in Money → Your money.</Text>
         </StepScaffold>
       )}
 

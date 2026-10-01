@@ -88,6 +88,8 @@ widen who can call this from a browser.
 | `GET /friend-requests` · `POST` · `POST /:id/accept` · `/decline` · `DELETE /:id` | bearer | A friend request by email address. `POST` answers an identical `202` whether or not the address has an account — the email body differs, visible only to the inbox owner. |
 | `POST /sync/push` | bearer | `{deviceId, mutations: [{id, entity, op, entityId, baseVersion, data?}]}` → `{lastMutationId}`. At most 100 mutations and 2 MB. |
 | `POST /sync/pull` | bearer | `{deviceId, cursors, rejectionsAfter}` → `{scopes, revoked, revokedWhy, lastMutationId, rejections, invites}`. Pages of up to 500 rows. |
+| `GET /sync/live` | bearer | WebSocket upgrade (426 otherwise). One connection per open app to the user's hub, which says when to sync (`DQ-108`). 503 when the hub is not bound. |
+| `GET /v1/groups` · `GET /v1/me/balances` | bearer | Read endpoints for a client with no local database: the user's groups, and what they owe and are owed. The phone does not call them; it reads its own SQLite. |
 | `GET /transactions/:id/history` | bearer | A transaction's saved versions, for anyone who can read its group. Loaded on open, never synced. |
 
 ### Sync
