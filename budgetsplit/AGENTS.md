@@ -536,7 +536,7 @@ it's on the exempt list below.
 **Exempt, with the reason** (these load data but must NOT have it):
 | Screen | Why |
 |---|---|
-| `afford`, `group/[id]/edit`, `settings/notifications` | Forms. A pull gesture fights the keyboard and there's no feed to refresh. |
+| `afford`, `group/[id]/edit`, `settings/notifications`, `settings/account` | Forms. A pull gesture fights the keyboard and there's no feed to refresh. |
 | `txn/[id]` | Detail + actions, not a feed. Refetches on focus already. |
 | `add/*` | Wizards. Never. |
 | `(system)/settings/index` | A menu, not a feed. Its one loaded figure (the category count) exists to label a row, and it already refetches on focus — a pull gesture on a list of navigation rows suggests content that can change underneath you, and none can. |

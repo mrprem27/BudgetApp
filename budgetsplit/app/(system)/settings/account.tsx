@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Alert, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { useSQLiteContext } from 'expo-sqlite';
+import { Feather } from '@expo/vector-icons';
 import { KeyboardForm } from '../../../src/components/ui/KeyboardForm';
 import { useRouter } from 'expo-router';
 import { fullDate } from '../../../src/lib/dateFormat';
@@ -29,10 +31,19 @@ import {
   deleteAccount, updateProfile, uploadAvatar, deviceLabel,
 } from '../../../src/lib/serverApi';
 import { backOr } from '../../../src/lib/nav';
+import { saveMyName } from '../../../src/lib/settingsData';
+import { replacePersonPhoto } from '../../../src/lib/personWrites';
+import { loadBadges } from '../../../src/lib/badgesData';
+import { useScreenData } from '../../../src/hooks/useScreenData';
+import { useDataRefresh } from '../../../src/components/system/DataRefreshProvider';
+import { BadgeBoard } from '../../../src/components/finance/badges/BadgeBoard';
 
 /**
- * The account screen: sign in by email link, see what the server holds about
- * you, sign out.
+ * Profile (`U-92`): who you are here, in one screen. Your photo and name (on this phone, with or
+ * without a server), then the account: sign in by email link, see what the server holds about
+ * you, sign out. Your badges close it, earned and not.
+ *
+ * The route is still `/settings/account`: a rename would have moved every link to it for nothing.
  *
  * An account holds a copy of everything this phone has (`DQ-93`): a new phone
  * gets it back by signing in, and shared groups are exchanged through it
@@ -45,8 +56,13 @@ import { backOr } from '../../../src/lib/nav';
  */
 export default function AccountScreen() {
   const router = useRouter();
+  const db = useSQLiteContext();
+  const { refresh } = useDataRefresh();
   const { session, ready, configured, reload } = useServerSession();
   const me = useStore(s => s.me);
+  const { data: badges } = useScreenData((database) => loadBadges(database), []);
+  const [showName, setShowName] = useState(false);
+  const [nameText, setNameText] = useState('');
 
   const {
     email, setEmail, sentTo, code, setCode, sending, verifying, error, setError,
@@ -95,6 +111,23 @@ export default function AccountScreen() {
     } finally {
       setSyncing(false);
     }
+  }
+
+  /** The name on this phone. `refresh()` re-hydrates the store, which is where `me` is read from. */
+  async function saveName() {
+    const trimmed = nameText.trim();
+    if (!trimmed || !me) return;
+    await saveMyName(db, me.id, trimmed);
+    refresh();
+    haptic.success();
+    setShowName(false);
+  }
+
+  async function changePhoto() {
+    if (!me) return;
+    try {
+      if (await replacePersonPhoto(db, me)) { haptic.success(); refresh(); }
+    } catch { haptic.error(); }
   }
 
   /** Self-declared and unverified — the server stores what you type. */
@@ -191,36 +224,62 @@ export default function AccountScreen() {
     );
   }
 
+  const backupCard = (
+    <Card>
+      <SettingsRow icon="shield" label="Backup & restore" value="Encrypted" onPress={() => router.push('/settings/backup')} />
+    </Card>
+  );
+
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Account" onBack={() => backOr(router, '/(tabs)')} />
+      <ScreenHeader title="Profile" onBack={() => backOr(router, '/(tabs)')} />
       <KeyboardForm contentContainerStyle={styles.content}>
-        {!configured ? (
-          <Card padded>
-            <InfoLabel
-              label="Works offline"
-              labelStyle={styles.heroTitle}
-              info="No server configured, everything works offline. Keep an encrypted copy under Backup & restore."
+        <Card padded style={styles.profileCard}>
+          <TouchableOpacity onPress={changePhoto} accessibilityRole="button" accessibilityLabel="Change photo" hitSlop={4}>
+            <MemberAvatar
+              name={me?.name ?? session?.user.name ?? '?'}
+              color={me?.avatar_color ?? colors.accent}
+              size={72}
+              imageUri={me?.image_uri}
             />
-          </Card>
+            <View style={styles.cameraBadge} pointerEvents="none">
+              <Feather name="camera" size={12} color={colors.bg} />
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.nameRow}
+            onPress={() => { setNameText(me?.name ?? ''); setShowName(true); }}
+            accessibilityRole="button"
+            accessibilityLabel="Edit name"
+            hitSlop={10}
+          >
+            <Text style={styles.profileName}>{me?.name ?? 'You'}</Text>
+            <Feather name="edit-2" size={14} color={colors.textMuted} />
+          </TouchableOpacity>
+          <Text style={styles.profileEmail}>{session ? session.user.email : 'On this phone'}</Text>
+          {session && (
+            <Text style={styles.profileMeta}>
+              Signed in on {deviceLabel()} · account created {fullDate(new Date(session.user.createdAt))}
+            </Text>
+          )}
+        </Card>
+
+        {!configured ? (
+          <>
+            <Card padded>
+              <InfoLabel
+                label="Works offline"
+                labelStyle={styles.heroTitle}
+                info="No server configured, everything works offline. Keep an encrypted copy under Backup & restore."
+              />
+            </Card>
+            {backupCard}
+          </>
         ) : !ready ? (
           <ActivityIndicator color={colors.accent} style={styles.loading} />
         ) : session ? (
           <>
             <SyncStatus onPress={() => router.push('/settings/sync')} onConnect={() => { void connect(); }} />
-            <Card padded style={styles.profileCard}>
-              <MemberAvatar
-                name={me?.name ?? session.user.name ?? session.user.email}
-                color={me?.avatar_color ?? colors.accent}
-                size={56}
-                imageUri={me?.image_uri}
-              />
-              <Text style={styles.profileName}>{session.user.name ?? me?.name ?? 'No name yet'}</Text>
-              <Text style={styles.profileEmail}>{session.user.email}</Text>
-              <Text style={styles.profileMeta}>
-                Signed in on {deviceLabel()} · account created {fullDate(new Date(session.user.createdAt))}
-              </Text>
-            </Card>
 
             <Card>
               <SettingsRow
@@ -325,6 +384,7 @@ export default function AccountScreen() {
               />
             </Card>
             {error && <Text style={styles.error}>{error}</Text>}
+            {backupCard}
           </>
         ) : (
           <>
@@ -370,9 +430,18 @@ export default function AccountScreen() {
               />
             </Card>
             {error && <Text style={styles.error}>{error}</Text>}
+            {backupCard}
           </>
         )}
+
+        {/* Every badge, earned and not; the card opens what each one means. */}
+        <BadgeBoard badges={badges ?? []} onOpen={() => router.push('/badges')} />
       </KeyboardForm>
+
+      <SheetModal visible={showName} onClose={() => setShowName(false)} title="Your name">
+        <Input value={nameText} onChangeText={setNameText} placeholder="Your name" autoFocus maxLength={30} autoCapitalize="words" returnKeyType="done" onSubmitEditing={saveName} style={styles.nameInputGap} />
+        <PrimaryButton label="Save" onPress={saveName} disabled={!nameText.trim()} />
+      </SheetModal>
 
       <SheetModal visible={showPhone} onClose={() => setShowPhone(false)} title="Your phone number">
         <PhoneInput
@@ -405,7 +474,10 @@ const styles = StyleSheet.create({
   // does, so it must not read as more of the same explanatory text above it.
   noteWarn: { ...type.caption, color: colors.healthAmber, textAlign: 'center', lineHeight: 18, marginTop: space.sm },
   profileCard: { alignItems: 'center', gap: space.xs },
-  profileName: { ...type.subheading, color: colors.textPrimary, marginTop: space.sm },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.sm },
+  profileName: { ...type.subheading, color: colors.textPrimary },
+  cameraBadge: { position: 'absolute', right: -2, bottom: -2, width: 22, height: 22, borderRadius: 11, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.bgCard },
+  nameInputGap: { marginBottom: space.md },
   profileEmail: { ...type.body, color: colors.textSecondary },
   profileMeta: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginTop: space.xs },
   blockLabel: { ...type.label, color: colors.textSecondary, marginBottom: space.sm, textTransform: 'uppercase', letterSpacing: 0.5 },

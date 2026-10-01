@@ -11,8 +11,7 @@ import { Feather } from '@expo/vector-icons';
 import { settings } from '../../../src/lib/settings';
 import { colors, type, space, layout } from '../../../src/theme';
 import { haptic } from '../../../src/lib/haptics';
-import { loadSettingsTab, saveMyName, saveMyVpa } from '../../../src/lib/settingsData';
-import { replacePersonPhoto } from '../../../src/lib/personWrites';
+import { loadSettingsTab, saveMyVpa } from '../../../src/lib/settingsData';
 import { useDataRefresh } from '../../../src/components/system/DataRefreshProvider';
 import { isValidVpa } from '../../../src/lib/upiIntent';
 import { RequestQrSheet } from '../../../src/components/finance/RequestQrSheet';
@@ -36,6 +35,7 @@ import { BadgeBoard } from '../../../src/components/finance/badges/BadgeBoard';
 import { useServerSession } from '../../../src/hooks/useServerSession';
 import { ErrorState } from '../../../src/components/ui/ErrorState';
 import { Card } from '../../../src/components/ui/Card';
+import { Divider } from '../../../src/components/ui/Divider';
 import { backOr } from '../../../src/lib/nav';
 
 
@@ -46,7 +46,6 @@ import { backOr } from '../../../src/lib/nav';
  * still overrides it.
  */
 const SECTION = {
-  account: decor.blue,
   paid: colors.income,
   manage: decor.orange,
   preferences: decor.violet,
@@ -56,7 +55,6 @@ const SECTION = {
 } as const;
 
 const TINT = {
-  account: SECTION.account,
   upiId: SECTION.paid,
   upiQr: SECTION.paid,
   friends: SECTION.manage,
@@ -82,8 +80,6 @@ export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const { flags } = useFeatureFlags();
 
-  const [showName, setShowName] = useState(false);
-  const [nameText, setNameText] = useState('');
   const [showVpa, setShowVpa] = useState(false);
   const [vpaText, setVpaText] = useState('');
   const [showMyQr, setShowMyQr] = useState(false);
@@ -188,16 +184,6 @@ export default function SettingsScreen() {
     }
   }
 
-  async function saveName() {
-    const trimmed = nameText.trim();
-    if (!trimmed || !me) return;
-    await saveMyName(db, me.id, trimmed);
-    await reload();
-    refresh();
-    haptic.success();
-    setShowName(false);
-  }
-
   /**
    * Your own handle — the one thing a request QR cannot be built without.
    *
@@ -236,57 +222,29 @@ export default function SettingsScreen() {
         />
       )}
 
-      {/* You, in one card: your photo and name, and under them the account (`U-85`). They were
-          two boxes, the profile and an "Account" section a scroll below it, for one thing: who
-          you are here. The account row exists only in a build with a server to talk to
-          (EXPO_PUBLIC_API_URL); the app stays offline-first either way, which is why signing
-          in is a row and not a gate in front of the app. */}
+      {/* You, in one card (`U-85`, `U-92`): your photo and name open Profile, where the name, the
+          photo, the account and every badge live; under them, one row of badges. The sign-in row
+          that sat here is Profile's now, so the line under the name says when there is one to do. */}
       <Card clip style={styles.profileCard}>
-        <TouchableOpacity style={styles.profileRow} onPress={() => { setNameText(me?.name ?? ''); setShowName(true); }} accessibilityRole="button" accessibilityLabel="Edit profile">
-          <TouchableOpacity
-            onPress={me ? async () => {
-              try {
-                if (await replacePersonPhoto(db, me)) { haptic.success(); await reload(); refresh(); }
-              } catch { haptic.error(); }
-            } : undefined}
-            accessibilityLabel="Change avatar"
-            hitSlop={4}
-          >
-            <MemberAvatar
-              name={me?.name ?? '?'}
-              color={me?.avatar_color ?? colors.accent}
-              size={56}
-              imageUri={me?.image_uri}
-            />
-            <View style={styles.cameraBadge} pointerEvents="none">
-              <Feather name="camera" size={10} color={colors.bg} />
-            </View>
-          </TouchableOpacity>
+        <TouchableOpacity style={styles.profileRow} onPress={() => { router.push('/settings/account'); }} accessibilityRole="button" accessibilityLabel="Open profile">
+          <MemberAvatar
+            name={me?.name ?? '?'}
+            color={me?.avatar_color ?? colors.accent}
+            size={56}
+            imageUri={me?.image_uri}
+          />
           <View style={{ flex: 1 }}>
             <Text style={styles.profileName}>{me?.name ?? 'You'}</Text>
             <Text style={styles.profileSub} numberOfLines={1}>
-              {serverSession ? serverSession.user.email : 'On this phone'}
+              {serverSession ? serverSession.user.email : serverSessionConfigured ? 'Sign in to keep a copy' : 'On this phone'}
             </Text>
           </View>
-          <Feather name="edit-2" size={16} color={colors.textMuted} />
+          <Feather name="chevron-right" size={18} color={colors.textMuted} />
         </TouchableOpacity>
-        {serverSessionConfigured && (
-          <>
-            <View style={settingsRowDivider} />
-            <SettingsRow
-              icon={serverSession ? 'user-check' : 'cloud'}
-              label={serverSession ? 'Account' : 'Sign in'}
-              tint={TINT.account}
-              // The email is already under the name, so signed in this says what the row is for.
-              value={serverSession ? 'Sync and sign out' : 'Keep a copy on your account'}
-              onPress={() => { router.push('/settings/account'); }}
-            />
-          </>
-        )}
+        {(badges ?? []).length > 0 && <Divider indent="none" />}
+        {/* Grey until earned, in colour once it is; opens every badge (`U-65`). */}
+        <BadgeBoard badges={badges ?? []} onOpen={() => router.push('/badges')} compact bare />
       </Card>
-
-      {/* The badge board: grey until earned, in colour once it is; opens every badge (`U-65`). */}
-      <BadgeBoard badges={badges ?? []} onOpen={() => router.push('/badges')} compact />
 
       {/* GETTING PAID — your own handle, and the code others scan to pay you.
           Sits directly under the profile because both rows are about *you*, not about
@@ -448,11 +406,6 @@ export default function SettingsScreen() {
         </TouchableOpacity>
       </Card>
 
-      <SheetModal visible={showName} onClose={() => setShowName(false)} title="Your name">
-        <Input value={nameText} onChangeText={setNameText} placeholder="Your name" autoFocus maxLength={30} autoCapitalize="words" returnKeyType="done" onSubmitEditing={saveName} style={styles.nameInputGap} />
-        <PrimaryButton label="Save" onPress={saveName} disabled={!nameText.trim()} />
-      </SheetModal>
-
       <SheetModal visible={showVpa} onClose={() => setShowVpa(false)} title="Your UPI ID">
         <Input
           value={vpaText}
@@ -509,7 +462,6 @@ const styles = StyleSheet.create({
   profileRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.md },
   profileName: { fontSize: 17, fontFamily: 'Inter_600SemiBold', color: colors.textPrimary },
   profileSub: { fontSize: 13, fontFamily: 'Inter_400Regular', color: colors.textMuted, marginTop: 2 },
-  cameraBadge: { position: 'absolute', right: -2, bottom: -2, width: 18, height: 18, borderRadius: 9, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.bgCard },
 
   aboutText: { ...type.body, color: colors.textPrimary, paddingHorizontal: space.md, paddingTop: space.md },
   aboutSub: { ...type.caption, color: colors.textSecondary, paddingHorizontal: space.md, paddingTop: 2 },

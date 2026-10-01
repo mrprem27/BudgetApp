@@ -1,22 +1,21 @@
-# HANDOFF — 2026-10-01, evening (read first; continue from here)
+# HANDOFF — 2026-10-01, later (read first; continue from here)
 
-Branch `claude/branch-selection-gi7lyy`. **15 commits ahead of origin, NOT pushed** (push needs the
-`mrprem27` account switch, see Rules). Working tree clean. Server deployed after the folder split (U-84).
-Gates at the last full run: 3,000 tests green, tsc clean for app and `server/api`. Nothing from today has
-been seen on a phone. Tracker: 302 items (96 open), 93 in §11.
+Branch `claude/branch-selection-gi7lyy`. **Commits ahead of origin, NOT pushed** (push needs the
+`mrprem27` account switch, see Rules). Server deployed after the folder split (U-84).
+Gates at the last full run: 3,004 tests green, tsc clean for the app. Nothing from today has
+been seen on a phone. Tracker: 304 items (95 open), 95 in §11.
 
-## Built today, all committed (the why is in FINDINGS §11, U-71 to U-90)
-Speed (U-02 part, U-82) · one top card for Budget and Recurring, Budget period dropdown, Recurring tab vs
-full page (U-80, U-89) · person page (U-79) · Members tab (U-90) · totals row + group-scoped Reports (U-88) ·
-profile + account card, preferences on Insights (U-85, U-86) · report PDF with charts (U-19) · demo data
-(U-81) · Search screen deleted (U-83) · server folders (U-84) · analytics rebuilt (`docs/SPEC-ANALYTICS.md`)
-· Android code readiness (`docs/SPEC-ANDROID.md`) · section boxes open instantly (flicker) · sheets scroll
-to their bottom edge.
+## Built today, all committed (the why is in FINDINGS §11, U-71 to U-95)
+Everything in the earlier handoff, plus: **Profile screen** (U-92: `/settings/account` is Profile; Settings'
+top card is the profile row and one badge row) · **demo starter set** (U-94: rent, groceries, a meal, a bill
+exist from the 1st) · **report PDF rebuilt** (U-95: header, four figures against the period before, facts,
+ring with matching legend, bars with average, by-group table, entries; no flex, sized SVG).
 
 ## Open — next, in order
-1. **U-92 Profile screen** (the user's most recent ask; plan in FINDINGS). Not started.
-2. **U-91 Insights as tiles** (plan + the one-sheet-at-a-time constraint in FINDINGS). Not started.
-3. **U-93** the group row's labels: waiting on the user's choice.
+1. **U-91 Insights as tiles** (plan + the one-sheet-at-a-time constraint in FINDINGS). Not started.
+2. **U-93** the group row's labels: waiting on the user's choice.
+3. **The PDF on the phone:** charts were reported missing or broken there before the rebuild; the cause was
+   not reproduced (headless Chrome renders it). If they are still missing, ask for a screenshot.
 4. **Speed, step 5** (`docs/SPEC-SPEED-PDF-READS-FOLDERS.md` §1): per-group reads on Groups (73 queries),
    Reports (96), budget summary (16). Wants the user's SCREEN LOADS numbers from the dev screen first.
 5. **Waiting on the user:** Mixpanel project token + service account · Android build route (Android Studio
@@ -29,6 +28,8 @@ to their bottom edge.
    (B-07), privacy/store (B-08, B-10, B-13), merge to main (B-19).
 
 ## Rules learned this session
+To look at the PDF without a phone: a throwaway jest test (`freshPhone` + `loadDemoData` + `loadReportsData` +
+`buildReportHtml`, write the HTML out), then headless Chrome `--print-to-pdf`; delete the test after.
 Tracker counts only via script (recount rows + Closed lists; §0 summary table is unguarded). New route →
 regenerate `.expo/types/router.d.ts` (`CI=1 npx expo start --offline`, kill after types appear). Jest flake: a
 random suite fails to load; rerun alone. Don't add `thinkingBudget` to the Gemini proxy (400). Deploy:

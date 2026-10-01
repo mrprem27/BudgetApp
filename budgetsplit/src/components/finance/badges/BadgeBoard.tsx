@@ -20,20 +20,21 @@ export function badgeTint(b: Badge): string {
  *
  * Small on purpose, and smaller twice over (`U-75`): 20pt discs, three rows for thirty-six on the
  * Badges screen. `compact` (Settings) is ONE row, earned ones first, as many as fit: the board
- * there is a door to the Badges screen, not the screen itself.
+ * there is a door to the Badges screen, not the screen itself. `bare` drops the card, for a caller
+ * that puts the row inside a card of its own (Settings' top card, `U-92`).
  */
 const DISC = 20;
 const GAP = space.xs;
 
-export function BadgeBoard({ badges, onOpen, compact }: { badges: Badge[]; onOpen?: () => void; compact?: boolean }) {
+export function BadgeBoard({ badges, onOpen, compact, bare }: { badges: Badge[]; onOpen?: () => void; compact?: boolean; bare?: boolean }) {
   const { width } = useWindowDimensions();
   if (badges.length === 0) return null;
   const earned = badges.filter(b => b.level > 0).length;
   // The card's inner width: the screen less its side padding and the card's own.
   const perRow = Math.max(1, Math.floor((width - 2 * layout.screenPaddingH - 2 * space.md + GAP) / (DISC + GAP)));
   const shown = compact ? [...badges].sort((a, b) => Number(b.level > 0) - Number(a.level > 0)).slice(0, perRow) : badges;
-  const body = (
-    <Card padded style={compact ? styles.cardCompact : undefined}>
+  const inner = (
+    <>
       <View style={styles.head}>
         <Text style={styles.title}>Badges</Text>
         <Text style={styles.count}>{earned} of {badges.length}</Text>
@@ -48,15 +49,16 @@ export function BadgeBoard({ badges, onOpen, compact }: { badges: Badge[]; onOpe
           </View>
         ))}
       </View>
-    </Card>
+    </>
   );
+  const body = bare ? <View style={styles.bare}>{inner}</View> : <Card padded>{inner}</Card>;
   return onOpen
     ? <PressableScale onPress={onOpen} accessibilityLabel={`Badges, ${earned} of ${badges.length} earned. Open`}>{body}</PressableScale>
     : body;
 }
 
 const styles = StyleSheet.create({
-  cardCompact: { marginBottom: space.lg },
+  bare: { padding: space.md },
   head: { flexDirection: 'row', alignItems: 'center', gap: space.xs, marginBottom: space.sm },
   title: { ...type.sectionLabel, color: colors.textMuted, flex: 1 },
   count: { ...type.caption, color: colors.textSecondary },
