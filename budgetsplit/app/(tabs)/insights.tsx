@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, type LayoutChangeEvent } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, type LayoutChangeEvent } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
@@ -9,7 +9,7 @@ import { getDate, getDaysInMonth } from 'date-fns';
 import { monthLabel } from '../../src/lib/dateFormat';
 import { colors, type, space, layout, alpha } from '../../src/theme';
 import { categoryVisual } from '../../src/constants/categories';
-import { asFeather } from '../../src/constants/palette';
+import { asFeather, decor } from '../../src/constants/palette';
 import { HeaderIconButton } from '../../src/components/ui/HeaderIconButton';
 import { useExportAll } from '../../src/hooks/useExportAll';
 import { Card } from '../../src/components/ui/Card';
@@ -21,7 +21,9 @@ import { Badge } from '../../src/components/ui/Badge';
 import { Chip } from '../../src/components/ui/Chip';
 import { IconCircle } from '../../src/components/ui/IconCircle';
 import { MoneyPreferences } from '../../src/components/finance/settings/MoneyPreferences';
-import { SectionCard } from '../../src/components/ui/SectionCard';
+import { SheetModal } from '../../src/components/ui/SheetModal';
+import { InfoLabel } from '../../src/components/ui/InfoLabel';
+import { InsightTile, InsightGrid } from '../../src/components/finance/insights/InsightTile';
 import { EmptyState } from '../../src/components/ui/EmptyState';
 import { ErrorState } from '../../src/components/ui/ErrorState';
 import { AppRefreshControl } from '../../src/components/ui/AppRefreshControl';
@@ -61,8 +63,7 @@ function insightTint(tone: Insight['tone']): string {
 const isDuplicateRec = (id: string) =>
   id.startsWith('over-') || id === 'projected' || id === 'ontrack';
 
-/** Sections start closed except the one you came here for. */
-const DEFAULT_OPEN = 'attention';
+type Sheet = 'outlook' | 'attention' | 'forecast' | 'shifts' | 'whatif' | 'savings' | 'prefs' | null;
 
 export default function InsightsScreen() {
   const router = useRouter();
@@ -70,13 +71,9 @@ export default function InsightsScreen() {
   const { flags } = useFeatureFlags();
   const { exporting, exportAll } = useExportAll(db);
   const [cutPct, setCutPct] = useState(20);
-  const [open, setOpen] = useState<Set<string>>(new Set([DEFAULT_OPEN]));
-  const toggle = (key: string) =>
-    setOpen(prev => {
-      const next = new Set(prev);
-      next.has(key) ? next.delete(key) : next.add(key);
-      return next;
-    });
+  // Which section's sheet is up. One at a time, by construction.
+  const [sheet, setSheet] = useState<Sheet>(null);
+  const closeSheet = () => setSheet(null);
 
   const { data, loading, error: loadError, refreshing, onRefresh, reload } =
     useScreenData((db) => loadInsightsData(db), []);
@@ -233,339 +230,353 @@ export default function InsightsScreen() {
               )}
             </Card>
 
-            {/*
-              * CASH OUTLOOK — the money engine's read of what is coming (`U-58`).
-              *
-              * The same walk Home's Safe-to-Spend comes from (`getSafeToSpendV2`): today's cash,
-              * every known bill and income up to payday, and the everyday rate for the days in
-              * between. The lowest point on that walk is what is safe to spend. Home shows the
-              * one figure; this is where it explains itself — and, via `explain`, says when it
-              * does not have enough history to say anything.
-              */}
-            {outlook && (
-              <SectionCard
-                title="Cash outlook"
-                subtitle={outlook.suppressed
-                  ? 'Learning your spending'
-                  : `${formatCompact(outlook.safeToSpend)} safe to spend`}
-                icon="compass"
-                iconColor={outlook.suppressed ? colors.textSecondary : outlook.safeToSpend >= 0 ? colors.income : colors.expense}
-                expanded={open.has('outlook')}
-                onToggle={() => toggle('outlook')}
-              >
-                {outlook.suppressed ? (
-                  <Text style={[styles.pace, styles.outlookPad]}>
-                    Needs {outlook.missing ?? 'a little more history'} before it can project your cash.
-                  </Text>
-                ) : (
-                  <>
-                    <Divider indent="text" />
-                    <ListRow
-                      icon="shield"
-                      iconColor={outlook.safeToSpend >= 0 ? colors.income : colors.expense}
-                      title="Safe to spend"
-                      subtitle={outlook.noDip
-                        ? `Through ${shortDate(new Date(outlook.untilMs))}, every known bill paid`
-                        : `Your lowest point ahead, on ${shortDate(new Date(outlook.untilMs))}`}
-                      value={<Text style={[styles.outlookAmt, { color: outlook.safeToSpend >= 0 ? colors.income : colors.expense }]}>{formatCompact(outlook.safeToSpend)}</Text>}
-                      chevron={false}
-                    />
-                    {outlook.upcomingBills > 0 && (
-                      <>
-                        <Divider indent="text" />
-                        <ListRow icon="calendar" title="Bills before then" value={formatCompact(outlook.upcomingBills)} chevron={false}
-                          onPress={() => router.push('/upcoming')} />
-                      </>
-                    )}
-                    {outlook.dailyRate != null && (
-                      <>
-                        <Divider indent="text" />
-                        <ListRow icon="coffee" title="Everyday spending" value={`${formatCompact(outlook.dailyRate)}/day`} chevron={false} />
-                      </>
-                    )}
-                    {outlook.warning && (
-                      <>
-                        <Divider indent="text" />
-                        <NoteRow
-                          icon="alert-triangle"
-                          tint={colors.healthAmber}
-                          body={<Text style={[styles.noteText, { color: colors.healthAmber }]}>
-                            Runs low on {shortDate(new Date(outlook.warning.date))}, when {outlook.warning.label} ({formatCompact(outlook.warning.amountPaise)}) is due.
-                          </Text>}
-                        />
-                      </>
-                    )}
-                    <Text style={[styles.pace, styles.outlookPad]}>
-                      {outlook.confidence === 'high' ? 'High confidence' : outlook.confidence === 'medium' ? 'Medium confidence' : 'Low confidence'}
-                      {outlook.missing ? ` · sharper with ${outlook.missing}` : ''}
-                    </Text>
-                  </>
-                )}
-              </SectionCard>
-            )}
-
-            {/*
-              * NEEDS ATTENTION — the merge.
-              *
-              * "Recommendations" and "Driving overspend" were two sections built from
-              * the same over-budget categories, so the screen printed "You're ₹800
-              * over on Food (140% used)" and then, one section later, "Food · ₹800
-              * over". One section, drivers first (the amount is the actionable part),
-              * then whatever the rule engine has left to say that isn't a repeat.
-              */}
-            {attentionCount > 0 && (
-              <SectionCard
-                title="Needs attention"
-                subtitle={overTotal > 0
-                  ? `${attentionCount} ${attentionCount === 1 ? 'thing' : 'things'} · ${formatCompact(overTotal)} over`
-                  : `${attentionCount} ${attentionCount === 1 ? 'thing' : 'things'}`}
-                icon="alert-triangle"
-                iconColor={colors.expense}
-                expanded={open.has('attention')}
-                onToggle={() => toggle('attention')}
-              >
-                {drivers.map((d, i) => {
-                  const vis = categoryVisual(d.category);
-                  return (
-                    <View key={d.key}>
-                      <Divider indent="text" />
-                      <ListRow
-                        leading={<IconCircle icon={asFeather(vis?.icon, 'tag')} size={layout.iconCircle} color={vis?.color ?? colors.accent} />}
-                        title={d.category}
-                        subtitle={multiGroup ? d.group : undefined}
-                        value={<Text style={styles.over}>{formatCompact(d.over)} over</Text>}
-                        chevron={false}
-                        onPress={() => router.push(`/category/${encodeURIComponent(d.category)}`)}
-                      />
-                    </View>
-                  );
-                })}
-                {notes.map(r => (
-                  <View key={r.key}>
-                    <Divider indent="text" />
-                    <NoteRow
-                      icon={asFeather(r.icon, 'info')}
-                      tint={recColor(r.severity)}
-                      body={<Text style={[styles.noteText, { color: recColor(r.severity) }]}>{r.text}</Text>}
-                      caption={multiGroup ? r.group : undefined}
-                    />
-                  </View>
-                ))}
-              </SectionCard>
-            )}
-
-            {/* A forecast needs at least two days of spending to draw a line
-                through, so early in the month there is nothing honest to show.
-                The section used to VANISH — `{hasForecast && …}` with no else —
-                which reads as a feature that was removed rather than one that is
-                waiting, and is exactly what Walk 1 reported (`W1-12`).
-
-                A placeholder saying WHY, not un-gating: a projection from one
-                day's data would swing wildly and be worse than none. Built as a
-                `SectionCard` so it is the same shape as the thing it stands in
-                for — and because `insightsScreen.test.ts` counts them. */}
-            {!hasForecast && !nothingYet && (
-              <SectionCard
-                title="Month-end forecast"
-                subtitle="Needs about a month of spending first"
-                icon="trending-up"
-                expanded={open.has('forecast')}
-                onToggle={() => toggle('forecast')}
-              >
-                <Text style={styles.pace}>
-                  A projection this early would swing on a single purchase. It appears
-                  once there is about a month of spending to base it on.
-                </Text>
-              </SectionCard>
-            )}
-
-            {hasForecast && (
-              <SectionCard
-                title="Month-end forecast"
-                subtitle={`${formatCompactMajor(projectedTotal)} projected · solid is spent, dashed is ahead`}
-                icon="trending-up"
-                expanded={open.has('forecast')}
-                onToggle={() => toggle('forecast')}
-              >
-                <Divider indent="none" />
-                <View style={styles.chartWrap} onLayout={onChartLayout}>
-                  {/* Drawn only once the width is measured, and re-keyed if it changes: the chart
-                      animates its own drawing, and one that starts at a guessed width and is then
-                      re-laid-out mid-animation stalls half-drawn on the first open. */}
-                  {chartW > 0 ? (
-                    <LineChart
-                      key={Math.round(chartW)}
-                      data={forecastProjected}
-                      data2={forecastActual}
-                      color1={colors.accent}
-                      color2={colors.expense}
-                      thickness1={2}
-                      thickness2={2.5}
-                      strokeDashArray1={[5, 5]}
-                      noOfSections={4}
-                      maxValue={Math.ceil((Math.max(...forecastActual.map(d => d.value), ...forecastProjected.map(d => d.value), 1)) * 1.1)}
-                      // Until the first layout lands there is nothing measured to
-                      // divide, so hold the old constant for one frame rather than
-                      // collapsing every label to the floor.
-                      spacing={plotWidth(chartW, space.md) > 0 ? axisSpacing(plotWidth(chartW, space.md), forecastProjected.length) : 8}
-                      initialSpacing={8}
-                      endSpacing={8}
-                      xAxisThickness={0}
-                      yAxisThickness={0}
-                      yAxisTextStyle={{ color: colors.textMuted, fontSize: 10 }}
-                      formatYLabel={formatAxisShort}
-                      xAxisLabelTextStyle={{ color: colors.textMuted, fontSize: 9 }}
-                      hideRules
-                      isAnimated
-                      disableScroll
-                      pointerConfig={{
-                        pointerStripUptoDataPoint: true,
-                        pointerStripColor: alpha(colors.textMuted, 38),
-                        pointerStripWidth: 1,
-                        pointerColor: colors.accent,
-                        radius: 5,
-                        pointerLabelWidth: 76,
-                        pointerLabelHeight: 32,
-                        activatePointersOnLongPress: false,
-                        autoAdjustPointerLabelPosition: true,
-                        pointerLabelComponent: (items: Array<{ value: number }>) => (
-                          <View style={styles.pointerLabel}>
-                            <Text style={styles.pointerLabelText}>{formatAxisShort(items[0]?.value ?? 0)}</Text>
-                          </View>
-                        ),
-                      }}
-                    />
-                  ) : <View style={styles.chartHold} />}
-                  <View style={styles.legend}>
-                    <LegendItem color={colors.expense} label="Actual" />
-                    <LegendItem color={colors.accent} label="Projected" />
-                  </View>
-                </View>
-              </SectionCard>
-            )}
-
-            {shifts.length > 0 && (
-              <SectionCard
-                title="Changed vs last month"
-                subtitle={`${shifts.length} ${shifts.length === 1 ? 'category' : 'categories'} moved most`}
-                icon="repeat"
-                expanded={open.has('shifts')}
-                onToggle={() => toggle('shifts')}
-              >
-                {shifts.map(s => {
-                  const vis = categoryVisual(s.cat);
-                  const up = s.pct > 5, down = s.pct < -5;
-                  return (
-                    <View key={s.cat}>
-                      <Divider indent="text" />
-                      <ListRow
-                        leading={<IconCircle icon={asFeather(vis?.icon, 'tag')} size={layout.iconCircle} color={vis?.color ?? colors.accent} />}
-                        title={s.cat}
-                        subtitle={`${formatCompact(s.thisAmt)} this month`}
-                        value={
-                          <Badge
-                            label={up ? `+${s.pct}%` : down ? `${s.pct}%` : 'about the same'}
-                            tone={up ? 'expense' : down ? 'income' : 'neutral'}
-                            icon={up ? 'arrow-up' : down ? 'arrow-down' : undefined}
-                          />
-                        }
-                        chevron={false}
-                      />
-                    </View>
-                  );
-                })}
-              </SectionCard>
-            )}
-
-            {whatIf && whatIf.monthly > 0 && (
-              <SectionCard
-                title="What if I cut back?"
-                subtitle={`Your biggest category is ${whatIf.name}`}
-                icon="scissors"
-                expanded={open.has('whatif')}
-                onToggle={() => toggle('whatif')}
-              >
-                <Divider indent="none" />
-                <View style={styles.whatIf}>
-                  <Text style={styles.whatIfLead}>
-                    Spend {cutPct}% less on <Text style={styles.whatIfName}>{whatIf.name}</Text> and you'd keep
-                  </Text>
-                  <Text style={styles.whatIfSave}>
-                    {formatCompact(Math.round((whatIf.monthly * cutPct) / 100))}<Text style={styles.whatIfPer}>/month</Text>
-                  </Text>
-                  <Text style={styles.whatIfYear}>
-                    ≈ {formatCompact(Math.round((whatIf.monthly * cutPct) / 100) * 12)} over a year
-                  </Text>
-                  {/* `ui/Chip`, not a fourth hand-rolled pill (§9). */}
-                  <View style={styles.cutRow}>
-                    {[10, 20, 30].map(p => (
-                      <Chip key={p} grow label={`${p}%`} selected={cutPct === p} onPress={() => setCutPct(p)} />
-                    ))}
-                  </View>
-                </View>
-              </SectionCard>
-            )}
-
-            {savings.length > 0 && (
-              <SectionCard
-                title="Ways to save"
-                subtitle={`${savings.length} ${savings.length === 1 ? 'idea' : 'ideas'} from your own spending`}
-                icon="feather"
-                iconColor={colors.income}
-                expanded={open.has('savings')}
-                onToggle={() => toggle('savings')}
-              >
-                {savings.map(ins => {
-                  const tint = insightTint(ins.tone);
-                  return (
-                    <View key={ins.text}>
-                      <Divider indent="text" />
-                      <NoteRow
-                        icon={asFeather(ins.icon, 'info')}
-                        tint={tint}
-                        body={<InsightText text={ins.text} color={tint} style={styles.noteText} />}
-                      />
-                    </View>
-                  );
-                })}
-              </SectionCard>
-            )}
           </>
         )}
 
-        {/* The answers the forecasts above are built on, beside them (`U-86`). They were Settings'
-            Preferences, a screen away from anything they change. Closed until wanted. */}
-        <SectionCard
-          title="How your money works"
-          subtitle="Pay cycle, safe to spend, defaults"
-          icon="sliders"
-          expanded={open.has('prefs')}
-          onToggle={() => toggle('prefs')}
-          style={{ marginTop: space.md }}
-        >
-          <Divider indent="none" />
-          <MoneyPreferences />
-        </SectionCard>
-
-        {/* Reports and export live here — with the numbers they are built from — not in Settings. */}
-        <Card clip>
-          {flags.reports && (
-            <>
-              <ListRow icon="pie-chart" title="Reports" subtitle="Month by month, drill down, CSV / PDF" onPress={() => router.push('/reports')} />
-              <Divider indent="text" />
-            </>
+        {/*
+          * THE SECTIONS, AS TILES (`U-91`).
+          *
+          * Each was a collapsed `SectionCard` in one column: nine rows at the same weight, none
+          * showing its figure until opened. A tile carries the section's colour and the one figure
+          * it comes down to, and opens a sheet with everything the section holds. A section with
+          * nothing to say has no tile, as it had no card.
+          */}
+        <InsightGrid>
+          {outlook && (
+            <InsightTile
+              key="outlook" icon="compass" tint={decor.blue} title="Cash outlook"
+              figure={outlook.suppressed ? 'Learning' : formatCompact(outlook.safeToSpend)}
+              figureColor={outlook.suppressed ? colors.textSecondary : outlook.safeToSpend >= 0 ? colors.income : colors.expense}
+              line={outlook.suppressed ? 'needs a little more history' : `safe to spend until ${shortDate(new Date(outlook.untilMs))}`}
+              onPress={() => setSheet('outlook')}
+            />
           )}
-          <ListRow
-            icon="database"
-            title="Export all data"
-            subtitle="Every transaction as one CSV"
-            chevron={false}
-            value={exporting ? <ActivityIndicator size="small" color={colors.accent} /> : undefined}
-            onPress={exporting ? undefined : exportAll}
+          <InsightTile
+            key="prefs" icon="sliders" tint={decor.violet} title="How your money works"
+            line="Pay cycle, safe to spend, defaults"
+            onPress={() => setSheet('prefs')}
           />
-        </Card>
+          {attentionCount > 0 && (
+            <InsightTile
+              key="attention" icon="alert-triangle" tint={colors.expense} title="Needs attention"
+              figure={overTotal > 0 ? formatCompact(overTotal) : String(attentionCount)}
+              figureColor={colors.expense}
+              line={overTotal > 0 ? `over, in ${attentionCount} ${attentionCount === 1 ? 'place' : 'places'}` : attentionCount === 1 ? 'thing to look at' : 'things to look at'}
+              onPress={() => setSheet('attention')}
+            />
+          )}
+          {!nothingYet && (
+            <InsightTile
+              key="forecast" icon="trending-up" tint={colors.accent} title="Month-end forecast"
+              figure={hasForecast ? formatCompactMajor(projectedTotal) : 'Soon'}
+              figureColor={hasForecast ? undefined : colors.textSecondary}
+              line={hasForecast ? 'projected by month-end' : 'needs about a month of spending'}
+              onPress={() => setSheet('forecast')}
+            />
+          )}
+          {shifts.length > 0 && (
+            <InsightTile
+              key="shifts" icon="repeat" tint={decor.orange} title="Changed vs last month"
+              figure={`${shifts[0].pct > 0 ? '+' : ''}${shifts[0].pct}%`}
+              figureColor={shifts[0].pct > 5 ? colors.expense : shifts[0].pct < -5 ? colors.income : undefined}
+              line={shifts.length === 1 ? shifts[0].cat : `${shifts[0].cat}, and ${shifts.length - 1} more`}
+              onPress={() => setSheet('shifts')}
+            />
+          )}
+          {whatIf && whatIf.monthly > 0 && (
+            <InsightTile
+              key="whatif" icon="scissors" tint={decor.pink} title="What if I cut back?"
+              figure={formatCompact(Math.round((whatIf.monthly * cutPct) / 100))}
+              figureColor={colors.income}
+              line={`a month, with ${cutPct}% less ${whatIf.name}`}
+              onPress={() => setSheet('whatif')}
+            />
+          )}
+          {savings.length > 0 && (
+            <InsightTile
+              key="savings" icon="feather" tint={colors.income} title="Ways to save"
+              figure={String(savings.length)}
+              line={savings.length === 1 ? 'idea from your own spending' : 'ideas from your own spending'}
+              onPress={() => setSheet('savings')}
+            />
+          )}
+          {/* Reports and export live here, with the numbers they are built from, not in Settings. */}
+          {flags.reports && (
+            <InsightTile
+              key="reports" icon="pie-chart" tint={colors.settle} title="Reports"
+              line="Month by month, drill down, CSV and PDF"
+              onPress={() => router.push('/reports')}
+            />
+          )}
+          <InsightTile
+            key="export" icon="database" tint={colors.textSecondary} title="Export all data"
+            line={exporting ? 'Preparing your file…' : 'Every transaction as one CSV'}
+            onPress={exporting ? () => {} : exportAll}
+          />
+        </InsightGrid>
       </ScrollView>
       )}
+
+      {/* One sheet per section, each opening on what the section is and an (i) for how it is worked out. */}
+      {outlook && (
+        <SheetModal visible={sheet === 'outlook'} onClose={closeSheet} title="Cash outlook">
+          <SheetIntro label={outlook.suppressed ? 'Still learning your spending' : 'What is safe to spend, and why'}
+            info="Today's cash, every known bill and income up to payday, and your everyday spending for the days between. The lowest point on that walk is what is safe to spend." />
+          {outlook.suppressed ? (
+            <Text style={styles.pace}>Needs {outlook.missing ?? 'a little more history'} before it can project your cash.</Text>
+          ) : (
+            <>
+              <Card clip>
+                <ListRow
+                  icon="shield"
+                  iconColor={outlook.safeToSpend >= 0 ? colors.income : colors.expense}
+                  title="Safe to spend"
+                  subtitle={outlook.noDip
+                    ? `Through ${shortDate(new Date(outlook.untilMs))}, every known bill paid`
+                    : `Your lowest point ahead, on ${shortDate(new Date(outlook.untilMs))}`}
+                  value={<Text style={[styles.outlookAmt, { color: outlook.safeToSpend >= 0 ? colors.income : colors.expense }]}>{formatCompact(outlook.safeToSpend)}</Text>}
+                  chevron={false}
+                />
+                {outlook.upcomingBills > 0 && (
+                  <>
+                    <Divider indent="text" />
+                    <ListRow icon="calendar" title="Bills before then" value={formatCompact(outlook.upcomingBills)}
+                      onPress={() => { closeSheet(); router.push('/upcoming'); }} />
+                  </>
+                )}
+                {outlook.dailyRate != null && (
+                  <>
+                    <Divider indent="text" />
+                    <ListRow icon="coffee" title="Everyday spending" value={`${formatCompact(outlook.dailyRate)}/day`} chevron={false} />
+                  </>
+                )}
+                {outlook.warning && (
+                  <>
+                    <Divider indent="text" />
+                    <NoteRow
+                      icon="alert-triangle"
+                      tint={colors.healthAmber}
+                      body={<Text style={[styles.noteText, { color: colors.healthAmber }]}>
+                        Runs low on {shortDate(new Date(outlook.warning.date))}, when {outlook.warning.label} ({formatCompact(outlook.warning.amountPaise)}) is due.
+                      </Text>}
+                    />
+                  </>
+                )}
+              </Card>
+              <Text style={[styles.pace, styles.sheetFoot]}>
+                {outlook.confidence === 'high' ? 'High confidence' : outlook.confidence === 'medium' ? 'Medium confidence' : 'Low confidence'}
+                {outlook.missing ? ` · sharper with ${outlook.missing}` : ''}
+              </Text>
+            </>
+          )}
+        </SheetModal>
+      )}
+
+      {/*
+        * NEEDS ATTENTION — the merge.
+        *
+        * "Recommendations" and "Driving overspend" were two sections built from
+        * the same over-budget categories, so the screen printed "You're ₹800
+        * over on Food (140% used)" and then, one section later, "Food · ₹800
+        * over". One section, drivers first (the amount is the actionable part),
+        * then whatever the rule engine has left to say that isn't a repeat.
+        */}
+      <SheetModal visible={sheet === 'attention'} onClose={closeSheet} title="Needs attention">
+        <SheetIntro label={overTotal > 0 ? `${formatCompact(overTotal)} over budget this month` : 'Worth a look this month'}
+          info="Categories that have passed their budget, largest first, then anything else this month's spending flagged. Tap a category to see its entries." />
+        <Card clip>
+          {drivers.map((d, i) => {
+            const vis = categoryVisual(d.category);
+            return (
+              <View key={d.key}>
+                {i > 0 && <Divider indent="text" />}
+                <ListRow
+                  leading={<IconCircle icon={asFeather(vis?.icon, 'tag')} size={layout.iconCircle} color={vis?.color ?? colors.accent} />}
+                  title={d.category}
+                  subtitle={multiGroup ? d.group : undefined}
+                  value={<Text style={styles.over}>{formatCompact(d.over)} over</Text>}
+                  onPress={() => { closeSheet(); router.push(`/category/${encodeURIComponent(d.category)}`); }}
+                />
+              </View>
+            );
+          })}
+          {notes.map((r, i) => (
+            <View key={r.key}>
+              {(i > 0 || drivers.length > 0) && <Divider indent="text" />}
+              <NoteRow
+                icon={asFeather(r.icon, 'info')}
+                tint={recColor(r.severity)}
+                body={<Text style={[styles.noteText, { color: recColor(r.severity) }]}>{r.text}</Text>}
+                caption={multiGroup ? r.group : undefined}
+              />
+            </View>
+          ))}
+        </Card>
+      </SheetModal>
+
+      {/* A forecast needs at least two days of spending to draw a line through, so early in
+          the month there is nothing honest to show. The tile stays and says why (`W1-12`): a
+          section that vanished read as a feature removed, and a projection from one day's
+          data would swing wildly and be worse than none. */}
+      <SheetModal visible={sheet === 'forecast'} onClose={closeSheet} title="Month-end forecast">
+        <SheetIntro label={hasForecast ? `${formatCompactMajor(projectedTotal)} projected by month-end` : 'Needs about a month of spending first'}
+          info={hasForecast
+            ? 'Your spending so far this month, carried on at the same pace to the last day. Solid is spent, dashed is ahead.'
+            : 'A projection this early would swing on a single purchase. It appears once there is about a month of spending to base it on.'} />
+        {hasForecast && (
+          <Card padded>
+            <View onLayout={onChartLayout}>
+              {/* Drawn only once the width is measured, and re-keyed if it changes: the chart
+                  animates its own drawing, and one that starts at a guessed width and is then
+                  re-laid-out mid-animation stalls half-drawn on the first open. */}
+              {chartW > 0 ? (
+                <LineChart
+                  key={Math.round(chartW)}
+                  data={forecastProjected}
+                  data2={forecastActual}
+                  color1={colors.accent}
+                  color2={colors.expense}
+                  thickness1={2}
+                  thickness2={2.5}
+                  strokeDashArray1={[5, 5]}
+                  noOfSections={4}
+                  maxValue={Math.ceil((Math.max(...forecastActual.map(d => d.value), ...forecastProjected.map(d => d.value), 1)) * 1.1)}
+                  // Until the first layout lands there is nothing measured to
+                  // divide, so hold the old constant for one frame rather than
+                  // collapsing every label to the floor.
+                  spacing={plotWidth(chartW, 0) > 0 ? axisSpacing(plotWidth(chartW, 0), forecastProjected.length) : 8}
+                  initialSpacing={8}
+                  endSpacing={8}
+                  xAxisThickness={0}
+                  yAxisThickness={0}
+                  yAxisTextStyle={{ color: colors.textMuted, fontSize: 10 }}
+                  formatYLabel={formatAxisShort}
+                  xAxisLabelTextStyle={{ color: colors.textMuted, fontSize: 9 }}
+                  hideRules
+                  isAnimated
+                  disableScroll
+                  pointerConfig={{
+                    pointerStripUptoDataPoint: true,
+                    pointerStripColor: alpha(colors.textMuted, 38),
+                    pointerStripWidth: 1,
+                    pointerColor: colors.accent,
+                    radius: 5,
+                    pointerLabelWidth: 76,
+                    pointerLabelHeight: 32,
+                    activatePointersOnLongPress: false,
+                    autoAdjustPointerLabelPosition: true,
+                    pointerLabelComponent: (items: Array<{ value: number }>) => (
+                      <View style={styles.pointerLabel}>
+                        <Text style={styles.pointerLabelText}>{formatAxisShort(items[0]?.value ?? 0)}</Text>
+                      </View>
+                    ),
+                  }}
+                />
+              ) : <View style={styles.chartHold} />}
+              <View style={styles.legend}>
+                <LegendItem color={colors.expense} label="Actual" />
+                <LegendItem color={colors.accent} label="Projected" />
+              </View>
+            </View>
+          </Card>
+        )}
+      </SheetModal>
+
+      <SheetModal visible={sheet === 'shifts'} onClose={closeSheet} title="Changed vs last month">
+        <SheetIntro label={`${shifts.length} ${shifts.length === 1 ? 'category' : 'categories'} moved most`}
+          info="This month's spending in each category against last month's, largest change first." />
+        <Card clip>
+          {shifts.map((s, i) => {
+            const vis = categoryVisual(s.cat);
+            const up = s.pct > 5, down = s.pct < -5;
+            return (
+              <View key={s.cat}>
+                {i > 0 && <Divider indent="text" />}
+                <ListRow
+                  leading={<IconCircle icon={asFeather(vis?.icon, 'tag')} size={layout.iconCircle} color={vis?.color ?? colors.accent} />}
+                  title={s.cat}
+                  subtitle={`${formatCompact(s.thisAmt)} this month`}
+                  value={
+                    <Badge
+                      label={up ? `+${s.pct}%` : down ? `${s.pct}%` : 'about the same'}
+                      tone={up ? 'expense' : down ? 'income' : 'neutral'}
+                      icon={up ? 'arrow-up' : down ? 'arrow-down' : undefined}
+                    />
+                  }
+                  chevron={false}
+                />
+              </View>
+            );
+          })}
+        </Card>
+      </SheetModal>
+
+      {whatIf && whatIf.monthly > 0 && (
+        <SheetModal visible={sheet === 'whatif'} onClose={closeSheet} title="What if I cut back?">
+          <SheetIntro label={`Your biggest category is ${whatIf.name}`}
+            info="Takes what you spend on your biggest category in a month and shows what a cut would keep, a month and over a year." />
+          <Card padded>
+            <Text style={styles.whatIfLead}>
+              Spend {cutPct}% less on <Text style={styles.whatIfName}>{whatIf.name}</Text> and you'd keep
+            </Text>
+            <Text style={styles.whatIfSave}>
+              {formatCompact(Math.round((whatIf.monthly * cutPct) / 100))}<Text style={styles.whatIfPer}>/month</Text>
+            </Text>
+            <Text style={styles.whatIfYear}>
+              ≈ {formatCompact(Math.round((whatIf.monthly * cutPct) / 100) * 12)} over a year
+            </Text>
+            {/* `ui/Chip`, not a fourth hand-rolled pill (§9). */}
+            <View style={styles.cutRow}>
+              {[10, 20, 30].map(p => (
+                <Chip key={p} grow label={`${p}%`} selected={cutPct === p} onPress={() => setCutPct(p)} />
+              ))}
+            </View>
+          </Card>
+        </SheetModal>
+      )}
+
+      <SheetModal visible={sheet === 'savings'} onClose={closeSheet} title="Ways to save">
+        <SheetIntro label={`${savings.length} ${savings.length === 1 ? 'idea' : 'ideas'} from your own spending`}
+          info="Read from your own entries: habits that add up, and what a small change to one would come to." />
+        <Card clip>
+          {savings.map((ins, i) => {
+            const tint = insightTint(ins.tone);
+            return (
+              <View key={ins.text}>
+                {i > 0 && <Divider indent="text" />}
+                <NoteRow
+                  icon={asFeather(ins.icon, 'info')}
+                  tint={tint}
+                  body={<InsightText text={ins.text} color={tint} style={styles.noteText} />}
+                />
+              </View>
+            );
+          })}
+        </Card>
+      </SheetModal>
+
+      {/* The answers the forecasts above are built on (`U-86`), in the colour Settings gives its
+          Preferences. The pickers are rendered beside this sheet, not inside it, and it steps
+          aside while one is up: only one sheet can be on stage (`lib/sheetStage`). */}
+      <MoneyPreferences
+        tint={decor.violet}
+        wrap={(rows, pickerOpen) => (
+          <SheetModal visible={sheet === 'prefs' && !pickerOpen} onClose={closeSheet} title="How your money works">
+            <SheetIntro label="What the forecasts are built on"
+              info="Safe to spend, the month-end forecast and Can I afford all read these answers. Change one and they move with it." />
+            <Card clip>{rows}</Card>
+          </SheetModal>
+        )}
+      />
+    </View>
+  );
+}
+
+/** A sheet's first line: what the section is, with how it is worked out behind an (i). */
+function SheetIntro({ label, info }: { label: string; info: string }) {
+  return (
+    <View style={styles.sheetIntro}>
+      <InfoLabel label={label} labelStyle={styles.sheetIntroLabel} info={info} />
     </View>
   );
 }
@@ -607,13 +618,13 @@ function LegendItem({ color, label }: { color: string; label: string }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  // No `gap`: `SectionCard` carries its own `marginBottom` (§3), and stacking the
-  // two is what put 32px between every card on the budget editor (§12).
+  // No `gap`: the headline card and each row of tiles carry their own bottom margin (§3).
   scroll: { padding: layout.screenPaddingH },
-  // The headline card spaces itself from the sections below, as every SectionCard does.
   headline: { marginBottom: space.md },
+  sheetIntro: { marginBottom: space.md },
+  sheetIntroLabel: { ...type.bodySemi, color: colors.textPrimary },
+  sheetFoot: { marginTop: space.md },
   sampleNote: { textAlign: 'left', marginTop: space.md, marginBottom: 0 },
-  outlookPad: { paddingHorizontal: space.md, paddingBottom: space.md, marginTop: space.sm },
   outlookAmt: { ...type.amountSM },
 
   headRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: space.xs },
@@ -633,7 +644,6 @@ const styles = StyleSheet.create({
   noteCaption: { ...type.caption, color: colors.textMuted, marginTop: 2 },
 
   chartHold: { height: 220 },
-  chartWrap: { paddingHorizontal: space.md, paddingBottom: space.md, paddingTop: space.sm },
   legend: { flexDirection: 'row', gap: space.lg, marginTop: space.sm },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
   legendLine: { width: 16, height: 3, borderRadius: 2 },
@@ -644,7 +654,6 @@ const styles = StyleSheet.create({
   },
   pointerLabelText: { ...type.amountSM, color: colors.textPrimary },
 
-  whatIf: { padding: space.md },
   whatIfLead: { ...type.body, color: colors.textSecondary, lineHeight: 20 },
   whatIfName: { color: colors.accent, fontFamily: 'Inter_600SemiBold' },
   whatIfSave: { ...type.amountLG, color: colors.income, marginTop: space.xs },

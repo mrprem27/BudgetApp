@@ -70,17 +70,28 @@ describe('nothing is said twice', () => {
   });
 });
 
-describe('the sections are collapsible and built from the design system', () => {
-  it('every section is a SectionCard', () => {
-    // `SectionCard` sets accessibilityState={{ expanded }} and opens the same way everywhere,
-    // neither of which a hand-rolled uppercase label above a bare View does.
-    expect((code.match(/<SectionCard/g) ?? []).length).toBeGreaterThanOrEqual(4);
-    expect(code).not.toMatch(/styles\.secLabel|styles\.secCard|styles\.chartCard/);
+describe('the sections are tiles that open a sheet, built from the design system (U-91)', () => {
+  it('every section is an InsightTile in one grid, and none is a collapsed row', () => {
+    // A column of collapsed `SectionCard`s gave nine sections the same weight and no figure.
+    expect(code).toContain('<InsightGrid>');
+    expect((code.match(/<InsightTile/g) ?? []).length).toBeGreaterThanOrEqual(8);
+    expect(code).not.toMatch(/<SectionCard|styles\.secLabel|styles\.secCard|styles\.chartCard/);
   });
 
-  it('opens exactly one section by default', () => {
-    expect(code).toMatch(/DEFAULT_OPEN = 'attention'/);
-    expect(code).toMatch(/useState<Set<string>>\(new Set\(\[DEFAULT_OPEN\]\)\)/);
+  it('holds one sheet at a time, each opening on an explanation', () => {
+    expect(code).toMatch(/useState<Sheet>\(null\)/);
+    const sheets = (code.match(/<SheetModal visible=\{sheet === '/g) ?? []).length;
+    expect(sheets).toBeGreaterThanOrEqual(7);
+    expect((code.match(/<SheetIntro /g) ?? []).length).toBe(sheets);
+  });
+
+  it('the preferences sheet steps aside while one of its pickers is up', () => {
+    // A sheet rendered inside another sheet's content is unmounted with it (`lib/sheetStage`), so
+    // the pickers are siblings of this sheet and it is hidden while one is open.
+    expect(code).toMatch(/visible=\{sheet === 'prefs' && !pickerOpen\}/);
+    const prefs = readFileSync(join(__dirname, '..', 'components', 'finance', 'settings', 'MoneyPreferences.tsx'), 'utf8');
+    expect(prefs).toMatch(/wrap \? wrap\(rows, showPayMethod \|\| showCadence \|\| money\.open\) : rows/);
+    expect(prefs).toMatch(/\{money\.sheets\}/);
   });
 
   it('uses the shared primitives rather than hand-rolled ones', () => {

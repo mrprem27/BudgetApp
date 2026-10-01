@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useState, type ReactNode } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
@@ -8,7 +8,7 @@ import { SettingsRow, settingsRowDivider } from '../../ui/SettingsRow';
 import { SheetModal } from '../../ui/SheetModal';
 import { PayMethodDisc } from '../pay/PayMethodGlyph';
 import { PayMethodSelector } from '../PayMethodSelector';
-import { MoneySettingsRows } from './MoneySettingsRows';
+import { useMoneySettingsRows } from './MoneySettingsRows';
 import { settings } from '../../../lib/settings';
 import { asBudgetCadence, asPayMethod, PayMethod, PAY_METHOD_LABEL } from '../../../constants/enums';
 import type { BudgetCadence } from '../../../db/queries/categoryBudgets';
@@ -21,8 +21,17 @@ const CADENCE_KEYS = Object.keys(CADENCE_LABELS) as BudgetCadence[];
  * on, how you are paid, how far Safe to spend looks, what to keep aside. Lives on Insights
  * (`U-86`), beside the forecasts these answers drive; it was Settings' Preferences section,
  * a screen away from anything it changes.
+ *
+ * `wrap` is for a caller that shows the rows in a sheet (`U-91`): it gets the rows and whether one
+ * of their pickers is open, and the pickers are rendered beside whatever it returns. A sheet inside
+ * another sheet's content dies with it (`lib/sheetStage`), so the caller hides its own sheet while a
+ * picker is up and shows it again after.
  */
-export function MoneyPreferences({ tint = colors.accent }: { tint?: string }) {
+export function MoneyPreferences({ tint = colors.accent, wrap }: {
+  tint?: string;
+  wrap?: (rows: ReactNode, pickerOpen: boolean) => ReactNode;
+}) {
+  const money = useMoneySettingsRows(tint);
   const [defaultCadence, setDefaultCadence] = useState<BudgetCadence>('monthly');
   const [defaultPay, setDefaultPay] = useState<PayMethod>(PayMethod.Bank);
   const [showPayMethod, setShowPayMethod] = useState(false);
@@ -51,7 +60,7 @@ export function MoneyPreferences({ tint = colors.accent }: { tint?: string }) {
     await settings.setDefaultCadence(c);
   }
 
-  return (
+  const rows = (
     <>
       <ListRow
         leading={<PayMethodDisc method={defaultPay} size={layout.iconCircle} color={tint} />}
@@ -63,7 +72,14 @@ export function MoneyPreferences({ tint = colors.accent }: { tint?: string }) {
       <View style={settingsRowDivider} />
       <SettingsRow icon="repeat" label="Default budget cadence" tint={tint} value={CADENCE_LABELS[defaultCadence]} onPress={() => setShowCadence(true)} />
       <View style={settingsRowDivider} />
-      <MoneySettingsRows tint={tint} />
+      {money.rows}
+    </>
+  );
+
+  return (
+    <>
+      {wrap ? wrap(rows, showPayMethod || showCadence || money.open) : rows}
+      {money.sheets}
 
       {/* Reuses the Add screen's own picker, so the tiles here are the tiles the
           preference actually seeds — not a second list that could drift from it. */}

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { SettingsRow, settingsRowDivider } from '../../ui/SettingsRow';
 import { SheetModal } from '../../ui/SheetModal';
@@ -47,10 +47,14 @@ type Sheet = 'cycle' | 'day' | 'ahead' | 'keep' | 'amount' | null;
 
 /**
  * How you're paid, how far Safe to spend looks ahead, and what it keeps aside (`SPEC-ENGINE.md`
- * §10b, `U-33`). Three rows in Settings' Preferences, each one question in its own sheet. Every
- * change refreshes the screens, since Safe to spend, Afford and the low-point warning all move.
+ * §10b, `U-33`). Three rows, each one question in its own sheet. Every change refreshes the
+ * screens, since Safe to spend, Afford and the low-point warning all move.
+ *
+ * A hook that hands back the rows and the sheets apart (`U-91`): only one sheet can be on stage
+ * (`lib/sheetStage`), and a sheet rendered inside another's content is unmounted with it, so a
+ * caller that shows the rows in a sheet has to render these pickers beside that sheet, not in it.
  */
-export function MoneySettingsRows({ tint }: { tint: string }) {
+export function useMoneySettingsRows(tint: string): { rows: ReactNode; sheets: ReactNode; open: boolean } {
   const { refresh } = useDataRefresh();
   const [s, setS] = useState<MoneySettings>(DEFAULT_MONEY_SETTINGS);
   const [sheet, setSheet] = useState<Sheet>(null);
@@ -65,14 +69,17 @@ export function MoneySettingsRows({ tint }: { tint: string }) {
 
   const keepValue = s.keepAside === 'custom' ? formatCompact(s.keepAsideAmount) : KEEP.find(k => k.key === s.keepAside)!.label;
 
-  return (
+  const rows = (
     <>
       <SettingsRow icon="calendar" label="How you're paid" tint={tint} value={cycleValue(s)} onPress={() => setSheet('cycle')} />
       <View style={settingsRowDivider} />
       <SettingsRow icon="eye" label="Safe to spend looks ahead" tint={tint} value={AHEAD.find(a => a.key === s.lookAhead)!.label.replace('Until my ', '').replace('The next ', '')} onPress={() => setSheet('ahead')} />
       <View style={settingsRowDivider} />
       <SettingsRow icon="shield" label="Keep aside" tint={tint} value={keepValue} onPress={() => setSheet('keep')} />
-
+    </>
+  );
+  const sheets = (
+    <>
       <SheetModal visible={sheet === 'cycle'} onClose={() => setSheet(null)} title="How are you paid?">
         <View style={styles.list}>
           {CYCLE.map(c => (
@@ -123,6 +130,7 @@ export function MoneySettingsRows({ tint }: { tint: string }) {
       </SheetModal>
     </>
   );
+  return { rows, sheets, open: sheet !== null };
 }
 
 const styles = StyleSheet.create({

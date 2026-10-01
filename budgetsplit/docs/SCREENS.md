@@ -252,7 +252,7 @@ Absorbed from `AUDIT.md` §2 so the IDs cited elsewhere resolve here. 45 route f
 |---|---|---|---|
 | S-20 | **Reports** | `app/(money)/reports.tsx` | Factual monthly history: donut, trend bars, per-group budget summaries, year stats, CSV + PDF export. Month selector cannot advance past the current month. |
 | S-21 | **Report transactions** | `app/(money)/report-transactions.tsx` | Month-scoped transaction list with category / type / group / sort filters — the drill-down from a Reports category. |
-| S-22 | **Insights** | `app/(tabs)/insights.tsx` | The single narrative-insight home: an always-present headline (spend vs budget, pace, month-end verdict) over collapsible sections — Needs attention · Month-end forecast · Changed vs last month · What if I cut back? · Ways to save. |
+| S-22 | **Insights** | `app/(tabs)/insights.tsx` | The single narrative-insight home: an always-present headline (spend vs budget, pace, month-end verdict) over a grid of tiles, each opening a sheet (`U-91`) — Needs attention · Month-end forecast · Changed vs last month · What if I cut back? · Ways to save. |
 
 ### 3.8 Settings sub-screens & utilities
 
@@ -1340,8 +1340,11 @@ budget** chip, because every section below needs something to measure against. I
 filled `budget / projected`, making the filled part your *budget* and the empty part the
 overspend — inverted from `BudgetBar` and Home's `ForecastCard`.
 
-Below it, collapsible `SectionCard`s (open: **Needs attention**; closed: the rest), each header
-carrying its own count or total so a closed section still says something:
+Below it, a two-column grid of tiles (`finance/insights/InsightTile`, `U-91`), each in its own
+colour with the one figure the section comes down to, each opening a sheet that starts with what
+the section is and an (i) for how it is worked out. A section with nothing to say has no tile.
+Cash outlook · How your money works (the preferences; its pickers open beside the sheet, which
+steps aside while one is up) · then:
 
 - **Needs attention** — over-budget categories worst-first (tap → `/category/{name}`), then the
   rule-engine notes that aren't repeats. `over-*`, `projected` and `ontrack` are filtered out:
@@ -1349,6 +1352,7 @@ carrying its own count or total so a closed section still says something:
   fired once *per group*, so four groups printed "All budgets are on track" four times.
 - **Month-end forecast** — the line chart (x-axis labels sized so they don't truncate).
 - **Changed vs last month** · **What if I cut back?** (`10% · 20% · 30%` chips) · **Ways to save**.
+- **Reports** (→ `/reports`) and **Export all data** are tiles too; they open nothing, they go.
 
 Donut / trend / owe-owed / recurring analytics live in **Reports**, not here — insights has one
 home.
