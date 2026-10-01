@@ -6,6 +6,7 @@ import {
   everydaySpendAhead, STS_HORIZON_DAYS, EVERYDAY_WINDOW_DAYS, type SafeToSpend, type SafeToSpendBreakdown,
 } from '../../lib/safeToSpend';
 import { getFinanceSnapshot } from './engineSnapshot';
+import type { FinanceSnapshot } from '../../lib/engine/types';
 import { safeToSpendV2 } from '../../lib/engine/assess';
 import { lowPointWarning } from '../../lib/engine/signals';
 import { DAILY_SPEND_SQL, bucketsFromDailyRows, type DailySpendRow } from './spendRateQuery';
@@ -147,7 +148,14 @@ export async function getSafeToSpend(db: SQLite.SQLiteDatabase, nowMs: number = 
  * reference; nothing user-facing reads it.
  */
 export async function getSafeToSpendV2(db: SQLite.SQLiteDatabase, nowMs: number = Date.now()): Promise<SafeToSpendBreakdown> {
-  const snapshot = await getFinanceSnapshot(db, nowMs);
+  return safeToSpendOf(await getFinanceSnapshot(db, nowMs));
+}
+
+/**
+ * The same answer from a snapshot the caller already holds. A loader that also needs the
+ * snapshot (Insights, Badges) used to build it twice, about forty round trips each time.
+ */
+export function safeToSpendOf(snapshot: FinanceSnapshot): SafeToSpendBreakdown {
   const v2 = safeToSpendV2(snapshot);
   const days = v2.projection.days;
   // L10: a low point at `asOf` itself means the balance never dipped below

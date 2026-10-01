@@ -65,6 +65,23 @@ describe('badges are targets that stay in play (U-65)', () => {
     expect(byId({ hasShared: true }).allSquare.level).toBe(1);
   });
 
+  it('the 2026-10-01 six read the ledger and balances, nothing new', () => {
+    const b = byId({ rows: [day(8, 22, 700, 1000), { ...day(8, 3), hasNote: true }], hasShared: true, owe: 0, owed: 500 });
+    expect(b.keptFifth).toMatchObject({ level: 1, status: '30% kept so far' });
+    expect(byId({ rows: [day(8, 22, 900, 1000)] }).keptFifth.level).toBe(0);
+    expect(byId({ rows: [day(8, 22, 900, 0)] }).keptFifth).toMatchObject({ level: 0, progress: 0 });
+    expect(b.loggedToday.level).toBe(1);
+    expect(byId({ rows: [day(8, 21)] }).loggedToday.level).toBe(0);
+    expect(b.daysLogged.status).toBe('2 days · next at 30');
+    expect(b.noteTaker.status).toBe('1 note · next at 10');
+    expect(b.paydays.status).toBe('1 income entry · next at 3');
+    // Owed money is not a debt of yours; owing any is.
+    expect(b.oweNobody.level).toBe(1);
+    expect(b.allSquare.level).toBe(0);
+    expect(byId({ hasShared: true, owe: 100 }).oweNobody.level).toBe(0);
+    expect(byId({}).oweNobody).toBeUndefined();
+  });
+
   it('gives every badge an explanation and a progress between 0 and 1', () => {
     for (const b of computeBadges({ ...base, rows: [day(8, 1, 100, 0)], budgetPct: 150, hasShared: true, incomeConsistency: 'variable' })) {
       expect(b.explain.length).toBeGreaterThan(20);

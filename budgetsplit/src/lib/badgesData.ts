@@ -5,7 +5,7 @@ import { getAllGroups, sharedGroupsOf } from '../db/queries/groups';
 import { getMyExposure } from '../db/queries/balances';
 import { getGoals, getGoalSavedMap } from '../db/queries/savings';
 import { getAssets } from '../db/queries/assets';
-import { getSafeToSpendV2 } from '../db/queries/spendPower';
+import { safeToSpendOf } from '../db/queries/spendPower';
 import { getTotalMoney } from '../db/queries/savings';
 import { getAllRecurringRules } from '../db/queries/recurring';
 import { getFinanceSnapshot } from '../db/queries/engineSnapshot';
@@ -23,14 +23,13 @@ import { parseTags } from './tags';
 export async function loadBadges(db: SQLite.SQLiteDatabase, nowMs: number = Date.now()): Promise<Badge[]> {
   const me = await getMe(db);
   if (!me) return [];
-  const [activity, groups, exposure, goals, saved, assets, sts, snapshot, budget, money, rules] = await Promise.all([
+  const [activity, groups, exposure, goals, saved, assets, snapshot, budget, money, rules] = await Promise.all([
     getMyActivity(db, me.id),
     getAllGroups(db),
     getMyExposure(db, me.id),
     getGoals(db),
     getGoalSavedMap(db),
     getAssets(db),
-    getSafeToSpendV2(db, nowMs),
     getFinanceSnapshot(db, nowMs),
     getMyGlobalBudgetSummary(db, me.id),
     getTotalMoney(db),
@@ -38,6 +37,8 @@ export async function loadBadges(db: SQLite.SQLiteDatabase, nowMs: number = Date
   ]);
   const emergency = goals.find(g => g.priority === 'emergency');
   const counted = activity.filter(t => !t.pendingApproval);
+  // From the one snapshot above, not a second build of it.
+  const sts = safeToSpendOf(snapshot);
   const why = explain(snapshot);
   const income = incomeModel(snapshot);
   return computeBadges({

@@ -1,3 +1,4 @@
+import { bumpPrefs } from './prefsVersion';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   type ReminderPrefs,
@@ -58,6 +59,6 @@ export async function setReminderPrefs(patch: Partial<ReminderPrefs>): Promise<R
     dailyTime: clampTime(patch.dailyTime ?? cur.dailyTime, DEFAULT_DAILY_TIME),
     backup: patch.backup ?? cur.backup,
   };
-  try { await AsyncStorage.setItem(PREFS_KEY, JSON.stringify(next)); } catch { /* best-effort */ }
+  try { await AsyncStorage.setItem(PREFS_KEY, JSON.stringify(next)); bumpPrefs(); } catch { /* best-effort */ }
   return next;
 }

@@ -1,3 +1,4 @@
+import { bumpPrefs } from './prefsVersion';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DEFAULTS, setFlag, FEATURE_KEYS, type FeatureFlags, type FeatureKey } from './featureFlags';
 import { personaFlags, type OnboardingIntent } from './personaDefaults';
@@ -59,6 +60,7 @@ export async function loadLevel(): Promise<Level> {
  */
 export async function applyLevel(level: Level, intent: OnboardingIntent, keys?: FeatureKey[]): Promise<void> {
   await AsyncStorage.setItem(KEY, level);
+  bumpPrefs();
   const flags = composeFlags(intent, level);
   const write = keys ?? FEATURE_KEYS.filter(k => flags[k] !== DEFAULTS[k]);
   for (const k of write) {

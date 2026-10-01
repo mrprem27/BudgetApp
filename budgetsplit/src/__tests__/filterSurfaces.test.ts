@@ -89,16 +89,12 @@ describe('a transaction ledger filters through one predicate', () => {
    * ledger has. Different domain, different engine (`lib/reviewFilter.ts`).
    */
   const LEDGERS = [
-    join(ROOT, 'app', '(ledger)', 'search.tsx'),
     join(ROOT, 'app', '(people)', 'personal.tsx'),
     join(ROOT, 'src', 'components', 'finance', 'group', 'TransactionsTab.tsx'),
   ];
 
   it('has all three on `applyFilters`', () => {
-    // Search's filtering moved out of the screen into `lib/searchData.ts`; the
-    // predicate is read wherever the screen's logic now lives.
-    const LOGIC = [join(ROOT, 'src', 'lib', 'searchData.ts'), ...LEDGERS.slice(1)];
-    for (const f of LOGIC) {
+    for (const f of LEDGERS) {
       expect({ file: label(f), shared: readFileSync(f, 'utf8').includes('applyFilters') })
         .toEqual({ file: label(f), shared: true });
     }

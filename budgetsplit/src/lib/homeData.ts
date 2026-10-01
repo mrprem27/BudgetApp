@@ -91,254 +91,275 @@ export const PERIOD_LABEL: Record<TabKey, string> = { today: 'SPENT TODAY', mont
 // PERIOD_LABEL above, which is a section heading, not inline prose.
 export const TXN_COUNT_PERIOD_LABEL: Record<TabKey, string> = { today: 'today', month: 'this month', year: 'this year' };
 
-export async function loadHomeData(
-  db: SQLite.SQLiteDatabase,
-  groups: BudgetGroup[],
-  tab: TabKey,
-) {
+/**
+ * Home loads in two parts, because a period pill is a `deps` change and re-ran everything:
+ * about a hundred database round trips per tap, most of them for figures the pill does not
+ * touch (Safe to spend alone is ~40). On a phone each one is a hop to native, and Today / Month /
+ * Year felt slow (2026-10-01).
+ *
+ * - `loadHomeBase` — everything that is the same on every pill.
+ * - `loadHomePeriod` — the period's own spend, comparison, categories and budget roll-up.
+ * - `composeHome` — pure; puts the two together into what the screen reads.
+ */
+export async function loadHomeBase(db: SQLite.SQLiteDatabase) {
+  const persons = await getAllPersons(db);
+  const me = persons.find(p => p.is_me === 1);
+  if (!me) return null;
+  const meInfo = { name: me.name, color: me.avatar_color, image: me.image_uri };
 
-    const persons = await getAllPersons(db);
+  // The streak reads its own window — the last 31 days and this month — whatever tab is open.
+  const streakFromMs = Math.min(startOfMonth(new Date()).getTime(), Date.now() - 31 * 86_400_000);
+  const streakTxns = await getTransactionsInRange(db, null, streakFromMs, Date.now());
+  const { streak, days: streakLoggedDays } = streakFrom(streakTxns.filter(t => !t.is_deleted).map(t => t.date), Date.now());
 
-    const me = persons.find(p => p.is_me === 1);
-    if (!me) {
-      return {
-        meInfo: null as { name: string; color: string; image: string | null } | null,
-        spending: 0, spendGroup: 0, income: 0, prevSpending: 0,
-        oweTotal: 0, owedTotal: 0, reviewCount: 0, approvalCount: 0,
-        budget: { allocated: 0, spent: 0, spentShared: 0, pooledCount: 0, exists: false, monthlyAllocated: 0 },
-        catRows: [] as CategoryRow[], catTotal: 0,
-        health: null as HealthResult | null, healthInputs: null as HealthInputs | null, healthTxnCount: 0,
-        upcoming: [] as UpcomingItem[],
-        forecast: null as Forecast | null,
-        streak: 0, streakLoggedDays: new Set<string>(), everLogged: false, entryCount: 0,
-      };
+  // Who owes whom — single source of truth (per-person, after all settlements),
+  // so owe AND owed can both show (matches Insights / Personal / Groups).
+  const exp = await getMyExposure(db, me.id);
+  const reviewCount = await getPendingCount(db);
+  // Entries other people wrote that are waiting on me.
+  const approvalCount = await getPendingApprovalCount(db);
+
+  /*
+   * Everything budget-shaped on Home is **My Budget** — one summary, no per-group
+   * loop.
+   *
+   * The loop it replaces summed every group's allocation (the Personal group's
+   * included, which IS this cap) and paired it with every group's *full bill*,
+   * because no `meId` was passed: a ₹1,000 expense split 50/50 charged ₹1,000
+   * against my budget. Both halves now share my-share, all-groups basis, and the
+   * health score is rebased onto them.
+   *
+   * `monthly` is the health engine's basis and never moves. Its inputs are
+   * month-shaped (`dayOfMonth`, `daysInMonth`), so a score that re-based itself
+   * on whichever pill was tapped would swing between three different numbers
+   * for the same finances. The pace bar's own roll-up is `loadHomePeriod`'s.
+   */
+  const monthly = await getMyGlobalBudgetSummary(db, me.id, { target: 'monthly' });
+
+  // D2: the whole-month figure onboarding stores (`budget_target`) is a real
+  // input until category budgets exist — it drives the Home pace bar and the
+  // health engine's budget terms instead of being one sentence two screens
+  // deep in the budget editor. Category budgets win the moment they're set.
+  const budgetTarget = (await settings.budgetTarget()) ?? 0;
+  // Health keeps the monthly basis, whatever pill is active.
+  const monthlyAllocated = monthly.allocated > 0 ? monthly.allocated : budgetTarget;
+
+  // Drives the bell badge only (the list moved to the Reminders screen). Count
+  // all bills due within the next 14 days — same window the Reminders screen uses.
+  const upcomingRules = await getAllRecurringRules(db);
+  const upcomingSkips = await getSkipsMap(db, upcomingRules.map(r => r.id));
+  const upcoming = buildUpcoming(upcomingRules, me.id, Date.now(), 99, 14, upcomingSkips);
+
+  // Safe-to-Spend — the strip above the hero, not the hero itself. Scoped to a
+  // rolling horizon regardless of the Today/Month/Year selector, which is
+  // exactly why it renders *outside* the card those pills drive: inside, it
+  // read as a headline that ignored its own control (see `StsStrip`).
+  // `EN10`: reads the money engine (`getSafeToSpendV2`), not the arithmetic
+  // formula — same breakdown shape, so `StsStrip`/`StsSheet` are unchanged.
+  const sts = await getSafeToSpendV2(db);
+
+  // ── Health score inputs: the four FinHealth-style pillars, each term from
+  // its single existing source (see lib/financialHealth.ts). ──
+  const nowMs2 = Date.now();
+  const now2 = new Date(nowMs2);
+  const [ninetyTxns, funding, totalMoney, ledger] = await Promise.all([
+    getTransactionsInRange(db, null, nowMs2 - 90 * 86400000, nowMs2),
+    getGoalFundingStatus(db, nowMs2),
+    getTotalMoney(db),
+    getLedgerStats(db),
+  ]);
+  let income90 = 0, spend90 = 0, monthSp = 0;
+  const monthStartMs = startOfMonth(now2).getTime();
+  for (const t of ninetyTxns) {
+    if (t.is_deleted) continue;
+    if (t.kind === 'expense') {
+      const share = myShareOf(t, me.id);
+      spend90 += share;
+      if (t.date >= monthStartMs) monthSp += share;
+    } else if (t.kind === 'income') income90 += myIncomeOf(t, me.id);
+  }
+  const healthInputs: HealthInputs = {
+    income90, spend90,
+    budgetAllocated: monthlyAllocated,
+    // Against a bare whole-month target the spend side is the whole month's
+    // my-share spend; category budgets keep their own scoped figure.
+    budgetSpent: monthly.allocated > 0 ? monthly.spent : monthSp,
+    dayOfMonth: getDate(now2),
+    daysInMonth: getDaysInMonth(now2),
+    liquid: sts.available,
+    goalCommitMonthly: funding.commitMonthly,
+    goalFundedThisMonth: funding.fundedThisMonth,
+    creditUsed: totalMoney.creditUsed,
+    netIOwe: exp.owe,
+    // `owedExpected`, not `owed`: a written-off balance must not net against
+    // what you owe. See `debtLoad`.
+    owedToMe: exp.owedExpected,
+    // Month-scoped, not the Safe-to-Spend window (which now runs to payday,
+    // not month-end) — `billsWithin` reads the same projection over the
+    // right days instead.
+    upcomingBills: billsWithin(sts, nowMs2, getDaysInMonth(now2) - getDate(now2)),
+    goalsCount: funding.goalsCount,
+    hasBudget: monthlyAllocated > 0,
+    dataDays: ledger.firstTxnMs != null ? Math.floor((nowMs2 - ledger.firstTxnMs) / 86400000) : 0,
+    hasIncome: ledger.hasIncome,
+    txnCount: ledger.txnCount,
+  };
+  const health = computeHealthScore(healthInputs);
+
+  // Month-end forecast — on every tab: it is one of Home's two headline tiles (`U-21`). Always from
+  // month-to-date spend (`monthSp`, the health score's), which is also what the Month pill shows.
+  // Known committed bills still due this month floor the forecast — the same figure
+  // Safe-to-Spend subtracts, so the two can't disagree.
+  const forecast: Forecast | null = monthEndFromEngine(
+    monthSp, getDate(now2), getDaysInMonth(now2), sts.dailyRate,
+    billsWithin(sts, nowMs2, getDaysInMonth(now2) - getDate(now2)),
+  );
+
+  return {
+    meInfo, monthly, budgetTarget, monthlyAllocated,
+    oweTotal: exp.owe, owedTotal: exp.owed, reviewCount, approvalCount,
+    // For Home's GET STARTED tiles: don't re-ask what onboarding answered.
+    peopleCount: persons.filter(p => p.id !== me.id).length,
+    health, healthInputs, upcoming, forecast, sts,
+    streak, streakLoggedDays,
+    /** Anything ever logged — what separates a first run from a quiet period. */
+    everLogged: ledger.txnCount > 0,
+    /** Entries logged, all time — when the next level is offered (`lib/levels.ts`). */
+    entryCount: ledger.txnCount,
+  };
+}
+export type HomeBase = Awaited<ReturnType<typeof loadHomeBase>>;
+
+/** What one pill changes: the period's spend, its comparison, its categories, its budget roll-up. */
+export async function loadHomePeriod(db: SQLite.SQLiteDatabase, groups: BudgetGroup[], tab: TabKey) {
+  const me = (await getAllPersons(db)).find(p => p.is_me === 1);
+  if (!me) return { tab, spending: 0, spendGroup: 0, income: 0, prevSpending: 0, catRows: [] as CategoryRow[], catTotal: 0, txnCount: 0, mine: null };
+
+  const { from, to } = getRange(tab);
+  // Single source of truth: materialization-aware query feeds the hero number
+  // and the category breakdown so they always agree (incl. recurring).
+  const txns = await getTransactionsInRange(db, null, from, to);
+  let sp = 0;
+  let inc = 0;
+  // How much of the same spend came from group activity. Keyed on the group the
+  // entry lives in — the axis the whole app is organised around — so it agrees
+  // with the per-group breakdown on category detail. Anything outside a shared
+  // group (including an entry whose group has since gone) counts as personal, so
+  // the two always sum to `sp` exactly.
+  const sharedIds = new Set(sharedGroupsOf(groups).map(g => g.id));
+  let spGroup = 0;
+  const catMap: Record<string, number> = {};
+  for (const txn of txns) {
+    if (txn.is_deleted) continue;
+    if (txn.kind === 'expense') {
+      const myShare = myShareOf(txn, me.id);
+      sp += myShare;
+      if (myShare > 0 && sharedIds.has(txn.group_id)) spGroup += myShare;
+      if (myShare > 0) catMap[txn.category] = (catMap[txn.category] ?? 0) + myShare;
+    } else if (txn.kind === 'income') {
+      inc += myIncomeOf(txn, me.id);
     }
-    const meInfo = { name: me.name, color: me.avatar_color, image: me.image_uri };
+  }
 
-    const { from, to } = getRange(tab);
-    // Single source of truth: materialization-aware query feeds the hero number
-    // and the category breakdown so they always agree (incl. recurring).
-    const txns = await getTransactionsInRange(db, null, from, to);
-    let sp = 0;
-    let inc = 0;
-    // How much of the same spend came from group activity. Keyed on the group the
-    // entry lives in — the axis the whole app is organised around — so it agrees
-    // with the per-group breakdown on category detail. Anything outside a shared
-    // group (including an entry whose group has since gone) counts as personal, so
-    // the two always sum to `sp` exactly.
-    const sharedIds = new Set(sharedGroupsOf(groups).map(g => g.id));
-    let spGroup = 0;
-    const catMap: Record<string, number> = {};
-    for (const txn of txns) {
-      if (txn.is_deleted) continue;
-      if (txn.kind === 'expense') {
-        const myShare = myShareOf(txn, me.id);
-        sp += myShare;
-        if (myShare > 0 && sharedIds.has(txn.group_id)) spGroup += myShare;
-        if (myShare > 0) catMap[txn.category] = (catMap[txn.category] ?? 0) + myShare;
-      } else if (txn.kind === 'income') {
-        inc += myIncomeOf(txn, me.id);
-      }
-    }
+  // Prior-period spend (my share) for the hero delta.
+  const prev = getPrevRange(tab);
+  const prevTxns = await getTransactionsInRange(db, null, prev.from, prev.to);
+  let prevSp = 0;
+  for (const t of prevTxns) {
+    if (t.is_deleted || t.kind !== 'expense') continue;
+    prevSp += myShareOf(t, me.id);
+  }
 
-    // The streak reads its own window — the last 31 days and this month — whatever tab is open.
-    const streakFromMs = Math.min(startOfMonth(new Date()).getTime(), Date.now() - 31 * 86_400_000);
-    const streakTxns = await getTransactionsInRange(db, null, streakFromMs, Date.now());
-    const { streak: s, days: loggedDays } = streakFrom(streakTxns.filter(t => !t.is_deleted).map(t => t.date), Date.now());
+  /*
+   * The pace bar's summary, rolled up at the period the pills select. On Month it is the base's
+   * `monthly`, so it is not read twice (`null` here).
+   *
+   * The screen used to take the monthly figure and divide it by days-in-month for
+   * Today and multiply it by 12 for Year. Both are wrong in the same way: the
+   * first rolls a monthly line *down* into a day — the error `budgetKind`
+   * exists to name, and the one a single rent payment turns into a 15× red bar
+   * — and the second silently dropped every yearly line from the Year view,
+   * the one place a yearly line belongs.
+   */
+  const mine = tab === 'month' ? null : await getMyGlobalBudgetSummary(db, me.id, { target: TARGET_FOR_TAB[tab] });
 
-    // Prior-period spend (my share) for the hero delta.
-    const prev = getPrevRange(tab);
-    const prevTxns = await getTransactionsInRange(db, null, prev.from, prev.to);
-    let prevSp = 0;
-    for (const t of prevTxns) {
-      if (t.is_deleted || t.kind !== 'expense') continue;
-      prevSp += myShareOf(t, me.id);
-    }
+  // Category breakdown for "Where it went" (largest first). Names not in the
+  // global catalog fold into one "Others" row (catMap itself is left intact so
+  // budget attribution above stays per-name).
+  const knownExpense = new Set((await getCategories(db, 'expense')).map(c => c.name));
+  const sorted = Object.entries(foldUncategorized(catMap, knownExpense)).sort((a, b) => b[1] - a[1]);
+  const catRows: CategoryRow[] = sorted.map(([name, paise]) => ({ name, paise }));
+  const catTotal = sorted.reduce((acc, [, v]) => acc + v, 0);
 
-    // Who owes whom — single source of truth (per-person, after all settlements),
-    // so owe AND owed can both show (matches Insights / Personal / Groups).
-    const exp = await getMyExposure(db, me.id);
-    const reviewCount = await getPendingCount(db);
-    // Entries other people wrote that are waiting on me. Always 0 today — nothing
-    // can author one until sync exists.
-    const approvalCount = await getPendingApprovalCount(db);
+  return {
+    tab, spending: sp, spendGroup: spGroup, income: inc, prevSpending: prevSp,
+    catRows, catTotal, txnCount: txns.filter(t => !t.is_deleted).length, mine,
+  };
+}
+export type HomePeriod = Awaited<ReturnType<typeof loadHomePeriod>>;
 
-    /*
-     * Everything budget-shaped on Home is **My Budget** — one summary, no per-group
-     * loop.
-     *
-     * The loop it replaces summed every group's allocation (the Personal group's
-     * included, which IS this cap) and paired it with every group's *full bill*,
-     * because no `meId` was passed: a ₹1,000 expense split 50/50 charged ₹1,000
-     * against my budget. Both halves now share my-share, all-groups basis, and the
-     * health score is rebased onto them.
-     */
-    /*
-     * TWO summaries, because Home asks two different questions.
-     *
-     * `monthly` is the health engine's basis and never moves. Its inputs are
-     * month-shaped (`dayOfMonth`, `daysInMonth`), so a score that re-based itself
-     * on whichever pill was tapped would swing between three different numbers
-     * for the same finances.
-     *
-     * `mine` is the pace bar's, rolled up at the period the pills select. The
-     * screen used to take the monthly figure and divide it by days-in-month for
-     * Today and multiply it by 12 for Year. Both are wrong in the same way: the
-     * first rolls a monthly line *down* into a day — the error `budgetKind`
-     * exists to name, and the one a single rent payment turns into a 15× red bar
-     * — and the second silently dropped every yearly line from the Year view,
-     * the one place a yearly line belongs.
-     */
-    const target = TARGET_FOR_TAB[tab];
-    const monthly = await getMyGlobalBudgetSummary(db, me.id, { target: 'monthly' });
-    const mine = tab === 'month' ? monthly : await getMyGlobalBudgetSummary(db, me.id, { target });
-
-    // D2: the whole-month figure onboarding stores (`budget_target`) is a real
-    // input until category budgets exist — it drives the Home pace bar and the
-    // health engine's budget terms instead of being one sentence two screens
-    // deep in the budget editor. Category budgets win the moment they're set.
-    const budgetTarget = (await settings.budgetTarget()) ?? 0;
-    // Read off the line count, not off `allocated`: at the daily target a user
-    // with eight monthly lines rolls up to zero, and testing the *amount* would
-    // fall back to a stale onboarding figure precisely when they have real ones.
-    const hasCategoryBudgets = monthly.categoryCount > 0;
-    // That onboarding figure is one whole-MONTH cap over ALL categories, so it
-    // obeys the same rate/pool rule as any monthly line: it is the Month headline,
-    // ×12 the Year one, and a pool on Today. Deriving ₹X/30 from it would be the
-    // same roll-down error, wearing the "but they have no daily budget" hat.
-    const budgetAllocated = hasCategoryBudgets
-      ? mine.allocated
-      : budgetEquivalent('monthly', budgetTarget, target, new Date()) ?? 0;
-    /*
-     * The bar's numerator must share its denominator's scope or it measures
-     * nothing. `mine.spent` is my spend restricted to the categories that
-     * contributed to `mine.allocated`; the hero number above it is all spend, and
-     * the two are *deliberately* different quantities — see `HeroCard`.
-     *
-     * Against the bare onboarding target — one cap over everything — the whole
-     * period's spend IS the matching numerator.
-     */
-    const budgetSpent = hasCategoryBudgets ? mine.spent : sp;
-    // The shared slice of whichever numerator was just chosen — never the other one.
-    const budgetSpentShared = hasCategoryBudgets ? mine.spentShared : spGroup;
-    // Health keeps the monthly basis, whatever pill is active.
-    const monthlyAllocated = monthly.allocated > 0 ? monthly.allocated : budgetTarget;
-
-    // Category breakdown for "Where it went" (largest first). Names not in the
-    // global catalog fold into one "Others" row (catMap itself is left intact so
-    // budget attribution above stays per-name).
-    const knownExpense = new Set((await getCategories(db, 'expense')).map(c => c.name));
-    const sorted = Object.entries(foldUncategorized(catMap, knownExpense)).sort((a, b) => b[1] - a[1]);
-    const catRows: CategoryRow[] = sorted.map(([name, paise]) => ({ name, paise }));
-    const catTotal = sorted.reduce((acc, [, v]) => acc + v, 0);
-
-    // Coming up: next recurring bills across all groups.
-
-    // "Coming up" = only what's due in the next 4 days (imminent), not the whole month.
-    // Drives the bell badge only (the list moved to the Reminders screen). Count
-    // all bills due within the next 14 days — same window the Reminders screen uses.
-    const upcomingRules = await getAllRecurringRules(db);
-    const upcomingSkips = await getSkipsMap(db, upcomingRules.map(r => r.id));
-    const upcoming = buildUpcoming(upcomingRules, me.id, Date.now(), 99, 14, upcomingSkips);
-
-    // Safe-to-Spend — the strip above the hero, not the hero itself. Scoped to a
-    // rolling horizon regardless of the Today/Month/Year selector, which is
-    // exactly why it renders *outside* the card those pills drive: inside, it
-    // read as a headline that ignored its own control (see `StsStrip`).
-    // `EN10`: reads the money engine (`getSafeToSpendV2`), not the arithmetic
-    // formula — same breakdown shape, so `StsStrip`/`StsSheet` are unchanged.
-    const sts = await getSafeToSpendV2(db);
-
-    // ── Health score inputs: the four FinHealth-style pillars, each term from
-    // its single existing source (see lib/financialHealth.ts). ──
-    const nowMs2 = Date.now();
-    const now2 = new Date(nowMs2);
-    const [ninetyTxns, funding, totalMoney, ledger] = await Promise.all([
-      getTransactionsInRange(db, null, nowMs2 - 90 * 86400000, nowMs2),
-      getGoalFundingStatus(db, nowMs2),
-      getTotalMoney(db),
-      getLedgerStats(db),
-    ]);
-    let income90 = 0, spend90 = 0, monthSp = 0;
-    const monthStartMs = startOfMonth(now2).getTime();
-    for (const t of ninetyTxns) {
-      if (t.is_deleted) continue;
-      if (t.kind === 'expense') {
-        const share = myShareOf(t, me.id);
-        spend90 += share;
-        if (t.date >= monthStartMs) monthSp += share;
-      } else if (t.kind === 'income') income90 += myIncomeOf(t, me.id);
-    }
-    const healthInputsNow: HealthInputs = {
-      income90, spend90,
-      budgetAllocated: monthlyAllocated,
-      // Against a bare whole-month target the spend side is the whole month's
-      // my-share spend; category budgets keep their own scoped figure.
-      budgetSpent: monthly.allocated > 0 ? monthly.spent : monthSp,
-      dayOfMonth: getDate(now2),
-      daysInMonth: getDaysInMonth(now2),
-      liquid: sts.available,
-      goalCommitMonthly: funding.commitMonthly,
-      goalFundedThisMonth: funding.fundedThisMonth,
-      creditUsed: totalMoney.creditUsed,
-      netIOwe: exp.owe,
-      // `owedExpected`, not `owed`: a written-off balance must not net against
-      // what you owe. See `debtLoad`.
-      owedToMe: exp.owedExpected,
-      // Month-scoped, not the Safe-to-Spend window (which now runs to payday,
-      // not month-end) — `billsWithin` reads the same projection over the
-      // right days instead.
-      upcomingBills: billsWithin(sts, nowMs2, getDaysInMonth(now2) - getDate(now2)),
-      goalsCount: funding.goalsCount,
-      hasBudget: monthlyAllocated > 0,
-      dataDays: ledger.firstTxnMs != null ? Math.floor((nowMs2 - ledger.firstTxnMs) / 86400000) : 0,
-      hasIncome: ledger.hasIncome,
-      txnCount: ledger.txnCount,
-    };
-    const health = computeHealthScore(healthInputsNow);
-    const healthInputs = healthInputsNow;
-
-    // Month-end forecast — on every tab: it is one of Home's two headline tiles (`U-21`). On Month
-    // the period's own spend is the month's; elsewhere, month-to-date (`monthSp`, the health score's).
-    const monthSpend = tab === 'month' ? sp : monthSp;
-    let forecast: Forecast | null = null;
-    {
-      const now = new Date();
-      // Known committed bills still due this month floor the forecast — the
-      // same figure Safe-to-Spend subtracts, so the two can't disagree.
-      forecast = monthEndFromEngine(monthSpend, getDate(now), getDaysInMonth(now), sts.dailyRate, billsWithin(sts, now.getTime(), getDaysInMonth(now) - getDate(now)));
-    }
-
+/** The two halves as the one object the screen reads. Pure. */
+export function composeHome(base: HomeBase, period: HomePeriod) {
+  if (!base) {
     return {
-      meInfo,
-      spending: sp, spendGroup: spGroup, income: inc, prevSpending: prevSp,
-      oweTotal: exp.owe, owedTotal: exp.owed, reviewCount, approvalCount,
-      budget: {
-        /** Rolled up at the active period; 0 when nothing is budgeted at it. */
-        allocated: budgetAllocated,
-        /** Spend restricted to the categories behind `allocated` — never all spend. */
-        spent: budgetSpent,
-        /** The shared-group part of `spent`, for the bar's second segment. */
-        spentShared: budgetSpentShared,
-        /** Lines too coarse for this period (a yearly line on Month), excluded from both halves. */
-        pooledCount: hasCategoryBudgets ? mine.pooledCount : 0,
-        /** Tab-independent: does ANY budget exist? Separates "no budget" from
-         *  "no budget at THIS period", which need different copy and different tiles. */
-        exists: hasCategoryBudgets || budgetTarget > 0,
-        /** The whole-month figure, for the Month-only forecast card. */
-        monthlyAllocated,
-      },
-      // For Home's GET STARTED tiles: don't re-ask what onboarding answered.
-      peopleCount: persons.filter(p => p.id !== me.id).length,
-      catRows, catTotal, health, healthInputs,
-      healthTxnCount: txns.filter(t => !t.is_deleted).length,
-      upcoming, forecast, sts,
-      streak: s, streakLoggedDays: loggedDays,
-      /** Anything ever logged — what separates a first run from a quiet period. */
-      everLogged: ledger.txnCount > 0,
-      /** Entries logged, all time — when the next level is offered (`lib/levels.ts`). */
-      entryCount: ledger.txnCount,
+      meInfo: null as { name: string; color: string; image: string | null } | null,
+      spending: 0, spendGroup: 0, income: 0, prevSpending: 0,
+      oweTotal: 0, owedTotal: 0, reviewCount: 0, approvalCount: 0,
+      budget: { allocated: 0, spent: 0, spentShared: 0, pooledCount: 0, exists: false, monthlyAllocated: 0 },
+      catRows: [] as CategoryRow[], catTotal: 0,
+      health: null as HealthResult | null, healthInputs: null as HealthInputs | null, healthTxnCount: 0,
+      upcoming: [] as UpcomingItem[],
+      forecast: null as Forecast | null,
+      streak: 0, streakLoggedDays: new Set<string>(), everLogged: false, entryCount: 0,
+      peopleCount: 0, sts: null as Awaited<ReturnType<typeof getSafeToSpendV2>> | null,
     };
+  }
+  const { monthly, budgetTarget, monthlyAllocated, ...rest } = base;
+  const target = TARGET_FOR_TAB[period.tab];
+  const mine = period.mine ?? monthly;
+  // Read off the line count, not off `allocated`: at the daily target a user
+  // with eight monthly lines rolls up to zero, and testing the *amount* would
+  // fall back to a stale onboarding figure precisely when they have real ones.
+  const hasCategoryBudgets = monthly.categoryCount > 0;
+  // That onboarding figure is one whole-MONTH cap over ALL categories, so it
+  // obeys the same rate/pool rule as any monthly line: it is the Month headline,
+  // ×12 the Year one, and a pool on Today. Deriving ₹X/30 from it would be the
+  // same roll-down error, wearing the "but they have no daily budget" hat.
+  const budgetAllocated = hasCategoryBudgets
+    ? mine.allocated
+    : budgetEquivalent('monthly', budgetTarget, target, new Date()) ?? 0;
+  return {
+    ...rest,
+    spending: period.spending, spendGroup: period.spendGroup, income: period.income, prevSpending: period.prevSpending,
+    budget: {
+      /** Rolled up at the active period; 0 when nothing is budgeted at it. */
+      allocated: budgetAllocated,
+      /*
+       * Spend restricted to the categories behind `allocated` — never all spend. The bar's
+       * numerator must share its denominator's scope or it measures nothing; the hero number
+       * above it is all spend, and the two are *deliberately* different quantities (see
+       * `HeroCard`). Against the bare onboarding target — one cap over everything — the whole
+       * period's spend IS the matching numerator.
+       */
+      spent: hasCategoryBudgets ? mine.spent : period.spending,
+      /** The shared-group part of `spent`, for the bar's second segment — never the other numerator's. */
+      spentShared: hasCategoryBudgets ? mine.spentShared : period.spendGroup,
+      /** Lines too coarse for this period (a yearly line on Month), excluded from both halves. */
+      pooledCount: hasCategoryBudgets ? mine.pooledCount : 0,
+      /** Tab-independent: does ANY budget exist? Separates "no budget" from
+       *  "no budget at THIS period", which need different copy and different tiles. */
+      exists: hasCategoryBudgets || budgetTarget > 0,
+      /** The whole-month figure, for the Month-only forecast card. */
+      monthlyAllocated,
+    },
+    catRows: period.catRows, catTotal: period.catTotal,
+    healthTxnCount: period.txnCount,
+  };
+}
+
+/** Both halves at once, for callers that want one period and nothing else (tests, mostly). */
+export async function loadHomeData(db: SQLite.SQLiteDatabase, groups: BudgetGroup[], tab: TabKey) {
+  return composeHome(await loadHomeBase(db), await loadHomePeriod(db, groups, tab));
 }
 
 /** How long the app must have been closed before the catch-up notice shows. */

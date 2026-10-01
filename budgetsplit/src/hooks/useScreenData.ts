@@ -1,12 +1,22 @@
 import { useCallback, useEffect, useRef, useState, type DependencyList } from 'react';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, usePathname } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import type * as SQLite from 'expo-sqlite';
 import { useRefreshOnDataChange } from '../components/system/DataRefreshProvider';
+import { readDataStamp } from '../db/queries/dataStamp';
+import { recordLoad } from '../lib/loadTimes';
+
+/** A load newer than this, with nothing changed since, is shown again on focus without re-reading. */
+export const FRESH_FOR_MS = 5 * 60_000;
 
 type Options = {
-  /** Re-run when the screen regains focus (skips the initial mount focus). Default true. */
-  refetchOnFocus?: boolean;
+  /**
+   * Re-run when the screen regains focus (skips the initial mount focus). Default true, and only
+   * when something could have changed: see `FRESH_FOR_MS` and `readDataStamp`.
+   * `'always'` is for a loader that reads something the database cannot vouch for: files, the
+   * system's notification settings.
+   */
+  refetchOnFocus?: boolean | 'always';
   /** Re-run when another screen signals a write via DataRefreshProvider. Default true. */
   refetchOnDataChange?: boolean;
 };
@@ -58,8 +68,8 @@ export type ScreenData<T> = {
  * `useRefreshOnDataChange` boilerplate with a single call, built on the existing
  * primitives (SQLite context + DataRefreshProvider + AppRefreshControl).
  *
- * Loads on mount and whenever `deps` change; reloads on refocus and on a
- * cross-screen write; exposes pull-to-refresh state. Truth stays in SQLite — this
+ * Loads on mount and whenever `deps` change; reloads on a cross-screen write, and on refocus
+ * when the data could have changed since; exposes pull-to-refresh state. Truth stays in SQLite — this
  * is read ergonomics, not a store.
  *
  * @example
@@ -93,14 +103,28 @@ export function useScreenData<T>(
   const loaderRef = useRef(loader);
   loaderRef.current = loader;
 
+  // What the data looked like when the last good load started, and when that was. Read BEFORE
+  // the loader runs, so a write that lands mid-load makes the next focus reload.
+  const stamp = useRef<string | null>(null);
+  const loadedAt = useRef(0);
+  // The route this screen mounted on. A ref: `usePathname` follows the whole app's current route,
+  // and a value that changed on every navigation would re-run every mounted screen's loader.
+  const path = useRef(usePathname()).current;
+
   const run = useCallback(async (mode: 'load' | 'refresh') => {
     if (mode === 'refresh') setRefreshing(true);
+    const started = Date.now();
     try {
+      const before = await readDataStamp(db).catch(() => null);
       const result = await loaderRef.current(db);
+      recordLoad(path, Date.now() - started);
       if (!mounted.current) return;
+      stamp.current = before;
+      loadedAt.current = started;
       setData(result);
       setError(false);
     } catch {
+      stamp.current = null;
       if (mounted.current) setError(true);
     } finally {
       if (mounted.current) {
@@ -152,18 +176,34 @@ export function useScreenData<T>(
   const isFocused = useRef(false);
   const dirty = useRef(false);
 
-  // Reload on refocus, skipping the initial mount focus (the effect above already loaded).
+  /*
+   * On refocus (the initial mount focus is skipped; the effect above already loaded):
+   *
+   * - a write was announced while this screen was in the background → reload;
+   * - otherwise ask the database whether anything changed (one round trip) and reload only if
+   *   it did, or if what is on screen is older than `FRESH_FOR_MS`.
+   *
+   * It used to reload unconditionally, so moving between tabs re-ran every loader (seventy to a
+   * hundred and fifty round trips each) to show the same figures (`U-02`).
+   */
   const firstFocus = useRef(true);
   useFocusEffect(useCallback(() => {
     isFocused.current = true;
     if (firstFocus.current) {
       firstFocus.current = false;
-    } else if (refetchOnFocus || dirty.current) {
+    } else if (dirty.current || refetchOnFocus === 'always') {
       dirty.current = false;
       void run('load');
+    } else if (refetchOnFocus) {
+      void (async () => {
+        const unchanged = stamp.current !== null
+          && Date.now() - loadedAt.current < FRESH_FOR_MS
+          && (await readDataStamp(db).catch(() => null)) === stamp.current;
+        if (!unchanged && mounted.current && isFocused.current) void run('load');
+      })();
     }
     return () => { isFocused.current = false; };
-  }, [run, refetchOnFocus]));
+  }, [run, refetchOnFocus, db]));
 
   // Cross-screen write: reload now if we're the focused screen, otherwise defer to
   // next focus. (This helper already skips the initial mount.)

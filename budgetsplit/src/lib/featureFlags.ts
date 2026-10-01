@@ -1,3 +1,4 @@
+import { bumpPrefs } from './prefsVersion';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Flags name whole FEATURES, not fragments of them. That distinction is the point:
@@ -82,4 +83,5 @@ export async function loadFlags(): Promise<FeatureFlags> {
 
 export async function setFlag(key: FeatureKey, value: boolean): Promise<void> {
   await AsyncStorage.setItem(PREFIX + key, value ? 'true' : 'false');
+  bumpPrefs();
 }

@@ -16,6 +16,7 @@ import { ListRow } from '../../src/components/ui/ListRow';
 import { Divider } from '../../src/components/ui/Divider';
 import { formatBytes } from '../../src/lib/storage';
 import { DEV_TOOLS_ENABLED } from '../../src/constants/devTools';
+import { loadTimeSummary, clearLoadTimes } from '../../src/lib/loadTimes';
 import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
 import { useFeatureFlags } from '../../src/components/system/FeatureFlagsProvider';
 import { DEFAULTS, FEATURE_KEYS, type FeatureKey } from '../../src/lib/featureFlags';
@@ -31,6 +32,9 @@ export default function StorageScreen() {
   const { refresh } = useDataRefresh();
   const { setFlag, reload: reloadFlags } = useFeatureFlags();
   const [busy, setBusy] = useState(false);
+  // Which screens are slow on this phone, in milliseconds (`U-02`). Re-read each time this opens.
+  const [loads, setLoads] = useState(loadTimeSummary);
+  useFocusEffect(useCallback(() => { setLoads(loadTimeSummary()); }, []));
 
   // Defense in depth: the only entry point (the 7-tap gesture in Settings → About)
   // carries the same gate, but this screen can replace or erase a user's entire
@@ -42,7 +46,7 @@ export default function StorageScreen() {
 
   // Refetch on focus (via useScreenData) so the stored-attachment stats reflect
   // imports/deletes made elsewhere. getAttachmentStorage is sync; db is unused here.
-  const { data, error: loadError, reload } = useScreenData(async () => getAttachmentStorage(), []);
+  const { data, error: loadError, reload } = useScreenData(async () => getAttachmentStorage(), [], { refetchOnFocus: 'always' });
   const count = data?.count ?? 0;
   const bytes = data?.bytes ?? 0;
 
@@ -204,6 +208,29 @@ export default function StorageScreen() {
             <Feather name="trash-2" size={16} color={colors.expense} />
             <Text style={styles.eraseText}>Erase all data</Text>
           </TouchableOpacity>
+
+          <Text style={styles.devTitle}>SCREEN LOADS</Text>
+          <Text style={styles.note}>
+            How long each screen took to read its data since the app opened, slowest first. Use the app, then come back here.
+          </Text>
+          {loads.length > 0 && (
+            <>
+              <Card clip>
+                {loads.map((l, i) => (
+                  <View key={l.path}>
+                    {i > 0 && <Divider indent="none" />}
+                    <ListRow
+                      title={l.path}
+                      subtitle={`${l.count} ${l.count === 1 ? 'load' : 'loads'} · last ${l.last} ms`}
+                      value={`${l.worst} ms`}
+                      chevron={false}
+                    />
+                  </View>
+                ))}
+              </Card>
+              <SecondaryButton label="Clear" size="sm" onPress={() => { clearLoadTimes(); setLoads([]); }} />
+            </>
+          )}
         </View>
       </ScrollView>
     </View>

@@ -1,3 +1,4 @@
+import { bumpPrefs } from './prefsVersion';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DEFAULT_MONEY_SETTINGS, type MoneySettings, type PayCycle, type LookAhead, type KeepAside } from './engine/moneySettings';
 
@@ -32,5 +33,6 @@ export async function getMoneySettings(): Promise<MoneySettings> {
 export async function setMoneySettings(patch: Partial<MoneySettings>): Promise<MoneySettings> {
   const next = { ...(await getMoneySettings()), ...patch };
   await AsyncStorage.setItem(KEY, JSON.stringify(next));
+  bumpPrefs();
   return next;
 }

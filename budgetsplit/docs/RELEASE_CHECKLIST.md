@@ -410,11 +410,6 @@ Needs the rebuild: npx expo prebuild --clean && npx expo run:ios
       - [ ] Skeleton appears while loading, not a blank screen
       - [ ] No dead space under the header
 
-- [ ] **S-23 Search** — `app/(ledger)/search.tsx`  
-      Open: Home → search
-      - [ ] The chip row's edge fade reads as “more to scroll”
-      - [ ] Empty copy switches between “Search your transactions” and “No matches”
-
 - [ ] **S-18 Import** — `app/(ledger)/import.tsx`  
       Open: Settings → Import transactions
       - [ ] Gibberish → “No transactions found” is helpful, not a dead end

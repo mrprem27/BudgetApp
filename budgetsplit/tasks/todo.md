@@ -1,4 +1,4 @@
-# HANDOFF — 2026-09-30 (read first; continue from here)
+# HANDOFF — 2026-10-01 (read first; continue from here)
 
 Branch `claude/branch-selection-gi7lyy`, pushed. Plan: `docs/SPEC-SERVER-WEBAPP.md` §7; readiness per
 module: `docs/TRACKER.md` §0a. Tests 2,933 green, tsc clean (app + `server/api`). Servers deployed:
@@ -13,25 +13,31 @@ card, one top-card size · Stopped recurring = own view · recurring search + so
 Groups search (≥5) · Personal "Friends" + "This month · N filters" · **badges ~30** (`lib/badges.ts`),
 smaller dimmed board, Earned box collapsed at bottom of Badges screen.
 
-## Still to track (not yet U- rows — add them to TRACKER §11 + FINDINGS, counts by script)
-Phone-pass feedback 2026-09-30 → U-71 bottom gap (done) · U-72 Budget/Recurring boxes + top card (done) ·
-U-73 Stopped view, recurring search/sort, group search (done) · U-74 Personal labels (done; user unsure what
-"Others" was — ask with a screenshot) · U-75 badges ×3, earned collapsed, dull unearned, small board (done,
-not seen on phone).
+## Done 2026-10-01 (NOT committed yet)
+U-71 to U-75 are now rows (TRACKER §11 + FINDINGS; 293 items (93 open), 84 in §11) · **U-76** section icons from one map
+(`sectionIcon` in `constants/categories`; Categories, budget editor, Budget tab boxes) · **U-77** Home hero
+padding one step down · **U-78** `HeaderIconButton showLabel` on Recurring (Money) and Reports (Insights) ·
+**U-75 follow-up**: six more badges (36 at most), board disc 24pt everywhere · **U-79** person page redone
+(balance card, one options card, header Edit; `usePersonEdit` shared with Friends) · **U-80** Budget/Recurring
+decluttered (no recurring search/sort, Stopped = closed box on the page, tinted card back, Expand all on the
+card's last line, section bar only when open) · **U-81** demo data no longer future-dated before 10:00/12:00 · **U-82** Home loader split
+(`loadHomeBase` + `loadHomePeriod`): a pill tap is 6 to 22 queries, was 90 to 106 · **U-83** Search off Home,
+Personal opens on All · Recurring tab = plain list + "All recurring"; Money's page = search, sort chips, Stopped
+box · Budget + Recurring share `SummaryCard` · badge board smaller again · Search screen DELETED (Personal on All replaces it) ·
+PDF has a category ring + spend bars · demo data sensible by day / month / year (`thisMonth` null, `recent`).
 
 ## Open — next, in order
-1. **Friend edit screen** UI/UX "not great" (`app/(people)/person/[id]` edit / PersonNameSheet?) — ask the user which
-   screen + what bothers them, then redo with Card/ListRow/Input.
-2. **Category section icons**: Categories screen sections get the budget editor's section icons
-   (`SECTION_ICON` in `finance/budget/BudgetEditor.tsx`) — move the map to `constants/categories` and use it in
-   Categories, Budget editor and Budget tab boxes (`BudgetList` SectionCard `icon`). One icon set everywhere.
-3. **Home hero padding**: reduce padding in `finance/home/HeroCard.tsx` (one token step).
-4. **Money tab top-right icons** (Recurring, Reports): add a text label under/beside each icon so it says what
-   it is (check `app/(tabs)/savings.tsx` header / HeaderIconButton; maybe a `label` display prop).
-5. Badges: user review on phone; check the board wraps well at 30.
-6. Needs the phone / user: U-09 screenshot, U-16, U-20, W1-28/29/32 spacing, U-02 perf, D-01–D-03 UPI,
+0. **`docs/SPEC-SPEED-PDF-READS-FOLDERS.md`**, answered 2026-10-01 (release build; PDF = Reports export; v1
+   endpoints later; server folders now). Built: speed steps 0 to 4, the PDF (U-19), the server split (U-84, NOT
+   deployed). Open: speed step 5 (per-group reads) after the user's load times from the dev screen; the pure
+   split for v1; `src/shared`; `src/lib` by area after the phone pass.
+1. Person page (U-79): user review on phone.
+3. Lag elsewhere (user, 2026-10-01): U-02 full reload on every focus, and the engine snapshot's ~40 queries
+   (Home, Money, Afford, Badges). Needs the user to name the slow screens, and a release build to judge.
+4. Budget/Recurring (U-80), badges + labelled header buttons: user review on phone (board wrap at 36, pill width beside the large title).
+4. Needs the phone / user: U-16, U-20, W1-28/29/32 spacing, U-02 perf, D-01–D-03 UPI,
    live updates with two signed-in phones, receipt scan after rebuild (60 s timeout needs new build).
-7. Waiting outside repo: Workers Paid (DQ-95 → DQ-105 server repeat posting, DQ-107 queues), Apple
+5. Waiting outside repo: Workers Paid (DQ-95 → DQ-105 server repeat posting, DQ-107 queues), Apple
    (B-02, push notifications, TestFlight), Brevo key (B-07), privacy/store (B-08, B-10, B-13), merge to main (B-19),
    Android native project (V-07), `/v1` budget/reports/money reads (need shared lib first).
 
@@ -77,7 +83,7 @@ Findings become `U-11`, `U-12`, … in `TRACKER.md` §11.
 - [ ] Filters, including Clear when a tag is set · the group header card
 - [ ] Scan & Pay with the app icons · Settings from Home's avatar · card due-day field · time picker
 - [ ] Demo personas on the dev screen · Personal → Recurring · Excel import (dates, multi-line cells)
-- [ ] Friends "name missing when I owe" → a screenshot if it is still there (`U-09`)
+- [x] Friends "name missing when I owe": fixed, confirmed by the user 2026-10-01 (`U-09`)
 - [ ] Afford — anything that feels broken (you mentioned it; `U-04` is one guess)
 
 **Carried from server sync and onboarding**

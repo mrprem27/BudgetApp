@@ -1,15 +1,14 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { colors, type, space, layout } from '../../tokens';
 import { healthColor } from '../group/helpers';
 import { budgetHealth, utilLabel, type CategoryBudgetStatus } from '../../../lib/budget';
 import { formatCompact } from '../../../lib/money';
 import { budgetInvestedCaption } from '../../../lib/budgetCopy';
-import { categorySection, SECTION_ORDER } from '../../../constants/categories';
+import { categorySection, sectionIcon, SECTION_ORDER } from '../../../constants/categories';
 import { BudgetBar } from '../BudgetBar';
 import { BudgetCategoryRow } from '../BudgetCategoryRow';
-import { Card } from '../../ui/Card';
+import { SummaryCard } from '../SummaryCard';
 import { SectionCard } from '../../ui/SectionCard';
 import { Chip } from '../../ui/Chip';
 import { Divider } from '../../ui/Divider';
@@ -138,15 +137,12 @@ export function BudgetList({
 
   return scroll(
     <>
-      <Card padded style={styles.overview}>
-        {/* Edit sits with the thing it edits. It was once a lone unlabelled pill in
-            a `space-between` row that had lost its heading, so the tab opened with
-            an action above the number the action changes. */}
-        <View style={styles.head}>
-          {/* What the figure is measured against, and what it leaves out, sit behind the ⓘ
-              (`U-55`, AGENTS §14): three caption lines under the hero made the card read as a
-              paragraph. Still one tap away — yearly pools and invested money are exclusions,
-              and an exclusion nobody can find is a silent omission. */}
+      <SummaryCard
+        /* What the figure is measured against, and what it leaves out, sit behind the ⓘ
+           (`U-55`, AGENTS §14): three caption lines under the hero made the card read as a
+           paragraph. Still one tap away — yearly pools and invested money are exclusions,
+           and an exclusion nobody can find is a silent omission. */
+        label={
           <InfoLabel
             label="Your spend"
             labelStyle={styles.headLabel}
@@ -166,31 +162,30 @@ export function BudgetList({
               </View>
             }
           />
-          <Chip label="Edit" icon="edit-2" size="sm" onPress={onEdit} accessibilityLabel="Edit budget" />
-        </View>
-
-        <View style={styles.amountRow}>
+        }
+        // Edit sits with the thing it edits.
+        action={<Chip label="Edit" icon="edit-2" size="sm" onPress={onEdit} accessibilityLabel="Edit budget" />}
+        amount={
           <Text style={[styles.spent, { color: healthColor(health) }]}>
             {formatCompact(spent)}
             <Text style={styles.ofBudget}> / {formatCompact(allocated)}</Text>
           </Text>
-          <Text style={[styles.pct, { color: healthColor(health) }]}>{utilLabel(pct ?? 0)}</Text>
-        </View>
-
+        }
+        side={<Text style={[styles.pct, { color: healthColor(health) }]}>{utilLabel(pct ?? 0)}</Text>}
+        // The three filters, with Expand all at the end of their line.
+        foot={
+          <View style={styles.filters}>
+            <CountChip count={counts.over} label="over" tint={colors.expense} active={filter === 'over'} onPress={() => toggle('over')} />
+            <CountChip count={counts.near} label="near limit" tint={colors.healthAmber} active={filter === 'near'} onPress={() => toggle('near')} />
+            <CountChip count={counts.ontrack} label="on track" tint={colors.income} active={filter === 'ontrack'} onPress={() => toggle('ontrack')} />
+          </View>
+        }
+        expand={!forcedOpen && shownSections.length > 1 ? { open: allOpen, onPress: () => setAll(!allOpen) } : undefined}
+      >
         <View style={styles.bar}>
           <BudgetBar pct={pct} health={health} height={6} />
         </View>
-
-        <View style={styles.filters}>
-          <CountChip count={counts.over} label="over" tint={colors.expense} active={filter === 'over'} onPress={() => toggle('over')} />
-          <CountChip count={counts.near} label="near limit" tint={colors.healthAmber} active={filter === 'near'} onPress={() => toggle('near')} />
-          <CountChip count={counts.ontrack} label="on track" tint={colors.income} active={filter === 'ontrack'} onPress={() => toggle('ontrack')} />
-        </View>
-        {/* Inside the card it acts on, not floating between the card and the boxes. */}
-        {!forcedOpen && shownSections.length > 1 && (
-          <ExpandAll open={allOpen} onPress={() => setAll(!allOpen)} />
-        )}
-      </Card>
+      </SummaryCard>
 
       {visible.length === 0 ? (
         <EmptyState
@@ -220,6 +215,7 @@ export function BudgetList({
             <SectionCard
               key={section}
               title={section}
+              icon={sectionIcon(section)}
               subtitle={note || `${lines.length} ${lines.length === 1 ? 'category' : 'categories'}`}
               right={sum.allocated > 0 ? (
                 <Text style={[styles.boxAmt, { color: healthColor(sum.health) }]} numberOfLines={1}>
@@ -255,16 +251,6 @@ export function BudgetList({
   );
 }
 
-/** Expand or collapse every box, from inside the top card (Budget and Recurring alike). */
-export function ExpandAll({ open, onPress }: { open: boolean; onPress: () => void }) {
-  return (
-    <TouchableOpacity style={styles.expandAll} onPress={onPress} hitSlop={10} accessibilityRole="button">
-      <Feather name={open ? 'chevrons-up' : 'chevrons-down'} size={14} color={colors.accent} />
-      <Text style={styles.expandAllText}>{open ? 'Collapse all' : 'Expand all'}</Text>
-    </TouchableOpacity>
-  );
-}
-
 /**
  * One count in the overview: a filter when it has rows to show, a plain statement
  * of fact when it does not.
@@ -286,19 +272,14 @@ function CountChip({ count, label, tint, active, onPress }: {
 
 const styles = StyleSheet.create({
   content: { paddingHorizontal: layout.screenPaddingH, paddingTop: space.xs },
-  overview: { marginBottom: space.md },
-  head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: space.sm },
   headLabel: { ...type.sectionLabel, color: colors.textMuted },
-  amountRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
   spent: { ...type.amountLG },
   pct: { ...type.amountSM },
   caption: { ...type.caption, color: colors.textMuted, marginTop: 2 },
   info: { marginTop: space.xs },
   ofBudget: { ...type.amountSM, color: colors.textMuted },
-  expandAll: { flexDirection: 'row', alignItems: 'center', gap: space.xs, alignSelf: 'flex-end', marginTop: space.smd },
-  expandAllText: { ...type.labelSemi, color: colors.accent },
   boxAmt: { ...type.amountSM },
   boxOf: { ...type.caption, color: colors.textMuted },
   bar: { marginTop: space.sm },
-  filters: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs, marginTop: space.smd },
+  filters: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs },
 });

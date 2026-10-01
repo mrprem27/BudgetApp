@@ -399,3 +399,19 @@ describe('loadHomeData — personal vs group attribution', () => {
     expect(r.budget.spentShared).toBe(r.spendGroup);
   });
 });
+
+describe('a period pill reloads only the period half (U-82)', () => {
+  const fs = jest.requireActual('fs') as typeof import('fs');
+  it('the screen keys the shared half on groups alone, and the period half on the pill', () => {
+    const src = fs.readFileSync('app/(tabs)/index.tsx', 'utf8');
+    expect(src).toMatch(/useScreenData\(\(db\) => loadHomeBase\(db\), \[groups\]\)/);
+    expect(src).toMatch(/useScreenData\(\(db\) => loadHomePeriod\(db, groups, tab\), \[groups, tab\]\)/);
+    expect(src).not.toMatch(/loadHomeData\(/);
+  });
+  it('the period half never runs the engine, the health score or the streak', () => {
+    const src = fs.readFileSync('src/lib/homeData.ts', 'utf8');
+    const period = src.slice(src.indexOf('export async function loadHomePeriod'), src.indexOf('export type HomePeriod'));
+    expect(period.length).toBeGreaterThan(500);
+    expect(period).not.toMatch(/getSafeToSpendV2|computeHealthScore|streakFrom|getMyExposure|getAllRecurringRules|getTotalMoney/);
+  });
+});

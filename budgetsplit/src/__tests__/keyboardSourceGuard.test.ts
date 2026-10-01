@@ -125,7 +125,6 @@ function inputBearers(): Set<string> {
  * decision, not an omission (the same shape as `syncQueueCoverage`'s EXEMPT).
  */
 const EXEMPT: Record<string, string> = {
-  'app/(ledger)/search.tsx': 'the search box is pinned at the top of the screen, above the keyboard; the results list below it is keyboardAwareScroll',
 };
 /** Components the scan can't prove, same rule. */
 const EXEMPT_COMPONENTS: Record<string, string> = {

@@ -93,8 +93,7 @@ describe('no surface sums across kinds', () => {
    * problem, not this rule.
    */
   const SUMMING = [
-    // Both screens' totals now live in lib (`searchData`, `reportsData`).
-    join(ROOT, 'src', 'lib', 'searchData.ts'),
+    // The Search screen was the other one; it went on 2026-10-01 (`U-83`).
     join(ROOT, 'src', 'lib', 'reportsData.ts'),
   ];
 

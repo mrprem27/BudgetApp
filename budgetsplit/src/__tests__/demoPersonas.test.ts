@@ -59,3 +59,53 @@ describe('demo personas land in the state each is for', () => {
     expect(used.filter(c => !known.has(c) && c !== 'Poker Night')).toEqual([]);
   });
 });
+
+describe('demo data loaded early on the 1st still shows this month', () => {
+  // 1 Oct 2026, 09:00 local: "this month" entries were stamped 10:00 or 12:00 today, so they sat
+  // in the future and every month figure read zero.
+  beforeEach(() => {
+    jest.useFakeTimers({
+      now: new Date(2026, 9, 1, 9, 0).getTime(),
+      doNotFake: ['nextTick', 'setImmediate', 'clearImmediate', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'queueMicrotask'],
+    });
+  });
+  afterEach(() => { jest.useRealTimers(); });
+
+  it.each(DEMO_PERSONAS.map(p => p.key))('%s: no logged entry is dated after now', async (persona) => {
+    const db = createTestDb();
+    await loadDemoPersona(db as never, persona);
+    const future = await (db as never as { getAllAsync: <T>(sql: string, p: unknown[]) => Promise<T[]> }).getAllAsync<{ category: string }>(
+      'SELECT category FROM txn WHERE recur_freq IS NULL AND is_deleted = 0 AND date > ?', [Date.now()],
+    );
+    expect(future).toEqual([]);
+  });
+
+  it('established: on the 1st, today is the 1st and nothing else is piled onto it', async () => {
+    const db = createTestDb();
+    await loadDemoPersona(db as never, 'established');
+    const start = new Date(2026, 9, 1).getTime();
+    const rows = await (db as never as { getAllAsync: <T>(sql: string, p: unknown[]) => Promise<T[]> }).getAllAsync<{ category: string; kind: string }>(
+      "SELECT t.category, t.kind FROM txn t JOIN budget_group g ON g.id = t.group_id WHERE g.is_personal = 1 AND t.recur_freq IS NULL AND t.is_deleted = 0 AND t.date >= ? AND t.date <= ?", [start, Date.now()],
+    );
+    // The salary lands on the 1st and the daily chai is logged; rent (the 2nd) and three grocery
+    // runs (3rd, 9th, 15th) have not happened yet. They used to be clamped onto today.
+    expect(rows.some(r => r.kind === 'income' && r.category === 'Salary')).toBe(true);
+    expect(rows.map(r => r.category)).not.toEqual(expect.arrayContaining(['Rent']));
+    expect(rows.filter(r => r.category === 'Groceries')).toEqual([]);
+    expect(rows.length).toBeLessThan(6);
+  });
+
+  it('established: mid-month, the month has its rent, its groceries and its income', async () => {
+    jest.setSystemTime(new Date(2026, 9, 20, 15, 0));
+    const db = createTestDb();
+    await loadDemoPersona(db as never, 'established');
+    const start = new Date(2026, 9, 1).getTime();
+    const rows = await (db as never as { getAllAsync: <T>(sql: string, p: unknown[]) => Promise<T[]> }).getAllAsync<{ category: string; d: number }>(
+      "SELECT t.category, t.date AS d FROM txn t JOIN budget_group g ON g.id = t.group_id WHERE g.is_personal = 1 AND t.recur_freq IS NULL AND t.is_deleted = 0 AND t.date >= ? AND t.date <= ?", [start, Date.now()],
+    );
+    expect(rows.filter(r => r.category === 'Groceries')).toHaveLength(3);
+    expect(rows.filter(r => r.category === 'Rent')).toHaveLength(1);
+    // Spread over the month, not on one day.
+    expect(new Set(rows.map(r => new Date(r.d).getDate())).size).toBeGreaterThan(10);
+  });
+});

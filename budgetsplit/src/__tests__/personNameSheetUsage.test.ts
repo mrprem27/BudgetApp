@@ -73,8 +73,8 @@ describe('every place that creates a person renders PersonNameSheet', () => {
 });
 
 describe('every removal is a destructive confirm, never silent', () => {
-  it('deletePerson (friends.tsx) and removeMemberFromGroup (members.tsx) both confirm destructively', () => {
-    const friends = readFileSync(join(ROOT, 'app', '(people)', 'friends.tsx'), 'utf8');
+  it('deletePerson (usePersonEdit, for Friends and the person page) and removeMemberFromGroup (members.tsx) both confirm destructively', () => {
+    const friends = readFileSync(join(ROOT, 'src', 'hooks', 'usePersonEdit.ts'), 'utf8');
     const members = readFileSync(join(ROOT, 'app', '(people)', 'group', '[id]', 'members.tsx'), 'utf8');
     expect(friends).toMatch(/style: 'destructive'/);
     expect(members).toMatch(/style: 'destructive'/);

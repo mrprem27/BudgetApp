@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { bumpPrefs } from './prefsVersion';
 
 /**
  * Single typed home for the app's key/value preferences. Replaces ~30 raw
@@ -50,10 +51,12 @@ async function getBool(key: string, fallback: boolean): Promise<boolean> {
   const v = await AsyncStorage.getItem(key);
   return v === null ? fallback : v === 'true';
 }
-const setBool = (key: string, v: boolean) => AsyncStorage.setItem(key, v ? 'true' : 'false');
+// Every setter bumps `prefsVersion`, so a screen that skips its reload on focus still sees the change.
+const put = (key: string, v: string) => { bumpPrefs(); return AsyncStorage.setItem(key, v); };
+const setBool = (key: string, v: boolean) => put(key, v ? 'true' : 'false');
 
 const getString = (key: string): Promise<string | null> => AsyncStorage.getItem(key);
-const setString = (key: string, v: string) => AsyncStorage.setItem(key, v);
+const setString = (key: string, v: string) => put(key, v);
 
 async function getNumber(key: string): Promise<number | null> {
   const v = await AsyncStorage.getItem(key);
@@ -61,7 +64,7 @@ async function getNumber(key: string): Promise<number | null> {
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
 }
-const setNumber = (key: string, v: number) => AsyncStorage.setItem(key, String(v));
+const setNumber = (key: string, v: number) => put(key, String(v));
 
 export const settings = {
   // Security / privacy
@@ -119,7 +122,8 @@ export const settings = {
 
   // App lifecycle
   appLastOpen: () => getNumber(K.appLastOpen),
-  setAppLastOpen: (v: number) => setNumber(K.appLastOpen, v),
+  // Written on every Home focus and read by no screen's figures, so it does not bump.
+  setAppLastOpen: (v: number) => AsyncStorage.setItem(K.appLastOpen, String(v)),
   onboardingDone: () => getBool(K.onboardingDone, false),
   setOnboardingDone: (v: boolean) => setBool(K.onboardingDone, v),
   clearOnboardingDone: () => AsyncStorage.removeItem(K.onboardingDone),

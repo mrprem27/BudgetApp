@@ -15,7 +15,7 @@ import { loadCategoryCatalog } from '../../src/lib/categoryData';
 import { useCategoryWrites } from '../../src/hooks/useCategoryWrites';
 import { haptic } from '../../src/lib/haptics';
 import {
-  CATEGORY_SECTIONS, INCOME_SECTIONS, TRANSFER_SECTIONS, TRANSFER_HIDDEN_FROM_PICKER, categorySection, categoryVisual,
+  CATEGORY_SECTIONS, INCOME_SECTIONS, TRANSFER_SECTIONS, TRANSFER_HIDDEN_FROM_PICKER, categorySection, categoryVisual, sectionIcon,
   DEFAULT_CATEGORIES, INCOME_CATEGORIES, TRANSFER_CATEGORIES,
 } from '../../src/constants/categories';
 import {
@@ -179,6 +179,7 @@ export default function CategoriesScreen() {
             <SectionCard
               key={section.title}
               title={section.title}
+              icon={sectionIcon(section.title)}
               subtitle={`${catsInSection.length} categories`}
               expanded={isExpanded}
               onToggle={() => toggleSection(section.title)}

@@ -13,13 +13,13 @@ import { EmptyState } from '../../src/components/ui/EmptyState';
 import { SumLine } from '../../src/components/ui/SumLine';
 import { AmountText } from '../../src/components/ui/AmountText';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
-import { loadFriends, deletePerson, replacePersonPhoto, addFriend, saveFriendDetails, inviteFriendByEmail } from '../../src/lib/personWrites';
+import { loadFriends, replacePersonPhoto, addFriend } from '../../src/lib/personWrites';
 import { AVATAR_COLORS } from '../../src/constants/categories';
 import { oweView, ledgerOrder } from '../../src/lib/owe';
-import { refusalReason } from '../../src/lib/personCopy';
 import { haptic } from '../../src/lib/haptics';
 import type { Person } from '../../src/db/queries/persons';
 import { useScreenData } from '../../src/hooks/useScreenData';
+import { usePersonEdit } from '../../src/hooks/usePersonEdit';
 import { useStore } from '../../src/store';
 import { useDataRefresh } from '../../src/components/system/DataRefreshProvider';
 import { PersonNameSheet } from '../../src/components/finance/PersonNameSheet';
@@ -31,11 +31,7 @@ export default function FriendsScreen() {
   const router = useRouter();
   const me = useStore((s) => s.me);
   const { refresh } = useDataRefresh();
-  const [renamePerson, setRenamePerson] = useState<Person | null>(null);
-  const [renameText, setRenameText] = useState('');
-  const [renameVpa, setRenameVpa] = useState('');
-  const [renamePhone, setRenamePhone] = useState('');
-  const [renameEmail, setRenameEmail] = useState('');
+  const edit = usePersonEdit();
   const [showAdd, setShowAdd] = useState(false);
   const [addName, setAddName] = useState('');
   const [addPhone, setAddPhone] = useState('');
@@ -83,110 +79,6 @@ export default function FriendsScreen() {
     } catch {
       haptic.error();
       Alert.alert('Something went wrong', 'Please try again.');
-    }
-  }
-
-  function openRename(p: Person) {
-    setRenamePerson(p);
-    setRenameText(p.name);
-    setRenameVpa(p.upi_vpa ?? '');
-    setRenamePhone(p.mobile ?? '');
-    setRenameEmail(p.email ?? '');
-  }
-
-  /**
-   * Remove somebody added by mistake.
-   *
-   * Refused for anyone with history, and the refusal explains itself rather than
-   * saying no: a person with shared expenses is not a typo, and the honest answers
-   * for them are removing them from a group (soft, reversible) or merging two rows
-   * that turned out to be one human.
-   */
-  function confirmDeletePerson() {
-    const person = renamePerson;
-    if (!person) return;
-    Alert.alert(
-      `Remove ${person.name}?`,
-      'They will be gone from your friends list.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Remove', style: 'destructive', onPress: async () => {
-          try {
-            const res = await deletePerson(db, person.id);
-            if (!res.ok) {
-              haptic.error();
-              Alert.alert(`Can't remove ${person.name}`, refusalReason(res));
-              return;
-            }
-            haptic.warning();
-            setRenamePerson(null);
-            await reload();
-            refresh();
-          } catch {
-            haptic.error();
-            Alert.alert(`Couldn't remove ${person.name}`, 'Please try again.');
-          }
-        } },
-      ],
-    );
-  }
-
-  /**
-   * Save the details, and — if an address was added — ask that person to connect.
-   *
-   * One act, deliberately. Adding somebody and inviting them are the same
-   * intention, and splitting them across two screens is how an invite step ends
-   * up never being found.
-   *
-   * The invite is best-effort and never blocks the save: the address is theirs
-   * whether or not the request went out, and a failed send is something to retry,
-   * not a reason to lose what they typed.
-   */
-  async function handleRename() {
-    const trimmed = renameText.trim();
-    const vpa = renameVpa.trim() || null;
-    const phone = renamePhone.trim() || null;
-    const email = renameEmail.trim().toLowerCase() || null;
-    const vpaChanged = vpa !== (renamePerson?.upi_vpa ?? null);
-    const phoneChanged = phone !== (renamePerson?.mobile ?? null);
-    const emailChanged = email !== (renamePerson?.email ?? null);
-    if (!renamePerson || !trimmed) { setRenamePerson(null); return; }
-    if (trimmed === renamePerson.name && !vpaChanged && !phoneChanged && !emailChanged) {
-      setRenamePerson(null); return;
-    }
-    const person = renamePerson;
-    let invite: string | null = null;
-    try {
-      invite = await saveFriendDetails(db, person, { name: trimmed, vpa, phone, email });
-      haptic.success();
-      setRenamePerson(null);
-      refresh();
-    } catch {
-      haptic.error();
-      Alert.alert('Something went wrong', 'Please try again.');
-      return;
-    }
-    if (invite) await inviteByEmail(person, invite);
-  }
-
-  /**
-   * Ask an address to connect, and remember which person row it was for.
-   *
-   * That second half is the whole reason a local mirror table exists: when the
-   * request is accepted, the account id has to land on the row the user actually
-   * chose, not on a match they are asked to make later and will not find.
-   */
-  async function inviteByEmail(person: Person, email: string) {
-    try {
-      if (!(await inviteFriendByEmail(db, person, email))) return;
-      await reload();
-      refresh();
-    } catch (e) {
-      haptic.error();
-      Alert.alert(
-        'Saved, but the invite didn’t go',
-        e instanceof Error ? e.message : 'Try again from their row.',
-      );
     }
   }
 
@@ -264,7 +156,7 @@ export default function FriendsScreen() {
                 return (
                   <FriendRow key={p.id} person={p} last={i === open.length - 1}
                     caption={captionFor(p, bal?.groupCount ?? 0)}
-                    onOpen={() => router.push(`/person/${p.id}`)} onRename={() => openRename(p)} onPhoto={() => changePhoto(p)}
+                    onOpen={() => router.push(`/person/${p.id}`)} onRename={() => edit.open(p)} onPhoto={() => changePhoto(p)}
                     right={
                       <View style={styles.amountCol}>
                         <AmountText paise={ov.amount} size="md" compact forceColor={ov.color} />
@@ -284,7 +176,7 @@ export default function FriendsScreen() {
                 {square.map((p, i) => (
                   <FriendRow key={p.id} person={p} last={i === square.length - 1} quiet
                     caption={captionFor(p, balances[p.id]?.groupCount ?? 0)}
-                    onOpen={() => router.push(`/person/${p.id}`)} onRename={() => openRename(p)} onPhoto={() => changePhoto(p)} />
+                    onOpen={() => router.push(`/person/${p.id}`)} onRename={() => edit.open(p)} onPhoto={() => changePhoto(p)} />
                 ))}
               </Card>
             </>
@@ -313,21 +205,7 @@ export default function FriendsScreen() {
         </KeyboardForm>
       )}
 
-      <PersonNameSheet
-        visible={!!renamePerson}
-        onClose={() => setRenamePerson(null)}
-        title="Rename"
-        value={renameText}
-        onChangeText={setRenameText}
-        onSubmit={handleRename}
-        vpa={renameVpa}
-        onChangeVpa={setRenameVpa}
-        phone={renamePhone}
-        onChangePhone={setRenamePhone}
-        email={renameEmail}
-        onChangeEmail={setRenameEmail}
-        onDelete={confirmDeletePerson}
-      />
+      <PersonNameSheet {...edit.sheetProps} />
 
       <PersonNameSheet
         visible={showAdd}

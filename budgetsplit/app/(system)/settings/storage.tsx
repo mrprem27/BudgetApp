@@ -45,7 +45,7 @@ export default function StorageSettingsScreen() {
     receipts: getAttachmentStorage(),
     cache: getCacheStorage(),
     avatars: getAvatarStorage(),
-  }), []);
+  }), [], { refetchOnFocus: 'always' });
 
   const free = data?.free ?? null;
   const total = data?.total ?? null;

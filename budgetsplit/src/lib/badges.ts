@@ -421,5 +421,54 @@ export function computeBadges(i: BadgeInputs): Badge[] {
     status: i.budgetPct != null ? 'Budget set' : 'Set a budget under Money', progress: i.budgetPct != null ? 1 : 0,
   });
 
+  // ── More, 2026-10-01: six more, still only what the ledger and balances already say ──
+  const keptPct = m.income > 0 ? Math.round(((m.income - m.spent) / m.income) * 100) : 0;
+  badges.push({
+    id: 'keptFifth', title: 'Kept a fifth', icon: 'percent', group: 'month',
+    explain: 'This month you kept at least 20% of the money that came in. Starts again on the 1st.',
+    level: m.income > 0 && keptPct >= 20 ? 1 : 0, maxLevel: 1,
+    status: m.income === 0 ? 'No income logged this month yet' : keptPct >= 0 ? `${keptPct}% kept so far` : 'Spent more than came in',
+    progress: Math.max(0, Math.min(1, keptPct / 20)),
+  });
+
+  const allDays = days.size;
+  const dl = tiered(allDays, [30, 100, 365]);
+  badges.push({
+    id: 'daysLogged', title: 'Days on record', icon: 'sun', group: 'milestone',
+    explain: 'Different days with at least one entry, in a row or not. Levels at 30, 100 and 365.',
+    level: dl.level, maxLevel: 3, status: `${plural(allDays, 'day')}${dl.next ? ` · next at ${dl.next}` : ''}`, progress: dl.progress,
+  });
+  const notes = i.rows.filter(r => r.hasNote).length;
+  const nt = tiered(notes, [10, 50, 200]);
+  badges.push({
+    id: 'noteTaker', title: 'Note taker', icon: 'message-square', group: 'milestone',
+    explain: 'Entries that carry a note saying what they were. Levels at 10, 50 and 200.',
+    level: nt.level, maxLevel: 3, status: `${plural(notes, 'note')}${nt.next ? ` · next at ${nt.next}` : ''}`, progress: nt.progress,
+  });
+  const paydays = i.rows.filter(r => r.income > 0).length;
+  const pd = tiered(paydays, [3, 12, 36]);
+  badges.push({
+    id: 'paydays', title: 'Paydays logged', icon: 'inbox', group: 'milestone',
+    explain: 'Income entries you have logged. Levels at 3, 12 and 36.',
+    level: pd.level, maxLevel: 3, status: `${plural(paydays, 'income entry', 'income entries')}${pd.next ? ` · next at ${pd.next}` : ''}`, progress: pd.progress,
+  });
+
+  const loggedToday = days.has(dayKey(i.nowMs));
+  badges.push({
+    id: 'loggedToday', title: 'Logged today', icon: 'edit', group: 'now',
+    explain: 'Today has at least one entry. Checked again every day.',
+    level: loggedToday ? 1 : 0, maxLevel: 1,
+    status: loggedToday ? 'Done for today' : 'Nothing logged today yet', progress: loggedToday ? 1 : 0,
+  });
+  if (i.hasShared) {
+    const clear = i.owe === 0;
+    badges.push({
+      id: 'oweNobody', title: 'Owe nobody', icon: 'smile', group: 'now',
+      explain: 'You owe nothing to anyone right now, whatever others still owe you. Checked again every day.',
+      level: clear ? 1 : 0, maxLevel: 1,
+      status: clear ? 'Nothing to pay back' : `You owe ${rupees(i.owe)}`, progress: clear ? 1 : 0,
+    });
+  }
+
   return badges;
 }

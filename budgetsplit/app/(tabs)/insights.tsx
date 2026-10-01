@@ -134,7 +134,7 @@ export default function InsightsScreen() {
       <ScreenHeader
         large
         title="Insights"
-        right={<HeaderIconButton icon="pie-chart" color={colors.accent} label="Reports" onPress={() => router.push('/reports')} />}
+        right={<HeaderIconButton icon="pie-chart" color={colors.accent} label="Reports" showLabel onPress={() => router.push('/reports')} />}
       />
       {loadError ? (
         <ErrorState onRetry={reload} />

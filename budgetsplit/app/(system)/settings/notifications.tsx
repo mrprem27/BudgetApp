@@ -38,7 +38,7 @@ export default function NotificationsScreen() {
     ]);
     const status: PermStatus = perm.granted ? 'granted' : perm.canAskAgain ? 'undetermined' : 'denied';
     return { prefs, permStatus: status };
-  }, []);
+  }, [], { refetchOnFocus: 'always' });
   const prefs = data?.prefs ?? null;
 
   // Mirror the loaded OS permission into local state so toggle() can still apply its

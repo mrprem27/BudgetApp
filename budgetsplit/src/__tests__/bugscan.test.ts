@@ -620,7 +620,7 @@ describe('G2 · one filter structure: tags match any-of, and the badge counts wh
   });
 
   it('every screen with a filter bar passes tags through', () => {
-    for (const f of ['app/(ledger)/search.tsx', 'app/(people)/personal.tsx', 'src/components/finance/group/TransactionsTab.tsx']) {
+    for (const f of ['app/(people)/personal.tsx', 'src/components/finance/group/TransactionsTab.tsx']) {
       const src = fs.readFileSync(f, 'utf8');
       expect(src).toMatch(/onTags=\{setTags\}/);
       expect(src).not.toMatch(/\bcollapsible\b/);

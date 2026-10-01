@@ -225,7 +225,7 @@ photos never sync (`SYNC-F4`); balances never travel (`E-50`).
 
 One SQLite database, `budgetsplit.db`, opened by `SQLiteProvider` at the root. It is the single
 source of truth — there is no Redux, no React Query, no in-memory mirror. Reads go through
-`src/db/queries/` (29 modules); pure logic lives in `src/lib/` (144 modules) and touches neither
+`src/db/queries/` (30 modules); pure logic lives in `src/lib/` (145 modules) and touches neither
 React nor the database.
 
 **Foreign keys are OFF** on every connection (`applyConnectionPragmas`). Every `REFERENCES` clause
@@ -415,7 +415,7 @@ Sync.          As a `transactions` bundle — payers, splits, line items, tags, 
                travels (SYNC-F4).
 Aliases.       transaction · entry · expense · txn · recurring rule · series
                · occurrence · item (Review) · line (ledger).  Nine.  OV-01.
-Surfaces.      SC-07 · SC-08 · SC-15 · SC-09 · SC-14 · SC-19 · SC-23 · SC-21
+Surfaces.      SC-07 · SC-08 · SC-15 · SC-09 · SC-14 · SC-19 · SC-21
                · SC-41 · SC-16 (18 in total, §7)
 Invariants.    IV-01 paise · IV-02 shares sum to payments · IV-03 one transaction
                · IV-04 rules are not events · IV-05 awaiting approval is excluded
@@ -1891,7 +1891,7 @@ Amazon Pay and WhatsApp and that is closed on our side (`DQ-84`); the route roun
 | `FE-34` | Forecast — credibility-weighted, floored by committed bills | live, unflagged (its flag was deleted) | `SC-03` `SC-05` `SC-22` | `E-57` |
 | `FE-35` | Insights — one narrative home, collapsible sections | flag:`insights` | `SC-22` | `E-63` `E-57` |
 | `FE-36` | Reports — donut, trend, group summaries, CSV + PDF | flag:`reports` | `SC-20` `SC-21` | `E-63` |
-| `FE-37` | Search — 3 years, month-sectioned, per-kind totals only | live, unflagged | `SC-23` | `E-04` |
+| `FE-37` | Search across everything you are on: Personal, opened on All, with its filter bar. The separate Search screen was removed 2026-10-01 (`U-83`) | live, unflagged | `SC-14` | `E-04` |
 | `FE-38` | Categories — global catalog, adopt-uncategorized, tombstones | live | `SC-25` `SC-16` | `E-09` `E-10` |
 | `FE-39` | Streak | flag:`streak`, **off** | `SC-03` | — |
 | `FE-40` | Personal ledger — Activity / Budget, cross-group filter, CSV | live | `SC-14` | `E-04` |
@@ -1958,7 +1958,7 @@ that the server could not read.
 
 `Last verified: 2026-09-01 · Guarded by: docCoverage.test.ts, deadRouteRef.test.ts, screenIdMap.test.ts, entryPointCount.test.ts`
 
-46 routes. `SC-xx` numbers are the existing `S-xx` numbers — the same screen, the same digits, so old
+45 routes. `SC-xx` numbers are the existing `S-xx` numbers — the same screen, the same digits, so old
 citations still resolve (§12). `SC-42` and `SC-43` are new: `/assets` and `/settings/sync` had no ID
 and no behaviour section anywhere before this document. `SC-44`, the sync log, was retired in S22
 with the sync it logged; its number is not reused.
@@ -2057,7 +2057,6 @@ taps are listed separately below and are not in the count.
 | `SC-15` | `/txn/[id]` | Transaction detail | 5 | |
 | `SC-18` | `/import` | File or paste → parse → `E-17` | 2 | `replace`s to `SC-19` on success |
 | `SC-19` | `/review` | The staging inbox | 2 | Largest screen; 12 sheet states. `OV-24` |
-| `SC-23` | `/search` | 3-year search, month-sectioned | 1 | A **ledger**, not an analysis surface |
 | `SC-25` | `/categories` | The global catalog | 1 | |
 | `SC-26` | `/friends` | Friends | 3 | |
 | `SC-45` | `/trust` | **Who can add to my ledger** — trust for everyone, in one list | 2 | Three groups, not two: the third is people with no account, whose setting is inert |
@@ -2112,7 +2111,6 @@ open. The walkthrough shows these instead of the paths.
 | `SC-20` | **Insights** → the Reports icon in the header, or the Reports row |
 | `SC-21` | **Reports** → tap a slice of the donut |
 | `SC-22` | **Plan** → the insights icon in the header, or Home → tap the pace line |
-| `SC-23` | **Home** → the magnifier at the top right |
 | `SC-24` | **Settings → Features** |
 | `SC-25` | **Settings → Categories** |
 | `SC-26` | **Settings → Friends**, or **Groups** → the Friends icon at the top right (2026-09-24, `SPEC-2026-09-FEEDBACK.md` §5) |
@@ -2148,7 +2146,7 @@ nowhere to go.
 - **One entry, and it was an unlabeled icon:** `SC-33` `/afford`. `featureFlags.ts` says of its
   flag, "a real feature since the engine grew; off is why nobody found it". The rail is labelled now
   (`OV-16`), so the entry count is unchanged and the entry is findable.
-- **One entry, buried:** `SC-23` `/search`, `SC-30` `/upcoming`, `SC-21` `/report-transactions`,
+- **One entry, buried:** `SC-30` `/upcoming`, `SC-21` `/report-transactions`,
   `SC-27` `/storage` (a 7-tap gesture).
 - **The hub:** `SC-07` `/add/quick`, at 24 in-app call sites plus three external entries. It is the
   destination of every settle-up, every "log it" affordance, the daily-log notification and the Siri
@@ -2497,7 +2495,7 @@ Steps.       .S1 pick a period: Today · Month · Year  .S2 read  .S3 tap throug
 Entities.    R nearly everything: E-04 E-07 E-50 E-51 E-53 E-55 E-56 E-57 E-58 E-63
 Writes.      None.
 Exit.        Stays. Tapping through goes to SC-22, SC-16, SC-07, SC-40, SC-19,
-             SC-23, SC-30, SC-06, SC-28, SC-27a, SC-10, SC-04, SC-26.
+             SC-30, SC-06, SC-28, SC-27a, SC-10, SC-04, SC-26.
 Branches.    .B1 flags.healthScore off nulls the ring
              .B2 flags.splitting off removes the owe/owed strip
              .B3 flags.streak off (default) removes the streak card

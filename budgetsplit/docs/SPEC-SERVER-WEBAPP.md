@@ -84,7 +84,7 @@ cheap now and expensive after a web client exists:
 ### 2.4 · Operations
 
 Request ids and structured logs; an error sink (Workers Logs or Sentry); per-user rate limits on the
-new routes (`rateLimit.ts` exists); pagination limits on every list; an OpenAPI description generated
+new routes (`utils/rateLimit.ts` exists); pagination limits on every list; an OpenAPI description generated
 from the route table, so a web client is typed from the server, not guessed.
 
 ### 2.5 · Order of work

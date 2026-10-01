@@ -322,11 +322,11 @@ function PaceLeft({ onPress, color, label, a11y }: {
 }
 
 const styles = StyleSheet.create({
-  card: { padding: space.lg, marginBottom: space.md, ...shadow.md, position: 'relative' },
+  card: { padding: space.md, marginBottom: space.md, ...shadow.md, position: 'relative' },
   label: { ...type.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: space.xs, fontFamily: 'Inter_600SemiBold' },
   // Reserve the right gutter so the label/number never slide under the ring.
   gutter: { paddingRight: RING + space.sm },
-  ringAbs: { position: 'absolute', top: space.lg, right: space.lg, width: RING, height: RING, alignItems: 'center', justifyContent: 'center', zIndex: 2 },
+  ringAbs: { position: 'absolute', top: space.md, right: space.md, width: RING, height: RING, alignItems: 'center', justifyContent: 'center', zIndex: 2 },
   ringCenter: { alignItems: 'center', justifyContent: 'center' },
   ringScore: { fontFamily: 'SpaceMono_400Regular', fontSize: 13, letterSpacing: -0.5 },
   numberRow: { flexDirection: 'row', alignItems: 'flex-end' },

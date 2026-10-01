@@ -19,7 +19,7 @@ import { KeyboardForm } from '../../ui/KeyboardForm';
 import { useBudgetEditor } from '../../../hooks/useBudgetEditor';
 import { rollUpBudgets } from '../../../lib/budget';
 import { formatRupees, formatCompact, parseToPaise } from '../../../lib/money';
-import { categoryVisual } from '../../../constants/categories';
+import { categoryVisual, sectionIcon } from '../../../constants/categories';
 import type { FeatherName } from '../../../constants/palette';
 import type { BudgetCadence, BudgetLevel } from '../../../db/queries/categoryBudgets';
 import type { BudgetScope } from '../../../lib/budgetEditor';
@@ -28,17 +28,6 @@ import { OwnBudgetSheet } from './OwnBudgetSheet';
 import { perPersonMeans, PERIOD_RESETS } from '../../../lib/budgetCopy';
 
 const CADENCES: BudgetCadence[] = ['daily', 'monthly', 'yearly'];
-
-const SECTION_ICON: Record<string, FeatherName> = {
-  'Home & Living': 'home',
-  Food: 'coffee',
-  Transport: 'navigation',
-  'Bills & Utilities': 'zap',
-  Lifestyle: 'shopping-bag',
-  Health: 'heart',
-  'Money & Growth': 'trending-up',
-  Other: 'grid',
-};
 
 /**
  * The budget editor, for both My Budget (`/budget`) and one group's
@@ -201,7 +190,7 @@ export function BudgetEditor({ scope, groupId, focusCategory }: {
                 key={sec.title}
                 title={sec.title}
                 subtitle={lines.length > 0 ? `${lines.length} set · ${secLabel}` : `${sec.cats.length} categories`}
-                icon={SECTION_ICON[sec.title] ?? 'grid'}
+                icon={sectionIcon(sec.title)}
                 expanded={!e.collapsed.has(sec.title)}
                 onToggle={() => e.toggleSection(sec.title)}
               >

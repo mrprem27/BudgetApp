@@ -55,6 +55,8 @@ const TABS: { key: TabKey; label: string }[] = [
 
 const listScroll = keyboardAwareScroll();
 
+const DEFAULT_SCOPE: ActivityScope = 'all';
+
 export default function PersonalScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
@@ -68,7 +70,8 @@ export default function PersonalScreen() {
   const tabs = flags.recurring ? TABS : TABS.filter(t => t.key !== 'recurring');
   useEffect(() => { if (!flags.recurring && tab === 'recurring') setTab('activity'); }, [flags.recurring, tab]);
   // Personal, every group, or both. One group on its own is that group's screen, not a filter here.
-  const [filter, setFilter] = useState<ActivityScope>('personal');
+  // Opens on everything you are part of (2026-10-01); Personal and Groups narrow it.
+  const [filter, setFilter] = useState<ActivityScope>(DEFAULT_SCOPE);
   // The transaction filters, none of which this screen had: it offered scope only.
   const [query, setQuery] = useState('');
   const [kind, setKind] = useState<KindFilter>(KIND_ANY);
@@ -132,7 +135,7 @@ export default function PersonalScreen() {
    * below showed last month answered a question nobody had asked.
    */
   // Search finds rows; it does not change what the card is about (`U-62`) — only the filters do.
-  const narrowed = filter !== 'personal' || filtersActive({ query: '', kind, from, to, personId, tags });
+  const narrowed = filter !== DEFAULT_SCOPE || filtersActive({ query: '', kind, from, to, personId, tags });
   /*
    * The row under the hero adds up what the list shows (`U-63`). With no date chosen the list
    * runs through all time, and an all-time "spent" answers nothing — so the row reads this month
@@ -145,11 +148,11 @@ export default function PersonalScreen() {
   );
   const rowTotals = useMemo(() => activityTotals(rowRows, myId), [rowRows, myId]);
   // Which filters are on, counted, so the row says why its numbers changed ("This month · 2 filters").
-  const filterCount = (filter !== 'personal' ? 1 : 0) + (kind !== KIND_ANY ? 1 : 0) + (personId ? 1 : 0) + tags.length;
+  const filterCount = (filter !== DEFAULT_SCOPE ? 1 : 0) + (kind !== KIND_ANY ? 1 : 0) + (personId ? 1 : 0) + tags.length;
   const period = from == null && to == null ? 'This month' : range === 'custom' ? 'Chosen dates' : RANGE_LABEL[range];
   const rowLabel = filterCount > 0 ? `${period} · ${filterCount} ${filterCount === 1 ? 'filter' : 'filters'}` : period;
   const clearFilters = useCallback(() => {
-    setFilter('personal'); setQuery(''); setKind(KIND_ANY); setRange('any');
+    setFilter(DEFAULT_SCOPE); setQuery(''); setKind(KIND_ANY); setRange('any');
     setFrom(null); setTo(null); setPersonId(null); setTags([]);
   }, []);
   const openReports = () => {

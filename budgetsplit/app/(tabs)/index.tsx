@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { settings } from '../../src/lib/settings';
 import { nextLevel, levelOfferDismissed, dismissLevelOffer, applyLevel, LEVEL_OPTIONS, LEVEL_OFFER_AFTER } from '../../src/lib/levels';
 import { asIntent } from '../../src/lib/personaDefaults';
@@ -37,7 +37,7 @@ import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { HeaderIconButton } from '../../src/components/ui/HeaderIconButton';
 import { MemberAvatar } from '../../src/components/finance/MemberAvatar';
 import { greeting, homeHealthColor } from '../../src/components/finance/home/helpers';
-import { loadHomeData, loadCatchUp, PREV_LABEL, PERIOD_LABEL, TXN_COUNT_PERIOD_LABEL, TARGET_FOR_TAB, type TabKey } from '../../src/lib/homeData';
+import { loadHomeBase, loadHomePeriod, composeHome, loadCatchUp, PREV_LABEL, PERIOD_LABEL, TXN_COUNT_PERIOD_LABEL, TARGET_FOR_TAB, type TabKey, type HomePeriod } from '../../src/lib/homeData';
 import { Card } from '../../src/components/ui/Card';
 import { SheetModal } from '../../src/components/ui/SheetModal';
 import { ListRow } from '../../src/components/ui/ListRow';
@@ -75,10 +75,23 @@ export default function DashboardScreen() {
   // Data load. Groups come from the store (StoreHydrator hydrates them at the root
   // and re-hydrates on every cross-screen write), so Home no longer queries/sets
   // them here. useScreenData owns loading/error/refreshing + focus/cross-screen refetch.
-  const { data, loading, error, refreshing, onRefresh, reload } = useScreenData(
-    (db) => loadHomeData(db, groups, tab),
-    [groups, tab],
+  // Two loads: what every pill shares, and what one pill changes. A pill tap re-reads only the
+  // second (it re-read everything, ~100 queries, and felt slow), and a period already seen shows
+  // at once from `seen` while its fresh copy loads.
+  const base = useScreenData((db) => loadHomeBase(db), [groups]);
+  const period = useScreenData((db) => loadHomePeriod(db, groups, tab), [groups, tab]);
+  const seen = useRef<Partial<Record<TabKey, HomePeriod>>>({});
+  if (period.data) seen.current[period.data.tab] = period.data;
+  const slice = period.data?.tab === tab ? period.data : seen.current[tab] ?? period.data;
+  const data = useMemo(
+    () => (base.data !== undefined && slice ? composeHome(base.data, slice) : undefined),
+    [base.data, slice],
   );
+  const loading = base.loading || period.loading;
+  const error = base.error || period.error;
+  const refreshing = base.refreshing || period.refreshing;
+  const onRefresh = useCallback(() => { base.onRefresh(); period.onRefresh(); }, [base.onRefresh, period.onRefresh]);
+  const reload = useCallback(async () => { await Promise.all([base.reload(), period.reload()]); }, [base.reload, period.reload]);
 
   const meInfo = data?.meInfo ?? null;
   const spending = data?.spending ?? 0;
@@ -167,7 +180,6 @@ export default function DashboardScreen() {
                   : setShowInbox(true)}
               />
             )}
-            <HeaderIconButton icon="search" label="Search" onPress={() => router.push('/search')} />
             <HeaderIconButton icon="bell" badge={upcoming.length} label="Upcoming" onPress={() => router.push('/upcoming')} />
             <MemberAvatar
               name={meInfo?.name ?? ''}

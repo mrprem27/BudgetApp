@@ -33,9 +33,9 @@ const R = (rupees: number) => Math.round(rupees * 100);
 /** A deterministic 0.5–1.5 wobble, so a persona looks lived-in without being random. */
 const wobble = (i: number) => 0.5 + ((i * 9301 + 49297) % 233280) / 233280;
 
-/** A day `back` days ago, at `hour`. */
+/** A day `back` days ago, at `hour`; today's is never later than now (loaded in the morning it was). */
 const daysAgo = (back: number, hour = 12) => {
-  const d = new Date(Date.now() - back * DAY); d.setHours(hour, 0, 0, 0); return d.getTime();
+  const d = new Date(Date.now() - back * DAY); d.setHours(hour, 0, 0, 0); return Math.min(d.getTime(), Date.now());
 };
 
 type Ctx = { db: SQLite.SQLiteDatabase; meId: string; personalId: string };
@@ -96,8 +96,9 @@ async function student(db: SQLite.SQLiteDatabase): Promise<string> {
   // The allowance lands on the 1st; logged for the past three months, the rule carries it on.
   for (let m = 1; m <= 3; m++) {
     const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - m + 1); d.setHours(10, 0, 0, 0);
-    if (d.getTime() <= Date.now()) {
-      await insertTxn(db, { groupId: c.personalId, kind: 'income', entryMode: 'quick', date: d.getTime(), category: 'Other Income', note: 'From home', payments: [{ personId: c.meId, amount: R(9_000) }], shares: [] });
+    {
+      // This month's lands today when loaded on the 1st before 10:00, not in the future.
+      await insertTxn(db, { groupId: c.personalId, kind: 'income', entryMode: 'quick', date: Math.min(d.getTime(), Date.now()), category: 'Other Income', note: 'From home', payments: [{ personId: c.meId, amount: R(9_000) }], shares: [] });
     }
   }
   const next = new Date(); next.setDate(1); next.setMonth(next.getMonth() + 1); next.setHours(10, 0, 0, 0);

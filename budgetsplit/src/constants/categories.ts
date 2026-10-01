@@ -176,6 +176,25 @@ export function categorySection(name: string): string {
   return SECTION_OF[name] ?? 'Other';
 }
 
+const SECTION_ICON: Record<string, FeatherName> = {
+  'Home & Living': 'home',
+  Food: 'coffee',
+  Transport: 'navigation',
+  'Bills & Utilities': 'zap',
+  Lifestyle: 'shopping-bag',
+  Health: 'heart',
+  'Money & Growth': 'trending-up',
+  Earnings: 'briefcase',
+  Investments: 'trending-up',
+  Transfers: 'repeat',
+  Other: 'grid',
+};
+
+/** A section's icon, the same on Categories, the budget editor and the Budget tab. */
+export function sectionIcon(title: string): FeatherName {
+  return SECTION_ICON[title] ?? 'grid';
+}
+
 /** Ordered list of section titles for grouping UIs. */
 export const SECTION_ORDER = CATEGORY_SECTIONS.map(s => s.title);
 

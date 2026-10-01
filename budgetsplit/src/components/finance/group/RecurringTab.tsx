@@ -1,17 +1,17 @@
 import { useMemo } from 'react';
-import { StyleSheet } from 'react-native';
+import { ScrollView, StyleSheet } from 'react-native';
+import { useRouter } from 'expo-router';
 import { space, layout } from '../../tokens';
 import { useContentInset } from '../../../hooks/useContentInset';
 import { AppRefreshControl } from '../../ui/AppRefreshControl';
-import { KeyboardForm } from '../../ui/KeyboardForm';
-import { RecurringBrowser, NoRecurring } from '../recurring/RecurringBrowser';
+import { RecurringInventory, NoRecurring } from '../recurring/RecurringInventory';
 import { toRecurringSubs } from '../../../lib/recurringData';
 import type { TxnWithSplits } from '../../../db/queries/transactions';
 
 type Props = {
   refreshing: boolean;
   onRefresh: () => void;
-  /** Every rule in this group, stopped ones included — this tab splits them. */
+  /** Every rule in this group; stopped ones are left to Money's Recurring page. */
   rules: TxnWithSplits[];
   /** Skipped occurrence dates per rule — keeps "next charge" honest. */
   skips?: Map<string, Set<number>>;
@@ -30,9 +30,11 @@ type Props = {
  * way to do the same thing. The empty state keeps its button — an empty screen needs a way out
  * (AGENTS §2).
  *
- * Search, sort and the Stopped view come from `RecurringBrowser`, shared with Money's screen.
+ * The plain view (2026-10-01): what is active or paused here, and a link to Money's Recurring
+ * page, where search, sorting and stopped rules live.
  */
 export function RecurringTab({ rules, skips, meId, onAdd, onOpenRule, refreshing, onRefresh }: Props) {
+  const router = useRouter();
   const bottomPad = useContentInset({ fab: true });
   const now = Date.now();
   const subs = useMemo(
@@ -40,19 +42,15 @@ export function RecurringTab({ rules, skips, meId, onAdd, onOpenRule, refreshing
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [rules, skips, meId],
   );
-  const stopped = useMemo(
-    () => toRecurringSubs(rules.filter(r => r.recur_state === 'ended'), skips, meId, now),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [rules, skips, meId],
-  );
   return (
-    // `KeyboardForm`: the list has a search box above its results (AGENTS §6b).
-    <KeyboardForm
+    <ScrollView
       contentContainerStyle={[styles.listContent, { paddingBottom: bottomPad }]}
       refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
     >
-      <RecurringBrowser active={subs} stopped={stopped} onOpen={onOpenRule} empty={<NoRecurring onAdd={onAdd} />} />
-    </KeyboardForm>
+      {subs.length === 0
+        ? <NoRecurring onAdd={onAdd} />
+        : <RecurringInventory subs={subs} onOpen={onOpenRule} onSeeAll={() => router.push('/plan/recurring')} />}
+    </ScrollView>
   );
 }
 

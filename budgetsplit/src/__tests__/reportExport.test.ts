@@ -11,7 +11,7 @@ jest.mock('../db/queries/persons', () => ({
 }));
 
 import { getTransactionsInRange } from '../db/queries/transactions';
-import { buildReportCsv, buildReportHtml, type PdfSummary } from '../lib/reportExport';
+import { buildReportCsv, buildReportHtml, spendBuckets, type PdfSummary } from '../lib/reportExport';
 import { splitCsvLine, GROUP_EXPORT_HEADER, isBudgetSplitExport, parseBudgetSplitExport } from '../lib/importParse';
 
 /** Header is Date,Group,Category,Kind,Direction,Amount,Note. */
@@ -197,5 +197,89 @@ describe('buildReportHtml', () => {
   it('handles an empty summaries list', async () => {
     const html = await buildReportHtml(db, [], MONTH);
     expect(html).toContain('No transactions this month.');
+  });
+  it('prints my share in every row, and the whole bill beside it only when they differ (U-19)', async () => {
+    mockRange.mockResolvedValue([
+      txn({ id: 'a', note: 'dinner', payments: [{ personId: 'p2', amount: 120000 }], shares: [{ personId: 'p1', amount: 40000 }, { personId: 'p2', amount: 80000 }] }),
+      txn({ id: 'b', note: 'solo' }),
+    ]);
+    const html = await buildReportHtml(db, [summary('Flat', 0, 65000)], MONTH);
+    const row = (note: string) => html.split('<tr>').find(r => r.includes(note))!;
+    // The split dinner: ₹1,200 as the whole bill, ₹400 as mine. It printed ₹1,200 under a ₹650 total.
+    expect(row('dinner')).toContain('₹1,200');
+    expect(row('dinner')).toContain('−₹400');
+    // Mine in full: the whole-bill cell stays empty.
+    expect(row('solo')).toContain('−₹250');
+    expect(row('solo').match(/₹/g)).toHaveLength(1);
+    expect(html).toContain('every amount is your share');
+  });
+
+  it('keeps transfers out of the spending table and names them as not counted', async () => {
+    mockRange.mockResolvedValue([
+      txn({ id: 'a' }),
+      txn({ id: 's', kind: 'settlement', category: 'Repayment', note: 'paid Asha', payments: [{ personId: 'p1', amount: 50000 }], shares: [{ personId: 'p2', amount: 50000 }] }),
+      txn({ id: 'o', kind: 'settlement', category: 'Repayment', note: 'theirs', payments: [{ personId: 'p2', amount: 70000 }], shares: [{ personId: 'p3', amount: 70000 }] }),
+    ]);
+    const html = await buildReportHtml(db, [summary('Flat', 0, 25000)], MONTH);
+    const [spending, transfers] = html.split('Transfers, not counted above');
+    expect(transfers).toContain('paid Asha');
+    expect(spending).not.toContain('paid Asha');
+    // Moved is what I moved (₹500), not two friends settling between themselves.
+    expect(html).toMatch(/Moved<\/span><span class="box-value"[^>]*>₹500\.00</);
+  });
+
+  it('leads with the categories, by my share', async () => {
+    mockRange.mockResolvedValue([txn({ id: 'a', category: 'Food' }), txn({ id: 'b', category: 'Fuel', payments: [{ personId: 'p1', amount: 75000 }], shares: [{ personId: 'p1', amount: 75000 }] })]);
+    const html = await buildReportHtml(db, [summary('Me', 0, 100000)], MONTH);
+    const where = html.slice(html.indexOf('Where it went'), html.indexOf('<h2>'));
+    expect(where.indexOf('Fuel')).toBeLessThan(where.indexOf('Food'));
+    expect(where).toContain('75%');
+  });
+
+  it('names a custom period correctly when it is empty', async () => {
+    mockRange.mockResolvedValue([]);
+    const html = await buildReportHtml(db, [summary('Trip', 0, 0)], MONTH, { from: new Date(2026, 0, 1).getTime(), to: new Date(2026, 0, 9).getTime() } as never);
+    expect(html).toContain('No transactions in this period.');
+  });
+  it('draws the category ring and the spend-over-time bars as inline SVG (U-19)', async () => {
+    mockRange.mockResolvedValue([
+      txn({ id: 'a', category: 'Food' }),
+      txn({ id: 'b', category: 'Fuel', date: new Date(2026, 0, 20, 12).getTime() }),
+    ]);
+    const html = await buildReportHtml(db, [summary('Me', 0, 50000)], MONTH);
+    expect(html.match(/<svg/g)).toHaveLength(2);
+    // Two slices, each an arc with real coordinates.
+    expect(html.match(/<path d="M [\d.]+ [\d.]+ A 56 56/g)).toHaveLength(2);
+    expect(html).not.toMatch(/NaN/);
+    // January: a bar for the 10th and the 20th, nothing external to load.
+    expect(html.match(/<rect /g)).toHaveLength(2);
+    expect(html).not.toMatch(/<script|src=["']http/i);
+  });
+
+  it('one category is a whole ring, and no spending draws no charts', async () => {
+    mockRange.mockResolvedValue([txn()]);
+    const one = await buildReportHtml(db, [summary('Me', 0, 25000)], MONTH);
+    expect(one).toMatch(/<circle [^>]*stroke-width="20"/);
+    expect(one).not.toMatch(/NaN/);
+    mockRange.mockResolvedValue([txn({ kind: 'income' })]);
+    expect(await buildReportHtml(db, [summary('Me', 25000, 0)], MONTH)).not.toMatch(/<svg/);
+  });
+});
+
+describe('spendBuckets', () => {
+  const at = (m: number, d: number) => new Date(2026, m, d, 12).getTime();
+  it('is one bucket per day for a month, empty days included', () => {
+    const b = spendBuckets([{ date: at(0, 3), paise: 100 }, { date: at(0, 3), paise: 50 }, { date: at(1, 1), paise: 999 }], new Date(2026, 0, 1).getTime(), new Date(2026, 0, 31, 23, 59).getTime());
+    expect(b).toHaveLength(31);
+    expect(b[2]).toEqual({ label: '3', paise: 150 });
+    expect(b.reduce((t, x) => t + x.paise, 0)).toBe(150);
+  });
+  it('is one bucket per month for a longer period', () => {
+    const b = spendBuckets([{ date: at(0, 3), paise: 100 }, { date: at(2, 9), paise: 40 }], new Date(2026, 0, 1).getTime(), new Date(2026, 2, 31).getTime());
+    expect(b.map(x => x.label)).toEqual(['Jan', 'Feb', 'Mar']);
+    expect(b.map(x => x.paise)).toEqual([100, 0, 40]);
+  });
+  it('is empty for a backwards period', () => {
+    expect(spendBuckets([], 10, 5)).toEqual([]);
   });
 });

@@ -171,7 +171,7 @@ Custom bottom tab bar: **Home · Groups · [FAB] · Money · Insights**.
 ```
 Tab bar:  Home · Groups · (＋FAB) · Money · Insights      (Settings: Home's avatar)
 
-Home ──► Search, History, Review, Reminders, Settings, Insights, Category,
+Home ──► History, Review, Reminders, Settings, Insights, Category,
          Group budget, Groups, Friends, Add(expense/transfer)
 Groups ──► Personal (pinned), Group detail, Add(transfer)
 Personal ──► Txn (source), Budget editor, group Recurring
@@ -193,7 +193,7 @@ right-slide push.
 
 ## 3. Screen index (S-XX)
 
-Absorbed from `AUDIT.md` §2 so the IDs cited elsewhere resolve here. 46 route files under
+Absorbed from `AUDIT.md` §2 so the IDs cited elsewhere resolve here. 45 route files under
 `app/`; expo-router registers each implicitly by filename.
 
 ### 3.1 Shell / layout (not user-visible screens)
@@ -207,7 +207,7 @@ Absorbed from `AUDIT.md` §2 so the IDs cited elsewhere resolve here. 46 route f
 
 | ID | Screen | File | Purpose | Exits |
 |---|---|---|---|---|
-| S-03 | **Home / Dashboard** | `app/(tabs)/index.tsx` | Period-scoped spend hero + category ranks + owe/owed + forecast + streak. Dedicated first-run empty state. | `/review` `/search` `/upcoming` `/settings` `/history` `/add/quick` `/group/{personal}/budget` `/groups` `/friends` `/category/{name}` `/insights` |
+| S-03 | **Home / Dashboard** | `app/(tabs)/index.tsx` | Period-scoped spend hero + category ranks + owe/owed + forecast + streak. Dedicated first-run empty state. | `/review` `/upcoming` `/settings` `/history` `/add/quick` `/group/{personal}/budget` `/groups` `/friends` `/category/{name}` `/insights` |
 | S-04 | **Groups** | `app/(tabs)/groups.tsx` | Groups list (Personal pinned first) with budget health + my net; swipe-left archive/restore; People balance chips. | `/group/{id}` (or `/personal`) · `/add/quick?kind=transfer&to=` |
 | S-05 | **Plan** | `app/(tabs)/savings.tsx` | Available-Money card (+ net worth, credit headroom), overspend **consent** prompt, drag-rankable goals, upcoming bills, forecast. | `/insights` `/plan/recurring` `/afford` · `/savings/{id}` |
 | S-06 | **Settings** | `app/(system)/settings/index.tsx` | Profile + **Account** (only with a server configured) / **Getting paid** (Your UPI ID · Show my UPI QR, behind `upiSettle`) / Manage / Preferences / Security / Your data / Help / About — one colour per section. Opened from Home's avatar (not a tab). Reports and Export all moved to Insights. Version ×7 unlocks S-27. | `/settings/account` `/friends` `/categories` `/group/{personal}/budget` `/groups` `/features` `/settings/notifications` `/settings/backup` `/import` `/help` `/history` `/storage` |
@@ -253,7 +253,6 @@ Absorbed from `AUDIT.md` §2 so the IDs cited elsewhere resolve here. 46 route f
 | S-20 | **Reports** | `app/(money)/reports.tsx` | Factual monthly history: donut, trend bars, per-group budget summaries, year stats, CSV + PDF export. Month selector cannot advance past the current month. |
 | S-21 | **Report transactions** | `app/(money)/report-transactions.tsx` | Month-scoped transaction list with category / type / group / sort filters — the drill-down from a Reports category. |
 | S-22 | **Insights** | `app/(tabs)/insights.tsx` | The single narrative-insight home: an always-present headline (spend vs budget, pace, month-end verdict) over collapsible sections — Needs attention · Month-end forecast · Changed vs last month · What if I cut back? · Ways to save. |
-| S-23 | **Search** | `app/(ledger)/search.tsx` | Free-text search over 3 years, month-sectioned, 6 rows/section with a "more" expander. 150 ms debounce. Deliberately **no** pull-to-refresh. |
 
 ### 3.8 Settings sub-screens & utilities
 
@@ -264,7 +263,7 @@ Absorbed from `AUDIT.md` §2 so the IDs cited elsewhere resolve here. 46 route f
 | S-45 | **Who can add to my ledger** | `app/(people)/trust.tsx` | The one place that answers it. Everyone who could write to your numbers, in three groups — **counts straight away**, **waits for you**, and **cannot reach you yet** (no linked account, so the setting is stored and inert; listing them as "waiting" would reassure in the wrong direction). A per-group exception is named on the row rather than hidden behind a tap. Tapping a row opens the same `TrustSheet` the person screen uses, so the two cannot drift. Carries the standing note that trusting somebody is not handing over the keys: even a trusted person is asked before anything claiming YOUR money moved. Reached from Settings → Security and from the `/approvals` empty state. |
 | S-46 | **One asset** | `app/(money)/asset/[id].tsx` | The movements behind an asset's balance — hero (icon, balance, kind, movement count) then date-sectioned `TxnCell`+`TransactionRow` rows, the same shape as every other ledger. The exit surface `OV-30` was missing: the register showed a balance and `deleteAsset`'s refusal check was the app's only other reader of `asset_id`, so the rows that built the figure were unreachable. Rows read as "Invested · Gold" because `lib/settlementView.ts` decides that once, and the asset name is passed in — no loader joins `asset`, so it otherwise survives only as a default note a user-written note erases. **No CTA on the empty state**: the register owns both halves of a movement and is one tap back, so a second door to a write this screen does not perform would be a duplicate. Reached from Plan → Assets. |
 | S-26 | **People / Friends** | `app/(people)/friends.tsx` | A ledger (`U-13`): Owed to you − You owe = Net, then open balances largest first, then All square. Rows carry no buttons; tap → `/person/{id}` (Settle up, Remind). Long-press rename, avatar photo, search. |
-| S-26a | **Person detail** | `app/(people)/person/[id].tsx` | Everything shared with one person, across every group: the net (with the per-group breakdown behind it, from `computeTransferScopes`), how often they settle up, and every transaction you are **both** on — payer or sharer, expenses, settlements and income alike. Settle from here. Reached from S-26 and from the Groups-tab balance chips; personal-group rows are excluded, since a personal settlement is deliberately one-sided. |
+| S-26a | **Person detail** | `app/(people)/person/[id].tsx` | Everything shared with one person, across every group: the net (with the per-group breakdown behind it, from `computeTransferScopes`), how often they settle up, and every transaction you are **both** on — payer or sharer, expenses, settlements and income alike. Layout (`U-79`): a balance card (avatar, direction, amount, notes, **Settle up** + **Remind** side by side), then one card of rows (their entries, per-group exceptions, write it off, same person as…), then the ledger; the header's Edit opens `PersonNameSheet`. Reached from S-26 and from the Groups-tab balance chips; personal-group rows are excluded, since a personal settlement is deliberately one-sided. |
 | S-27 | **Storage (dev)** | `app/(system)/storage.tsx` | Hidden QA screen: attachment stats, clear attachments, **load demo data, erase all data**. Settings → version ×7. Kept separate from S-27a precisely so those two destructive actions are never one tap from Settings. |
 | S-48 | **Accounts** | `app/(money)/accounts.tsx` | Every account by kind (Bank, Cash, Wallet, Credit card), each with what it holds today; a card shows what is owed, its limit and due day. Tap one to rename it or correct its balance (an account with history gets a dated Balance adjustment, `U-64`); **Add account** at the end; **Not in use** lists archived ones, tap to use again. The four defaults cannot be archived. Reached from Money's money card: tap Bank, Cash, Wallet or Card owed (`U-68`). |
 | S-47 | **Badges** | `app/(system)/badges.tsx` | Every badge in three groups: **This month** (resets on the 1st: Every week, Kept more than spent, On budget), **Milestones** (levels: Logging streak 7/30/100/365, Record keeper 25/100/500/1,000, Good months of the year 3/6/9/12 restarting each January, Goal getter 1/3/10) and **Right now** (re-checked daily: Covered to payday, Steady income, All square, Building wealth). The board at the top is the one on Settings; each row has an ⓘ explaining it, a status line and a progress bar. Grey until earned, a warmer colour per level (`U-65`). |
@@ -305,7 +304,7 @@ link in an email or a message.
 - **Full:** hero + period pills + breakdown + balances + forecast + coming-up + streak.
 
 ### Layout (top → bottom) & actions
-1. **Header** — greeting + first name, then the icon row: **inbox badge** *(only when `reviewCount > 0`, showing the count or "9+")* → `/review`; 🔍 → `/search`; 🔔 *(labelled with the upcoming count)* → `/upcoming`; avatar → `/settings`.
+1. **Header** — greeting + first name, then the icon row: **inbox badge** *(only when `reviewCount > 0`, showing the count or "9+")* → `/review`; 🔔 *(labelled with the upcoming count)* → `/upcoming`; avatar → `/settings`.
 2. **Catch-up banner** (conditional) — amber, when the app was closed 30+ days with active recurring rules. **Review entries** → `/history` (the only route to the audit log from Home); **Dismiss**.
 3. **HeroCard** — XL period spend (SpaceMono); pace bar + "X% · ₹Y left" **only if a budget is set** (else number + delta vs previous period); SVG health ring *(flag `healthScore` — `index.tsx:80` nulls the score when off, and `HeroCard` hides the ring on a null score)* → **HealthSheet** *(sheet)*.
 4. 🔘 **TabPills** — `Month · Today · Year` (re-runs the data load for that period).
@@ -382,7 +381,7 @@ Members**. A personal id never renders here — it `router.replace`s to `/person
 3. **Balance card** (`GroupBalanceCard`) — when your net ≠ 0: "YOU OWE / OWED TO YOU" + amount + counterpart name + **Settle up** → `/add/quick?kind=transfer&to={primaryPerson}`. When net **= 0** it renders an explicit **"All settled up"** card (check-circle, `colors.settle`) rather than nothing.
 4. 🔘 **Tab pills** (see set above).
 
-**Tab — Expenses:** **FilterBar** (collapsible 🔍 "Search this group…" + 🔘 kind + 📅 date range + 👤 person). All three ledgers — this, `SC-14` and `SC-23` — run the same `lib/txnFilter.ts` predicate, so a word that finds a row on one finds it on all (`OV-34`). Person is the shared-ledger question the screen previously could not answer → **SectionList** of **TransactionRow** in **TxnCell**, grouped by date ("Today" / "Yesterday" / "14 Jun" via `dateSectionLabel`); each date's rows share one card. Row tap → `/txn/{id}` (or → the recurring manager for a materialized occurrence). Swipe/delete: non-recurring → confirm + soft-delete + undo toast; recurring → 3-way Alert (rule only / rule + logged occurrences / cancel). Settlement rows render **both members' avatars**. **EmptyState** when none. **FAB** → `/add/quick?groupId={id}&kind=expense`.
+**Tab — Expenses:** **FilterBar** (collapsible 🔍 "Search this group…" + 🔘 kind + 📅 date range + 👤 person). Both ledgers — this and `SC-14` — run the same `lib/txnFilter.ts` predicate, so a word that finds a row on one finds it on all (`OV-34`). Person is the shared-ledger question the screen previously could not answer → **SectionList** of **TransactionRow** in **TxnCell**, grouped by date ("Today" / "Yesterday" / "14 Jun" via `dateSectionLabel`); each date's rows share one card. Row tap → `/txn/{id}` (or → the recurring manager for a materialized occurrence). Swipe/delete: non-recurring → confirm + soft-delete + undo toast; recurring → 3-way Alert (rule only / rule + logged occurrences / cancel). Settlement rows render **both members' avatars**. **EmptyState** when none. **FAB** → `/add/quick?groupId={id}&kind=expense`.
 
 **Tab — Budget:** the shared `BudgetList` (`components/finance/budget/BudgetList.tsx`), which Personal's Budget tab renders too. Overview `Card`: "Your spend" + **Edit** chip → `/group/{id}/budget`, spend / utilisation, the caption from `lib/budgetCopy`, pooled yearly/one-time named separately, **BudgetBar**, then three count chips — **N over · N near limit · N on track** — which *are* the filter (tap to filter, tap again to clear; a zero count renders as a plain chip with no `onPress`). Below: `BudgetCategoryRow`s grouped by section. An admin gets a **Re-plan the rest of this month** chip on an overspent row (`V2-07`). Counts come from the rows the list renders, never from a parallel aggregate — the tab used to take them from `BudgetAnalytics` while filtering on `health` from a different query, which folds `Others` differently. "Who paid what" moved to the Members tab: it is a settlement concern and the people are already there.
 
@@ -426,7 +425,7 @@ Body order, top to bottom:
 9. **Remainder warning** when payers or shares don't add up.
 10. **DetailChips** under an "Other details" header — one named chip each for `Note`, `Receipt`, **Tags**, **Time**, `Location`, pay method, **Split by items** and `Repeat`. **Every chip shows its own glyph in both states** (`align-left`, `paperclip`, `map-pin`, `credit-card`/`download`, `list`, `repeat`); unset reads muted with the field name, set shows the value tinted with a ✕ to clear. The first version used a shared `plus` glyph while unset, so four different chips looked identical exactly when the user needed to tell them apart. Each opens a focused sheet (`NoteSheet`, `PayMethodSheet`, `RecurringSheet`) or acts directly (receipt → OS picker, location → capture, split-by-items → `/add/itemized`).
 
-**Tags** *(`txn.tags`)* — one chip showing the count (`Tags` → `2 tags`), opening a multi-select `TagSheet` with create-as-you-type. Deliberately **orthogonal to categories**: one category, any number of tags. The vocabulary comes from `getTagsByFrequency`, derived from the rows that use it — no tag table, so nothing to keep in sync and no orphans. `lib/tags.ts` owns parse/serialize; `parseTags` is **total** (never throws, never null) because one malformed row must not break a whole list, and empty serializes to `NULL` rather than `"[]"` so "no tags" stays indistinguishable from every pre-tags row. Searchable from `/search`'s text field (typing a trip name finds it); shown read-only on `txn/[id]`. **Not** filterable in Review — `pending_txn` has no tags column.
+**Tags** *(`txn.tags`)* — one chip showing the count (`Tags` → `2 tags`), opening a multi-select `TagSheet` with create-as-you-type. Deliberately **orthogonal to categories**: one category, any number of tags. The vocabulary comes from `getTagsByFrequency`, derived from the rows that use it — no tag table, so nothing to keep in sync and no orphans. `lib/tags.ts` owns parse/serialize; `parseTags` is **total** (never throws, never null) because one malformed row must not break a whole list, and empty serializes to `NULL` rather than `"[]"` so "no tags" stays indistinguishable from every pre-tags row. Searchable from Personal's search field (typing a trip name finds it); shown read-only on `txn/[id]`. **Not** filterable in Review — `pending_txn` has no tags column.
 
 **Time-of-day** — a chip showing `h:mm a`, opening the existing `TimePickerSheet`. `txn.date` was always epoch ms and Review always rendered the time; Add was the only place that discarded it. Always filled (the time is real whether or not it was chosen), and setting it preserves the calendar date while zeroing seconds.
 
@@ -1387,7 +1386,6 @@ above it (`sectionTop(isFirst)`) — Account when configured, else Getting paid,
 | **Feature management** | `features.tsx` | "Always on" pillars (no toggle) + module switches in four sections. Two rows are **not** feature flags and behave differently: **Location Tagging** asks OS permission and refuses if denied (§17), and **Cloud Receipt Scanning** picks the OCR provider (§7.4). Turning **splitting off** first names how many unsettled balances and what amount would disappear (nothing is deleted); turning it on is silent. | No loading/error state — flags are already in context |
 | **Help** | `help.tsx` | Static FAQ accordion, ordered by screen flow, including **Settling Up & Paying** (UPI hand-off, which apps arrive pre-filled, request-QR). No data access. | None (static) |
 | **Audit log** | `history.tsx` | Date-grouped change log with coloured dots, EDIT/DEL badges, "Load older" (30/page). Filters by `?groupId=`. | Error + retry · `EmptyState` "Nothing logged yet" · pull-to-refresh |
-| **Search** | `search.tsx` | `Input` + 🔘 kind & source filters → `SectionList` of `TransactionRow` (→ `/txn/{id}`). Chip row has a gradient right-edge fade as a scroll affordance. | Error + retry · one `EmptyState` that switches copy between "Search your transactions" and "No matches" · **deliberately no pull-to-refresh** (the list *is* the query result) |
 | **Storage** | `storage.tsx` | Receipt-photo disk usage + "Delete all attachments"; **TESTING:** Load demo data / Erase all data (see §24). | Error + retry |
 | **Notifications** | `settings/notifications.tsx` | Reminder prefs + permission handling + test notification (§18). | Error + retry ("Couldn't load reminder settings") · no pull-to-refresh (it's a form) |
 | **Backup & restore** | `settings/backup.tsx` | §13.3. | `ActivityIndicator` per row while busy; every failure is an Alert |
@@ -1905,7 +1903,7 @@ do to sealed data (`DQ-93`). It never sees a receipt photo or a backup passphras
 
 **It runs free.** Workers (100k req/day), D1 (5 GB) and R2 (10 GB, once wired) are all on Cloudflare's
 free plan. The one exception is Cloudflare's *own* Email Sending, which is Workers Paid
-($5/mo) and needs a domain you own — so `server/api/mailer.ts` defaults to an HTTP provider
+($5/mo) and needs a domain you own — so `server/api/utils/mailer.ts` defaults to an HTTP provider
 with a free tier and single-sender verification, and falls back to the Cloudflare binding
 when it is configured. Which one is live is reported by `GET /health`.
 Leave that env var unset (the default) and none of this code path is reachable: no Account row,
@@ -1959,7 +1957,6 @@ vs. surfaced").
 | `/reports` | `Skeleton` behind a **450 ms floor** so it can't flash | `ErrorState` + retry | "Nothing to report yet" | ✅ |
 | `/review` | 4 × `SkeletonCard` (150 pt) | `ErrorState` + retry | "Nothing to review" **+** a distinct "No matches" for a filtered-empty set | ✅ |
 | `/savings/[id]` | `Skeleton` + `SkeletonCard` | `ErrorState` + retry | "Goal not found" **+** "No contributions yet" | ✅ |
-| `/search` | none (150 ms debounce) | `ErrorState` + retry | one `EmptyState`, copy switches "Search your transactions" ↔ "No matches" | ✖ **deliberate** — the list *is* the query |
 | `/settings/backup` | per-row `ActivityIndicator` | Alert per failure, typed (§13.3) | n/a | ✖ form |
 | `/settings/notifications` | none | `ErrorState` "Couldn't load reminder settings" | n/a | ✖ form |
 | `/storage` | none | `ErrorState` + retry | n/a | ✖ |
@@ -2047,7 +2044,7 @@ Every sheet routes through `ui/SheetModal` (an RN `<Modal transparent>` wrapping
 | "How was it paid?" — `PayMethodSheet` | `finance/add/PayMethodSheet.tsx` | Quick Add pay-method chip |
 | "Repeat this" — `RecurringSheet` | `finance/add/RecurringSheet.tsx` | Quick Add repeat chip |
 | "Note" — `NoteSheet` | `finance/add/NoteSheet.tsx` | Quick Add note chip |
-| "Add a friend" / "Rename" / "Your name" — `PersonNameSheet` | `finance/PersonNameSheet.tsx` | Friends (add + rename), group Members (rename) |
+| "Add a friend" / "Edit details" / "Rename" / "Your name" — `PersonNameSheet` | `finance/PersonNameSheet.tsx` | Friends (add + rename), group Members (rename) |
 | "Who paid?" — `PayersSheet` | `finance/add/PayersSheet.tsx` | Quick Add payers row |
 | "Split" — `SplitSheet` | `finance/add/SplitSheet.tsx` | Quick Add split row |
 | "Who paid?" / "Who received?" — `TransferSlotSheet` | `finance/add/TransferSlotSheet.tsx` | Quick Add transfer from/to slots |
@@ -2134,7 +2131,7 @@ widgets; `system/` = onboarding, gates, privacy. `ui/` never imports from `finan
 | `ErrorState` | Error icon + message + Retry. |
 | `FAB` | Floating action button — `aboveTabBar` (tab-bar centered) or bottom-right; optional action-menu mode. |
 | `FadeIn` | Staggered fade-in wrapper for list/section mounts. |
-| `FilterBar` | Search box + chips: kind, date range and person (the shared transaction filters, matched by `lib/txnFilter.ts`) plus screen-specific scope groups. Built on `ui/Chip` — it used to hand-roll its own pills, which made the shared component one of the four variants it existed to prevent (`OV-34`). Collapsible mode. Group Expenses, `SC-14`, `SC-23`. |
+| `FilterBar` | Search box + chips: kind, date range and person (the shared transaction filters, matched by `lib/txnFilter.ts`) plus screen-specific scope groups. Built on `ui/Chip` — it used to hand-roll its own pills, which made the shared component one of the four variants it existed to prevent (`OV-34`). Collapsible mode. Group Expenses, `SC-14`. |
 | `IconCircle` | The canonical icon-in-a-coloured-dot (replaced ~40 hand-rolled copies). |
 | `Input` | Design-system text input (bgInput, focus border, amount mode, secure mode for passphrases). |
 | `ModalHeader` | Header for modal sheets (title + close). Add flows. |

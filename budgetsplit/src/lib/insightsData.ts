@@ -11,7 +11,7 @@ import { expandUpcoming } from './upcoming';
 import { getAllRecurringRules, getSkipsMap } from '../db/queries/recurring';
 import { getMyGlobalBudgetSummary } from './budget';
 import { monthEndFromEngine, projectedAtDay, FORECAST_MIN_DAYS } from './forecast';
-import { getSafeToSpendV2 } from '../db/queries/spendPower';
+import { safeToSpendOf } from '../db/queries/spendPower';
 import { getFinanceSnapshot } from '../db/queries/engineSnapshot';
 import { explain } from './engine/explain';
 
@@ -89,7 +89,9 @@ export async function loadInsightsData(
     const recurSkips = await getSkipsMap(db, recurRules.map(r => r.id));
     const committedRemaining = expandUpcoming(recurRules, meId, now.getTime(), monthEndMs, recurSkips)
       .reduce((s, o) => s + o.amount, 0);
-    const [sts, snapshot] = await Promise.all([getSafeToSpendV2(db, now.getTime()), getFinanceSnapshot(db, now.getTime())]);
+    // One snapshot, read once; Safe to spend is worked out from it, not from a second one.
+    const snapshot = await getFinanceSnapshot(db, now.getTime());
+    const sts = safeToSpendOf(snapshot);
     const fc = monthEndFromEngine(monthSpend, dayOfMonth, daysInMonth, sts.dailyRate, committedRemaining);
     /*
      * The money engine's own read of what is coming (`U-58`): the lowest your cash gets before

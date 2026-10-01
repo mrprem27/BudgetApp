@@ -519,14 +519,6 @@ label it (`spent` / `received` / `moved`), or show a two-sided figure. Both
 `report-transactions` and `search` shipped this bug: one dropped settlements from a filter
 labelled "All", the other summed only expenses under the word "total".
 
-**Search is a LEDGER, not an analysis surface.** It contradicted itself for a while, so this
-is written down rather than left to be re-derived: it lists all three kinds including
-settlements, it groups by `date` (when it happened) like every other ledger, and it shows a
-total only when a single kind is selected — on "All" there is deliberately no figure, because
-one across money-in, money-out and money-moved would answer no question. It is the surface
-that finds a transaction, not one that measures a period; the measuring surfaces are Reports
-and Insights, and those are the ones that exclude settlements.
-
 **A kind's categories are its own** (`CATEGORY_KIND`), and the Add screen calls a transfer's
 category its "Reason". If a kind's categories are collected, something must show them back —
 collecting input you never display is the same as not collecting it.
@@ -544,7 +536,6 @@ it's on the exempt list below.
 **Exempt, with the reason** (these load data but must NOT have it):
 | Screen | Why |
 |---|---|
-| `search` | Query-driven. The list *is* the query result; pulling would re-run a stale search. |
 | `afford`, `group/[id]/edit`, `settings/notifications` | Forms. A pull gesture fights the keyboard and there's no feed to refresh. |
 | `txn/[id]` | Detail + actions, not a feed. Refetches on focus already. |
 | `add/*` | Wizards. Never. |
@@ -812,9 +803,9 @@ BudgetApp/
 │   │   ├── (money)/             # reports · insights · budget · afford · categories · assets · accounts · history ·
 │   │   │                        #   upcoming · plan/ · savings/ · recurring/ · category/ · asset/
 │   │   ├── (people)/            # friends · personal · trust · approvals · link · person/ · group/[id]
-│   │   ├── (ledger)/            # review · import · search · txn/[id]
+│   │   ├── (ledger)/            # review · import · txn/[id]
 │   │   └── (system)/            # help · features · storage · auth · settings/
-│   │                            # 46 routes in total. `(group)` folders organise files and are
+│   │                            # 45 routes in total. `(group)` folders organise files and are
 │   │                            # NOT part of the URL — moving a file between them changes no route.
 │   ├── src/
 │   │   ├── components/

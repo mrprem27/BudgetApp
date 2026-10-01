@@ -111,6 +111,7 @@ export type RecurringSort = 'next' | 'newest' | 'amount';
 /**
  * Search and sort a rule list: by name or category, then Next due (the default order: live rules
  * by next charge, paused below), Newest (when the rule was made) or Amount (largest first).
+ * Money's Recurring page only; a Recurring tab is a plain list.
  */
 export function findRecurring(subs: readonly RecurringSub[], query: string, sort: RecurringSort): RecurringSub[] {
   const q = query.trim().toLowerCase();

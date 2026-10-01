@@ -121,7 +121,7 @@ export default function SavingsScreen() {
         right={(
           <>
             {/* One door each (`U-12`): Recurring here, Afford as the card in the body (Overview and Goals, `U-46`). */}
-            {flags.recurring && <HeaderIconButton icon="refresh-cw" color={colors.accent} label="Recurring" onPress={() => router.push('/plan/recurring')} />}
+            {flags.recurring && <HeaderIconButton icon="refresh-cw" color={colors.accent} label="Recurring" showLabel onPress={() => router.push('/plan/recurring')} />}
           </>
         )}
       />

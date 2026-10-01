@@ -173,9 +173,28 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
   // --- Date helpers ------------------------------------------------------
   const today = new Date();
   const todayDate = today.getDate();
-  // A date within the current month, never in the future (so forecast math is sane).
-  const thisMonth = (day: number, hour = 10) => {
-    const d = new Date(); d.setHours(hour, 0, 0, 0); d.setDate(Math.min(day, todayDate)); return d.getTime();
+  /*
+   * Two ways to say "lately", because a demo has to read sensibly on any day of the month:
+   *
+   * - `thisMonth(day)`: that day of THIS month, or `null` when it has not come yet. The personal
+   *   month (rent, groceries, salary) uses it, and an entry with no date is not written. Clamping
+   *   a future day to today, as this did, put the whole month on one day early in the month:
+   *   Today read the same as Month, with rent and three grocery runs on the 1st.
+   * - `recent(day)`: the same day when it has come, otherwise as many days back from today as it
+   *   is ahead. For entries the screens need to exist whatever the date (a group's bills, the
+   *   approvals queue, the import queue); early in the month they sit in the last few weeks.
+   *
+   * Neither is ever after now: loaded before `hour` on the day itself, the entry was in the
+   * future and every month figure read zero.
+   */
+  const notFuture = (ms: number) => Math.min(ms, Date.now());
+  const thisMonth = (day: number, hour = 10): number | null => {
+    if (day > todayDate) return null;
+    const d = new Date(); d.setHours(hour, 0, 0, 0); d.setDate(day); return notFuture(d.getTime());
+  };
+  const recent = (day: number, hour = 10): number => {
+    const d = new Date(); d.setHours(hour, 0, 0, 0); d.setDate(day <= todayDate ? day : todayDate - (day - todayDate));
+    return notFuture(d.getTime());
   };
   // A date `monthsBack` months ago, on `day` (clamped to 28 to avoid overflow).
   const monthsBack = (back: number, day: number, hour = 10) => {
@@ -188,8 +207,8 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
   };
 
   // --- Personal income (logged occurrences) ------------------------------
-  const income = (category: string, rupees: number, date: number, note?: string) =>
-    insertTxn(db, { groupId: personalId, kind: 'income', entryMode: 'quick', date, category, note, payments: [{ personId: meId, amount: R(rupees) }], shares: [{ personId: meId, amount: R(rupees) }] });
+  const income = (category: string, rupees: number, date: number | null, note?: string) =>
+    date == null ? null : insertTxn(db, { groupId: personalId, kind: 'income', entryMode: 'quick', date, category, note, payments: [{ personId: meId, amount: R(rupees) }], shares: [{ personId: meId, amount: R(rupees) }] });
   await income('Salary', 85000, thisMonth(1), 'Monthly salary');
   await income('Salary', 85000, monthsBack(1, 1), 'Monthly salary');
   await income('Salary', 85000, monthsBack(2, 1), 'Monthly salary');
@@ -212,8 +231,8 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
 
   // --- Personal expenses (logged occurrences) ----------------------------
   type Opt = { note?: string; pay?: PayMethod; lat?: number; lng?: number; place?: string; attach?: string };
-  const exp = (category: string, rupees: number, date: number, o: Opt = {}) =>
-    insertTxn(db, { groupId: personalId, kind: 'expense', entryMode: 'quick', date, category, note: o.note, payMethod: o.pay, lat: o.lat, lng: o.lng, placeLabel: o.place, attachmentUri: o.attach, payments: [{ personId: meId, amount: R(rupees) }], shares: [{ personId: meId, amount: R(rupees) }] });
+  const exp = (category: string, rupees: number, date: number | null, o: Opt = {}) =>
+    date == null ? null : insertTxn(db, { groupId: personalId, kind: 'expense', entryMode: 'quick', date, category, note: o.note, payMethod: o.pay, lat: o.lat, lng: o.lng, placeLabel: o.place, attachmentUri: o.attach, payments: [{ personId: meId, amount: R(rupees) }], shares: [{ personId: meId, amount: R(rupees) }] });
 
   // This month — drives forecast, budgets (over/near/under) and shift teaser.
   await exp('Rent', 22000, thisMonth(2), { note: 'Flat rent', pay: PayMethod.Bank });
@@ -233,7 +252,7 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
   // A daily chai for the last nine days, today included: a live ⚡ streak on Home (`U-40`).
   for (let back = 0; back < 9; back++) {
     const d = new Date(); d.setDate(d.getDate() - back); d.setHours(9, 30, 0, 0);
-    await exp('Chai & Snacks', 20 + ((back * 17) % 41), d.getTime(), { pay: PayMethod.Bank });
+    await exp('Chai & Snacks', 20 + ((back * 17) % 41), notFuture(d.getTime()), { pay: PayMethod.Bank });
   }
 
   // Last month — gives shifts vs this month + reports/trend depth + a big one-off.
@@ -254,8 +273,8 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
   await exp('Travel', 9000, monthsBack(2, 18), { note: 'Weekend getaway' });
 
   // A soft-deleted entry → exercises the deleted state + audit log.
-  const doomed = await exp('Other', 999, thisMonth(16), { note: 'Mistaken entry' });
-  await softDeleteTxn(db, doomed);
+  const doomed = await exp('Other', 999, recent(16), { note: 'Mistaken entry' });
+  if (doomed) await softDeleteTxn(db, doomed);
 
   // Months 3–11 back: a year of ordinary history, so reports and trends have depth and the
   // engine reads a settled income pattern. Amounts drift a little month to month, like real ones.
@@ -309,11 +328,11 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
   await exp('Cab & Auto', 250, thisMonth(11), { note: 'Auto to the station' });
 
   // --- Roommates (shared flat): groceries, internet, power — rent is each person's own, above ------
-  await insertTxn(db, { groupId: roommates.id, kind: 'expense', entryMode: 'quick', date: thisMonth(4), category: 'Groceries', note: 'Weekly groceries', payments: [{ personId: aarav.id, amount: R(4500) }], shares: [{ personId: meId, amount: R(1500) }, { personId: aarav.id, amount: R(1500) }, { personId: priya.id, amount: R(1500) }] });
-  await insertTxn(db, { groupId: roommates.id, kind: 'expense', entryMode: 'quick', date: thisMonth(6), category: 'WiFi & Broadband', note: 'Internet', payments: [{ personId: priya.id, amount: R(1200) }], shares: [{ personId: meId, amount: R(400) }, { personId: aarav.id, amount: R(400) }, { personId: priya.id, amount: R(400) }] });
-  await insertTxn(db, { groupId: roommates.id, kind: 'expense', entryMode: 'quick', date: thisMonth(9), category: 'Electricity', note: 'Power bill', payments: [{ personId: meId, amount: R(1800) }], shares: [{ personId: meId, amount: R(600) }, { personId: aarav.id, amount: R(600) }, { personId: priya.id, amount: R(600) }] });
-  await recordSettlement(db, { groupId: roommates.id, fromId: aarav.id, toId: meId, amount: R(1500), date: thisMonth(12), payMethod: PayMethod.Bank, category: 'Shared Bill', note: 'For the electricity' });
-  await recordSettlement(db, { groupId: roommates.id, fromId: priya.id, toId: meId, amount: R(600), date: thisMonth(14), payMethod: PayMethod.Cash, category: 'Repayment' });
+  await insertTxn(db, { groupId: roommates.id, kind: 'expense', entryMode: 'quick', date: recent(4), category: 'Groceries', note: 'Weekly groceries', payments: [{ personId: aarav.id, amount: R(4500) }], shares: [{ personId: meId, amount: R(1500) }, { personId: aarav.id, amount: R(1500) }, { personId: priya.id, amount: R(1500) }] });
+  await insertTxn(db, { groupId: roommates.id, kind: 'expense', entryMode: 'quick', date: recent(6), category: 'WiFi & Broadband', note: 'Internet', payments: [{ personId: priya.id, amount: R(1200) }], shares: [{ personId: meId, amount: R(400) }, { personId: aarav.id, amount: R(400) }, { personId: priya.id, amount: R(400) }] });
+  await insertTxn(db, { groupId: roommates.id, kind: 'expense', entryMode: 'quick', date: recent(9), category: 'Electricity', note: 'Power bill', payments: [{ personId: meId, amount: R(1800) }], shares: [{ personId: meId, amount: R(600) }, { personId: aarav.id, amount: R(600) }, { personId: priya.id, amount: R(600) }] });
+  await recordSettlement(db, { groupId: roommates.id, fromId: aarav.id, toId: meId, amount: R(1500), date: recent(12), payMethod: PayMethod.Bank, category: 'Shared Bill', note: 'For the electricity' });
+  await recordSettlement(db, { groupId: roommates.id, fromId: priya.id, toId: meId, amount: R(600), date: recent(14), payMethod: PayMethod.Cash, category: 'Repayment' });
   // Shared-group recurring rule → Personal → Recurring shows a second group section (Roommates).
   // Starts next month: dated in the past it would materialise months of maid payments I fronted and nobody repaid.
   await insertTxn(db, { groupId: roommates.id, kind: 'expense', entryMode: 'quick', date: monthsAhead(1, 5), category: 'Household Help', note: 'Maid (shared)', recurFreq: 'monthly', recurInterval: 1, payments: [{ personId: meId, amount: R(3000) }], shares: [{ personId: meId, amount: R(1000) }, { personId: aarav.id, amount: R(1000) }, { personId: priya.id, amount: R(1000) }] });
@@ -348,13 +367,13 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
   }
 
   // --- Office Lunch: fully settled (tests the "all settled up" state) ------
-  await insertTxn(db, { groupId: office.id, kind: 'expense', entryMode: 'quick', date: thisMonth(5), category: 'Eating Out', note: 'Team lunch', payments: [{ personId: meId, amount: R(1500) }], shares: [{ personId: meId, amount: R(500) }, { personId: priya.id, amount: R(500) }, { personId: vikram.id, amount: R(500) }] });
-  await recordSettlement(db, { groupId: office.id, fromId: priya.id, toId: meId, amount: R(500), date: thisMonth(6), payMethod: PayMethod.Bank, category: 'Shared Bill' });
-  await recordSettlement(db, { groupId: office.id, fromId: vikram.id, toId: meId, amount: R(500), date: thisMonth(6), payMethod: PayMethod.Cash, category: 'Shared Bill' });
+  await insertTxn(db, { groupId: office.id, kind: 'expense', entryMode: 'quick', date: recent(5), category: 'Eating Out', note: 'Team lunch', payments: [{ personId: meId, amount: R(1500) }], shares: [{ personId: meId, amount: R(500) }, { personId: priya.id, amount: R(500) }, { personId: vikram.id, amount: R(500) }] });
+  await recordSettlement(db, { groupId: office.id, fromId: priya.id, toId: meId, amount: R(500), date: recent(6), payMethod: PayMethod.Bank, category: 'Shared Bill' });
+  await recordSettlement(db, { groupId: office.id, fromId: vikram.id, toId: meId, amount: R(500), date: recent(6), payMethod: PayMethod.Cash, category: 'Shared Bill' });
 
   // --- Family: I owe THEM (they paid) → a "you owe" balance direction --------
-  await insertTxn(db, { groupId: family.id, kind: 'expense', entryMode: 'quick', date: thisMonth(3), category: 'Groceries', note: 'Monthly groceries', payments: [{ personId: meera.id, amount: R(6000) }], shares: [{ personId: meId, amount: R(2000) }, { personId: meera.id, amount: R(2000) }, { personId: aarav.id, amount: R(2000) }] });
-  await insertTxn(db, { groupId: family.id, kind: 'expense', entryMode: 'quick', date: thisMonth(8), category: 'Health & Pharmacy', note: 'Medicines', payments: [{ personId: aarav.id, amount: R(2400) }], shares: [{ personId: meId, amount: R(800) }, { personId: meera.id, amount: R(800) }, { personId: aarav.id, amount: R(800) }] });
+  await insertTxn(db, { groupId: family.id, kind: 'expense', entryMode: 'quick', date: recent(3), category: 'Groceries', note: 'Monthly groceries', payments: [{ personId: meera.id, amount: R(6000) }], shares: [{ personId: meId, amount: R(2000) }, { personId: meera.id, amount: R(2000) }, { personId: aarav.id, amount: R(2000) }] });
+  await insertTxn(db, { groupId: family.id, kind: 'expense', entryMode: 'quick', date: recent(8), category: 'Health & Pharmacy', note: 'Medicines', payments: [{ personId: aarav.id, amount: R(2400) }], shares: [{ personId: meId, amount: R(800) }, { personId: meera.id, amount: R(800) }, { personId: aarav.id, amount: R(800) }] });
 
   // --- Manali Trip: single expense + a full settle-back ----------------------
   await insertTxn(db, { groupId: manali.id, kind: 'expense', entryMode: 'quick', date: monthsBack(2, 20), category: 'Travel', note: 'Cabs & stay', payments: [{ personId: meId, amount: R(15000) }], shares: [{ personId: meId, amount: R(5000) }, { personId: rohan.id, amount: R(5000) }, { personId: vikram.id, amount: R(5000) }] });
@@ -454,7 +473,7 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
   // Categories → Uncategorized (adopt-or-leave) and folds into "Others" in your
   // analytics until you adopt it. This is the real "someone else's category" case.
   await insertTxn(db, {
-    groupId: roommates.id, kind: 'expense', entryMode: 'quick', date: thisMonth(9),
+    groupId: roommates.id, kind: 'expense', entryMode: 'quick', date: recent(9),
     category: 'Poker Night', note: "Aarav's game night",
     payments: [{ personId: aarav.id, amount: R(1200) }],
     shares: [{ personId: meId, amount: R(400) }, { personId: aarav.id, amount: R(400) }, { personId: priya.id, amount: R(400) }],
@@ -509,7 +528,7 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
   // counted nowhere. This is the one to check the "moves none of your numbers"
   // promise against — note the Home badge and the amber banner on the entry.
   await peerTxn({
-    groupId: roommates.id, author: priya.id, date: thisMonth(21),
+    groupId: roommates.id, author: priya.id, date: recent(21),
     category: 'Groceries', note: 'Weekly big shop',
     payments: [{ personId: priya.id, amount: R(3600) }],
     shares: [{ personId: meId, amount: R(1200) }, { personId: priya.id, amount: R(1200) }, { personId: aarav.id, amount: R(1200) }],
@@ -520,7 +539,7 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
   // question. Side by side with Priya's, this is what "trust is per person"
   // looks like on screen.
   await peerTxn({
-    groupId: roommates.id, author: aarav.id, date: thisMonth(22),
+    groupId: roommates.id, author: aarav.id, date: recent(22),
     category: 'Bills', note: 'Electricity, Aarav paid',
     payments: [{ personId: aarav.id, amount: R(2400) }],
     shares: [{ personId: meId, amount: R(800) }, { personId: aarav.id, amount: R(800) }, { personId: priya.id, amount: R(800) }],
@@ -532,7 +551,7 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
   // it actually landed, so approving it asks. Trust is the wrong test here, and
   // this row is what proves the app agrees.
   await peerTxn({
-    groupId: roommates.id, author: aarav.id, date: thisMonth(23),
+    groupId: roommates.id, author: aarav.id, date: recent(23),
     kind: 'settlement', category: 'Settle up', note: 'Aarav says he sent this by UPI',
     payMethod: PayMethod.Bank,
     payments: [{ personId: aarav.id, amount: R(1500) }],
@@ -545,7 +564,7 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
   // disagree. Open the entry to see the red banner — deliberately unlike the
   // amber "waiting for you" one, because it means the opposite thing.
   const disputed = await insertTxn(db, {
-    groupId: goa.id, kind: 'expense', entryMode: 'quick', date: thisMonth(12),
+    groupId: goa.id, kind: 'expense', entryMode: 'quick', date: recent(12),
     category: 'Cab & Auto', note: 'Airport cab',
     payments: [{ personId: meId, amount: R(2800) }],
     shares: [{ personId: meId, amount: R(1400) }, { personId: rohan.id, amount: R(1400) }],
@@ -554,7 +573,7 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
   await db.runAsync("UPDATE person SET remote_uid = 'demo-acct-rohan' WHERE id = ?", [rohan.id]);
   await db.runAsync(
     'INSERT OR REPLACE INTO txn_dispute (txn_id, by_uid, version, created_at, cleared) VALUES (?, ?, 1, ?, 0)',
-    [disputed, 'demo-acct-rohan', thisMonth(13)],
+    [disputed, 'demo-acct-rohan', recent(13)],
   );
 
   // --- Import inbox: pending transactions to exercise the GPay import → Review
@@ -562,16 +581,16 @@ export async function loadDemoData(db: SQLite.SQLiteDatabase): Promise<string> {
   // expense/income, some pre-categorized, one shareable-in-a-group, one uncategorized.
   await insertPending(db, [
     // Google Pay import (most rows) — a couple carry a detected pay method.
-    { date: thisMonth(20), amount: R(950), description: 'Sandeep Malik', kind: 'expense', category: null, direction: 'debit', source: 'gpay', pay_method: PayMethod.Bank, raw: 'UPI 651859540084 · Paid to Sandeep Malik ₹950' },
-    { date: thisMonth(20), amount: R(485), description: 'Select Infrastructure', kind: 'expense', category: 'Bills', direction: 'debit', source: 'gpay', pay_method: PayMethod.Bank, raw: null },
-    { date: thisMonth(19), amount: R(70), description: 'PVR LIMITED', kind: 'expense', category: 'Entertainment', direction: 'debit', source: 'gpay', pay_method: null, raw: null },
-    { date: thisMonth(19), amount: R(420), description: 'Amazon Pay', kind: 'expense', category: 'Shopping', direction: 'debit', source: 'gpay', pay_method: PayMethod.Wallet, raw: null },
-    { date: thisMonth(18), amount: R(1000), description: 'RAHUL VERMA', kind: 'income', category: null, direction: 'credit', source: 'gpay', pay_method: null, raw: null },
-    { date: thisMonth(18), amount: R(2000), description: 'Om Prakash Basnet', kind: 'expense', category: null, direction: 'debit', source: 'gpay', pay_method: PayMethod.Bank, raw: null },
+    { date: recent(20), amount: R(950), description: 'Sandeep Malik', kind: 'expense', category: null, direction: 'debit', source: 'gpay', pay_method: PayMethod.Bank, raw: 'UPI 651859540084 · Paid to Sandeep Malik ₹950' },
+    { date: recent(20), amount: R(485), description: 'Select Infrastructure', kind: 'expense', category: 'Bills', direction: 'debit', source: 'gpay', pay_method: PayMethod.Bank, raw: null },
+    { date: recent(19), amount: R(70), description: 'PVR LIMITED', kind: 'expense', category: 'Entertainment', direction: 'debit', source: 'gpay', pay_method: null, raw: null },
+    { date: recent(19), amount: R(420), description: 'Amazon Pay', kind: 'expense', category: 'Shopping', direction: 'debit', source: 'gpay', pay_method: PayMethod.Wallet, raw: null },
+    { date: recent(18), amount: R(1000), description: 'RAHUL VERMA', kind: 'income', category: null, direction: 'credit', source: 'gpay', pay_method: null, raw: null },
+    { date: recent(18), amount: R(2000), description: 'Om Prakash Basnet', kind: 'expense', category: null, direction: 'debit', source: 'gpay', pay_method: PayMethod.Bank, raw: null },
     // Bank / UPI email alerts — a separate section in Review.
-    { date: thisMonth(17), amount: R(264), description: 'GOKUL MEDICAL STORE', kind: 'expense', category: 'Health & Pharmacy', direction: 'debit', source: 'email', pay_method: PayMethod.Card, raw: 'Rs 264.00 spent on Credit Card ending 4321 at GOKUL MEDICAL STORE' },
-    { date: thisMonth(17), amount: R(73), description: 'Rapido', kind: 'expense', category: 'Cab & Auto', direction: 'debit', source: 'email', pay_method: PayMethod.Bank, raw: 'You paid ₹73 to Rapido via UPI' },
-    { date: thisMonth(16), amount: R(2500), description: 'Society maintenance', kind: 'expense', category: 'Maintenance', direction: 'debit', source: 'email', pay_method: PayMethod.Bank, raw: 'E-mandate debit of Rs 2500 towards Society maintenance' },
+    { date: recent(17), amount: R(264), description: 'GOKUL MEDICAL STORE', kind: 'expense', category: 'Health & Pharmacy', direction: 'debit', source: 'email', pay_method: PayMethod.Card, raw: 'Rs 264.00 spent on Credit Card ending 4321 at GOKUL MEDICAL STORE' },
+    { date: recent(17), amount: R(73), description: 'Rapido', kind: 'expense', category: 'Cab & Auto', direction: 'debit', source: 'email', pay_method: PayMethod.Bank, raw: 'You paid ₹73 to Rapido via UPI' },
+    { date: recent(16), amount: R(2500), description: 'Society maintenance', kind: 'expense', category: 'Maintenance', direction: 'debit', source: 'email', pay_method: PayMethod.Bank, raw: 'E-mandate debit of Rs 2500 towards Society maintenance' },
   ]);
 
   // Verify the writes actually landed — turns a silent "empty app" into a clear signal.
