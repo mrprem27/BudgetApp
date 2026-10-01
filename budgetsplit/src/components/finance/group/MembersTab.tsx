@@ -152,7 +152,6 @@ export function MembersTab({ members, net, settlements, personMap, simplifyOn, o
                   onValueChange={onToggleSimplify}
                   trackColor={{ true: colors.accent, false: colors.bgMuted }}
                   thumbColor={colors.textPrimary}
-                  style={styles.simplifySwitch}
                   accessibilityLabel={`Simplify debts, ${simplifyOn ? 'on: fewest possible payments' : 'off: every direct debt'}`}
                 />
               </View>
@@ -202,10 +201,9 @@ const styles = StyleSheet.create({
   memberBalLabel: { ...type.caption, color: colors.textMuted, marginTop: 1 },
   foot: { ...type.caption, color: colors.textMuted, marginTop: space.sm },
   balanceRowWrap: { paddingHorizontal: space.md },
-  simplify: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
+  simplify: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   simplifyLabel: { ...type.caption, color: colors.textSecondary },
-  // The platform switch at header size.
-  simplifySwitch: { transform: [{ scale: 0.8 }] },
+
   settled: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.lg },
   settledText: { ...type.body, color: colors.textSecondary },
 });

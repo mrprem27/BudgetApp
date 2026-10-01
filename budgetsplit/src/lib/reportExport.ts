@@ -1,6 +1,6 @@
 import { previousRange, type ReportRange } from './dateRange';
 import type * as SQLite from 'expo-sqlite';
-import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
+import { format, startOfMonth, endOfMonth, subMonths, differenceInCalendarDays } from 'date-fns';
 import { fullDate, monthLabel, shortDate } from './dateFormat';
 import { getTransactionsInRange } from '../db/queries/transactions';
 import { settlementView } from './settlementView';
@@ -221,7 +221,9 @@ export async function buildReportHtml(
     return pct === 0 && v > 0 ? '&lt;1%' : `${pct}%`;
   };
 
-  const days = Math.max(1, Math.round((Math.min(toMs, Date.now()) - fromMs) / 86_400_000));
+  // Calendar days, today included: rounding elapsed time dropped today before noon, and the
+  // average over "1 day" sat beside bars for two.
+  const days = differenceInCalendarDays(Math.min(toMs, Date.now()), fromMs) + 1;
   const busiest = [...byDay.entries()].sort((a, b) => b[1] - a[1])[0];
   const top = largest as { what: string; paise: number; date: number } | null;
   const facts = catTotal > 0 ? `

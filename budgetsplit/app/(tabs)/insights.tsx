@@ -261,7 +261,8 @@ export default function InsightsScreen() {
               key="attention" icon="alert-triangle" tint={colors.expense} title="Needs attention"
               figure={overTotal > 0 ? formatCompact(overTotal) : String(attentionCount)}
               figureColor={colors.expense}
-              line={overTotal > 0 ? `over, in ${attentionCount} ${attentionCount === 1 ? 'place' : 'places'}` : attentionCount === 1 ? 'thing to look at' : 'things to look at'}
+              // The amount is the overruns'; the count beside it has to be theirs too, not the notes'.
+              line={overTotal > 0 ? `over, in ${drivers.length} ${drivers.length === 1 ? 'category' : 'categories'}` : attentionCount === 1 ? 'thing to look at' : 'things to look at'}
               onPress={() => setSheet('attention')}
             />
           )}

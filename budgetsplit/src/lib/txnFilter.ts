@@ -1,4 +1,5 @@
 import { parseTags, tagKey } from './tags';
+import { singleMonthKey } from './dateRange';
 import { txnTotal } from './splitMath';
 import { formatRupees } from './money';
 import type { TxnKind } from '../constants/enums';
@@ -166,4 +167,30 @@ export function resolveRange(preset: RangePreset, now: number = Date.now()): { f
       return { from: startOfDay(first), to: endOfDay(last) };
     }
   }
+}
+
+type DateChoice = { from: number | null; to: number | null; range: RangePreset };
+
+/**
+ * What changed a totals row from its default (this month, everything): "Last month · 2 filters".
+ * `null` while nothing has, so the default goes unsaid.
+ */
+export function totalsRowLabel(d: DateChoice, filterCount: number): string | null {
+  const period = d.from == null && d.to == null ? null : d.range === 'custom' ? 'Chosen dates' : RANGE_LABEL[d.range];
+  const filters = filterCount > 0 ? `${filterCount} ${filterCount === 1 ? 'filter' : 'filters'}` : null;
+  return [period, filters].filter(Boolean).join(' · ') || null;
+}
+
+/**
+ * Reports on what a totals row covers: one calendar month opens on that month, any other span
+ * on exactly that range (`U-60`), no date on this month; `group` scopes it to one group.
+ */
+export function reportsHref(d: DateChoice, group?: string, nowMs: number = Date.now()): string {
+  const m = singleMonthKey(d.from, d.to);
+  const wholeMonth = m != null && (d.range === 'thisMonth' || d.range === 'lastMonth');
+  const q = [
+    group ? `group=${group}` : null,
+    wholeMonth ? `month=${m}` : d.from != null ? `from=${d.from}&to=${d.to ?? nowMs}` : null,
+  ].filter(Boolean).join('&');
+  return q ? `/reports?${q}` : '/reports';
 }

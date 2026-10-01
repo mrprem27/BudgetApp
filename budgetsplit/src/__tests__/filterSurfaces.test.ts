@@ -105,7 +105,9 @@ describe('a transaction ledger filters through one predicate', () => {
 
   it("the group's totals row adds up the filtered rows, not the month whatever is filtered", () => {
     const screen = readFileSync(join(ROOT, 'app', '(people)', 'group', '[id].tsx'), 'utf8');
-    expect(screen).toMatch(/groupSpend\(filteredTxns,/);
+    expect(screen).toMatch(/groupSpend\(filter\.totalsRows\(txns\),/);
+    // The search text finds rows; it never narrows the totals, and so needs no word in the label.
+    expect(readFileSync(join(ROOT, 'src', 'hooks', 'useTxnFilters.ts'), 'utf8')).toMatch(/applyFilters\(rows, \{ query: '', kind, from, to, personId, tags \}\)/);
     expect(screen).toMatch(/label=\{filter\.label\}/);
   });
 

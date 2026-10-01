@@ -3,6 +3,7 @@ import { getMoneyProfile, setMoneyProfile } from '../db/queries/moneyProfile';
 import { getCashPosition } from '../db/queries/savings';
 import { getTransactionsInRange } from '../db/queries/transactions';
 import { createTestDb, addPerson, addGroup, addMember, asDb } from './helpers/testDb';
+import { movesWholeUnset } from '../lib/moneySum';
 
 /**
  * One way to move money — from bank, cash, wallet or any asset, to any other.
@@ -127,6 +128,19 @@ describe('moveMoney', () => {
       expect(after.notSet).toBe(0);
       expect(after.bank).toBe(before.bank - 400000);
       expect(after.total).toBe(before.total);
+    });
+
+    it('the whole amount, in the direction that clears it, is written on the entries instead', () => {
+      const u = { kind: 'unset' }, b = { kind: 'bucket' }, as = { kind: 'asset' };
+      // Money with no place: all of it out of Not set. Spending with no source: all of it into Not set.
+      expect(movesWholeUnset(u, b, 500000, 500000)).toBe(true);
+      expect(movesWholeUnset(b, u, 400000, -400000)).toBe(true);
+      // A part of it, the wrong way round, an asset, or nothing to clear: an ordinary move.
+      expect(movesWholeUnset(u, b, 200000, 500000)).toBe(false);
+      expect(movesWholeUnset(b, u, 500000, 500000)).toBe(false);
+      expect(movesWholeUnset(u, as, 500000, 500000)).toBe(false);
+      expect(movesWholeUnset(u, b, 500000, 0)).toBe(false);
+      expect(movesWholeUnset(b, b, 500000, 500000)).toBe(false);
     });
 
     it('not to or from an asset, and not to itself; a refusal writes nothing', async () => {

@@ -14,10 +14,11 @@ import { setMoneyProfile } from '../db/queries/moneyProfile';
 import type { MoneyProfileWrite } from '../db/queries/moneyProfile';
 import { payCardBill, recordBalanceAdjustment } from '../db/queries/spendPower';
 import { getMe } from '../db/queries/persons';
-import type { PayMethod } from '../constants/enums';
 import { Alert } from 'react-native';
-import { moveMoney, AssetError, type MoveEndpoint } from '../db/queries/assets';
+import { moveMoney, AssetError, BUCKET_PAY, type MoveEndpoint } from '../db/queries/assets';
+import { setSourceForUnsetEntries } from '../db/queries/transactions';
 import { loadSavingsTabData } from '../lib/savingsTabData';
+import { movesWholeUnset } from '../lib/moneySum';
 import { getPendingOverspendNotice, setPendingOverspendNotice } from '../lib/overspendNotice';
 import { useDataRefresh } from '../components/system/DataRefreshProvider';
 import { useScreenData } from './useScreenData';
@@ -49,7 +50,6 @@ export function useSavingsTab() {
     if (showPayCardBill) listAccounts(db).then(setCardBillAccounts).catch(() => {});
   }, [showPayCardBill, db]);
   const [showMoveInvest, setShowMoveInvest] = useState(false);
-  // "Paid from not set": how many of my entries, while its sheet is open (`U-62`).
   const [fundGoalId, setFundGoalId] = useState<string | null>(null);
   const [fundAmt, setFundAmt] = useState('');
 
@@ -132,7 +132,15 @@ export function useSavingsTab() {
   /** Money from any place to any other — the one form behind Plan's "Move money". */
   async function handleMoveMoney(from: MoveEndpoint, to: MoveEndpoint, amountPaise: number) {
     try {
-      await moveMoney(db, from, to, amountPaise);
+      /*
+       * The whole "Paid from not set" amount going to one place is written on the entries
+       * themselves: each takes that place as its Paid from (`U-62`), so nothing is left to count
+       * twice if one of them is corrected later. Only a part of it is a move beside them (`U-99`).
+       */
+      const place = from.kind === 'unset' ? to : from;
+      const me = movesWholeUnset(from, to, amountPaise, unattributed) ? await getMe(db) : null;
+      if (me && place.kind === 'bucket') await setSourceForUnsetEntries(db, me.id, BUCKET_PAY[place.bucket]);
+      else await moveMoney(db, from, to, amountPaise);
     } catch (e) {
       haptic.error();
       Alert.alert('Couldn’t move that', e instanceof AssetError ? e.message : 'Please try again.');

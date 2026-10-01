@@ -142,7 +142,7 @@ const SECTIONS: Section[] = [
       { icon: 'target', color: colors.settle, title: 'Goals', body: 'Create goals with a target amount, an Emergency / Need / Want priority and an icon. Goals are grouped into those three sections; drag within a section to set which goal in it fills up first. Fund a goal directly from your Cash available (swipe or enter an amount). Each shows a progress bar, what’s left, and, if you set an auto-save amount, an estimated “done by” date. Withdrawing returns money to your cash.' },
       { icon: 'refresh-cw', color: colors.healthAmber, title: 'Auto-save', body: 'Give a goal a fixed amount and cadence (e.g. ₹5,000 monthly) and the app funds it from your Cash available on schedule, Emergency goals first, then Need, then Want, in your drag order within each.' },
       { icon: 'alert-triangle', color: colors.expense, title: 'Overspending', body: 'If Cash available goes negative, the app asks before touching your goals. It names which Want goals, then Need goals, could cover the shortfall, and nothing moves unless you choose Use savings. Undo is there afterwards. Emergency and Locked goals, and your assets, are never touched.' },
-      { icon: 'zap', color: colors.income, title: 'Savings insights', body: 'Gentle opportunity-cost nudges on the Money tab (e.g. how a recurring expense compares to a goal). Toggle them off anytime in Settings → Feature management.' },
+      { icon: 'zap', color: colors.income, title: 'Savings insights', body: 'The Ways to save tile on Insights compares your own habits with your goals (how a recurring expense measures against one, say). Switch Insights off in Settings → Feature management if you would rather not see them.' },
     ],
   },
   {

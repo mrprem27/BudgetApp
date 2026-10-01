@@ -27,14 +27,28 @@ describe('one group\'s report', () => {
     expect(one.myBudget).toBeNull();
   });
 
-  it('is what a group\'s row opens, and the drill-down keeps the group', () => {
-    expect(fs.readFileSync('app/(people)/group/[id].tsx', 'utf8')).toMatch(/router\.push\(`\/reports\?group=\$\{id\}`\)/);
+  it('is what a group\'s row opens, on the dates the row covers, and the drill-down keeps the group', () => {
+    const { reportsHref, totalsRowLabel } = jest.requireActual('../lib/txnFilter') as typeof import('../lib/txnFilter');
+    const sep = { from: new Date(2026, 8, 1).getTime(), to: new Date(2026, 8, 30, 23, 59, 59, 999).getTime() };
+    // No date: this month, in this group. A whole month: that month. Anything else: exactly those dates.
+    expect(reportsHref({ from: null, to: null, range: 'any' }, 'g1')).toBe('/reports?group=g1');
+    expect(reportsHref({ ...sep, range: 'lastMonth' }, 'g1')).toBe('/reports?group=g1&month=2026-09');
+    expect(reportsHref({ from: 100, to: 200, range: 'custom' }, 'g1')).toBe('/reports?group=g1&from=100&to=200');
+    expect(reportsHref({ from: 100, to: null, range: '7d' }, undefined, 999)).toBe('/reports?from=100&to=999');
+    expect(reportsHref({ from: null, to: null, range: 'any' })).toBe('/reports');
+    // The row said "Last month" and its button opened this month: the group's link carried no dates.
+    expect(fs.readFileSync('app/(people)/group/[id].tsx', 'utf8')).toMatch(/filter\.reportsHref\(id\)/);
+    expect(fs.readFileSync('app/(people)/personal.tsx', 'utf8')).toMatch(/txnFilter\.reportsHref\(\)/);
     expect(fs.readFileSync('app/(money)/reports.tsx', 'utf8')).toMatch(/\$\{groupId \? `&group=\$\{groupId\}` : ''\}&category=/);
     expect(fs.readFileSync('app/(money)/report-transactions.tsx', 'utf8')).toMatch(/loadReportTransactions\(db, month, range, groupParam\)/);
+
+    // ...and the label says only what changed it; this month and no filter go unsaid.
+    expect(totalsRowLabel({ from: null, to: null, range: 'any' }, 0)).toBeNull();
+    expect(totalsRowLabel({ ...sep, range: 'lastMonth' }, 2)).toBe('Last month · 2 filters');
+    expect(totalsRowLabel({ from: 1, to: 2, range: 'custom' }, 1)).toBe('Chosen dates · 1 filter');
   });
 
   it('the row says nothing about the period while it is simply this month', () => {
-    expect(fs.readFileSync('app/(people)/personal.tsx', 'utf8')).toMatch(/const period = from == null && to == null \? null/);
     expect(fs.readFileSync('src/components/finance/LedgerTotalsRow.tsx', 'utf8')).toMatch(/\{!!label && <Text style=\{styles\.period\}>/);
   });
 });

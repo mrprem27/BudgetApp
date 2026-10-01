@@ -330,7 +330,7 @@ export type MoveEndpoint =
   | { kind: 'asset'; id: string }
   | { kind: 'unset' };
 
-const BUCKET_PAY: Record<AssetBucket, PayMethod> = {
+export const BUCKET_PAY: Record<AssetBucket, PayMethod> = {
   bank: PayMethod.Bank, cash: PayMethod.Cash, wallet: PayMethod.Wallet,
 };
 const BUCKET_LABEL: Record<AssetBucket, string> = { bank: 'Bank', cash: 'Cash', wallet: 'Wallet' };
@@ -355,7 +355,11 @@ const BUCKET_LABEL: Record<AssetBucket, string> = { bank: 'Bank', cash: 'Cash', 
  *   Paid from. "Paid from not set" is the sum of movement on entries with none, so a row with
  *   none moves that line and the other row moves the place. Any part of it can be moved, either
  *   way: out of Not set when it holds money, into it when it is spending nobody sourced. Not to
- *   or from an asset: say which place it went through first.
+ *   or from an asset: say which place it went through first. These rows are an adjustment beside
+ *   the entries, not a correction of them: giving one of those entries a Paid from afterwards
+ *   counts it in that place a second time, and the difference shows on the Not set line. So the
+ *   WHOLE amount going to one place does not come here; the caller sets the place on the entries
+ *   themselves (`setSourceForUnsetEntries`), which leaves nothing to double.
  *
  * Net worth is flat in all of them, which is the rule this file exists for. Everything is
  * written in ONE transaction; a move that lands only its first half would drop net worth

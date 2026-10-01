@@ -180,12 +180,11 @@ export default function GroupDetailScreen() {
       setTrusting(false);
     }
   }
-  // The row under the header adds up what the list shows, as Personal's does (`U-63`): my share
-  // and everyone's, through the filters. With no date chosen it reads this month and says nothing;
-  // choose a date and it reads exactly that. It stayed on this month whatever was filtered.
-  const monthStart = useMemo(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1).getTime(); }, []);
+  // The row under the header adds up what the list shows, by the rule Personal's follows
+  // (`useTxnFilters.totalsRows`, `U-63`): my share and everyone's, through the filters but not the
+  // search text, this month while no date is chosen. It stayed on this month whatever was filtered.
   const filteredTxns = useMemo(() => applyFilters(txns, filter.filters), [txns, filter.filters]);
-  const monthSpend = useMemo(() => groupSpend(filteredTxns, meId, filter.dated ? 0 : monthStart), [filteredTxns, meId, filter.dated, monthStart]);
+  const monthSpend = useMemo(() => groupSpend(filter.totalsRows(txns), meId, 0), [filter.totalsRows, txns, meId]);
 
   const TABS: { key: TabKey; label: string }[] = [
     { key: 'transactions', label: 'Expenses' },
@@ -248,7 +247,7 @@ export default function GroupDetailScreen() {
           income is never booked to a shared group and would read zero in every one. */}
       <View style={styles.totals}>
         <LedgerTotalsRow
-          onReports={() => router.push(`/reports?group=${id}`)}
+          onReports={() => router.push(filter.reportsHref(id) as never)}
           label={filter.label}
           stats={[
             { label: 'Your share', value: formatCompact(monthSpend.mine), tint: colors.expense },

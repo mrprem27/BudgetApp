@@ -8,10 +8,10 @@ import { HeaderIconButton } from '../../src/components/ui/HeaderIconButton';
 import { TabPills } from '../../src/components/ui/TabPills';
 import { FilterBar } from '../../src/components/ui/FilterBar';
 import { rankTagsByFrequency } from '../../src/lib/tags';
-import { applyFilters, filtersActive, KIND_ANY, RANGE_LABEL, type KindFilter, type RangePreset } from '../../src/lib/txnFilter';
+import { applyFilters } from '../../src/lib/txnFilter';
+import { useTxnFilters } from '../../src/hooks/useTxnFilters';
 import { PersonalHero } from '../../src/components/finance/personal/PersonalHero';
 import { activityTotals } from '../../src/lib/activityTotals';
-import { singleMonthKey } from '../../src/lib/dateRange';
 import { TransactionRow } from '../../src/components/finance/TransactionRow';
 import { TxnCell } from '../../src/components/finance/TxnCell';
 import { SectionHeader } from '../../src/components/ui/SectionHeader';
@@ -71,14 +71,10 @@ export default function PersonalScreen() {
   // Personal, every group, or both. One group on its own is that group's screen, not a filter here.
   // Opens on everything you are part of (2026-10-01); Personal and Groups narrow it.
   const [filter, setFilter] = useState<ActivityScope>(DEFAULT_SCOPE);
-  // The transaction filters, none of which this screen had: it offered scope only.
-  const [query, setQuery] = useState('');
-  const [kind, setKind] = useState<KindFilter>(KIND_ANY);
-  const [range, setRange] = useState<RangePreset>('any');
-  const [from, setFrom] = useState<number | null>(null);
-  const [to, setTo] = useState<number | null>(null);
-  const [personId, setPersonId] = useState<string | null>(null);
-  const [tags, setTags] = useState<string[]>([]);
+  // The transaction filters, shared with every group ledger (`useTxnFilters`); the scope above
+  // is this screen's own, and counts as one filter in the row's label.
+  const txnFilter = useTxnFilters(filter !== DEFAULT_SCOPE ? 1 : 0);
+  const { search: query, setSearch: setQuery, kind, setKind, range, from, to, personId, setPersonId, tags, setTags } = txnFilter;
   const [showMenu, setShowMenu] = useState(false);
 
   const { data, loading, error: loadError, refreshing, onRefresh, reload } = useScreenData(async (db) => {
@@ -115,10 +111,7 @@ export default function PersonalScreen() {
    */
   const scoped = useMemo(() => scopeActivity(activity, filter), [activity, filter]);
   const tagOptions = useMemo(() => rankTagsByFrequency(scoped.map(t => t.tags)), [scoped]);
-  const filtered = useMemo(
-    () => applyFilters(scoped, { query, kind, from, to, personId, tags }),
-    [scoped, query, kind, from, to, personId, tags],
-  );
+  const filtered = useMemo(() => applyFilters(scoped, txnFilter.filters), [scoped, txnFilter.filters]);
   const sections = useMemo(() => groupByDate(filtered), [filtered]);
 
   /*
@@ -129,38 +122,17 @@ export default function PersonalScreen() {
    * below showed last month answered a question nobody had asked.
    */
   // Search finds rows; it does not change what the card is about (`U-62`) — only the filters do.
-  const narrowed = filter !== DEFAULT_SCOPE || filtersActive({ query: '', kind, from, to, personId, tags });
+  const narrowed = filter !== DEFAULT_SCOPE || txnFilter.narrowed;
   /*
-   * The row under the hero adds up what the list shows (`U-63`). With no date chosen the list
-   * runs through all time, and an all-time "spent" answers nothing — so the row reads this month
-   * then, and says so. Choose a date and it reads exactly that.
+   * The row under the hero adds up what the list shows (`U-63`), by the rule every ledger's row
+   * follows (`useTxnFilters.totalsRows`): this month while no date is chosen, exactly the chosen
+   * dates otherwise, and never narrowed by the search text.
    */
-  const monthStart = useMemo(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1).getTime(); }, []);
-  const rowRows = useMemo(
-    () => (from == null && to == null ? filtered.filter(t => t.date >= monthStart) : filtered),
-    [filtered, from, to, monthStart],
-  );
+  const rowRows = useMemo(() => txnFilter.totalsRows(scoped), [txnFilter.totalsRows, scoped]);
   const rowTotals = useMemo(() => activityTotals(rowRows, myId), [rowRows, myId]);
-  // Which filters are on, counted, so the row says why its numbers changed ("This month · 2 filters").
-  const filterCount = (filter !== DEFAULT_SCOPE ? 1 : 0) + (kind !== KIND_ANY ? 1 : 0) + (personId ? 1 : 0) + tags.length;
-  // This month is the row's default and goes unsaid; the label names only what changed it.
-  const period = from == null && to == null ? null : range === 'custom' ? 'Chosen dates' : RANGE_LABEL[range];
-  const filtersLabel = filterCount > 0 ? `${filterCount} ${filterCount === 1 ? 'filter' : 'filters'}` : null;
-  const rowLabel = [period, filtersLabel].filter(Boolean).join(' · ') || null;
-  const clearFilters = useCallback(() => {
-    setFilter(DEFAULT_SCOPE); setQuery(''); setKind(KIND_ANY); setRange('any');
-    setFrom(null); setTo(null); setPersonId(null); setTags([]);
-  }, []);
-  const openReports = () => {
-    // One calendar month opens Reports on that month; any other span opens it on exactly that
-    // range (`U-60`); no date filter opens it on this month.
-    const m = singleMonthKey(from, to);
-    const isWholeMonth = m != null && (range === 'thisMonth' || range === 'lastMonth');
-    router.push(isWholeMonth ? `/reports?month=${m}`
-      : from != null && to != null ? `/reports?from=${from}&to=${to}`
-      : from != null ? `/reports?from=${from}&to=${Date.now()}`
-      : '/reports');
-  };
+  const rowLabel = txnFilter.label;
+  const clearFilters = useCallback(() => { setFilter(DEFAULT_SCOPE); txnFilter.clear(); }, [txnFilter.clear]);
+  const openReports = () => router.push(txnFilter.reportsHref() as never);
 
   // Stable identities, so the filter bar and the list below do not re-render per keystroke.
   const filterGroups = useMemo(() => [{
@@ -286,7 +258,7 @@ export default function PersonalScreen() {
                       range={range}
                       customFrom={from}
                       customTo={to}
-                      onRange={(r, f2, t2) => { setRange(r); setFrom(f2); setTo(t2); }}
+                      onRange={txnFilter.setRange}
                       people={people}
                       personId={personId}
                       onPerson={setPersonId}

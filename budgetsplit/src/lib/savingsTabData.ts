@@ -15,11 +15,7 @@ import { getAssets } from '../db/queries/assets';
  * this now uses on its own. `getAffordSnapshot` already compared the right two
  * things; this is Plan agreeing with it.
  */
-export async function loadSavingsTabData(
-  db: SQLite.SQLiteDatabase,
-  /** Injected for determinism, same contract as the other loaders. */
-  now: Date = new Date(),
-) {
+export async function loadSavingsTabData(db: SQLite.SQLiteDatabase) {
   // The profile is read ONCE and handed to everything that needs it. It is no
   // longer a cheap KV lookup — `investments` is derived from the asset register —
   // and this loader used to issue four of them.
