@@ -1121,7 +1121,9 @@ describe('U-25/U-41 · a ⌄ only on chips that pick one value from a list', () 
   /** Category, date and pay method in Add (`U-41`); never details, filters or pills. */
   const PICKERS = new Set(['src/components/finance/CategoryField.tsx', 'src/components/finance/add/CategoryDatePills.tsx', 'src/components/finance/add/DetailChips.tsx',
     // Split by items' Paid from: the same pay-method picker as Add (`U-69`).
-    'app/add/itemized.tsx']);
+    'app/add/itemized.tsx',
+    // The Budget tab's period: one value from three (`U-89`).
+    'src/components/finance/budget/BudgetList.tsx']);
   const files = (dir: string): string[] => fs.readdirSync(dir, { withFileTypes: true }).flatMap(e =>
     e.isDirectory() ? files(`${dir}/${e.name}`) : /\.tsx$/.test(e.name) ? [`${dir}/${e.name}`] : []);
   it('sets chevron on no other chip', () => {
@@ -1302,5 +1304,15 @@ describe('a section box opens and closes without tearing', () => {
     // every other open body a layout transition of its own; a Budget tab flickered on each tap.
     expect(src).toMatch(/\{expanded && children\}/);
     expect(src).not.toMatch(/from '\.\/anim\/Collapse'|LayoutAnimation\.configureNext|\blayout=\{/);
+  });
+});
+
+describe('a scrolling sheet runs to its own bottom edge', () => {
+  it('keeps the bottom space inside the scroll content, not on the sheet around it', () => {
+    const src = fs.readFileSync('src/components/ui/DraggableSheet.tsx', 'utf8');
+    // On the sheet, the scroll area stopped short and a long list was cut by a hard line above
+    // an empty band.
+    expect(src).toMatch(/!scroll && \{ paddingBottom: bottomPad \}/);
+    expect(src).toMatch(/contentContainerStyle=\{\[styles\.content, \{ paddingBottom: bottomPad \}\]\}/);
   });
 });

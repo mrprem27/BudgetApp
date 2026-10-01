@@ -216,7 +216,10 @@ export function DraggableSheet({ onClose, title, children, scroll = true, dragBo
     </View>
   );
   const sheet = (
-    <Animated.View style={[styles.sheet, { paddingBottom: bottomPad }, sheetStyle]}>
+    // A scrolling body carries the bottom space INSIDE its content, so rows scroll to the sheet's
+    // own edge. With the space on the sheet instead, the scroll area stopped short of it and a
+    // long list was sliced by a hard line above an empty band (half an avatar, then nothing).
+    <Animated.View style={[styles.sheet, !scroll && { paddingBottom: bottomPad }, sheetStyle]}>
       {dragBody ? header : <GestureDetector gesture={pan}>{header}</GestureDetector>}
         {scroll ? (
           <GestureDetector gesture={nativeGesture}>
@@ -228,7 +231,7 @@ export function DraggableSheet({ onClose, title, children, scroll = true, dragBo
               scrollEventThrottle={16}
               onScroll={onBodyScroll}
               style={styles.bodyWrap}
-              contentContainerStyle={styles.content}
+              contentContainerStyle={[styles.content, { paddingBottom: bottomPad }]}
             >
               {children}
             </ScrollView>

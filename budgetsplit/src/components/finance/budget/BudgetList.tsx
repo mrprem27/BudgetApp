@@ -5,7 +5,9 @@ import { healthColor } from '../group/helpers';
 import { budgetHealth, utilLabel, type CategoryBudgetStatus, type Period } from '../../../lib/budget';
 import { formatCompact } from '../../../lib/money';
 import { budgetInvestedCaption, PERIOD_WORDS } from '../../../lib/budgetCopy';
-import { TabPills } from '../../ui/TabPills';
+import { SheetModal } from '../../ui/SheetModal';
+import { OptionRow } from '../../ui/OptionRow';
+import { decor } from '../../../constants/palette';
 import { categorySection, sectionIcon, SECTION_ORDER } from '../../../constants/categories';
 import { BudgetBar } from '../BudgetBar';
 import { BudgetCategoryRow } from '../BudgetCategoryRow';
@@ -19,11 +21,12 @@ import { haptic } from '../../../lib/haptics';
 import { sectionSummary } from '../../../lib/budgetSections';
 import { InfoLabel } from '../../ui/InfoLabel';
 
-const PERIODS: { key: Period; label: string }[] = [
-  { key: 'daily', label: 'Daily' },
-  { key: 'monthly', label: 'Monthly' },
-  { key: 'yearly', label: 'Yearly' },
+const PERIODS: { key: Period; label: string; hint: string }[] = [
+  { key: 'daily', label: 'Daily', hint: 'Today, against your daily limits' },
+  { key: 'monthly', label: 'Monthly', hint: 'This month: daily and monthly limits' },
+  { key: 'yearly', label: 'Yearly', hint: 'This year: every limit you have set' },
 ];
+const PERIOD_LABEL: Record<Period, string> = { daily: 'Daily', monthly: 'Monthly', yearly: 'Yearly' };
 const PERIOD_BY: Record<Period, string> = { daily: 'by the day', monthly: 'by the month', yearly: 'by the year' };
 
 /** `'all'` = no filter. The other three mirror `CategoryBudgetStatus.health`. */
@@ -96,6 +99,7 @@ export function BudgetList({
   // budget reads in one screen, and a section opens when you want its lines. A status filter
   // opens every section — "3 over" must never answer with three closed headers.
   const [open, setOpen] = useState<Record<string, boolean>>({});
+  const [picking, setPicking] = useState(false);
 
   const counts = useMemo(() => ({
     over: rows.filter(r => r.health === 'red').length,
@@ -132,14 +136,39 @@ export function BudgetList({
   );
 
   /*
-   * Daily / Monthly / Yearly, always there: a budget cannot be judged without saying over what.
-   * A line counts in its own period and every longer one (a daily limit fills the month and the
-   * year, a monthly one fills the year), never a shorter one (`budgetKind`).
+   * The period, always there: a budget cannot be judged without saying over what. One picker
+   * beside Edit, on Monthly until changed (it was a three-way strip above the card for a day,
+   * a whole row for a choice most people leave alone). A line counts in its own period and every
+   * longer one (a daily limit fills the month and the year, a monthly one fills the year), never
+   * a shorter one (`budgetKind`).
    */
-  const periods = (
-    <View style={styles.periods}>
-      <TabPills tabs={PERIODS} active={period} onChange={k => onPeriod(k as Period)} size="sm" />
+  const controls = (
+    <View style={styles.controls}>
+      <Chip
+        size="sm"
+        label={PERIOD_LABEL[period]}
+        icon="calendar"
+        chevron
+        onPress={() => setPicking(true)}
+        accessibilityLabel={`Showing the budget ${PERIOD_BY[period]}. Change`}
+      />
+      <Chip label="Edit" icon="edit-2" size="sm" onPress={onEdit} accessibilityLabel="Edit budget" />
     </View>
+  );
+  const picker = (
+    <SheetModal visible={picking} onClose={() => setPicking(false)} title="Read the budget" scroll={false}>
+      <View style={styles.pickerList}>
+        {PERIODS.map(p => (
+          <OptionRow
+            key={p.key}
+            label={p.label}
+            description={p.hint}
+            selected={period === p.key}
+            onPress={() => { setPicking(false); onPeriod(p.key); }}
+          />
+        ))}
+      </View>
+    </SheetModal>
   );
 
   // No budget at all: the host's empty state, and nothing to switch between.
@@ -148,7 +177,8 @@ export function BudgetList({
   if (rows.length === 0) {
     return scroll(
       <>
-        {periods}
+        <View style={styles.controlsAlone}>{controls}</View>
+        {picker}
         <EmptyState
           icon="clock"
           title={`Nothing budgeted ${PERIOD_BY[period]}`}
@@ -176,7 +206,7 @@ export function BudgetList({
 
   return scroll(
     <>
-      {periods}
+      {picker}
       <SummaryCard
         style={styles.overview}
         /* What the figure is measured against, and what it leaves out, sit behind the ⓘ
@@ -204,8 +234,8 @@ export function BudgetList({
             }
           />
         }
-        // Edit sits with the thing it edits.
-        action={<Chip label="Edit" icon="edit-2" size="sm" onPress={onEdit} accessibilityLabel="Edit budget" />}
+        // The period and Edit sit with the figure they change.
+        action={controls}
         amount={
           <Text style={[styles.spent, { color: healthColor(health) }]}>
             {formatCompact(spent)}
@@ -315,11 +345,15 @@ function CountChip({ count, label, tint, active, onPress }: {
 
 const styles = StyleSheet.create({
   content: { paddingHorizontal: layout.screenPaddingH, paddingTop: space.xs },
-  periods: { marginBottom: space.md },
+  controls: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
+  controlsAlone: { flexDirection: 'row', justifyContent: 'flex-end', marginBottom: space.sm },
+  pickerList: { gap: space.sm },
   // An overview, and it should look like one: the same wash and border Recurring's card has in
   // its own colour. Plain, it read as one more box in a column of boxes.
-  overview: { backgroundColor: alpha(colors.accent, 8), borderColor: colors.accent },
-  headLabel: { ...type.sectionLabel, color: colors.accent },
+  // Blue, its own colour, as Recurring's is purple. In the app's teal it was tinted and still
+  // read as one more card, because teal is what every button and link already wears.
+  overview: { backgroundColor: alpha(decor.blue, 8), borderColor: decor.blue },
+  headLabel: { ...type.sectionLabel, color: decor.blue },
   spent: { ...type.amountLG },
   pct: { ...type.amountSM },
   caption: { ...type.caption, color: colors.textMuted, marginTop: 2 },

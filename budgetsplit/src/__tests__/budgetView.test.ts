@@ -95,14 +95,16 @@ describe('getBudgetView: the headline and the rows are one reading', () => {
   });
 });
 
-describe('the Budget tab always shows the switch', () => {
-  it('Personal and every group render the period view, which owns the switch', () => {
+describe('the Budget tab always shows its period', () => {
+  it('Personal and every group render the period view; the picker sits beside Edit', () => {
     expect(fs.readFileSync('app/(people)/personal.tsx', 'utf8')).toMatch(/<BudgetPeriodView\s+groupId=\{null\}/);
     expect(fs.readFileSync('src/components/finance/group/BudgetTab.tsx', 'utf8')).toMatch(/<BudgetPeriodView\s+groupId=\{groupId\}/);
     const list = fs.readFileSync('src/components/finance/budget/BudgetList.tsx', 'utf8');
-    expect(list).toMatch(/<TabPills tabs=\{PERIODS\} active=\{period\}/);
+    // One picker beside Edit, in the card's heading line, with a ⌄ because it picks one of three.
+    expect(list).toMatch(/label=\{PERIOD_LABEL\[period\]\}[\s\S]{0,60}chevron/);
+    expect(list).toMatch(/action=\{controls\}/);
     // Shown even when nothing can be read at this period, so you can switch away from it.
-    expect(list.indexOf('{periods}')).toBeLessThan(list.indexOf('<SummaryCard'));
+    expect(list).toMatch(/controlsAlone\}>\{controls\}/);
   });
   it('a re-plan is offered on the monthly view only', () => {
     expect(fs.readFileSync('src/components/finance/group/BudgetTab.tsx', 'utf8')).toMatch(/period === 'monthly' && c\.remaining < 0/);
