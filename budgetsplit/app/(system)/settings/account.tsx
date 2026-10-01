@@ -93,7 +93,7 @@ export default function AccountScreen() {
 
   /**
    * Pushes this device's name and picture up. One-directional on purpose: the
-   * device profile is the one the user edits (Settings → profile card), so a
+   * device profile is the one the user edits (the rows at the top of this screen), so a
    * two-way merge would be inventing a conflict that doesn't exist yet.
    */
   async function handleSyncProfile() {
@@ -223,9 +223,16 @@ export default function AccountScreen() {
     );
   }
 
-  const backupRow = (
-    <SettingsRow icon="shield" label="Backup & restore" value="Encrypted" tint={TINT.data} onPress={() => router.push('/settings/backup')} />
+  // "Your data" closes every state of this screen, and the error line follows whichever card raised it.
+  const yourData = (
+    <>
+      <SectionHeader title="Your data" />
+      <Card clip style={styles.card}>
+        <SettingsRow icon="shield" label="Backup & restore" value="Encrypted" tint={TINT.data} onPress={() => router.push('/settings/backup')} />
+      </Card>
+    </>
   );
+  const errorLine = error ? <Text style={styles.error}>{error}</Text> : null;
 
   return (
     <View style={styles.container}>
@@ -267,8 +274,7 @@ export default function AccountScreen() {
 
         {!configured ? (
           <>
-            <SectionHeader title="Your data" />
-            <Card clip style={styles.card}>{backupRow}</Card>
+            {yourData}
             <Text style={styles.meta}>No account in this build. Everything stays on this phone.</Text>
           </>
         ) : !ready ? (
@@ -289,10 +295,8 @@ export default function AccountScreen() {
               <Divider indent="text" />
               <SettingsRow icon="users" label="Linked people" value="Invite · approve" tint={TINT.account} onPress={() => router.push('/settings/linked')} />
             </Card>
-            {error && <Text style={styles.error}>{error}</Text>}
-
-            <SectionHeader title="Your data" />
-            <Card clip style={styles.card}>{backupRow}</Card>
+            {errorLine}
+            {yourData}
 
             {/* Leaving, on its own: the two rows that cannot be taken back sit apart from the rest. */}
             <Card clip style={styles.leaving}>
@@ -350,10 +354,8 @@ export default function AccountScreen() {
               <SecondaryButton label="Use a different email" onPress={useDifferentEmail} style={styles.secondaryCta} />
               <Text style={styles.signInHint}>The link works once, on this phone, for 15 minutes.</Text>
             </Card>
-            {error && <Text style={styles.error}>{error}</Text>}
-
-            <SectionHeader title="Your data" />
-            <Card clip style={styles.card}>{backupRow}</Card>
+            {errorLine}
+            {yourData}
           </>
         ) : (
           <>
@@ -391,10 +393,8 @@ export default function AccountScreen() {
                 style={styles.cta}
               />
             </Card>
-            {error && <Text style={styles.error}>{error}</Text>}
-
-            <SectionHeader title="Your data" />
-            <Card clip style={styles.card}>{backupRow}</Card>
+            {errorLine}
+            {yourData}
           </>
         )}
       </KeyboardForm>

@@ -155,3 +155,18 @@ export function buildUpcoming(
   const windowed = withinDays === undefined ? items : items.filter(i => i.daysUntil <= withinDays);
   return windowed.slice(0, limit);
 }
+
+/**
+ * How far ahead "upcoming" looks: two weeks, or to the end of this month when that is further.
+ * To month-end because the Upcoming screen is the only list of charges (`U-96`): a bill due on
+ * the 20th has to be on it on the 1st. One window for the screen and for the bell that opens it,
+ * so the badge counts what the screen lists.
+ */
+export function upcomingWindowDays(nowMs: number = Date.now()): number {
+  const now = new Date(nowMs);
+  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  return Math.max(14, lastDay - now.getDate());
+}
+
+/** No cap on a windowed list: the window is the limit. */
+export const UPCOMING_NO_LIMIT = 99;

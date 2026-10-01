@@ -37,7 +37,6 @@ import { ErrorState } from '../../../src/components/ui/ErrorState';
 import { Card } from '../../../src/components/ui/Card';
 import { backOr } from '../../../src/lib/nav';
 
-
 /**
  * One hue per SECTION: every row in a section shares it, so the section reads as one group and the
  * colour tells you where you are, not which row is which. (One hue per row made the list a
@@ -110,11 +109,10 @@ export default function SettingsScreen() {
   const [hideAmounts, setHideAmounts] = useState(false);
   const [usageOn, setUsageOn] = useState(true);
 
-
   const [devTaps, setDevTaps] = useState(0);
 
-  // Optional server account (`server/api`). `configured` is false in any build
-  // without EXPO_PUBLIC_API_URL, and then none of this UI exists.
+  // Optional server account (`server/api`). `configured` is false in any build without
+  // EXPO_PUBLIC_API_URL; the line under your name then reads "On this phone".
   const { session: serverSession, configured: serverSessionConfigured } = useServerSession();
 
   /**
@@ -352,12 +350,8 @@ export default function SettingsScreen() {
           />
           <View style={settingsRowDivider} />
         </>)}
-        {/* `B-101`: Sync and Backup & restore dropped as their own rows —
-            `/settings/account` already surfaces both (`SyncStatus` and a link
-            to Backup), so this stopped being a second, repeated path to the
-            same two things and started being a third and fourth (`DQ-101`).
-            When there's no server build (`!serverSessionConfigured`), Account
-            itself is hidden too, so there is nothing to sync either. */}
+        {/* `B-101`: Sync and Backup & restore are not rows here. Both live on Profile (your card
+            at the top): the sync line when there is an account, Backup & restore always (`U-92`). */}
         <SettingsRow
           icon="hard-drive"
           label="Storage"
@@ -417,7 +411,7 @@ export default function SettingsScreen() {
           maxLength={100}
           returnKeyType="done"
           onSubmitEditing={saveVpa}
-          style={styles.nameInputGap}
+          style={styles.sheetInputGap}
         />
         <Text style={styles.vpaHint}>
           Goes into the QR others scan to pay you. Signed in, it's kept on your account with your profile.
@@ -434,7 +428,6 @@ export default function SettingsScreen() {
         name={me?.name}
         onSetUpiId={() => { setShowMyQr(false); setVpaText(me?.upi_vpa ?? ''); setShowVpa(true); }}
       />
-
 
       {/* Default-currency sheet hidden for v1 (INR-only). */}
     </ScrollView>
@@ -465,7 +458,7 @@ const styles = StyleSheet.create({
   aboutText: { ...type.body, color: colors.textPrimary, paddingHorizontal: space.md, paddingTop: space.md },
   aboutSub: { ...type.caption, color: colors.textSecondary, paddingHorizontal: space.md, paddingTop: 2 },
   aboutHint: { ...type.caption, color: colors.textMuted, fontSize: 10, paddingHorizontal: space.md, paddingBottom: space.md, paddingTop: 6 },
-  nameInputGap: { marginBottom: space.md },
+  sheetInputGap: { marginBottom: space.md },
   vpaHint: { ...type.label, color: colors.textSecondary, marginBottom: space.md, lineHeight: 19 },
   toggleRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm, paddingHorizontal: space.md, minHeight: 52 },
   toggleLabel: { ...type.body, color: colors.textPrimary, flex: 1 },

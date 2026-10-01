@@ -110,13 +110,15 @@ describe('loadReportsData', () => {
 
   it('scopes the previous month separately from the selected one', async () => {
     const { db, me, personal } = setup();
-    const thisMonth = midMonth();
-    const prev = new Date(thisMonth); prev.setMonth(prev.getMonth() - 1);
+    // A month that has finished, so it is measured against the whole of the one before it. (A
+    // month still running is measured against the same stretch only: `comparisonRange`.)
+    const month = midMonth(); month.setMonth(month.getMonth() - 1);
+    const prev = new Date(month); prev.setMonth(prev.getMonth() - 1);
 
-    addSimpleExpense(db, { groupId: personal, personId: me, amount: 10000, date: at(thisMonth) });
+    addSimpleExpense(db, { groupId: personal, personId: me, amount: 10000, date: at(month) });
     addSimpleExpense(db, { groupId: personal, personId: me, amount: 70000, date: at(prev) });
 
-    const d = await loadReportsData(asDb(db), thisMonth);
+    const d = await loadReportsData(asDb(db), month);
     expect(d.monthSpent).toBe(10000);
     expect(d.prevSpent).toBe(70000);
   });

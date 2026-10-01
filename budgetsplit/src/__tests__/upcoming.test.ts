@@ -184,3 +184,22 @@ describe('a peer rule awaiting approval is nobody else’s commitment', () => {
     expect(rows.map(r => r.category)).toEqual(['Rent']);
   });
 });
+
+describe('upcomingWindowDays: one window for the bell and the screen it opens', () => {
+  const { upcomingWindowDays } = jest.requireActual('../lib/upcoming') as typeof import('../lib/upcoming');
+  it('runs to the end of the month when that is further than two weeks', () => {
+    // On the 1st a bill due on the 20th has to be on the only list of charges there is.
+    expect(upcomingWindowDays(new Date(2026, 9, 1, 9).getTime())).toBe(30);
+    expect(upcomingWindowDays(new Date(2026, 1, 1, 9).getTime())).toBe(27);
+  });
+  it('is never under two weeks, so late in the month it looks into the next', () => {
+    expect(upcomingWindowDays(new Date(2026, 9, 25, 9).getTime())).toBe(14);
+    expect(upcomingWindowDays(new Date(2026, 9, 31, 23).getTime())).toBe(14);
+  });
+  it('both loaders ask it, so the badge counts what the screen lists', () => {
+    const fs = jest.requireActual('fs') as typeof import('fs');
+    for (const f of ['src/lib/homeData.ts', 'src/lib/upcomingData.ts']) {
+      expect(fs.readFileSync(f, 'utf8')).toMatch(/UPCOMING_NO_LIMIT, upcomingWindowDays\(\)/);
+    }
+  });
+});

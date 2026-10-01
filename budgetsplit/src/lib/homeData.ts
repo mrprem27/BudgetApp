@@ -22,7 +22,7 @@ import { getMyGlobalBudgetSummary, budgetEquivalent, type Period } from './budge
 import { computeHealthScore, type HealthInputs, type HealthResult } from './financialHealth';
 import { monthEndFromEngine, type Forecast } from './forecast';
 import { streakFrom } from './streak';
-import { buildUpcoming, type UpcomingItem } from './upcoming';
+import { buildUpcoming, upcomingWindowDays, UPCOMING_NO_LIMIT, type UpcomingItem } from './upcoming';
 import type { CategoryRow } from '../components/finance/home/CategoryRankList';
 import type { BudgetGroup } from '../db/queries/groups';
 
@@ -144,11 +144,11 @@ export async function loadHomeBase(db: SQLite.SQLiteDatabase) {
   // Health keeps the monthly basis, whatever pill is active.
   const monthlyAllocated = monthly.allocated > 0 ? monthly.allocated : budgetTarget;
 
-  // Drives the bell badge only (the list moved to the Reminders screen). Count
-  // all bills due within the next 14 days — same window the Reminders screen uses.
+  // Drives the bell badge only (the list is the Upcoming screen's). The same window that screen
+  // uses (`upcomingWindowDays`), so the badge counts what it lists.
   const upcomingRules = await getAllRecurringRules(db);
   const upcomingSkips = await getSkipsMap(db, upcomingRules.map(r => r.id));
-  const upcoming = buildUpcoming(upcomingRules, me.id, Date.now(), 99, 14, upcomingSkips);
+  const upcoming = buildUpcoming(upcomingRules, me.id, Date.now(), UPCOMING_NO_LIMIT, upcomingWindowDays(), upcomingSkips);
 
   // Safe-to-Spend — the strip above the hero, not the hero itself. Scoped to a
   // rolling horizon regardless of the Today/Month/Year selector, which is

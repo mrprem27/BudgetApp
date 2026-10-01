@@ -22,14 +22,14 @@ const CADENCE_KEYS = Object.keys(CADENCE_LABELS) as BudgetCadence[];
  * (`U-86`), beside the forecasts these answers drive; it was Settings' Preferences section,
  * a screen away from anything it changes.
  *
- * `wrap` is for a caller that shows the rows in a sheet (`U-91`): it gets the rows and whether one
- * of their pickers is open, and the pickers are rendered beside whatever it returns. A sheet inside
+ * The rows are shown in the caller's sheet (`U-91`): `wrap` gets the rows and whether one of
+ * their pickers is open, and the pickers are rendered beside whatever it returns. A sheet inside
  * another sheet's content dies with it (`lib/sheetStage`), so the caller hides its own sheet while a
  * picker is up and shows it again after.
  */
-export function MoneyPreferences({ tint = colors.accent, wrap }: {
-  tint?: string;
-  wrap?: (rows: ReactNode, pickerOpen: boolean) => ReactNode;
+export function MoneyPreferences({ tint, wrap }: {
+  tint: string;
+  wrap: (rows: ReactNode, pickerOpen: boolean) => ReactNode;
 }) {
   const money = useMoneySettingsRows(tint);
   const [defaultCadence, setDefaultCadence] = useState<BudgetCadence>('monthly');
@@ -78,7 +78,7 @@ export function MoneyPreferences({ tint = colors.accent, wrap }: {
 
   return (
     <>
-      {wrap ? wrap(rows, showPayMethod || showCadence || money.open) : rows}
+      {wrap(rows, showPayMethod || showCadence || money.open)}
       {money.sheets}
 
       {/* Reuses the Add screen's own picker, so the tiles here are the tiles the

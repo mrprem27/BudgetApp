@@ -2,10 +2,10 @@ import * as SQLite from 'expo-sqlite';
 import 'react-native-get-random-values';
 import { v4 as uuid } from 'uuid';
 import { INVESTMENT_CATEGORY } from '../../constants/categories';
-import { PayMethod, type AssetBucket } from '../../constants/enums';
+import { BUCKET_PAY, PAY_METHOD_LABEL, PayMethod, type AssetBucket } from '../../constants/enums';
 import { getMe } from './persons';
 import { getAllGroups, personalGroupOf } from './groups';
-import { insertTxnRows } from './transactions';
+import { insertTxnRows, getUnsetSourceTotal, setSourceForUnsetEntries } from './transactions';
 import { queueDelete, queueUpsert } from './syncQueue';
 
 /**
@@ -330,10 +330,7 @@ export type MoveEndpoint =
   | { kind: 'asset'; id: string }
   | { kind: 'unset' };
 
-export const BUCKET_PAY: Record<AssetBucket, PayMethod> = {
-  bank: PayMethod.Bank, cash: PayMethod.Cash, wallet: PayMethod.Wallet,
-};
-const BUCKET_LABEL: Record<AssetBucket, string> = { bank: 'Bank', cash: 'Cash', wallet: 'Wallet' };
+const bucketName = (b: AssetBucket) => PAY_METHOD_LABEL[BUCKET_PAY[b]];
 
 /**
  * Move money from any place you hold it to any other: bank, cash, wallet or an asset.
@@ -357,9 +354,10 @@ const BUCKET_LABEL: Record<AssetBucket, string> = { bank: 'Bank', cash: 'Cash', 
  *   way: out of Not set when it holds money, into it when it is spending nobody sourced. Not to
  *   or from an asset: say which place it went through first. These rows are an adjustment beside
  *   the entries, not a correction of them: giving one of those entries a Paid from afterwards
- *   counts it in that place a second time, and the difference shows on the Not set line. So the
- *   WHOLE amount going to one place does not come here; the caller sets the place on the entries
- *   themselves (`setSourceForUnsetEntries`), which leaves nothing to double.
+ *   counts it in that place a second time, and the difference shows on the Not set line. So a
+ *   move that clears the WHOLE amount writes no rows: the entries themselves take the place as
+ *   their Paid from (`setSourceForUnsetEntries`), which leaves nothing to double. Decided here,
+ *   over the rows that rewrite touches, so every caller gets it.
  *
  * Net worth is flat in all of them, which is the rule this file exists for. Everything is
  * written in ONE transaction; a move that lands only its first half would drop net worth
@@ -378,9 +376,9 @@ export async function moveMoney(
   if (!Number.isFinite(amountPaise) || amountPaise <= 0) {
     throw new AssetError('bad-amount', 'A move needs a positive amount');
   }
-  const same = from.kind === to.kind && (from.kind === 'bucket'
-    ? from.bucket === (to as { bucket: AssetBucket }).bucket
-    : from.kind === 'asset' ? from.id === (to as { id: string }).id : true);
+  const same = from.kind === 'bucket' ? to.kind === 'bucket' && from.bucket === to.bucket
+    : from.kind === 'asset' ? to.kind === 'asset' && from.id === to.id
+    : to.kind === 'unset';
   if (same) throw new AssetError('same-place', 'Pick two different places');
 
   const amount = Math.round(amountPaise);
@@ -408,14 +406,15 @@ export async function moveMoney(
   if (from.kind === 'unset' || to.kind === 'unset') {
     const place = from.kind === 'unset' ? to : from;
     if (place.kind !== 'bucket') throw new AssetError('unset-asset', 'Move it to Bank, Cash or Wallet first');
-    const name = BUCKET_LABEL[place.bucket];
-    if (from.kind === 'unset') {
-      legs.push({ dir: 'out', bucket: null, assetId: null, note: `Moved to ${name}`, category: 'Other' });
-      legs.push({ dir: 'in', bucket: place.bucket, assetId: null, note: 'From money with no Paid from', category: 'Other' });
-    } else {
-      legs.push({ dir: 'out', bucket: place.bucket, assetId: null, note: 'For entries with no Paid from', category: 'Other' });
-      legs.push({ dir: 'in', bucket: null, assetId: null, note: `Covered from ${name}`, category: 'Other' });
+    const total = await getUnsetSourceTotal(db, me.id);
+    if (amount === Math.abs(total) && (from.kind === 'unset') === (total > 0)) {
+      await setSourceForUnsetEntries(db, me.id, BUCKET_PAY[place.bucket]);
+      return [];
     }
+    const name = bucketName(place.bucket);
+    const plain = (dir: Leg['dir'], bucket: AssetBucket | null, note: string): Leg => ({ dir, bucket, assetId: null, note, category: 'Other' });
+    if (from.kind === 'unset') legs.push(plain('out', null, `Moved to ${name}`), plain('in', place.bucket, 'From money with no Paid from'));
+    else legs.push(plain('out', place.bucket, 'For entries with no Paid from'), plain('in', null, `Covered from ${name}`));
   } else if (from.kind === 'bucket' && toAsset) {
     legs.push({ dir: 'out', bucket: from.bucket, assetId: toAsset.id, note: `Moved to ${toAsset.name}`, category: INVESTMENT_CATEGORY });
   } else if (fromAsset && to.kind === 'bucket') {
@@ -424,8 +423,8 @@ export async function moveMoney(
     legs.push({ dir: 'in', bucket: via, assetId: fromAsset.id, note: `Moved to ${toAsset.name}`, category: INVESTMENT_CATEGORY });
     legs.push({ dir: 'out', bucket: via, assetId: toAsset.id, note: `Moved from ${fromAsset.name}`, category: INVESTMENT_CATEGORY });
   } else if (from.kind === 'bucket' && to.kind === 'bucket') {
-    legs.push({ dir: 'out', bucket: from.bucket, assetId: null, note: `Moved to ${BUCKET_LABEL[to.bucket]}`, category: 'Other' });
-    legs.push({ dir: 'in', bucket: to.bucket, assetId: null, note: `Moved from ${BUCKET_LABEL[from.bucket]}`, category: 'Other' });
+    legs.push({ dir: 'out', bucket: from.bucket, assetId: null, note: `Moved to ${bucketName(to.bucket)}`, category: 'Other' });
+    legs.push({ dir: 'in', bucket: to.bucket, assetId: null, note: `Moved from ${bucketName(from.bucket)}`, category: 'Other' });
   }
 
   const now = Date.now();

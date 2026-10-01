@@ -13,12 +13,9 @@ import {
 import { setMoneyProfile } from '../db/queries/moneyProfile';
 import type { MoneyProfileWrite } from '../db/queries/moneyProfile';
 import { payCardBill, recordBalanceAdjustment } from '../db/queries/spendPower';
-import { getMe } from '../db/queries/persons';
 import { Alert } from 'react-native';
-import { moveMoney, AssetError, BUCKET_PAY, type MoveEndpoint } from '../db/queries/assets';
-import { setSourceForUnsetEntries } from '../db/queries/transactions';
+import { moveMoney, AssetError, type MoveEndpoint } from '../db/queries/assets';
 import { loadSavingsTabData } from '../lib/savingsTabData';
-import { movesWholeUnset } from '../lib/moneySum';
 import { getPendingOverspendNotice, setPendingOverspendNotice } from '../lib/overspendNotice';
 import { useDataRefresh } from '../components/system/DataRefreshProvider';
 import { useScreenData } from './useScreenData';
@@ -132,15 +129,7 @@ export function useSavingsTab() {
   /** Money from any place to any other — the one form behind Plan's "Move money". */
   async function handleMoveMoney(from: MoveEndpoint, to: MoveEndpoint, amountPaise: number) {
     try {
-      /*
-       * The whole "Paid from not set" amount going to one place is written on the entries
-       * themselves: each takes that place as its Paid from (`U-62`), so nothing is left to count
-       * twice if one of them is corrected later. Only a part of it is a move beside them (`U-99`).
-       */
-      const place = from.kind === 'unset' ? to : from;
-      const me = movesWholeUnset(from, to, amountPaise, unattributed) ? await getMe(db) : null;
-      if (me && place.kind === 'bucket') await setSourceForUnsetEntries(db, me.id, BUCKET_PAY[place.bucket]);
-      else await moveMoney(db, from, to, amountPaise);
+      await moveMoney(db, from, to, amountPaise);
     } catch (e) {
       haptic.error();
       Alert.alert('Couldn’t move that', e instanceof AssetError ? e.message : 'Please try again.');

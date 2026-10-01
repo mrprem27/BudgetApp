@@ -51,16 +51,3 @@ export function moneySumLines(m: {
 export function openingFor(typed: number, current: number, opening: number): number {
   return typed - (current - opening);
 }
-
-/**
- * Is this move the WHOLE "Paid from not set" amount going to one place, in the direction that
- * clears it? Then it is written on the entries themselves, not as a move beside them (`U-99`):
- * out of Not set when the line is positive, into it when it is spending with no source.
- */
-export function movesWholeUnset(
-  from: { kind: string }, to: { kind: string }, amountPaise: number, unattributed: number,
-): boolean {
-  const place = from.kind === 'unset' ? to : to.kind === 'unset' ? from : null;
-  return place?.kind === 'bucket' && unattributed !== 0
-    && amountPaise === Math.abs(unattributed) && (from.kind === 'unset') === (unattributed > 0);
-}

@@ -3,7 +3,6 @@ import { getMoneyProfile, setMoneyProfile } from '../db/queries/moneyProfile';
 import { getCashPosition } from '../db/queries/savings';
 import { getTransactionsInRange } from '../db/queries/transactions';
 import { createTestDb, addPerson, addGroup, addMember, asDb } from './helpers/testDb';
-import { movesWholeUnset } from '../lib/moneySum';
 
 /**
  * One way to move money — from bank, cash, wallet or any asset, to any other.
@@ -118,29 +117,37 @@ describe('moveMoney', () => {
       expect(after.total).toBe(before.total);
     });
 
-    it('spending with no source is covered from a place, and the line comes back to zero', async () => {
+    it('part of spending with no source is covered from a place; the rest stays on the line', async () => {
       const { db } = await setup();
       entry(db, 'expense', 400000);
       const before = await lines(db);
       expect(before.notSet).toBe(-400000);
-      await moveMoney(asDb(db), bank, unset, 400000);
+      await moveMoney(asDb(db), bank, unset, 150000);
       const after = await lines(db);
-      expect(after.notSet).toBe(0);
-      expect(after.bank).toBe(before.bank - 400000);
+      expect(after.notSet).toBe(-250000);
+      expect(after.bank).toBe(before.bank - 150000);
       expect(after.total).toBe(before.total);
     });
 
-    it('the whole amount, in the direction that clears it, is written on the entries instead', () => {
-      const u = { kind: 'unset' }, b = { kind: 'bucket' }, as = { kind: 'asset' };
-      // Money with no place: all of it out of Not set. Spending with no source: all of it into Not set.
-      expect(movesWholeUnset(u, b, 500000, 500000)).toBe(true);
-      expect(movesWholeUnset(b, u, 400000, -400000)).toBe(true);
-      // A part of it, the wrong way round, an asset, or nothing to clear: an ordinary move.
-      expect(movesWholeUnset(u, b, 200000, 500000)).toBe(false);
-      expect(movesWholeUnset(b, u, 500000, 500000)).toBe(false);
-      expect(movesWholeUnset(u, as, 500000, 500000)).toBe(false);
-      expect(movesWholeUnset(u, b, 500000, 0)).toBe(false);
-      expect(movesWholeUnset(b, b, 500000, 500000)).toBe(false);
+    it('the whole amount, in the direction that clears it, is written on the entries instead', async () => {
+      // A move beside the entries double-counts if one of them is given a Paid from later, so
+      // clearing all of it writes no move: the entries take the place themselves.
+      const { db } = await setup();
+      entry(db, 'expense', 400000);
+      const before = await lines(db);
+      expect(await moveMoney(asDb(db), bank, unset, 400000)).toEqual([]);
+      const after = await lines(db);
+      expect(after.notSet).toBe(0);
+      expect(after.bank).toBe(before.bank - 400000);
+      expect((db.raw.prepare("SELECT COUNT(*) AS n FROM txn WHERE kind = 'settlement'").get() as { n: number }).n).toBe(0);
+      expect((db.raw.prepare("SELECT pay_method FROM txn WHERE id = 'e-expense-400000'").get() as { pay_method: string }).pay_method).toBe('bank');
+    });
+
+    it('the whole amount the wrong way round is an ordinary move', async () => {
+      const { db } = await setup();
+      entry(db, 'income', 500000);
+      // Money sitting in Not set is cleared by moving it OUT; moving the same amount in is not that.
+      expect(await moveMoney(asDb(db), bank, unset, 500000)).toHaveLength(2);
     });
 
     it('not to or from an asset, and not to itself; a refusal writes nothing', async () => {

@@ -12,12 +12,10 @@ import { IconCircle } from '../../ui/IconCircle';
 import { InfoLabel } from '../../ui/InfoLabel';
 import { PrimaryButton } from '../../ui/PrimaryButton';
 import { formatCompact, formatRupees, parseToPaise } from '../../../lib/money';
-import { ASSET_BUCKET, PayMethod, PAY_METHOD_LABEL, type AssetBucket } from '../../../constants/enums';
+import { ASSET_BUCKET, BUCKET_PAY, PayMethod, PAY_METHOD_LABEL, type AssetBucket } from '../../../constants/enums';
 import { ASSET_KIND_ICON } from '../../../constants/assets';
 import { PayMethodDisc } from '../pay/PayMethodGlyph';
 import type { Asset, MoveEndpoint } from '../../../db/queries/assets';
-
-const BUCKET_PAY: Record<AssetBucket, PayMethod> = { bank: PayMethod.Bank, cash: PayMethod.Cash, wallet: PayMethod.Wallet };
 
 /** A stable key for an endpoint, for comparing and for React. */
 export const endpointKey = (e: MoveEndpoint) => (e.kind === 'bucket' ? `b:${e.bucket}` : e.kind === 'asset' ? `a:${e.id}` : 'unset');

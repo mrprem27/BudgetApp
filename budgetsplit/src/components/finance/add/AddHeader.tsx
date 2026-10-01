@@ -2,7 +2,7 @@ import { Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { ModalHeader } from '../../ui/ModalHeader';
 import { colors, type } from '../../tokens';
 import { formatCompact } from '../../../lib/money';
-import { PAY_METHOD_LABEL, SPLIT_MODE_LABEL, TRANSFER_SCOPE_ALL, AddKind, ADD_KIND_LABEL } from '../../../constants/enums';
+import { SPLIT_MODE_LABEL, TRANSFER_SCOPE_ALL, AddKind, ADD_KIND_LABEL } from '../../../constants/enums';
 import type { useAddTxnForm } from '../../../hooks/useAddTxnForm';
 import type { QuickAddSheet } from './QuickAddSheets';
 

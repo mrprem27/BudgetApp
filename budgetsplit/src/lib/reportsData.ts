@@ -1,4 +1,4 @@
-import { previousRange, type ReportRange } from './dateRange';
+import { comparisonRange, type ReportRange } from './dateRange';
 import type * as SQLite from 'expo-sqlite';
 import { startOfMonth, endOfMonth, startOfYear, endOfYear, subMonths, format } from 'date-fns';
 import { getAllGroups, getArchivedGroups, type BudgetGroup } from '../db/queries/groups';
@@ -100,9 +100,7 @@ export async function loadReportsData(db: SQLite.SQLiteDatabase, month: Date, ra
       const toMs = range ? range.to : endOfMonth(month).getTime();
       const yFrom = startOfYear(month).getTime();
       const yTo = endOfYear(month).getTime();
-      const prev = range ? previousRange(range) : null;
-      const pStart = prev ? prev.from : startOfMonth(subMonths(month, 1)).getTime();
-      const pEnd = prev ? prev.to : endOfMonth(subMonths(month, 1)).getTime();
+      const { from: pStart, to: pEnd } = comparisonRange(month, range);
       // 6-month trend window (oldest → newest) ending at the selected month. None for a range.
       const trendMonths = range ? [] : Array.from({ length: 6 }, (_, i) => subMonths(month, 5 - i));
 

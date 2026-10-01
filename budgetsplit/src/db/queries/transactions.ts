@@ -1129,9 +1129,24 @@ const UNSET_SOURCE_SQL = `
     AND (EXISTS (SELECT 1 FROM txn_payment p WHERE p.txn_id = t.id AND p.person_id = ?)
       OR EXISTS (SELECT 1 FROM txn_share   s WHERE s.txn_id = t.id AND s.person_id = ?))`;
 
-export async function countUnsetSourceEntries(db: SQLite.SQLiteDatabase, meId: string): Promise<number> {
-  const row = await db.getFirstAsync<{ n: number }>(`SELECT COUNT(*) AS n ${UNSET_SOURCE_SQL}`, [meId, meId]);
-  return row?.n ?? 0;
+/**
+ * What those entries add up to for me: income in, spending out, a transfer by its direction.
+ * The amount `setSourceForUnsetEntries` would move, over exactly the rows it would rewrite
+ * (`moveMoney` asks before deciding whether a move clears all of it, `U-99`).
+ */
+export async function getUnsetSourceTotal(db: SQLite.SQLiteDatabase, meId: string): Promise<number> {
+  const row = await db.getFirstAsync<{ total: number }>(
+    `SELECT COALESCE(SUM(CASE u.kind
+         WHEN 'income'     THEN  COALESCE(mp.amt, 0)
+         WHEN 'expense'    THEN -COALESCE(mp.amt, 0)
+         WHEN 'settlement' THEN  COALESCE(ms.amt, 0) - COALESCE(mp.amt, 0)
+         ELSE 0 END), 0) AS total
+       FROM (SELECT t.id, t.kind ${UNSET_SOURCE_SQL}) u
+       LEFT JOIN (SELECT txn_id, SUM(amount) AS amt FROM txn_payment WHERE person_id = ? GROUP BY txn_id) mp ON mp.txn_id = u.id
+       LEFT JOIN (SELECT txn_id, SUM(amount) AS amt FROM txn_share   WHERE person_id = ? GROUP BY txn_id) ms ON ms.txn_id = u.id`,
+    [meId, meId, meId, meId],
+  );
+  return row?.total ?? 0;
 }
 
 /**

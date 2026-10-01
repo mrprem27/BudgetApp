@@ -194,3 +194,17 @@ export function reportsHref(d: DateChoice, group?: string, nowMs: number = Date.
   ].filter(Boolean).join('&');
   return q ? `/reports?${q}` : '/reports';
 }
+
+/**
+ * The rows a totals row adds up: the filters without the search text, and this month while no
+ * date is chosen (an all-time "spent" answers nothing). Search finds rows; it does not change
+ * what the figures are about (`U-62`), and it has no place in the label, so a typed word would
+ * narrow the totals with nothing on screen saying so.
+ */
+export function totalsRows<T extends FilterableTxn>(rows: readonly T[], f: TxnFilters, nowMs: number = Date.now()): T[] {
+  const narrowed = applyFilters(rows, { ...f, query: '' });
+  if (f.from != null || f.to != null) return narrowed;
+  const now = new Date(nowMs);
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+  return narrowed.filter(t => t.date >= monthStart);
+}

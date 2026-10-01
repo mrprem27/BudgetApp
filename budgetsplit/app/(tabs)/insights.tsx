@@ -35,6 +35,7 @@ import { healthColor, recColor } from '../../src/components/finance/group/helper
 import type { Insight } from '../../src/lib/savingsInsights';
 import { formatCompact, formatCompactMajor, formatAxisShort } from '../../src/lib/money';
 import { loadInsightsData } from '../../src/lib/insightsData';
+import { forecastTile } from '../../src/lib/forecastVerdict';
 import { budgetHealth, utilLabel } from '../../src/lib/budget';
 import { shortDate } from '../../src/lib/dateFormat';
 import { plotWidth, axisSpacing } from '../../src/lib/chartAxis';
@@ -64,6 +65,16 @@ const isDuplicateRec = (id: string) =>
   id.startsWith('over-') || id === 'projected' || id === 'ontrack';
 
 type Sheet = 'outlook' | 'attention' | 'forecast' | 'shifts' | 'whatif' | 'savings' | 'prefs' | null;
+/** Each section's name, said once: on its tile and on the sheet the tile opens. */
+const TITLE: Record<Exclude<Sheet, null>, string> = {
+  outlook: 'Cash outlook',
+  prefs: 'How your money works',
+  attention: 'Needs attention',
+  forecast: 'Month-end forecast',
+  shifts: 'Changed vs last month',
+  whatif: 'What if I cut back?',
+  savings: 'Ways to save',
+};
 
 export default function InsightsScreen() {
   const router = useRouter();
@@ -74,6 +85,8 @@ export default function InsightsScreen() {
   // Which section's sheet is up. One at a time, by construction.
   const [sheet, setSheet] = useState<Sheet>(null);
   const closeSheet = () => setSheet(null);
+  // The preferences read device settings when they mount, so they mount the first time they are opened.
+  const [prefsSeen, setPrefsSeen] = useState(false);
 
   const { data, loading, error: loadError, refreshing, onRefresh, reload } =
     useScreenData((db) => loadInsightsData(db), []);
@@ -117,6 +130,13 @@ export default function InsightsScreen() {
   const budgetPerDay = hasBudget && daysInMonth > 0 ? Math.round(budget / daysInMonth) : 0;
   const hasForecast = forecastActual.length >= 2 && forecastProjected.length >= 1;
 
+  // Said on a tile and again in its sheet, so each is worked out once.
+  const outlookColor = !outlook || outlook.suppressed ? colors.textSecondary : outlook.safeToSpend >= 0 ? colors.income : colors.expense;
+  const outlookUntil = outlook ? shortDate(new Date(outlook.untilMs)) : '';
+  const cutSaving = whatIf ? Math.round((whatIf.monthly * cutPct) / 100) : 0;
+  // The same figure and words as Home's month-end tile (`forecastTile`), not a second phrasing of it.
+  const forecast = hasForecast ? forecastTile({ projected, budget }) : null;
+
   const attentionCount = drivers.length + notes.length;
   const overTotal = drivers.reduce((s, d) => s + d.over, 0);
   const nothingYet = !loading && !hasBudget && attentionCount === 0 && shifts.length === 0
@@ -154,8 +174,7 @@ export default function InsightsScreen() {
             onAction={() => router.push('/add/quick')}
           />
         ) : (
-          <>
-            {/*
+            /*
               * THE HEADLINE — always here.
               *
               * This card used to render only when you were projected to overspend,
@@ -169,7 +188,7 @@ export default function InsightsScreen() {
               * `BudgetBar` and Home's `ForecastCard`, where the fill is spend tinted
               * by health. Three legend labels sat `space-between` above a track they
               * did not align with. `Card` + `BudgetBar` replace all of it.
-              */}
+              */
             <Card padded style={styles.headline}>
               <View style={styles.headRow}>
                 <Text style={styles.eyebrow}>{monthLabel(today)} · {dayOfMonth} days in</Text>
@@ -229,8 +248,6 @@ export default function InsightsScreen() {
                 />
               )}
             </Card>
-
-          </>
         )}
 
         {/*
@@ -244,21 +261,21 @@ export default function InsightsScreen() {
         <InsightGrid>
           {outlook && (
             <InsightTile
-              key="outlook" icon="compass" tint={decor.blue} title="Cash outlook"
+              key="outlook" icon="compass" tint={decor.blue} title={TITLE.outlook}
               figure={outlook.suppressed ? 'Learning' : formatCompact(outlook.safeToSpend)}
-              figureColor={outlook.suppressed ? colors.textSecondary : outlook.safeToSpend >= 0 ? colors.income : colors.expense}
-              line={outlook.suppressed ? 'needs a little more history' : `safe to spend until ${shortDate(new Date(outlook.untilMs))}`}
+              figureColor={outlookColor}
+              line={outlook.suppressed ? 'needs a little more history' : `safe to spend until ${outlookUntil}`}
               onPress={() => setSheet('outlook')}
             />
           )}
           <InsightTile
-            key="prefs" icon="sliders" tint={decor.violet} title="How your money works"
+            key="prefs" icon="sliders" tint={decor.violet} title={TITLE.prefs}
             line="Pay cycle, safe to spend, defaults"
-            onPress={() => setSheet('prefs')}
+            onPress={() => { setPrefsSeen(true); setSheet('prefs'); }}
           />
           {attentionCount > 0 && (
             <InsightTile
-              key="attention" icon="alert-triangle" tint={colors.expense} title="Needs attention"
+              key="attention" icon="alert-triangle" tint={colors.expense} title={TITLE.attention}
               figure={overTotal > 0 ? formatCompact(overTotal) : String(attentionCount)}
               figureColor={colors.expense}
               // The amount is the overruns'; the count beside it has to be theirs too, not the notes'.
@@ -268,16 +285,16 @@ export default function InsightsScreen() {
           )}
           {!nothingYet && (
             <InsightTile
-              key="forecast" icon="trending-up" tint={colors.accent} title="Month-end forecast"
-              figure={hasForecast ? formatCompactMajor(projectedTotal) : 'Soon'}
-              figureColor={hasForecast ? undefined : colors.textSecondary}
-              line={hasForecast ? 'projected by month-end' : 'needs about a month of spending'}
+              key="forecast" icon="trending-up" tint={colors.accent} title={TITLE.forecast}
+              figure={forecast ? forecast.amount : 'Soon'}
+              figureColor={!forecast ? colors.textSecondary : forecast.tone === 'over' ? colors.expense : forecast.tone === 'good' ? colors.income : undefined}
+              line={forecast ? forecast.sub : 'after a few days of spending'}
               onPress={() => setSheet('forecast')}
             />
           )}
           {shifts.length > 0 && (
             <InsightTile
-              key="shifts" icon="repeat" tint={decor.orange} title="Changed vs last month"
+              key="shifts" icon="repeat" tint={decor.orange} title={TITLE.shifts}
               figure={`${shifts[0].pct > 0 ? '+' : ''}${shifts[0].pct}%`}
               figureColor={shifts[0].pct > 5 ? colors.expense : shifts[0].pct < -5 ? colors.income : undefined}
               line={shifts.length === 1 ? shifts[0].cat : `${shifts[0].cat}, and ${shifts.length - 1} more`}
@@ -286,8 +303,8 @@ export default function InsightsScreen() {
           )}
           {whatIf && whatIf.monthly > 0 && (
             <InsightTile
-              key="whatif" icon="scissors" tint={decor.pink} title="What if I cut back?"
-              figure={formatCompact(Math.round((whatIf.monthly * cutPct) / 100))}
+              key="whatif" icon="scissors" tint={decor.pink} title={TITLE.whatif}
+              figure={formatCompact(cutSaving)}
               figureColor={colors.income}
               line={`a month, with ${cutPct}% less ${whatIf.name}`}
               onPress={() => setSheet('whatif')}
@@ -295,7 +312,7 @@ export default function InsightsScreen() {
           )}
           {savings.length > 0 && (
             <InsightTile
-              key="savings" icon="feather" tint={colors.income} title="Ways to save"
+              key="savings" icon="feather" tint={colors.income} title={TITLE.savings}
               figure={String(savings.length)}
               line={savings.length === 1 ? 'idea from your own spending' : 'ideas from your own spending'}
               onPress={() => setSheet('savings')}
@@ -320,9 +337,9 @@ export default function InsightsScreen() {
 
       {/* One sheet per section, each opening on what the section is and an (i) for how it is worked out. */}
       {outlook && (
-        <SheetModal visible={sheet === 'outlook'} onClose={closeSheet} title="Cash outlook">
-          <SheetIntro label={outlook.suppressed ? 'Still learning your spending' : 'What is safe to spend, and why'}
-            info="Today's cash, every known bill and income up to payday, and your everyday spending for the days between. The lowest point on that walk is what is safe to spend." />
+        <InsightSheet id="outlook" sheet={sheet} onClose={closeSheet}
+          label={outlook.suppressed ? 'Still learning your spending' : 'What is safe to spend, and why'}
+            info="Today's cash, every known bill and income up to payday, and your everyday spending for the days between. The lowest point on that walk is what is safe to spend.">
           {outlook.suppressed ? (
             <Text style={styles.pace}>Needs {outlook.missing ?? 'a little more history'} before it can project your cash.</Text>
           ) : (
@@ -330,12 +347,10 @@ export default function InsightsScreen() {
               <Card clip>
                 <ListRow
                   icon="shield"
-                  iconColor={outlook.safeToSpend >= 0 ? colors.income : colors.expense}
+                  iconColor={outlookColor}
                   title="Safe to spend"
-                  subtitle={outlook.noDip
-                    ? `Through ${shortDate(new Date(outlook.untilMs))}, every known bill paid`
-                    : `Your lowest point ahead, on ${shortDate(new Date(outlook.untilMs))}`}
-                  value={<Text style={[styles.outlookAmt, { color: outlook.safeToSpend >= 0 ? colors.income : colors.expense }]}>{formatCompact(outlook.safeToSpend)}</Text>}
+                  subtitle={outlook.noDip ? `Through ${outlookUntil}, every known bill paid` : `Your lowest point ahead, on ${outlookUntil}`}
+                  value={<Text style={[styles.outlookAmt, { color: outlookColor }]}>{formatCompact(outlook.safeToSpend)}</Text>}
                   chevron={false}
                 />
                 {outlook.upcomingBills > 0 && (
@@ -370,7 +385,7 @@ export default function InsightsScreen() {
               </Text>
             </>
           )}
-        </SheetModal>
+        </InsightSheet>
       )}
 
       {/*
@@ -382,9 +397,9 @@ export default function InsightsScreen() {
         * over". One section, drivers first (the amount is the actionable part),
         * then whatever the rule engine has left to say that isn't a repeat.
         */}
-      <SheetModal visible={sheet === 'attention'} onClose={closeSheet} title="Needs attention">
-        <SheetIntro label={overTotal > 0 ? `${formatCompact(overTotal)} over budget this month` : 'Worth a look this month'}
-          info="Categories that have passed their budget, largest first, then anything else this month's spending flagged. Tap a category to see its entries." />
+      <InsightSheet id="attention" sheet={sheet} onClose={closeSheet}
+          label={overTotal > 0 ? `${formatCompact(overTotal)} over budget this month` : 'Worth a look this month'}
+          info="Categories that have passed their budget, largest first, then anything else this month's spending flagged. Tap a category to see its entries.">
         <Card clip>
           {drivers.map((d, i) => {
             const vis = categoryVisual(d.category);
@@ -413,17 +428,17 @@ export default function InsightsScreen() {
             </View>
           ))}
         </Card>
-      </SheetModal>
+      </InsightSheet>
 
       {/* A forecast needs at least two days of spending to draw a line through, so early in
           the month there is nothing honest to show. The tile stays and says why (`W1-12`): a
           section that vanished read as a feature removed, and a projection from one day's
           data would swing wildly and be worse than none. */}
-      <SheetModal visible={sheet === 'forecast'} onClose={closeSheet} title="Month-end forecast">
-        <SheetIntro label={hasForecast ? `${formatCompactMajor(projectedTotal)} projected by month-end` : 'Needs about a month of spending first'}
+      <InsightSheet id="forecast" sheet={sheet} onClose={closeSheet}
+          label={hasForecast ? `${formatCompactMajor(projectedTotal)} projected by month-end` : 'Appears after a few days of spending'}
           info={hasForecast
             ? 'Your spending so far this month, carried on at the same pace to the last day. Solid is spent, dashed is ahead.'
-            : 'A projection this early would swing on a single purchase. It appears once there is about a month of spending to base it on.'} />
+            : 'A projection this early would swing on a single purchase. It appears from the third day of the month, once there is spending to base it on.'}>
         {hasForecast && (
           <Card padded>
             <View onLayout={onChartLayout}>
@@ -442,10 +457,7 @@ export default function InsightsScreen() {
                   strokeDashArray1={[5, 5]}
                   noOfSections={4}
                   maxValue={Math.ceil((Math.max(...forecastActual.map(d => d.value), ...forecastProjected.map(d => d.value), 1)) * 1.1)}
-                  // Until the first layout lands there is nothing measured to
-                  // divide, so hold the old constant for one frame rather than
-                  // collapsing every label to the floor.
-                  spacing={plotWidth(chartW, 0) > 0 ? axisSpacing(plotWidth(chartW, 0), forecastProjected.length) : 8}
+                  spacing={axisSpacing(plotWidth(chartW, 0), forecastProjected.length)}
                   initialSpacing={8}
                   endSpacing={8}
                   xAxisThickness={0}
@@ -481,11 +493,11 @@ export default function InsightsScreen() {
             </View>
           </Card>
         )}
-      </SheetModal>
+      </InsightSheet>
 
-      <SheetModal visible={sheet === 'shifts'} onClose={closeSheet} title="Changed vs last month">
-        <SheetIntro label={`${shifts.length} ${shifts.length === 1 ? 'category' : 'categories'} moved most`}
-          info="This month's spending in each category against last month's, largest change first." />
+      <InsightSheet id="shifts" sheet={sheet} onClose={closeSheet}
+          label={`${shifts.length} ${shifts.length === 1 ? 'category' : 'categories'} moved most`}
+          info="This month's spending in each category against last month's, largest change first.">
         <Card clip>
           {shifts.map((s, i) => {
             const vis = categoryVisual(s.cat);
@@ -510,21 +522,21 @@ export default function InsightsScreen() {
             );
           })}
         </Card>
-      </SheetModal>
+      </InsightSheet>
 
       {whatIf && whatIf.monthly > 0 && (
-        <SheetModal visible={sheet === 'whatif'} onClose={closeSheet} title="What if I cut back?">
-          <SheetIntro label={`Your biggest category is ${whatIf.name}`}
-            info="Takes what you spend on your biggest category in a month and shows what a cut would keep, a month and over a year." />
+        <InsightSheet id="whatif" sheet={sheet} onClose={closeSheet}
+          label={`Your biggest category is ${whatIf.name}`}
+            info="Takes what you spend on your biggest category in a month and shows what a cut would keep, a month and over a year.">
           <Card padded>
             <Text style={styles.whatIfLead}>
               Spend {cutPct}% less on <Text style={styles.whatIfName}>{whatIf.name}</Text> and you'd keep
             </Text>
             <Text style={styles.whatIfSave}>
-              {formatCompact(Math.round((whatIf.monthly * cutPct) / 100))}<Text style={styles.whatIfPer}>/month</Text>
+              {formatCompact(cutSaving)}<Text style={styles.whatIfPer}>/month</Text>
             </Text>
             <Text style={styles.whatIfYear}>
-              ≈ {formatCompact(Math.round((whatIf.monthly * cutPct) / 100) * 12)} over a year
+              ≈ {formatCompact(cutSaving * 12)} over a year
             </Text>
             {/* `ui/Chip`, not a fourth hand-rolled pill (§9). */}
             <View style={styles.cutRow}>
@@ -533,12 +545,12 @@ export default function InsightsScreen() {
               ))}
             </View>
           </Card>
-        </SheetModal>
+        </InsightSheet>
       )}
 
-      <SheetModal visible={sheet === 'savings'} onClose={closeSheet} title="Ways to save">
-        <SheetIntro label={`${savings.length} ${savings.length === 1 ? 'idea' : 'ideas'} from your own spending`}
-          info="Read from your own entries: habits that add up, and what a small change to one would come to." />
+      <InsightSheet id="savings" sheet={sheet} onClose={closeSheet}
+          label={`${savings.length} ${savings.length === 1 ? 'idea' : 'ideas'} from your own spending`}
+          info="Read from your own entries: habits that add up, and what a small change to one would come to.">
         <Card clip>
           {savings.map((ins, i) => {
             const tint = insightTint(ins.tone);
@@ -554,31 +566,47 @@ export default function InsightsScreen() {
             );
           })}
         </Card>
-      </SheetModal>
+      </InsightSheet>
 
       {/* The answers the forecasts above are built on (`U-86`), in the colour Settings gives its
           Preferences. The pickers are rendered beside this sheet, not inside it, and it steps
           aside while one is up: only one sheet can be on stage (`lib/sheetStage`). */}
-      <MoneyPreferences
-        tint={decor.violet}
-        wrap={(rows, pickerOpen) => (
-          <SheetModal visible={sheet === 'prefs' && !pickerOpen} onClose={closeSheet} title="How your money works">
-            <SheetIntro label="What the forecasts are built on"
-              info="Safe to spend, the month-end forecast and Can I afford all read these answers. Change one and they move with it." />
-            <Card clip>{rows}</Card>
-          </SheetModal>
-        )}
-      />
+      {prefsSeen && (
+        <MoneyPreferences
+          tint={decor.violet}
+          wrap={(rows, pickerOpen) => (
+            <InsightSheet id="prefs" sheet={sheet} hidden={pickerOpen} onClose={closeSheet}
+            label="What the forecasts are built on"
+                info="Safe to spend, the month-end forecast and Can I afford all read these answers. Change one and they move with it.">
+              <Card clip>{rows}</Card>
+            </InsightSheet>
+          )}
+        />
+      )}
     </View>
   );
 }
 
-/** A sheet's first line: what the section is, with how it is worked out behind an (i). */
-function SheetIntro({ label, info }: { label: string; info: string }) {
+/**
+ * One section's sheet: its title (the tile's), then what the section is with how it is worked
+ * out behind an (i). `hidden` steps it aside while a picker opened from inside it is up.
+ */
+function InsightSheet({ id, sheet, hidden, onClose, label, info, children }: {
+  id: Exclude<Sheet, null>;
+  sheet: Sheet;
+  hidden?: boolean;
+  onClose: () => void;
+  label: string;
+  info: string;
+  children?: React.ReactNode;
+}) {
   return (
-    <View style={styles.sheetIntro}>
-      <InfoLabel label={label} labelStyle={styles.sheetIntroLabel} info={info} />
-    </View>
+    <SheetModal visible={sheet === id && !hidden} onClose={onClose} title={TITLE[id]}>
+      <View style={styles.sheetIntro}>
+        <InfoLabel label={label} labelStyle={styles.sheetIntroLabel} info={info} />
+      </View>
+      {children}
+    </SheetModal>
   );
 }
 

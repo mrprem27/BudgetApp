@@ -161,6 +161,9 @@ export const INCOME_LANDING_DEFAULT = PayMethod.Bank;
 export const ASSET_BUCKET = ['bank', 'cash', 'wallet'] as const;
 export type AssetBucket = typeof ASSET_BUCKET[number];
 
+/** The Paid from each place is drawn through. The inverse of `assetOf` for the three places. */
+export const BUCKET_PAY: Record<AssetBucket, PayMethod> = { bank: PayMethod.Bank, cash: PayMethod.Cash, wallet: PayMethod.Wallet };
+
 /**
  * The place a stored From draws on, or `null` when it genuinely is not known.
  *

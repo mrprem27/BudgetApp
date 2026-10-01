@@ -42,23 +42,43 @@ describe('activityTotals (U-52)', () => {
   });
 });
 
-describe('groupSpend: a group\'s month, mine and everyone\'s (U-88)', () => {
+describe('groupSpend: mine and everyone\'s, over the rows it is given (U-88)', () => {
   const at = (d: number) => new Date(2026, 9, d, 12).getTime();
-  const from = new Date(2026, 9, 1).getTime();
   const three = [{ personId: ME, amount: 300 }, { personId: 'a', amount: 300 }, { personId: 'b', amount: 300 }];
-  it('adds my share and the whole bill, this month only', () => {
+  it('adds my share and the whole bill', () => {
     expect(groupSpend([
-      { kind: 'expense', date: at(3), shares: three },
-      { kind: 'expense', date: at(5), shares: [{ personId: 'a', amount: 500 }] },      // not mine at all
-      { kind: 'expense', date: new Date(2026, 8, 30).getTime(), shares: three },        // last month
-    ], ME, from)).toEqual({ mine: 300, everyone: 1400 });
+      { kind: 'expense', shares: three },
+      { kind: 'expense', shares: [{ personId: 'a', amount: 500 }] },      // not mine at all
+    ], ME)).toEqual({ mine: 300, everyone: 1400 });
   });
   it('leaves out transfers, deleted entries and entries waiting for me', () => {
     expect(groupSpend([
-      { kind: 'settlement', date: at(3), shares: [{ personId: 'a', amount: 900 }] },
-      { kind: 'expense', date: at(3), shares: three, is_deleted: 1 },
-      { kind: 'expense', date: at(3), shares: three, pendingApproval: true },
-    ], ME, from)).toEqual({ mine: 0, everyone: 0 });
+      { kind: 'settlement', shares: [{ personId: 'a', amount: 900 }] },
+      { kind: 'expense', shares: three, is_deleted: 1 },
+      { kind: 'expense', shares: three, pendingApproval: true },
+    ], ME)).toEqual({ mine: 0, everyone: 0 });
+  });
+
+  /*
+   * Which rows: `totalsRows`. This month while no date is chosen, exactly the chosen dates
+   * otherwise, through every filter but the search text.
+   */
+  describe('totalsRows: what a totals row adds up', () => {
+    const { totalsRows, NO_FILTERS } = jest.requireActual('../lib/txnFilter') as typeof import('../lib/txnFilter');
+    const now = new Date(2026, 9, 20).getTime();
+    const row = (date: number, kind = 'expense', note: string | null = null) => ({ kind, date, category: 'Food', note, tags: null, payments: [], shares: three });
+    const rows = [row(at(3), 'expense', 'pizza'), row(at(5)), row(new Date(2026, 8, 30).getTime()), row(at(6), 'income')];
+
+    it('is this month while no date is chosen', () => {
+      expect(totalsRows(rows, NO_FILTERS, now).map(r => r.date)).toEqual([at(3), at(5), at(6)]);
+    });
+    it('is exactly the chosen dates otherwise', () => {
+      const sep = { ...NO_FILTERS, from: new Date(2026, 8, 1).getTime(), to: new Date(2026, 8, 30, 23, 59).getTime() };
+      expect(totalsRows(rows, sep, now)).toHaveLength(1);
+    });
+    it('follows the kind filter, and never the search text', () => {
+      expect(totalsRows(rows, { ...NO_FILTERS, kind: 'income' }, now)).toHaveLength(1);
+      expect(totalsRows(rows, { ...NO_FILTERS, query: 'pizza' }, now)).toHaveLength(3);
+    });
   });
 });
-

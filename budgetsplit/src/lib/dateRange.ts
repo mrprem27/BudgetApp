@@ -53,3 +53,21 @@ export function previousRange(r: ReportRange): ReportRange {
   const len = r.to - r.from;
   return { from: r.from - len - 1, to: r.from - 1 };
 }
+
+/**
+ * What a report's period is measured against: the month (or the equal span) before it. While the
+ * period is still running, only the same stretch of that one: ten days of October against all of
+ * September reads as a 70% saving every month. One rule for the Reports screen and its PDF, which
+ * compared differently for a day.
+ */
+export function comparisonRange(month: Date, range: ReportRange | undefined, nowMs: number = Date.now()): ReportRange {
+  const cur: ReportRange = range ?? {
+    from: new Date(month.getFullYear(), month.getMonth(), 1).getTime(),
+    to: new Date(month.getFullYear(), month.getMonth() + 1, 1).getTime() - 1,
+  };
+  const whole: ReportRange = range ? previousRange(range) : {
+    from: new Date(month.getFullYear(), month.getMonth() - 1, 1).getTime(),
+    to: cur.from - 1,
+  };
+  return cur.to > nowMs && nowMs >= cur.from ? { from: whole.from, to: Math.min(whole.to, whole.from + (nowMs - cur.from)) } : whole;
+}

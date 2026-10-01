@@ -33,20 +33,20 @@ export function activityTotals(rows: readonly TotalsRow[], meId: string): Activi
 }
 
 /**
- * A group's spending since `fromMs`: my share, and the whole group's (`U-88`, the row under a
- * group's header). Spending only; a transfer or an entry waiting for approval is neither.
+ * A group's spending over the rows given: my share, and the whole group's (`U-88`, the row under
+ * a group's header). Spending only; a transfer or an entry waiting for approval is neither. The
+ * caller chooses the rows (`totalsRows`: the filters, and this month while no date is chosen).
  */
 export function groupSpend(
   rows: readonly {
-    kind: string; date: number; pendingApproval?: boolean; is_deleted?: number | boolean | null;
+    kind: string; pendingApproval?: boolean; is_deleted?: number | boolean | null;
     shares: ReadonlyArray<{ personId: string; amount: number }>;
   }[],
   meId: string,
-  fromMs: number,
 ): { mine: number; everyone: number } {
   let mine = 0, everyone = 0;
   for (const t of rows) {
-    if (t.kind !== 'expense' || t.pendingApproval || t.is_deleted || t.date < fromMs) continue;
+    if (t.kind !== 'expense' || t.pendingApproval || t.is_deleted) continue;
     mine += myShareOf(t, meId);
     everyone += t.shares.reduce((s, x) => s + x.amount, 0);
   }

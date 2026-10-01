@@ -183,8 +183,8 @@ export default function GroupDetailScreen() {
   // The row under the header adds up what the list shows, by the rule Personal's follows
   // (`useTxnFilters.totalsRows`, `U-63`): my share and everyone's, through the filters but not the
   // search text, this month while no date is chosen. It stayed on this month whatever was filtered.
-  const filteredTxns = useMemo(() => applyFilters(txns, filter.filters), [txns, filter.filters]);
-  const monthSpend = useMemo(() => groupSpend(filter.totalsRows(txns), meId, 0), [filter.totalsRows, txns, meId]);
+  const filteredTxns = useMemo(() => applyFilters(txns, filter.noSearch), [txns, filter.noSearch]);
+  const monthSpend = useMemo(() => groupSpend(filter.totalsRows(txns), meId), [filter.totalsRows, txns, meId]);
 
   const TABS: { key: TabKey; label: string }[] = [
     { key: 'transactions', label: 'Expenses' },

@@ -1,4 +1,4 @@
-import { useMemo, useCallback, useRef } from 'react';
+import { useMemo, useCallback, useRef, useState } from 'react';
 import { View, StyleSheet, SectionList } from 'react-native';
 import { colors, space, layout } from '../../tokens';
 import { useContentInset } from '../../../hooks/useContentInset';
@@ -8,6 +8,7 @@ import { TxnCell } from '../TxnCell';
 import { FilterBar } from '../../ui/FilterBar';
 import { rankTagsByFrequency } from '../../../lib/tags';
 import type { TxnFilterState } from '../../../hooks/useTxnFilters';
+import { applyFilters, NO_FILTERS } from '../../../lib/txnFilter';
 import { EmptyState } from '../../ui/EmptyState';
 import { SectionHeader } from '../../ui/SectionHeader';
 import { AppRefreshControl } from '../../ui/AppRefreshControl';
@@ -19,7 +20,7 @@ const listScroll = keyboardAwareScroll();
 
 type Props = {
   txns: TxnWithSplits[];
-  /** `txns` through the filters: the screen applies them, because its totals row adds up the same rows. */
+  /** `txns` through every filter but the search text: the screen applies them, because its totals row adds up the same rows. */
   filteredTxns: TxnWithSplits[];
   filter: TxnFilterState;
   members: Person[];
@@ -40,9 +41,13 @@ type Props = {
  */
 export function TransactionsTab({ txns, filteredTxns, filter, members, meId, groupName, onDeleteTxn, onEditTxn, onAddTxn, refreshing, onRefresh }: Props) {
   const bottomPad = useContentInset({ fab: true });
-  const { kind, setKind, search, setSearch, range, from, to, setRange, personId, setPersonId, tags, setTags } = filter;
+  const { kind, setKind, range, from, to, setRange, personId, setPersonId, tags, setTags } = filter;
+  // The search text stays here: it finds rows and changes no figure above the list, so a
+  // keystroke has no business re-rendering the header, the totals row and the tabs.
+  const [search, setSearch] = useState('');
+  const shown = useMemo(() => applyFilters(filteredTxns, { ...NO_FILTERS, query: search }), [filteredTxns, search]);
 
-  const sections = useMemo(() => groupByDate<TxnWithSplits>(filteredTxns), [filteredTxns]);
+  const sections = useMemo(() => groupByDate<TxnWithSplits>(shown), [shown]);
 
   // Stable identity for the person sheet — `FilterBar` memoises on it.
   const people = useMemo(() => members.map(m => ({ id: m.id, name: m.name })), [members]);
@@ -133,7 +138,7 @@ export function TransactionsTab({ txns, filteredTxns, filter, members, meId, gro
             // Clears every filter, not the two that used to exist. A "clear
             // filters" that left a date range or a person set would be the same
             // dead end it exists to escape.
-            onAction={filter.clear}
+            onAction={() => { setSearch(''); filter.clear(); }}
           />
         )
       }

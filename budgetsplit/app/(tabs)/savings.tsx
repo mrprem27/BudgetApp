@@ -111,7 +111,12 @@ export default function SavingsScreen() {
     allocation, setAllocation, frequency, setFrequency, newDate, setNewDate,
     resetNew, handleCreate, handleReorder, showReorderHint,
   } = useSavingsTab();
-  const notSet = unattributed ?? 0;
+  // What Move money opens on: bank → your first asset (the common "I bought an investment" case),
+  // or, from the "Paid from not set" line, that money (`U-99`): out of Not set when it holds some,
+  // into it from the bank when it is spending with no source, the whole amount filled in.
+  const BANK = { kind: 'bucket', bucket: 'bank' } as const, UNSET = { kind: 'unset' } as const;
+  const moveSeed = !moveUnset ? { from: BANK, to: assets[0] ? { kind: 'asset' as const, id: assets[0].id } : { kind: 'bucket' as const, bucket: 'cash' as const }, amount: '' }
+    : { ...(unattributed >= 0 ? { from: UNSET, to: BANK } : { from: BANK, to: UNSET }), amount: unattributed !== 0 ? paiseToInput(Math.abs(unattributed)) : '' };
 
   return (
     <View style={styles.container}>
@@ -323,20 +328,14 @@ export default function SavingsScreen() {
         onManageAccounts={() => { setShowMoneyEditor(false); router.push('/accounts'); }}
       />
 
-      {/* Opens as bank → your first asset (the common "I bought an investment" case); ⇅ flips it,
-          and any place can be either end. From the "Paid from not set" line it opens on that money
-          instead (`U-99`): out of Not set when it holds some, into it from the bank when it is
-          spending with no source, the whole amount filled in and yours to lower. */}
+      {/* ⇅ flips it, and any place can be either end. */}
       <MoveMoneySheet
         visible={showMoveInvest}
         onClose={() => setShowMoveInvest(false)}
         assets={assets}
         bucketBalances={byBucket}
-        unset={notSet}
-        from={moveUnset && notSet >= 0 ? { kind: 'unset' } : { kind: 'bucket', bucket: 'bank' }}
-        to={moveUnset ? (notSet >= 0 ? { kind: 'bucket', bucket: 'bank' } : { kind: 'unset' })
-          : assets[0] ? { kind: 'asset', id: assets[0].id } : { kind: 'bucket', bucket: 'cash' }}
-        amount={moveUnset && notSet !== 0 ? paiseToInput(Math.abs(notSet)) : ''}
+        unset={unattributed}
+        {...moveSeed}
         onMove={handleMoveMoney}
       />
 

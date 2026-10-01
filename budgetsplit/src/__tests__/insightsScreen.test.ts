@@ -78,20 +78,28 @@ describe('the sections are tiles that open a sheet, built from the design system
     expect(code).not.toMatch(/<SectionCard|styles\.secLabel|styles\.secCard|styles\.chartCard/);
   });
 
-  it('holds one sheet at a time, each opening on an explanation', () => {
+  it('holds one sheet at a time, each named once and opening on an explanation', () => {
     expect(code).toMatch(/useState<Sheet>\(null\)/);
-    const sheets = (code.match(/<SheetModal visible=\{sheet === '/g) ?? []).length;
-    expect(sheets).toBeGreaterThanOrEqual(7);
-    expect((code.match(/<SheetIntro /g) ?? []).length).toBe(sheets);
+    // One wrapper: the title is the tile's (`TITLE`), and the (i) line is not optional.
+    expect((code.match(/<InsightSheet id="/g) ?? []).length).toBe(7);
+    expect((code.match(/<SheetModal /g) ?? []).length).toBe(1);
+    expect(code).toMatch(/title=\{TITLE\[id\]\}/);
+    expect((code.match(/title=\{TITLE\.\w+\}/g) ?? []).length).toBe(7);
   });
 
   it('the preferences sheet steps aside while one of its pickers is up', () => {
     // A sheet rendered inside another sheet's content is unmounted with it (`lib/sheetStage`), so
     // the pickers are siblings of this sheet and it is hidden while one is open.
-    expect(code).toMatch(/visible=\{sheet === 'prefs' && !pickerOpen\}/);
+    expect(code).toMatch(/<InsightSheet id="prefs" sheet=\{sheet\} hidden=\{pickerOpen\}/);
+    expect(code).toMatch(/visible=\{sheet === id && !hidden\}/);
     const prefs = readFileSync(join(__dirname, '..', 'components', 'finance', 'settings', 'MoneyPreferences.tsx'), 'utf8');
-    expect(prefs).toMatch(/wrap \? wrap\(rows, showPayMethod \|\| showCadence \|\| money\.open\) : rows/);
+    expect(prefs).toMatch(/\{wrap\(rows, showPayMethod \|\| showCadence \|\| money\.open\)\}/);
     expect(prefs).toMatch(/\{money\.sheets\}/);
+  });
+
+  it('says the month-end figure the way Home does', () => {
+    // One projection, two tiles: Home said "₹X over budget", this one "projected by month-end".
+    expect(code).toMatch(/forecastTile\(\{ projected, budget \}\)/);
   });
 
   it('uses the shared primitives rather than hand-rolled ones', () => {

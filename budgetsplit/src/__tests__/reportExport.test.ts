@@ -32,6 +32,7 @@ const group = (id: string, name: string): BudgetGroup => ({ id, name } as Budget
 
 const txn = (over: Partial<TxnWithSplits> = {}): TxnWithSplits => ({
   id: 't1',
+  group_id: 'g1',
   date: new Date(2026, 0, 10, 12).getTime(),
   category: 'Food',
   kind: 'expense',

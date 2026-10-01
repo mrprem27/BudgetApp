@@ -1,5 +1,5 @@
 import { openTestDb, seedGroupAndMe } from './dbHarness';
-import { insertTxnRows, getTxnById, countUnsetSourceEntries, setSourceForUnsetEntries } from '../db/queries/transactions';
+import { insertTxnRows, getTxnById, getUnsetSourceTotal, setSourceForUnsetEntries } from '../db/queries/transactions';
 import { PayMethod } from '../constants/enums';
 
 /**
@@ -22,9 +22,13 @@ async function seed() {
 }
 
 describe('setting a source on entries that have none (U-62)', () => {
-  it('counts only the entries with no source or "Other"', async () => {
+  it('adds up only the entries with no source or "Other"', async () => {
     const db = await seed();
-    expect(await countUnsetSourceEntries(db, ME)).toBe(2);
+    const total = await getUnsetSourceTotal(db, ME);
+    expect(total).not.toBe(0);
+    // Sourcing them all leaves nothing on the line.
+    await setSourceForUnsetEntries(db, ME, PayMethod.Bank);
+    expect(await getUnsetSourceTotal(db, ME)).toBe(0);
   });
 
   it('gives them the chosen place and leaves a recorded source alone', async () => {
@@ -33,6 +37,6 @@ describe('setting a source on entries that have none (U-62)', () => {
     expect((await getTxnById(db, 'none'))?.pay_method).toBe('wallet');
     expect((await getTxnById(db, 'other'))?.pay_method).toBe('wallet');
     expect((await getTxnById(db, 'cash'))?.pay_method).toBe('cash');
-    expect(await countUnsetSourceEntries(db, ME)).toBe(0);
+    expect(await getUnsetSourceTotal(db, ME)).toBe(0);
   });
 });
