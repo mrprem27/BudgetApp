@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
-import { colors, type, space, layout } from '../../tokens';
+import { colors, type, space, layout, alpha } from '../../tokens';
 import { healthColor } from '../group/helpers';
 import { budgetHealth, utilLabel, type CategoryBudgetStatus, type Period } from '../../../lib/budget';
 import { formatCompact } from '../../../lib/money';
@@ -178,6 +178,7 @@ export function BudgetList({
     <>
       {periods}
       <SummaryCard
+        style={styles.overview}
         /* What the figure is measured against, and what it leaves out, sit behind the ⓘ
            (`U-55`, AGENTS §14): three caption lines under the hero made the card read as a
            paragraph. Still one tap away — yearly pools and invested money are exclusions,
@@ -315,7 +316,10 @@ function CountChip({ count, label, tint, active, onPress }: {
 const styles = StyleSheet.create({
   content: { paddingHorizontal: layout.screenPaddingH, paddingTop: space.xs },
   periods: { marginBottom: space.md },
-  headLabel: { ...type.sectionLabel, color: colors.textMuted },
+  // An overview, and it should look like one: the same wash and border Recurring's card has in
+  // its own colour. Plain, it read as one more box in a column of boxes.
+  overview: { backgroundColor: alpha(colors.accent, 8), borderColor: colors.accent },
+  headLabel: { ...type.sectionLabel, color: colors.accent },
   spent: { ...type.amountLG },
   pct: { ...type.amountSM },
   caption: { ...type.caption, color: colors.textMuted, marginTop: 2 },
