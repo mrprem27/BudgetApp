@@ -1,6 +1,6 @@
 # HANDOFF — 2026-10-01, night (read first; continue from here)
 
-Branch `claude/branch-selection-gi7lyy`. **Commits ahead of origin, NOT pushed** (push needs the
+Branch `claude/branch-selection-gi7lyy`. **Merged into `main` and pushed 2026-10-01** (B-19; a push needs the
 `mrprem27` account switch, see Rules). Server deployed after the folder split (U-84); nothing server-side
 changed since but its README. Gates at the last full run: 3,049 tests green, tsc clean for the app.
 Nothing from today has been seen on a phone. Tracker: 318 items (93 open), 109 in §11.
@@ -26,13 +26,13 @@ two more badges (U-109).
 2. **Speed, step 5** (`docs/SPEC-SPEED-PDF-READS-FOLDERS.md` §1): Reports read 565 ms on the user's phone,
    build type unknown. Check with a release build before cutting its per-group reads.
 3. **Parked by the user:** stop editing balances directly and record an adjustment entry instead (as Fold does).
-4. **Waiting on the user:** Mixpanel project token + service account · Android build route · whether to push.
+4. **Waiting on the user:** Mixpanel project token + service account · Android build route.
 5. **Known and not fixed:** a sheet opened from inside a sheet needs its caller to hide the parent by hand, in
    four places (a stack in `lib/sheetStage` would remove that; it is the freeze-prone part and wants a device).
 6. Needs the phone / user: U-16, U-20, W1-28/29/32 spacing, D-01–D-03 UPI, live updates with two
    signed-in phones, receipt scan after rebuild.
 7. Waiting outside repo: Workers Paid (DQ-95 → DQ-105, DQ-107), Apple (B-02, push, TestFlight), Brevo key
-   (B-07), privacy/store (B-08, B-10, B-13), merge to main (B-19).
+   (B-07), privacy/store (B-08, B-10, B-13).
 
 ## Rules learned this session
 A SQL statement over `txn` must show its two exclusions (`recur_freq IS NULL`, `NOT_AWAITING_APPROVAL`) in its own

@@ -2,7 +2,7 @@
 
 `Last verified: 2026-10-01 (§11, through `U-109`; 2026-09-30 for §0, §1, §9–§10 and every row whose status changed; the rest as of 2026-09-07) · Guarded by: trackerIntegrity.test.ts · countClaims.test.ts · docIdGraph.test.ts`
 
-**318 items, 93 of them still open.** One row each: what it is, and where it stands.
+**318 items, 92 of them still open.** One row each: what it is, and where it stands.
 Nothing else. **This is the V1 tracker** — start at §0.
 
 **The evidence is not here.** Why each item exists, what it costs, what breaks if you touch it, and
@@ -21,7 +21,7 @@ is defined in two places.
 
 | Section | Open | Total |
 |---|---|---|
-| §1 · Ship blockers | **12** | 19 |
+| §1 · Ship blockers | **11** | 19 |
 | §2 · Complexity — `OV-` | **10** | 34 |
 | §3 · Decisions — `DQ-` | **36** | 64 |
 | §4 · Walk 1 — `W1-` | **12** | 39 |
@@ -100,7 +100,7 @@ otherwise, except the business and legal ones in phase 5. `PARKED` rows keep the
 
 ## §1 · Ship blockers — `B-`
 
-**19 items: 10 `OPEN`, 1 `DECIDE`, 1 `BLOCKED`, 7 `DONE`.** Nothing ships until every one is closed. Order of operations is in `FINDINGS.md` §1 — everything below `B-03` needs a phone.
+**19 items: 9 `OPEN`, 1 `DECIDE`, 1 `BLOCKED`, 8 `DONE`.** Nothing ships until every one is closed. Order of operations is in `FINDINGS.md` §1 — everything below `B-03` needs a phone.
 
 | | What | Status |
 |---|---|---|
@@ -113,11 +113,10 @@ otherwise, except the business and legal ones in phase 5. `PARKED` rows keep the
 | `B-12` | Device-test Pass 4 | `OPEN` |
 | `B-13` | Paste the store copy into App Store Connect and confirm the privacy answers | `OPEN` |
 | `B-14` | Run §0a's no-enumeration diff | `OPEN` |
-| `B-19` | Merge the working branch into `main` (76 commits behind) | `OPEN` |
 | `B-09` | India DPDP posture | `DECIDE` |
 | `B-02` | Buy the Apple Developer Program | `BLOCKED` |
 
-**Closed (7), detail in `FINDINGS.md`:** `B-03` `B-11` `B-06` `B-15` `B-16` `B-17` `B-18`
+**Closed (8), detail in `FINDINGS.md`:** `B-03` `B-11` `B-06` `B-15` `B-16` `B-17` `B-18` `B-19`
 
 ---
 ## §2 · Complexity and overlap — `OV-`
