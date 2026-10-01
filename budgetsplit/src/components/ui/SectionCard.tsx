@@ -3,7 +3,6 @@ import { View, Text, StyleSheet, TouchableOpacity, type StyleProp, type ViewStyl
 import { Feather } from '@expo/vector-icons';
 import { Card } from './Card';
 import { IconCircle } from './IconCircle';
-import { Collapse } from './anim/Collapse';
 import { colors, type, space, layout } from '../tokens';
 
 /**
@@ -20,12 +19,14 @@ import { colors, type, space, layout } from '../tokens';
  * pass `icon` for a leading disc, and `subtitle` or `right` for the trailing
  * detail (a count badge, a total, …).
  *
- * The body animates via `Collapse`, which is why **both** call sites could drop their
- * `LayoutAnimation.configureNext` and the `UIManager.setLayoutAnimationEnabledExperimental`
- * Android shim. AGENTS §11 bans `LayoutAnimation`: it's a legacy *global* API, so a
- * section toggle here also animated every unrelated layout change landing in the same
- * commit — and it's unreliable under the New Architecture. `Collapse` is scoped to this
- * subtree and honours Reduce Motion.
+ * **The body opens and closes at once, with no animation** (2026-10-01). It used `Collapse`,
+ * which is built for one row leaving a list, not for a disclosure, and says so itself. Here it
+ * tore: a closing body kept fading in place for 200 ms while the cards below had already
+ * jumped up underneath it, and every OTHER open body carried its own layout transition, so it
+ * slid to its new place separately from the card it sits in. With two or three boxes open, or
+ * on Expand all, a Budget tab flickered on every tap. A height animation that moves the whole
+ * column together needs every sibling to take part; until one exists, instant is the version
+ * that is never wrong. (`LayoutAnimation` stays banned, AGENTS §11.)
  */
 export function SectionCard({
   title,
@@ -79,7 +80,7 @@ export function SectionCard({
         {below}
       </TouchableOpacity>
 
-      <Collapse visible={expanded}>{children}</Collapse>
+      {expanded && children}
     </Card>
   );
 }

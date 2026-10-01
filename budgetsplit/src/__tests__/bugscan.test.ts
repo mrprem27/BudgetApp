@@ -1294,3 +1294,13 @@ describe('W1-06 · every pay-method icon comes from PayMethodGlyph', () => {
     expect(fs.readFileSync('src/constants/enums.ts', 'utf8')).not.toMatch(/PAY_METHOD_ICON/);
   });
 });
+
+describe('a section box opens and closes without tearing', () => {
+  it('renders its body at once: no exit fade, no per-body layout transition', () => {
+    const src = fs.readFileSync('src/components/ui/SectionCard.tsx', 'utf8');
+    // `Collapse` faded a closing body in place while the cards below jumped under it, and gave
+    // every other open body a layout transition of its own; a Budget tab flickered on each tap.
+    expect(src).toMatch(/\{expanded && children\}/);
+    expect(src).not.toMatch(/from '\.\/anim\/Collapse'|LayoutAnimation\.configureNext|\blayout=\{/);
+  });
+});

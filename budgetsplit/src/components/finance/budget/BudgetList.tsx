@@ -200,8 +200,10 @@ export function BudgetList({
         />
       ) : (
         <>
-        {/* Each section is a box, like the budget editor's (`SectionCard`): its header carries the
-            section's own spent / budget and bar, so a closed box still reads as a budget. */}
+        {/* Each section is a box, like the budget editor's (`SectionCard`). CLOSED, its header
+            carries the section's own spent / budget and bar, so a closed box still reads as a
+            budget. OPEN, the header is just the name: every line below has its own figure and
+            bar, and a total above them said the same thing twice (2026-10-01). */}
         {shownSections.map(section => {
           const lines = bySection.get(section) ?? [];
           const expanded = isOpen(section);
@@ -217,13 +219,13 @@ export function BudgetList({
               title={section}
               icon={sectionIcon(section)}
               subtitle={note || `${lines.length} ${lines.length === 1 ? 'category' : 'categories'}`}
-              right={sum.allocated > 0 ? (
+              right={!expanded && sum.allocated > 0 ? (
                 <Text style={[styles.boxAmt, { color: healthColor(sum.health) }]} numberOfLines={1}>
                   {formatCompact(sum.spent)}
                   <Text style={styles.boxOf}> / {formatCompact(sum.allocated)}{per}</Text>
                 </Text>
               ) : undefined}
-              below={sum.allocated > 0 ? <BudgetBar pct={sum.pct} health={sum.health} height={4} /> : undefined}
+              below={!expanded && sum.allocated > 0 ? <BudgetBar pct={sum.pct} health={sum.health} height={4} /> : undefined}
               expanded={expanded}
               onToggle={forcedOpen ? undefined : () => setOpen(o => ({ ...o, [section]: !expanded }))}
             >

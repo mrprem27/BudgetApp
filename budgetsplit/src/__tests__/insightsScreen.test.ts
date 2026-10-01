@@ -72,9 +72,8 @@ describe('nothing is said twice', () => {
 
 describe('the sections are collapsible and built from the design system', () => {
   it('every section is a SectionCard', () => {
-    // `SectionCard` already animates with `Collapse`, honours Reduce Motion and
-    // sets accessibilityState={{ expanded }} — none of which a hand-rolled
-    // uppercase label above a bare View does.
+    // `SectionCard` sets accessibilityState={{ expanded }} and opens the same way everywhere,
+    // neither of which a hand-rolled uppercase label above a bare View does.
     expect((code.match(/<SectionCard/g) ?? []).length).toBeGreaterThanOrEqual(4);
     expect(code).not.toMatch(/styles\.secLabel|styles\.secCard|styles\.chartCard/);
   });
