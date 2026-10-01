@@ -1,5 +1,5 @@
 import { canRead, ensurePerson, type Db } from './access';
-import { errorMessage } from '../../lib';
+import { errorMessage } from '../../utils/lib';
 import { guard, isGuardFailure, isTransient, versionIs, type SyncedTable } from './guard';
 
 /**

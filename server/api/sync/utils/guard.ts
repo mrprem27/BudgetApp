@@ -1,5 +1,5 @@
 import type { Db } from './access';
-import { errorMessage } from '../../lib';
+import { errorMessage } from '../../utils/lib';
 
 /**
  * Preconditions that live INSIDE a D1 batch (SPEC-SERVER.md §2.10).

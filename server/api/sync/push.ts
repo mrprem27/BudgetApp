@@ -1,7 +1,7 @@
 import type { Db } from './utils/access';
 import { buildStatements, diagnose, Rejected, type EntitySpec, type Mutation, type PushContext } from './utils/mutation';
 import { countQueries, isTransient } from './utils/guard';
-import { errorMessage } from '../lib';
+import { errorMessage } from '../utils/lib';
 
 /**
  * `POST /sync/push` (SPEC-SERVER.md §3.2).

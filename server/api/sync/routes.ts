@@ -1,6 +1,6 @@
 import {
   authenticate, badRequest, forbidden, json, methodNotAllowed, parseJsonObject, payloadTooLarge, unauthorized,
-} from '../lib';
+} from '../utils/lib';
 import type { Env } from '../types';
 import { BUDGET_ENTITIES } from './entities/budgets';
 import { GROUP_ENTITIES } from './entities/groups';

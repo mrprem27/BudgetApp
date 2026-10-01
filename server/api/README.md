@@ -54,7 +54,7 @@ Email magic link, no passwords.
    `expo-secure-store`, not AsyncStorage: it's the first real credential the app
    has ever held.
 
-Rate limit: 5 link requests per email, and 30 per caller (`CF-Connecting-IP`, all addresses together), per 15 minutes — `rateLimit.ts`. The per-caller number is generous on purpose: mobile carriers put many phones behind one IP. `POST /auth/request-link`
+Rate limit: 5 link requests per email, and 30 per caller (`CF-Connecting-IP`, all addresses together), per 15 minutes — `utils/rateLimit.ts`. The per-caller number is generous on purpose: mobile carriers put many phones behind one IP. `POST /auth/request-link`
 answers `{ok: true}` whether or not that address already has an account —
 accounts are created at verify time, so there is no account-existence signal to
 leak, and the response must not become one.
@@ -187,7 +187,7 @@ than from a user's failed sign-in.
 
 ### Storage: KV by default, R2 when available
 
-`storage.ts` prefers R2 and falls back to KV, so the same code runs either way.
+`utils/storage.ts` prefers R2 and falls back to KV, so the same code runs either way.
 It holds avatars only. The one difference that leaks out is the size cap — KV
 stops at 25 MiB per value, R2 does not — which an avatar (≤5 MB) never reaches.
 
@@ -200,7 +200,7 @@ Better deliverability, one platform, no third party — at $5/mo plus a domain.
 Onboard the domain (`npx wrangler email sending enable yourdomain.com`),
 uncomment the `[[send_email]]` block in `wrangler.toml`, delete the Brevo secret
 (`npx wrangler secret delete BREVO_API_KEY`), and point `EMAIL_FROM` at an
-address on that domain. `mailer.ts` chooses from what is configured, so this is
+address on that domain. `utils/mailer.ts` chooses from what is configured, so this is
 config and a redeploy — never a code change.
 
 ### Why not Nodemailer

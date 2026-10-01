@@ -1,4 +1,4 @@
-import type { Env } from './types';
+import type { Env } from '../types';
 
 /**
  * Sends the one email this server sends: the sign-in link.

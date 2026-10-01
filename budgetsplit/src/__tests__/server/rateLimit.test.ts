@@ -1,6 +1,6 @@
 import { createD1 } from './helpers/d1';
-import { magicLinkAllowed, recordMagicLink, callerIp } from '../../../../server/api/rateLimit';
-import { MAGIC_LINK_MAX_PER_WINDOW, MAGIC_LINK_MAX_PER_IP } from '../../../../server/api/lib';
+import { magicLinkAllowed, recordMagicLink, callerIp } from '../../../../server/api/utils/rateLimit';
+import { MAGIC_LINK_MAX_PER_WINDOW, MAGIC_LINK_MAX_PER_IP } from '../../../../server/api/utils/lib';
 
 /**
  * Sign-in links are limited per address AND per caller (SV-1). Per address alone

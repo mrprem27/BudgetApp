@@ -1,6 +1,6 @@
 /** Small shared helpers: JSON responses, tokens, session lookup, rate limiting. */
 
-import type { Env, UserRow } from './types';
+import type { Env, UserRow } from '../types';
 
 // --- Lifetimes ------------------------------------------------------------
 
@@ -217,3 +217,16 @@ export async function authenticate(request: Request, env: Env): Promise<AuthedUs
     },
   };
 }
+
+export const USER_COLUMNS = 'id, email, name, phone, avatar_url, created_at, deleted_at';
+
+/**
+ * Avatars need R2; sign-in, linking and sync do not. R2 must be enabled
+ * once on the Cloudflare dashboard before a bucket can be created, so a Worker
+ * can legitimately be live before storage exists. Say so precisely instead of
+ * failing in a way that reads like a bug.
+ */
+export const noStorage = () => json(
+  { error: 'File storage is not configured on this server yet.', code: 'E_STORAGE_UNCONFIGURED' },
+  503,
+);

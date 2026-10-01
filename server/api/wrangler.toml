@@ -48,7 +48,7 @@ database_id = "feba219a-708a-47d9-a6bc-c7abd6752dce"
 # --- KV: the no-card blob store (avatars) ---
 # Used only when R2 above is absent. KV is on the Workers Free plan with no
 # payment method and no dashboard opt-in, which is the entire reason it is here:
-# 1 GB total, 25 MiB per value, 1k writes/day. `storage.ts` prefers R2 when both
+# 1 GB total, 25 MiB per value, 1k writes/day. `utils/storage.ts` prefers R2 when both
 # are bound, so enabling R2 later needs no code change.
 # Created with: wrangler kv namespace create BLOBS
 [[kv_namespaces]]
@@ -67,7 +67,7 @@ id = "2c65354286c243cd958320b83a88c538"
 # Workers Paid plan ($5/mo) and a domain you own onboarded to Cloudflare:
 #   wrangler email sending enable yourdomain.com
 # then uncomment the block below, unset BREVO_API_KEY, and point EMAIL_FROM at
-# an address on that domain. `mailer.ts` picks the provider from what is
+# an address on that domain. `utils/mailer.ts` picks the provider from what is
 # configured — Brevo wins if its key is set — so switching is config, not code.
 #
 # [[send_email]]

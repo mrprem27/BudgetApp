@@ -1,4 +1,4 @@
-import { authenticate, json, methodNotAllowed, notFound, unauthorized } from '../lib';
+import { authenticate, json, methodNotAllowed, notFound, unauthorized } from '../utils/lib';
 import type { Env } from '../types';
 import { canReadScope } from './utils/access';
 
