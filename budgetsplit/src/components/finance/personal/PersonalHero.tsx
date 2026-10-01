@@ -32,7 +32,6 @@ export function PersonalHero({ name, color, imageUri, owe, owed, totals, periodL
 }) {
   const net = owed - owe;
   const ov = oweView(net);
-  const nv = oweView(totals.netWithOthers);
   return (
     <View style={styles.wrap}>
       <View style={styles.hero}>
@@ -63,19 +62,6 @@ export function PersonalHero({ name, color, imageUri, owe, owed, totals, periodL
             <Stat label="Spent" value={formatCompact(totals.spent)} tint={kindColor('expense')} />
             <View style={styles.divider} />
             <Stat label="Income" value={formatCompact(totals.income)} tint={kindColor('income')} />
-            {/* Over the period, in shared groups: what you paid for friends less what they paid for
-                you. Only when there is one: on your own entries it is always zero, and "Friends 0"
-                beside Spent and Income said nothing (`U-74`). */}
-            {totals.netWithOthers !== 0 && (
-              <>
-                <View style={styles.divider} />
-                <Stat
-                  label={totals.netWithOthers > 0 ? 'Friends owe you' : 'You owe friends'}
-                  value={formatCompact(Math.abs(totals.netWithOthers))}
-                  tint={nv.color}
-                />
-              </>
-            )}
           </View>
         </View>
         <TouchableOpacity onPress={onReports} style={styles.go} hitSlop={6} accessibilityRole="button" accessibilityLabel="Open these in Reports">

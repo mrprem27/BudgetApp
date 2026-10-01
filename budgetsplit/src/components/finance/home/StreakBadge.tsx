@@ -3,7 +3,8 @@ import { Feather } from '@expo/vector-icons';
 import { colors, type } from '../../tokens';
 
 /**
- * Days in a row you've logged something, as a small ⚡ and a number beside your name on Home.
+ * Days in a row you've logged something, as a small ⚡ and a number beside the greeting on Home
+ * (it sat after your name until 2026-10-01).
  * Shown from two days — one day is not a streak. The full calendar card stays opt-in
  * (Settings › Sections).
  *

@@ -343,7 +343,7 @@ export default function GroupsScreen() {
           ListHeaderComponent={
             <>
               {showSearch && (
-                <Input value={query} onChangeText={setQuery} placeholder="Search groups" icon="search"
+                <Input round value={query} onChangeText={setQuery} placeholder="Search groups" icon="search"
                   autoCapitalize="none" autoCorrect={false} accessibilityLabel="Search groups" style={styles.search} />
               )}
               {viewMode === 'active' && <Text style={[styles.balListLabel, { marginTop: 0 }]}>My groups</Text>}

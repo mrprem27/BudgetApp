@@ -210,7 +210,7 @@ Absorbed from `AUDIT.md` §2 so the IDs cited elsewhere resolve here. 45 route f
 | S-03 | **Home / Dashboard** | `app/(tabs)/index.tsx` | Period-scoped spend hero + category ranks + owe/owed + forecast + streak. Dedicated first-run empty state. | `/review` `/upcoming` `/settings` `/history` `/add/quick` `/group/{personal}/budget` `/groups` `/friends` `/category/{name}` `/insights` |
 | S-04 | **Groups** | `app/(tabs)/groups.tsx` | Groups list (Personal pinned first) with budget health + my net; swipe-left archive/restore; People balance chips. | `/group/{id}` (or `/personal`) · `/add/quick?kind=transfer&to=` |
 | S-05 | **Plan** | `app/(tabs)/savings.tsx` | Available-Money card (+ net worth, credit headroom), overspend **consent** prompt, drag-rankable goals, upcoming bills, forecast. | `/insights` `/plan/recurring` `/afford` · `/savings/{id}` |
-| S-06 | **Settings** | `app/(system)/settings/index.tsx` | Profile + **Account** (only with a server configured) / **Getting paid** (Your UPI ID · Show my UPI QR, behind `upiSettle`) / Manage / Preferences / Security / Your data / Help / About — one colour per section. Opened from Home's avatar (not a tab). Reports and Export all moved to Insights. Version ×7 unlocks S-27. | `/settings/account` `/friends` `/categories` `/group/{personal}/budget` `/groups` `/features` `/settings/notifications` `/settings/backup` `/import` `/help` `/history` `/storage` |
+| S-06 | **Settings** | `app/(system)/settings/index.tsx` | One card for you: photo, name, and under them **Sign in / Account** (only with a server configured; `U-85`) / **Getting paid** (Your UPI ID · Show my UPI QR, behind `upiSettle`) / Manage / Preferences / Security / Your data / Help / About — one colour per section. Opened from Home's avatar (not a tab). Reports and Export all moved to Insights. Version ×7 unlocks S-27. | `/settings/account` `/friends` `/categories` `/group/{personal}/budget` `/groups` `/features` `/settings/notifications` `/settings/backup` `/import` `/help` `/history` `/storage` |
 
 ### 3.3 Add / edit flows (full-screen modals)
 
@@ -1369,7 +1369,7 @@ keeps content from painting under the clock/notch.
    "Sign in — Keep a copy on your account" → `/settings/account` (§13.4).
 3. **Getting paid** *(flag `upiSettle`)* — **Your UPI ID** *(sheet, validated by `isValidVpa`; empty clears it)* · **Show my UPI QR** → amount-less `RequestQrSheet`. This is the only place your **own** `upi_vpa` can be set: `friends.tsx` filters out `is_me`, so before this the field was unreachable for you and the request-QR could never be built.
 4. **Manage** — People → `/friends` · Categories → `/categories` · **My Budget** (monthly rollup, or "Not set") → `/budget`.
-5. **Preferences** — Currency (`INR`, no-op) · Default budget cadence *(sheet)* · **Feature management** → `/features`.
+5. **Preferences** — **Feature management** → `/features` · Notifications. The money preferences (usually paid from, default budget cadence, pay cycle, look-ahead, keep aside) are on Insights, "How your money works" (`U-86`).
 6. **Security** *(toggles → AsyncStorage)* — Face/Touch ID lock · Privacy screen in app switcher · Hide amounts on home.
 7. **Notifications** *(flag `reminders`)* — **Notifications & Reminders** ("Bills · daily log") → `/settings/notifications`.
 8. **Data & Help** — **Backup & restore** ("Encrypted file") → `/settings/backup` · Import → `/import` · Export & reports → `/reports` · Help & Feedback → `/help` · Replay welcome tour *(resets `onboarding_done`)* · History & Audit log → `/history`.
@@ -2060,7 +2060,8 @@ Every sheet routes through `ui/SheetModal` (an RN `<Modal transparent>` wrapping
 |---|---|
 | "New Group" (`GroupForm`) | `app/(tabs)/groups.tsx` |
 | "Add to {goal}" · "New goal" | `app/(tabs)/savings.tsx` |
-| "Your name" · "Default budget cadence" | `app/(system)/settings/index.tsx` |
+| "Your name" | `app/(system)/settings/index.tsx` |
+| "Default budget cadence" · "Where do you usually pay from?" | `finance/settings/MoneyPreferences.tsx` (Insights) |
 | "Add Tax" / "Add Tip" / "Add Service Charge" / "Add Discount" | `app/add/itemized.tsx` |
 | "{group.name}" options (Audit log · Export as CSV · Edit group · Archive group) | `app/(people)/group/[id].tsx` |
 | "How often?" (per-category cadence) | `app/(people)/group/[id]/budget.tsx` |

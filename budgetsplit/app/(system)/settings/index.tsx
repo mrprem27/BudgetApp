@@ -9,7 +9,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { settings } from '../../../src/lib/settings';
-import { colors, type, space, radius, layout } from '../../../src/theme';
+import { colors, type, space, layout } from '../../../src/theme';
 import { haptic } from '../../../src/lib/haptics';
 import { loadSettingsTab, saveMyName, saveMyVpa } from '../../../src/lib/settingsData';
 import { replacePersonPhoto } from '../../../src/lib/personWrites';
@@ -19,23 +19,17 @@ import { RequestQrSheet } from '../../../src/components/finance/RequestQrSheet';
 import { formatCompact } from '../../../src/lib/money';
 import { MemberAvatar } from '../../../src/components/finance/MemberAvatar';
 import { SheetModal } from '../../../src/components/ui/SheetModal';
-import { PayMethodSelector } from '../../../src/components/finance/PayMethodSelector';
 import { Input } from '../../../src/components/ui/Input';
 import { PrimaryButton } from '../../../src/components/ui/PrimaryButton';
 import { ScreenHeader } from '../../../src/components/ui/ScreenHeader';
 import { usageEventsOn, setUsageEventsOn } from '../../../src/lib/usageEvents';
-import { MoneySettingsRows } from '../../../src/components/finance/settings/MoneySettingsRows';
 import { SettingsRow, settingsRowDivider } from '../../../src/components/ui/SettingsRow';
-import { ListRow } from '../../../src/components/ui/ListRow';
-import { PayMethodDisc } from '../../../src/components/finance/pay/PayMethodGlyph';
 import { IconCircle } from '../../../src/components/ui/IconCircle';
 import { decor } from '../../../src/constants/palette';
 import { freeBytes } from '../../../src/lib/deviceStorage';
 import { StorageVerdict, storageVerdict, formatBytes } from '../../../src/lib/storage';
 import { DEV_TOOLS_ENABLED } from '../../../src/constants/devTools';
 import { useFeatureFlags } from '../../../src/components/system/FeatureFlagsProvider';
-import type { BudgetCadence } from '../../../src/db/queries/categoryBudgets';
-import { asBudgetCadence, asPayMethod, PayMethod, PAY_METHOD_LABEL } from '../../../src/constants/enums';
 import { useScreenData } from '../../../src/hooks/useScreenData';
 import { loadBadges } from '../../../src/lib/badgesData';
 import { BadgeBoard } from '../../../src/components/finance/badges/BadgeBoard';
@@ -44,8 +38,6 @@ import { ErrorState } from '../../../src/components/ui/ErrorState';
 import { Card } from '../../../src/components/ui/Card';
 import { backOr } from '../../../src/lib/nav';
 
-const CADENCE_LABELS: Record<BudgetCadence, string> = { daily: 'Daily', monthly: 'Monthly', yearly: 'Yearly' };
-const CADENCE_KEYS: BudgetCadence[] = ['daily', 'monthly', 'yearly'];
 
 /**
  * One hue per SECTION: every row in a section shares it, so the section reads as one group and the
@@ -70,8 +62,6 @@ const TINT = {
   friends: SECTION.manage,
   categories: SECTION.manage,
   budget: SECTION.manage,
-  payMethod: SECTION.preferences,
-  cadence: SECTION.preferences,
   features: SECTION.preferences,
   notifications: SECTION.preferences,
   trust: SECTION.security,
@@ -125,10 +115,6 @@ export default function SettingsScreen() {
   const [hideAmounts, setHideAmounts] = useState(false);
   const [usageOn, setUsageOn] = useState(true);
 
-  const [defaultCadence, setDefaultCadence] = useState<BudgetCadence>('monthly');
-  const [defaultPay, setDefaultPay] = useState<PayMethod>(PayMethod.Bank);
-  const [showPayMethod, setShowPayMethod] = useState(false);
-  const [showCadence, setShowCadence] = useState(false);
 
   const [devTaps, setDevTaps] = useState(0);
 
@@ -152,11 +138,6 @@ export default function SettingsScreen() {
       setPrivacyScreen(await settings.privacyScreen());
       setHideAmounts(await settings.hideAmounts());
       setUsageOn(await usageEventsOn());
-      // Narrowed, not cast: a database written before `once` was removed still
-      // holds it here, and an unknown key would index CADENCE_LABELS to undefined.
-      const dc = await settings.defaultCadence();
-      if (dc) setDefaultCadence(asBudgetCadence(dc));
-      setDefaultPay(asPayMethod(await settings.defaultPayMethod()));
     })();
   }, []));
 
@@ -207,18 +188,6 @@ export default function SettingsScreen() {
     }
   }
 
-  async function pickPayMethod(m: PayMethod) {
-    setDefaultPay(m);
-    setShowPayMethod(false);
-    await settings.setDefaultPayMethod(m);
-  }
-
-  async function pickCadence(c: BudgetCadence) {
-    setDefaultCadence(c);
-    setShowCadence(false);
-    await settings.setDefaultCadence(c);
-  }
-
   async function saveName() {
     const trimmed = nameText.trim();
     if (!trimmed || !me) return;
@@ -267,9 +236,13 @@ export default function SettingsScreen() {
         />
       )}
 
-      {/* Profile card — hero */}
-      <TouchableOpacity style={styles.profileTap} onPress={() => { setNameText(me?.name ?? ''); setShowName(true); }} accessibilityRole="button" accessibilityLabel="Edit profile">
-        <Card padded style={styles.profileCard}>
+      {/* You, in one card: your photo and name, and under them the account (`U-85`). They were
+          two boxes, the profile and an "Account" section a scroll below it, for one thing: who
+          you are here. The account row exists only in a build with a server to talk to
+          (EXPO_PUBLIC_API_URL); the app stays offline-first either way, which is why signing
+          in is a row and not a gate in front of the app. */}
+      <Card clip style={styles.profileCard}>
+        <TouchableOpacity style={styles.profileRow} onPress={() => { setNameText(me?.name ?? ''); setShowName(true); }} accessibilityRole="button" accessibilityLabel="Edit profile">
           <TouchableOpacity
             onPress={me ? async () => {
               try {
@@ -291,44 +264,36 @@ export default function SettingsScreen() {
           </TouchableOpacity>
           <View style={{ flex: 1 }}>
             <Text style={styles.profileName}>{me?.name ?? 'You'}</Text>
-            <Text style={styles.profileSub}>
-              {serverSession
-                ? serverSession.user.email
-                : serverSessionConfigured ? 'On this phone · sign in to link with people' : 'On this phone · no account needed'}
+            <Text style={styles.profileSub} numberOfLines={1}>
+              {serverSession ? serverSession.user.email : 'On this phone'}
             </Text>
           </View>
           <Feather name="edit-2" size={16} color={colors.textMuted} />
-        </Card>
-      </TouchableOpacity>
-
-      {/* The badge board: grey until earned, in colour once it is; opens every badge (`U-65`). */}
-      <BadgeBoard badges={badges ?? []} onOpen={() => router.push('/badges')} compact />
-
-      {/* ACCOUNT — only in a build that has a server to talk to
-          (EXPO_PUBLIC_API_URL). Signing in keeps a copy of everything on the
-          account and syncs shared groups; the app stays offline-first either way,
-          which is why this is a row and not a gate in front of the app. */}
-      {serverSessionConfigured && (
-        <>
-          <Text style={[styles.sectionTitle, sectionTop(true)]}>Account</Text>
-          <Card clip>
+        </TouchableOpacity>
+        {serverSessionConfigured && (
+          <>
+            <View style={settingsRowDivider} />
             <SettingsRow
               icon={serverSession ? 'user-check' : 'cloud'}
               label={serverSession ? 'Account' : 'Sign in'}
               tint={TINT.account}
-              value={serverSession ? serverSession.user.email : 'Keep a copy on your account'}
+              // The email is already under the name, so signed in this says what the row is for.
+              value={serverSession ? 'Sync and sign out' : 'Keep a copy on your account'}
               onPress={() => { router.push('/settings/account'); }}
             />
-          </Card>
-        </>
-      )}
+          </>
+        )}
+      </Card>
+
+      {/* The badge board: grey until earned, in colour once it is; opens every badge (`U-65`). */}
+      <BadgeBoard badges={badges ?? []} onOpen={() => router.push('/badges')} compact />
 
       {/* GETTING PAID — your own handle, and the code others scan to pay you.
           Sits directly under the profile because both rows are about *you*, not about
           the app. `friends.tsx` covers everyone else's handle; it filters out `is_me`. */}
       {flags.upiSettle && (
         <>
-          <Text style={[styles.sectionTitle, sectionTop(!serverSessionConfigured)]}>Getting paid</Text>
+          <Text style={[styles.sectionTitle, sectionTop(true)]}>Getting paid</Text>
           <Card clip>
             <SettingsRow
               icon="credit-card"
@@ -350,7 +315,7 @@ export default function SettingsScreen() {
       )}
 
       {/* MANAGE */}
-      <Text style={[styles.sectionTitle, sectionTop(!serverSessionConfigured && !flags.upiSettle)]}>Manage</Text>
+      <Text style={[styles.sectionTitle, sectionTop(!flags.upiSettle)]}>Manage</Text>
       <Card clip>
         <SettingsRow
           icon="users"
@@ -378,24 +343,11 @@ export default function SettingsScreen() {
       </Card>
 
       {/* PREFERENCES */}
+      {/* Where you usually pay from, the default budget cadence, how you are paid, how far Safe
+          to spend looks and what to keep aside moved to Insights (`U-86`, `MoneyPreferences`),
+          beside the forecasts they drive. */}
       <Text style={styles.sectionTitle}>Preferences</Text>
       <Card clip>
-        {/* `B-101`/`DQ-101`: Currency dropped — it was never tappable
-            (`onPress={undefined}`, INR only), which reads as a broken row,
-            not as "there's only one option." Comes back once there's a second
-            currency to pick between. */}
-        <ListRow
-          leading={<PayMethodDisc method={defaultPay} size={layout.iconCircle} color={TINT.payMethod} />}
-          title="Usually paid from"
-          value={PAY_METHOD_LABEL[defaultPay]}
-          onPress={() => setShowPayMethod(true)}
-          accessibilityLabel="Usually paid from"
-        />
-        <View style={settingsRowDivider} />
-        <SettingsRow icon="repeat" label="Default budget cadence" tint={TINT.cadence} value={CADENCE_LABELS[defaultCadence]} onPress={() => setShowCadence(true)} />
-        <View style={settingsRowDivider} />
-        <MoneySettingsRows tint={TINT.cadence} />
-        <View style={settingsRowDivider} />
         <SettingsRow icon="sliders" label="Feature management" tint={TINT.features} value="Modules & toggles" onPress={() => { router.push('/features'); }} />
         {/* Notifications used to be a section of its own holding one row — a
             heading for a single item. It's a preference like the rest. */}
@@ -532,21 +484,6 @@ export default function SettingsScreen() {
       />
 
 
-      {/* Reuses the Add screen's own picker, so the tiles here are the tiles the
-          preference actually seeds — not a second list that could drift from it. */}
-      <SheetModal visible={showPayMethod} onClose={() => setShowPayMethod(false)} title="Where do you usually pay from?" scroll={false}>
-        <PayMethodSelector value={defaultPay} onChange={pickPayMethod} />
-      </SheetModal>
-
-      <SheetModal visible={showCadence} onClose={() => setShowCadence(false)} title="Default budget cadence" scroll={false}>
-        {CADENCE_KEYS.map(c => (
-          <TouchableOpacity key={c} style={[styles.cadOption, defaultCadence === c && styles.cadOptionActive]} accessibilityState={{ selected: defaultCadence === c }} onPress={() => pickCadence(c)} accessibilityRole="button">
-            <Text style={[styles.cadOptionText, defaultCadence === c && { color: colors.accent, fontFamily: 'Inter_600SemiBold' }]}>{CADENCE_LABELS[c]}</Text>
-            {defaultCadence === c && <Feather name="check" size={18} color={colors.accent} />}
-          </TouchableOpacity>
-        ))}
-      </SheetModal>
-
       {/* Default-currency sheet hidden for v1 (INR-only). */}
     </ScrollView>
     </View>
@@ -568,8 +505,8 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: layout.screenPaddingH, paddingBottom: space.lg },
   sectionTitle: { ...type.label, color: colors.textSecondary, marginBottom: space.sm, marginTop: 20, textTransform: 'uppercase', letterSpacing: 0.5 },
-  profileTap: { marginBottom: space.lg },
-  profileCard: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  profileCard: { marginBottom: space.lg },
+  profileRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.md },
   profileName: { fontSize: 17, fontFamily: 'Inter_600SemiBold', color: colors.textPrimary },
   profileSub: { fontSize: 13, fontFamily: 'Inter_400Regular', color: colors.textMuted, marginTop: 2 },
   cameraBadge: { position: 'absolute', right: -2, bottom: -2, width: 18, height: 18, borderRadius: 9, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.bgCard },
@@ -581,8 +518,5 @@ const styles = StyleSheet.create({
   vpaHint: { ...type.label, color: colors.textSecondary, marginBottom: space.md, lineHeight: 19 },
   toggleRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm, paddingHorizontal: space.md, minHeight: 52 },
   toggleLabel: { ...type.body, color: colors.textPrimary, flex: 1 },
-  cadOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: space.md, paddingHorizontal: space.md, borderRadius: radius.md },
-  cadOptionActive: { backgroundColor: colors.accentMuted },
-  cadOptionText: { ...type.body, color: colors.textPrimary },
 });
 

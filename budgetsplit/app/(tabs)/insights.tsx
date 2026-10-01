@@ -20,6 +20,7 @@ import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { Badge } from '../../src/components/ui/Badge';
 import { Chip } from '../../src/components/ui/Chip';
 import { IconCircle } from '../../src/components/ui/IconCircle';
+import { MoneyPreferences } from '../../src/components/finance/settings/MoneyPreferences';
 import { SectionCard } from '../../src/components/ui/SectionCard';
 import { EmptyState } from '../../src/components/ui/EmptyState';
 import { ErrorState } from '../../src/components/ui/ErrorState';
@@ -532,8 +533,22 @@ export default function InsightsScreen() {
           </>
         )}
 
+        {/* The answers the forecasts above are built on, beside them (`U-86`). They were Settings'
+            Preferences, a screen away from anything they change. Closed until wanted. */}
+        <SectionCard
+          title="How your money works"
+          subtitle="Pay cycle, safe to spend, defaults"
+          icon="sliders"
+          expanded={open.has('prefs')}
+          onToggle={() => toggle('prefs')}
+          style={{ marginTop: space.md }}
+        >
+          <Divider indent="none" />
+          <MoneyPreferences />
+        </SectionCard>
+
         {/* Reports and export live here — with the numbers they are built from — not in Settings. */}
-        <Card clip style={{ marginTop: space.md }}>
+        <Card clip>
           {flags.reports && (
             <>
               <ListRow icon="pie-chart" title="Reports" subtitle="Month by month, drill down, CSV / PDF" onPress={() => router.push('/reports')} />

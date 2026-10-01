@@ -13,7 +13,7 @@ import { Card } from '../ui/Card';
  * The heading line keeps the height of a small chip whether or not it carries one, which is
  * what holds the figure at the same place on both.
  */
-export function SummaryCard({ label, action, amount, side, children, foot, expand, link, style }: {
+export function SummaryCard({ label, action, amount, side, children, foot, expand, style }: {
   label: React.ReactNode;
   /** One small control at the heading's right (Budget's Edit). */
   action?: React.ReactNode;
@@ -25,8 +25,6 @@ export function SummaryCard({ label, action, amount, side, children, foot, expan
   foot?: React.ReactNode;
   /** Omitted when there is nothing to expand. */
   expand?: { open: boolean; onPress: () => void };
-  /** In Expand all's place, on a card with nothing to expand: a way to the full screen. */
-  link?: { label: string; onPress: () => void };
   style?: StyleProp<ViewStyle>;
 }) {
   return (
@@ -40,16 +38,10 @@ export function SummaryCard({ label, action, amount, side, children, foot, expan
         {side}
       </View>
       {children}
-      {(foot || expand || link) && (
+      {(foot || expand) && (
         <View style={styles.foot}>
           <View style={styles.footLeft}>{foot}</View>
           {expand && <ExpandAll open={expand.open} onPress={expand.onPress} />}
-          {link && !expand && (
-            <TouchableOpacity style={styles.expandAll} onPress={link.onPress} hitSlop={10} accessibilityRole="link">
-              <Text style={styles.expandAllText}>{link.label}</Text>
-              <Feather name="chevron-right" size={14} color={colors.accent} />
-            </TouchableOpacity>
-          )}
         </View>
       )}
     </Card>

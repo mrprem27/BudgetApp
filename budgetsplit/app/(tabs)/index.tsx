@@ -162,7 +162,7 @@ export default function DashboardScreen() {
         large
         eyebrow={greeting()}
         title={meInfo?.name?.split(' ')[0] ?? 'BudgetSplit'}
-        titleAccessory={<StreakBadge days={streak} />}
+        eyebrowAccessory={<StreakBadge days={streak} />}
         right={(
           <>
             {/* One "to do" for everything waiting on you (`U-63`): entries someone else added for

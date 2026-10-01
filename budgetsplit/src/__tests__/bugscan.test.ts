@@ -852,8 +852,8 @@ describe('H1 · Home says where the month is heading in one line, and shows the 
     expect(home.indexOf('<HeroCard')).toBeLessThan(home.indexOf('<HomeTiles'));  // U-30: spend first
     expect(home.indexOf('<HomeTiles')).toBeLessThan(home.indexOf('<TabPills'));
   });
-  it('the streak badge sits beside the name on Home', () => {
-    expect(fs.readFileSync('app/(tabs)/index.tsx', 'utf8')).toMatch(/titleAccessory=\{<StreakBadge days=\{streak\} \/>\}/);
+  it('the streak badge sits beside the greeting on Home', () => {
+    expect(fs.readFileSync('app/(tabs)/index.tsx', 'utf8')).toMatch(/eyebrowAccessory=\{<StreakBadge days=\{streak\} \/>\}/);
     // The ⚡ glyph, as a chip icon or (since `U-61`, a compact inline badge) a Feather name.
     expect(fs.readFileSync('src/components/finance/home/StreakBadge.tsx', 'utf8')).toMatch(/(icon|name)="zap"/);
   });

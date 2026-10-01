@@ -344,7 +344,6 @@ export default function PersonalScreen() {
                   icon="target"
                   title="No budget yet"
                   body="Set category limits measured against your total spending, personal plus your share of every group."
-                  tint={colors.textSecondary}
                   actionLabel="Set a budget"
                   onAction={openBudgetEditor}
                 />

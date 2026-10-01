@@ -38,7 +38,7 @@ export function RecurringBrowser({ active, stopped, onOpen, empty }: {
       {active.length === 0 ? empty : (
         <>
           {tools && (
-            <Input value={query} onChangeText={setQuery} placeholder="Search by name or category" icon="search"
+            <Input round value={query} onChangeText={setQuery} placeholder="Search by name or category" icon="search"
               autoCapitalize="none" autoCorrect={false} accessibilityLabel="Search recurring" style={styles.search} />
           )}
           {shown.length > 0 ? (

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { kindColor } from '../../../lib/kindTheme';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { colors, type, space, layout, alpha } from '../../tokens';
 import { categoryVisual } from '../../../constants/categories';
 import { asFeather } from '../../../constants/palette';
@@ -75,17 +76,30 @@ export function RecurringInventory({ subs, onOpen, onSeeAll, tools }: {
             {monthlyMoved > 0 ? `Moved ${formatCompact(monthlyMoved)} a month` : ''}
           </Text>
         ) : undefined)}
-        link={onSeeAll ? { label: 'All recurring', onPress: onSeeAll } : undefined}
         expand={!brief && sections.length > 1
           ? { open: closed.size === 0, onPress: () => setClosed(closed.size === 0 ? new Set(sections.map(([t]) => t)) : new Set()) }
           : undefined}
       >
         <View style={styles.stats}>
-          <Stat label="A year" value={formatCompact(monthlyOut * 12)} />
+          {/* "Yearly", not "Spent this year": it is the monthly figure times twelve, what these
+              rules cost over a year, not what has left your account since January. */}
+          <Stat label="Yearly" value={formatCompact(monthlyOut * 12)} />
           <View style={styles.statDivider} />
-          <Stat label="Active" value={pausedCount > 0 ? `${activeCount} · ${pausedCount} paused` : String(activeCount)} />
+          <Stat label="Active" value={String(activeCount)} />
+          <View style={styles.statDivider} />
+          <Stat label="Paused" value={String(pausedCount)} />
           <View style={styles.statDivider} />
           <Stat label="Next" value={nextUp?.nextMs != null ? shortDate(nextUp.nextMs) : 'None'} />
+          {/* A tab's way to the full page, on the facts' own line: a fourth cell, not a line of its own. */}
+          {onSeeAll && (
+            <>
+              <View style={styles.statDivider} />
+              <TouchableOpacity style={styles.seeAll} onPress={onSeeAll} hitSlop={10} accessibilityRole="link" accessibilityLabel="All recurring">
+                <Text style={styles.seeAllText}>All recurring</Text>
+                <Feather name="chevron-right" size={14} color={colors.accent} />
+              </TouchableOpacity>
+            </>
+          )}
         </View>
       </SummaryCard>
 
@@ -156,12 +170,15 @@ function Stat({ label, value }: { label: string; value: string }) {
 const styles = StyleSheet.create({
   stats: { flexDirection: 'row', alignItems: 'center', marginTop: space.sm },
   stat: { flex: 1, alignItems: 'flex-start', gap: 2 },
-  statDivider: { width: 1, alignSelf: 'stretch', backgroundColor: alpha(colors.settle, 33), marginHorizontal: space.sm },
+  // `xs`, not `sm`: four facts and a tab's link share one line on a 360pt phone.
+  statDivider: { width: 1, alignSelf: 'stretch', backgroundColor: alpha(colors.settle, 33), marginHorizontal: space.xs },
   statLabel: { ...type.caption, color: colors.textMuted },
   statValue: { ...type.labelSemi, color: colors.textPrimary },
   // Tinted settle, matching how a recurring concern is coloured elsewhere.
   totalCard: { backgroundColor: alpha(colors.settle, 8), borderColor: colors.settle },
   totalSub: { ...type.caption, color: colors.textMuted },
+  seeAll: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  seeAllText: { ...type.labelSemi, color: colors.accent },
   count: { ...type.amountSM, color: colors.textSecondary },
   rowValue: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
 });

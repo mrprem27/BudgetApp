@@ -23,6 +23,8 @@ type Props = {
   autoCorrect?: boolean;
   accessibilityLabel?: string;
   secureTextEntry?: boolean;
+  /** Fully rounded ends, for a search box: the shape `FilterBar`'s search has inside a group. */
+  round?: boolean;
   style?: ViewStyle;
 };
 
@@ -48,6 +50,7 @@ export function Input({
   autoCorrect,
   accessibilityLabel,
   secureTextEntry,
+  round,
   style,
 }: Props) {
   const [focused, setFocused] = useState(false);
@@ -55,7 +58,7 @@ export function Input({
   return (
     <View style={style}>
       {label ? <Text style={styles.label}>{label}</Text> : null}
-      <View style={[styles.wrap, multiline && styles.wrapMultiline, focused && styles.wrapFocused, !editable && styles.wrapDisabled]}>
+      <View style={[styles.wrap, round && styles.wrapRound, multiline && styles.wrapMultiline, focused && styles.wrapFocused, !editable && styles.wrapDisabled]}>
         {icon ? (
           <Feather name={icon} size={16} color={focused ? colors.accent : colors.textMuted} style={styles.icon} />
         ) : null}
@@ -110,6 +113,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     paddingVertical: 12,
   },
+  wrapRound: { borderRadius: radius.pill },
   wrapFocused: {
     borderColor: colors.borderFocus,
   },
