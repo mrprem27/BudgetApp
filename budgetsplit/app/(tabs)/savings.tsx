@@ -15,7 +15,6 @@ import { Input } from '../../src/components/ui/Input';
 import { AppRefreshControl } from '../../src/components/ui/AppRefreshControl';
 import { TabPills } from '../../src/components/ui/TabPills';
 
-import { ComingUpList } from '../../src/components/finance/home/ComingUpList';
 import { GoalCard } from '../../src/components/finance/plan/GoalCard';
 import { TotalMoneyCard } from '../../src/components/finance/plan/TotalMoneyCard';
 import { MoneyEditorSheet } from '../../src/components/finance/plan/MoneyEditorSheet';
@@ -99,7 +98,7 @@ export default function SavingsScreen() {
   useEffect(() => { if (!flags.savingsGoals && tab === 'goals') setTab('overview'); }, [flags.savingsGoals, tab]);
   // All state, reads and write-handlers live in the hook; this screen renders.
   const {
-    goals, saved, money, profile, assets, byBucket, unattributed, inGoals, upcoming,
+    goals, saved, money, profile, assets, byBucket, unattributed, inGoals,
     loading, error, refreshing, onRefresh, reload,
     overspend, applied, handleApproveOverspend, handleUndoOverspend, handleDismissOverspend,
     showMoneyEditor, setShowMoneyEditor, handleSaveMoney,
@@ -174,7 +173,9 @@ export default function SavingsScreen() {
             Goals, where the answer is often "save toward it". */}
         {flags.affordCheck && <AffordHeroCard onPress={() => router.push('/afford')} />}
 
-        {((overspend?.total ?? 0) > 0 || upcoming.length > 0) && <SectionHeader title="This month" />}
+        {/* The charges due this month were listed under here as well; they are the Upcoming screen's
+            (the bell on Home), so the list is gone and the heading stays for the shortfall (`U-96`). */}
+        {(overspend?.total ?? 0) > 0 && <SectionHeader title="This month" />}
 
         {/* Overspend — ASKS before pulling from goals (`V2-10`). It used to move the
             money during app boot and tell you afterwards. */}
@@ -221,19 +222,6 @@ export default function SavingsScreen() {
               </TouchableOpacity>
             </View>
           </View>
-        )}
-
-        {/* Recurring CHARGES due soon — one row per occurrence. Deliberately not the
-            same list as /plan/recurring, which shows one row per rule: a yearly rule
-            due in 11 months, or a paused/fully-skipped one, is a rule with no upcoming
-            charge. "Due this month" used to carry that distinction in the title itself;
-            `SPEC-2026-09-FEEDBACK.md` §6 collapsed it to one word everywhere ("Upcoming" is charges,
-            "Recurring" is the inventory) — the reader now tells them apart by which
-            block they're looking at, not by a bespoke title per screen. */}
-        {upcoming.length > 0 && (
-          // No "Manage" link: this screen's header already has a Recurring shortcut, so a
-          // second entry point was pure clutter on a block whose job is to be glanced at.
-          <ComingUpList items={upcoming} showIcon />
         )}
 
           </>

@@ -1,15 +1,12 @@
 import type * as SQLite from 'expo-sqlite';
-import { endOfMonth, differenceInCalendarDays } from 'date-fns';
 import { getGoals, getGoalSavedMap, getCashPosition } from '../db/queries/savings';
 import { getMoneyProfile } from '../db/queries/moneyProfile';
 import { computeTotalMoney } from './cash';
-import { getMe } from '../db/queries/persons';
-import { getAllRecurringRules, getSkipsMap } from '../db/queries/recurring';
-import { buildUpcoming, type UpcomingItem } from './upcoming';
 import { getAssets } from '../db/queries/assets';
 
 /**
- * Data assembly for the Money tab — goals, money profile, assets and upcoming bills.
+ * Data assembly for the Money tab — goals, money profile and assets. The charges due this month
+ * were listed here too; they are the Upcoming screen's (the bell on Home), and were shown twice (`U-96`).
  *
  * Lifted out of `useSavingsTab` so the forecast comparison is reachable by a test:
  * both of its halves were wrong in opposite directions. The spend side summed every
@@ -27,8 +24,8 @@ export async function loadSavingsTabData(
   // longer a cheap KV lookup — `investments` is derived from the asset register —
   // and this loader used to issue four of them.
   const profile = await getMoneyProfile(db);
-  const [goals, saved, me, cashPos, assets] = await Promise.all([
-    getGoals(db), getGoalSavedMap(db), getMe(db),
+  const [goals, saved, cashPos, assets] = await Promise.all([
+    getGoals(db), getGoalSavedMap(db),
     // Same underlying figures as `getTotalMoney`, but carrying the per-bucket
     // detail. Only this screen needs it, which is why it is not on `TotalMoney`.
     getCashPosition(db, profile),
@@ -37,24 +34,5 @@ export async function loadSavingsTabData(
   ]);
   const money = computeTotalMoney(cashPos, profile);
 
-  let upcoming: UpcomingItem[] = [];
-  if (me) {
-    const rules = await getAllRecurringRules(db);
-    const skips = await getSkipsMap(db, rules.map(r => r.id));
-    /*
-     * A REAL window, because the heading claims one.
-     *
-     * This passed `undefined`, which means no window — so the list was "the next
-     * five charges, whenever they fall" under a heading reading "Due this month".
-     * A yearly insurance bill due in eleven months appeared there for anyone with
-     * fewer than five rules. The comment beside that heading argues the title is
-     * what separates this block from the Recurring inventory ("Due this month is a
-     * window, Recurring is the inventory") — so the title being false is not a
-     * wording slip, it collapses the distinction the two screens rest on.
-     */
-    const daysLeftInMonth = Math.max(0, differenceInCalendarDays(endOfMonth(now), now));
-    upcoming = buildUpcoming(rules, me.id, now.getTime(), 5, daysLeftInMonth, skips);
-  }
-
-  return { goals, saved, money, profile, assets, byBucket: cashPos.byBucket, unattributed: cashPos.unattributed, inGoals: cashPos.savings, upcoming };
+  return { goals, saved, money, profile, assets, byBucket: cashPos.byBucket, unattributed: cashPos.unattributed, inGoals: cashPos.savings };
 }

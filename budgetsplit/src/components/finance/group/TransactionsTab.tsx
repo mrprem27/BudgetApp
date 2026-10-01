@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback, useRef } from 'react';
+import { useMemo, useCallback, useRef } from 'react';
 import { View, StyleSheet, SectionList } from 'react-native';
 import { colors, space, layout } from '../../tokens';
 import { useContentInset } from '../../../hooks/useContentInset';
@@ -7,7 +7,7 @@ import { TransactionRow } from '../TransactionRow';
 import { TxnCell } from '../TxnCell';
 import { FilterBar } from '../../ui/FilterBar';
 import { rankTagsByFrequency } from '../../../lib/tags';
-import { applyFilters, KIND_ANY, type KindFilter, type RangePreset } from '../../../lib/txnFilter';
+import type { TxnFilterState } from '../../../hooks/useTxnFilters';
 import { EmptyState } from '../../ui/EmptyState';
 import { SectionHeader } from '../../ui/SectionHeader';
 import { AppRefreshControl } from '../../ui/AppRefreshControl';
@@ -19,6 +19,9 @@ const listScroll = keyboardAwareScroll();
 
 type Props = {
   txns: TxnWithSplits[];
+  /** `txns` through the filters: the screen applies them, because its totals row adds up the same rows. */
+  filteredTxns: TxnWithSplits[];
+  filter: TxnFilterState;
   members: Person[];
   meId: string;
   groupName: string;
@@ -30,30 +33,14 @@ type Props = {
   onRefresh: () => void;
 };
 
-/** Group ledger: filter bar + date-sectioned transaction list. Owns its
- *  own search/kind filter (tab-local UI state). */
-export function TransactionsTab({ txns, members, meId, groupName, onDeleteTxn, onEditTxn, onAddTxn, refreshing, onRefresh }: Props) {
+/**
+ * Group ledger: filter bar + date-sectioned transaction list. The filters are the screen's
+ * (`useTxnFilters`): one predicate for all three ledgers (`OV-34`, `lib/txnFilter.ts`), and the
+ * person filter matters most here, since "everything involving Aarav" is what a shared ledger is for.
+ */
+export function TransactionsTab({ txns, filteredTxns, filter, members, meId, groupName, onDeleteTxn, onEditTxn, onAddTxn, refreshing, onRefresh }: Props) {
   const bottomPad = useContentInset({ fab: true });
-  const [kind, setKind] = useState<KindFilter>(KIND_ANY);
-  const [search, setSearch] = useState('');
-  const [range, setRange] = useState<RangePreset>('any');
-  const [from, setFrom] = useState<number | null>(null);
-  const [to, setTo] = useState<number | null>(null);
-  const [personId, setPersonId] = useState<string | null>(null);
-  const [tags, setTags] = useState<string[]>([]);
-
-  /*
-   * `OV-34`: this searched `category + note` only, while Search searched tags and
-   * both spellings of the amount, and Personal searched nothing at all. One
-   * predicate now, in `lib/txnFilter.ts`.
-   *
-   * The person filter matters most here — this is the shared ledger, so "everything
-   * involving Aarav" is the question the screen exists to answer and could not.
-   */
-  const filteredTxns = useMemo(
-    () => applyFilters(txns, { query: search, kind, from, to, personId, tags }),
-    [txns, search, kind, from, to, personId, tags],
-  );
+  const { kind, setKind, search, setSearch, range, from, to, setRange, personId, setPersonId, tags, setTags } = filter;
 
   const sections = useMemo(() => groupByDate<TxnWithSplits>(filteredTxns), [filteredTxns]);
 
@@ -111,7 +98,7 @@ export function TransactionsTab({ txns, members, meId, groupName, onDeleteTxn, o
               range={range}
               customFrom={from}
               customTo={to}
-              onRange={(r, f2, t2) => { setRange(r); setFrom(f2); setTo(t2); }}
+              onRange={setRange}
               people={people}
               personId={personId}
               onPerson={setPersonId}
@@ -146,10 +133,7 @@ export function TransactionsTab({ txns, members, meId, groupName, onDeleteTxn, o
             // Clears every filter, not the two that used to exist. A "clear
             // filters" that left a date range or a person set would be the same
             // dead end it exists to escape.
-            onAction={() => {
-              setKind(KIND_ANY); setSearch('');
-              setRange('any'); setFrom(null); setTo(null); setPersonId(null); setTags([]);
-            }}
+            onAction={filter.clear}
           />
         )
       }

@@ -82,7 +82,6 @@ export function useSavingsTab() {
   const inGoals = data?.inGoals ?? 0;
   const profile = data?.profile ?? { openingCash: 0, openingBank: 0, openingWallet: 0, investments: 0, creditLimit: 0, creditUsed: 0, updatedAt: null };
   const assets = data?.assets ?? [];
-  const upcoming = data?.upcoming ?? [];
 
   // Scheduled goal funding + overspend auto-raid — a MUTATION, so it runs on focus
   // only (never inside the loader, which refetches on every focus/data-change).
@@ -246,7 +245,7 @@ export function useSavingsTab() {
   return {
     byBucket, unattributed, inGoals,
     // data
-    goals, saved, money, profile, assets, upcoming,
+    goals, saved, money, profile, assets,
     loading, error, refreshing, onRefresh, reload,
     // overspend raid
     overspend, setOverspend, applied, handleApproveOverspend, handleUndoOverspend, handleDismissOverspend,

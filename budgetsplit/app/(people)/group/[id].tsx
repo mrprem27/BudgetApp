@@ -27,6 +27,8 @@ import { FAB } from '../../../src/components/ui/FAB';
 import { SettingsRow, settingsRowDivider } from '../../../src/components/ui/SettingsRow';
 import { formatCompact } from '../../../src/lib/money';
 import { LedgerTotalsRow } from '../../../src/components/finance/LedgerTotalsRow';
+import { useTxnFilters } from '../../../src/hooks/useTxnFilters';
+import { applyFilters } from '../../../src/lib/txnFilter';
 import { groupSpend } from '../../../src/lib/activityTotals';
 import { GroupHeaderCard } from '../../../src/components/finance/group/GroupHeaderCard';
 import { TransactionsTab } from '../../../src/components/finance/group/TransactionsTab';
@@ -63,6 +65,7 @@ export default function GroupDetailScreen() {
 
   const group = data?.group ?? null;
   const txns = data?.txns ?? [];
+  const filter = useTxnFilters();
   const members = data?.members ?? [];
   const me = data?.me ?? null;
   const net = data?.net ?? {};
@@ -177,9 +180,12 @@ export default function GroupDetailScreen() {
       setTrusting(false);
     }
   }
-  // This month in this group: my share and everyone's, for the row under the header.
+  // The row under the header adds up what the list shows, as Personal's does (`U-63`): my share
+  // and everyone's, through the filters. With no date chosen it reads this month and says nothing;
+  // choose a date and it reads exactly that. It stayed on this month whatever was filtered.
   const monthStart = useMemo(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1).getTime(); }, []);
-  const monthSpend = useMemo(() => groupSpend(txns, meId, monthStart), [txns, meId, monthStart]);
+  const filteredTxns = useMemo(() => applyFilters(txns, filter.filters), [txns, filter.filters]);
+  const monthSpend = useMemo(() => groupSpend(filteredTxns, meId, filter.dated ? 0 : monthStart), [filteredTxns, meId, filter.dated, monthStart]);
 
   const TABS: { key: TabKey; label: string }[] = [
     { key: 'transactions', label: 'Expenses' },
@@ -243,6 +249,7 @@ export default function GroupDetailScreen() {
       <View style={styles.totals}>
         <LedgerTotalsRow
           onReports={() => router.push(`/reports?group=${id}`)}
+          label={filter.label}
           stats={[
             { label: 'Your share', value: formatCompact(monthSpend.mine), tint: colors.expense },
             { label: 'Group total', value: formatCompact(monthSpend.everyone), tint: colors.textPrimary },
@@ -265,6 +272,8 @@ export default function GroupDetailScreen() {
       {activeTab === 'transactions' && (
         <TransactionsTab
           txns={txns}
+          filteredTxns={filteredTxns}
+          filter={filter}
           members={members}
           meId={meId}
           groupName={group.name}

@@ -57,13 +57,10 @@ describe('no source file still targets the old /reminders route', () => {
 });
 
 describe('the next-charges list is one component, not two implementations', () => {
-  it('both Plan and the Upcoming screen render ComingUpList', () => {
-    for (const f of [
-      join(ROOT, 'app', '(tabs)', 'savings.tsx'),
-      join(ROOT, 'app', '(money)', 'upcoming.tsx'),
-    ]) {
-      expect(readFileSync(f, 'utf8')).toMatch(/<ComingUpList/);
-    }
+  it('the Upcoming screen renders ComingUpList, and Money does not list the charges again (U-96)', () => {
+    expect(readFileSync(join(ROOT, 'app', '(money)', 'upcoming.tsx'), 'utf8')).toMatch(/<ComingUpList/);
+    // The same charges under "This month" on Money and behind the bell on Home: one list, shown twice.
+    expect(readFileSync(join(ROOT, 'app', '(tabs)', 'savings.tsx'), 'utf8')).not.toMatch(/<ComingUpList/);
   });
 
   it("ComingUpList's own default title is Upcoming, not the old \"Coming up\"", () => {

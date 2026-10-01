@@ -1,6 +1,6 @@
-import { View, Text, StyleSheet, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { colors, type, space, layout } from '../../tokens';
+import { colors, type, space } from '../../tokens';
 import { IconCircle } from '../../ui/IconCircle';
 import { PressableScale } from '../../ui/PressableScale';
 import { Card } from '../../ui/Card';
@@ -18,21 +18,16 @@ export function badgeTint(b: Badge): string {
  * is — and a warmer colour for each level climbed. The whole board opens the Badges screen,
  * where each one says what it means and how far you are.
  *
- * Small on purpose, and smaller twice over (`U-75`): 20pt discs, three rows for thirty-six on the
- * Badges screen. `compact` (Settings) is ONE row, earned ones first, as many as fit: the board
- * there is a door to the Badges screen, not the screen itself. `bare` drops the card, for a caller
- * that puts the row inside a card of its own (Settings' top card, `U-92`).
+ * Small on purpose, and smaller twice over (`U-75`): 20pt discs, three rows for thirty-six.
+ * `bare` drops the card, for a caller that puts the board inside a card of its own (Settings' top
+ * card, directly under the profile row, `U-92`).
  */
 const DISC = 20;
 const GAP = space.xs;
 
-export function BadgeBoard({ badges, onOpen, compact, bare }: { badges: Badge[]; onOpen?: () => void; compact?: boolean; bare?: boolean }) {
-  const { width } = useWindowDimensions();
+export function BadgeBoard({ badges, onOpen, bare }: { badges: Badge[]; onOpen?: () => void; bare?: boolean }) {
   if (badges.length === 0) return null;
   const earned = badges.filter(b => b.level > 0).length;
-  // The card's inner width: the screen less its side padding and the card's own.
-  const perRow = Math.max(1, Math.floor((width - 2 * layout.screenPaddingH - 2 * space.md + GAP) / (DISC + GAP)));
-  const shown = compact ? [...badges].sort((a, b) => Number(b.level > 0) - Number(a.level > 0)).slice(0, perRow) : badges;
   const inner = (
     <>
       <View style={styles.head}>
@@ -41,7 +36,7 @@ export function BadgeBoard({ badges, onOpen, compact, bare }: { badges: Badge[];
         {onOpen && <Feather name="chevron-right" size={16} color={colors.textMuted} />}
       </View>
       <View style={styles.grid}>
-        {shown.map(b => (
+        {badges.map(b => (
           <View key={b.id} style={styles.cell} accessible accessibilityLabel={`${b.title}, ${b.level > 0 ? 'earned' : 'not yet'}`}>
             <View style={b.level > 0 ? undefined : styles.dull}>
               <IconCircle icon={b.icon} size={DISC} iconSize={12} color={badgeTint(b)} bg={b.level > 0 ? undefined : colors.bgMuted} />
@@ -58,7 +53,8 @@ export function BadgeBoard({ badges, onOpen, compact, bare }: { badges: Badge[];
 }
 
 const styles = StyleSheet.create({
-  bare: { padding: space.md },
+  // Under a row in the caller's card, with no line between: the row's own padding is the gap above.
+  bare: { paddingHorizontal: space.md, paddingBottom: space.md },
   head: { flexDirection: 'row', alignItems: 'center', gap: space.xs, marginBottom: space.sm },
   title: { ...type.sectionLabel, color: colors.textMuted, flex: 1 },
   count: { ...type.caption, color: colors.textSecondary },

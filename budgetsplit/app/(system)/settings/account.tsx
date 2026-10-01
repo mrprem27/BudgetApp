@@ -14,7 +14,10 @@ import { PrimaryButton } from '../../../src/components/ui/PrimaryButton';
 import { SecondaryButton } from '../../../src/components/ui/SecondaryButton';
 import { IconCircle } from '../../../src/components/ui/IconCircle';
 import { InfoLabel } from '../../../src/components/ui/InfoLabel';
-import { SettingsRow, settingsRowDivider } from '../../../src/components/ui/SettingsRow';
+import { SettingsRow } from '../../../src/components/ui/SettingsRow';
+import { Divider } from '../../../src/components/ui/Divider';
+import { SectionHeader } from '../../../src/components/ui/SectionHeader';
+import { decor } from '../../../src/constants/palette';
 import { MemberAvatar } from '../../../src/components/finance/MemberAvatar';
 import { SheetModal } from '../../../src/components/ui/SheetModal';
 import { SyncStatus } from '../../../src/components/system/SyncStatus';
@@ -33,15 +36,12 @@ import {
 import { backOr } from '../../../src/lib/nav';
 import { saveMyName } from '../../../src/lib/settingsData';
 import { replacePersonPhoto } from '../../../src/lib/personWrites';
-import { loadBadges } from '../../../src/lib/badgesData';
-import { useScreenData } from '../../../src/hooks/useScreenData';
 import { useDataRefresh } from '../../../src/components/system/DataRefreshProvider';
-import { BadgeBoard } from '../../../src/components/finance/badges/BadgeBoard';
 
 /**
  * Profile (`U-92`): who you are here, in one screen. Your photo and name (on this phone, with or
  * without a server), then the account: sign in by email link, see what the server holds about
- * you, sign out. Your badges close it, earned and not.
+ * you, sign out. Laid out as Settings is: a section label, a card of rows, one hue per section.
  *
  * The route is still `/settings/account`: a rename would have moved every link to it for nothing.
  *
@@ -60,7 +60,6 @@ export default function AccountScreen() {
   const { refresh } = useDataRefresh();
   const { session, ready, configured, reload } = useServerSession();
   const me = useStore(s => s.me);
-  const { data: badges } = useScreenData((database) => loadBadges(database), []);
   const [showName, setShowName] = useState(false);
   const [nameText, setNameText] = useState('');
 
@@ -224,93 +223,79 @@ export default function AccountScreen() {
     );
   }
 
-  const backupCard = (
-    <Card>
-      <SettingsRow icon="shield" label="Backup & restore" value="Encrypted" onPress={() => router.push('/settings/backup')} />
-    </Card>
+  const backupRow = (
+    <SettingsRow icon="shield" label="Backup & restore" value="Encrypted" tint={TINT.data} onPress={() => router.push('/settings/backup')} />
   );
 
   return (
     <View style={styles.container}>
       <ScreenHeader title="Profile" onBack={() => backOr(router, '/(tabs)')} />
       <KeyboardForm contentContainerStyle={styles.content}>
-        <Card padded style={styles.profileCard}>
+        {/* Who you are. The photo is the one control up here; everything else is a row below. */}
+        <View style={styles.hero}>
           <TouchableOpacity onPress={changePhoto} accessibilityRole="button" accessibilityLabel="Change photo" hitSlop={4}>
             <MemberAvatar
               name={me?.name ?? session?.user.name ?? '?'}
               color={me?.avatar_color ?? colors.accent}
-              size={72}
+              size={88}
               imageUri={me?.image_uri}
             />
             <View style={styles.cameraBadge} pointerEvents="none">
-              <Feather name="camera" size={12} color={colors.bg} />
+              <Feather name="camera" size={13} color={colors.bg} />
             </View>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.nameRow}
-            onPress={() => { setNameText(me?.name ?? ''); setShowName(true); }}
-            accessibilityRole="button"
-            accessibilityLabel="Edit name"
-            hitSlop={10}
-          >
-            <Text style={styles.profileName}>{me?.name ?? 'You'}</Text>
-            <Feather name="edit-2" size={14} color={colors.textMuted} />
-          </TouchableOpacity>
-          <Text style={styles.profileEmail}>{session ? session.user.email : 'On this phone'}</Text>
+          <Text style={styles.heroName} numberOfLines={1}>{me?.name ?? 'You'}</Text>
+          <Text style={styles.heroSub} numberOfLines={1}>{session ? session.user.email : 'On this phone'}</Text>
+        </View>
+
+        <SectionHeader title="Your details" />
+        <Card clip style={styles.card}>
+          <SettingsRow icon="user" label="Name" value={me?.name ?? 'Not set'} tint={TINT.details} onPress={() => { setNameText(me?.name ?? ''); setShowName(true); }} />
           {session && (
-            <Text style={styles.profileMeta}>
-              Signed in on {deviceLabel()} · account created {fullDate(new Date(session.user.createdAt))}
-            </Text>
+            <>
+              <Divider indent="text" />
+              <SettingsRow
+                icon="phone"
+                label="Phone"
+                value={session.user.phone ?? 'Not set'}
+                tint={TINT.details}
+                onPress={() => { setPhoneText(session.user.phone ?? ''); setShowPhone(true); }}
+              />
+            </>
           )}
         </Card>
 
         {!configured ? (
           <>
-            <Card padded>
-              <InfoLabel
-                label="Works offline"
-                labelStyle={styles.heroTitle}
-                info="No server configured, everything works offline. Keep an encrypted copy under Backup & restore."
-              />
-            </Card>
-            {backupCard}
+            <SectionHeader title="Your data" />
+            <Card clip style={styles.card}>{backupRow}</Card>
+            <Text style={styles.meta}>No account in this build. Everything stays on this phone.</Text>
           </>
         ) : !ready ? (
           <ActivityIndicator color={colors.accent} style={styles.loading} />
         ) : session ? (
           <>
+            <SectionHeader title="Account" />
             <SyncStatus onPress={() => router.push('/settings/sync')} onConnect={() => { void connect(); }} />
-
-            <Card>
-              <SettingsRow
-                icon="phone"
-                label="Phone"
-                value={session.user.phone ?? 'Not set'}
-                onPress={() => { setPhoneText(session.user.phone ?? ''); setShowPhone(true); }}
-              />
-              <View style={settingsRowDivider} />
+            <Card clip style={styles.card}>
               <SettingsRow
                 icon="refresh-cw"
                 label="Update profile from this device"
+                tint={TINT.account}
                 value={syncing ? undefined : session.user.avatarUrl ? 'Name · picture' : 'Name only'}
                 onPress={syncing ? undefined : handleSyncProfile}
                 right={syncing ? <ActivityIndicator size="small" color={colors.accent} /> : undefined}
               />
-              <View style={settingsRowDivider} />
-              <SettingsRow
-                icon="users"
-                label="Linked people"
-                value="Invite · approve"
-                onPress={() => router.push('/settings/linked')}
-              />
-              <View style={settingsRowDivider} />
-              <SettingsRow
-                icon="shield"
-                label="Backup & restore"
-                value="Encrypted"
-                onPress={() => router.push('/settings/backup')}
-              />
-              <View style={settingsRowDivider} />
+              <Divider indent="text" />
+              <SettingsRow icon="users" label="Linked people" value="Invite · approve" tint={TINT.account} onPress={() => router.push('/settings/linked')} />
+            </Card>
+            {error && <Text style={styles.error}>{error}</Text>}
+
+            <SectionHeader title="Your data" />
+            <Card clip style={styles.card}>{backupRow}</Card>
+
+            {/* Leaving, on its own: the two rows that cannot be taken back sit apart from the rest. */}
+            <Card clip style={styles.leaving}>
               <SettingsRow
                 icon="log-out"
                 label={signingOut ? 'Signing out…' : 'Sign out'}
@@ -318,7 +303,7 @@ export default function AccountScreen() {
                 onPress={signingOut ? undefined : handleSignOut}
                 right={signingOut ? <ActivityIndicator size="small" color={colors.expense} /> : undefined}
               />
-              <View style={settingsRowDivider} />
+              <Divider indent="text" />
               <SettingsRow
                 icon="trash-2"
                 label="Delete account"
@@ -327,42 +312,27 @@ export default function AccountScreen() {
                 right={deleting ? <ActivityIndicator size="small" color={colors.expense} /> : undefined}
               />
             </Card>
-
-            {/* `B-102`/`DQ-102`: this used to be two stacked footnotes — one
-                real constraint (phone privacy) and one restating what
-                sign-out does, which the sign-out flow itself already warns
-                about, contextually, at the moment it matters (`DQ-97`). */}
-            <View style={styles.footnoteRow}>
-              <InfoLabel
-                center
-                label="Your phone number"
-                labelStyle={styles.footnote}
-                info="Never used to find you, shown only to people you've linked with."
-              />
-            </View>
+            <Text style={styles.meta}>
+              Signed in on {deviceLabel()} · account created {fullDate(new Date(session.user.createdAt))}
+            </Text>
           </>
         ) : sentTo ? (
           <>
-            <Card padded style={styles.heroCard}>
-              <IconCircle icon="mail" size={56} iconSize={20} color={colors.accent} bg={colors.accentMuted} />
-              <Text style={styles.heroTitle}>Check your inbox</Text>
-              <Text style={styles.note}>Link sent to {sentTo}</Text>
-              <InfoLabel
-                center
-                label="How the link works"
-                labelStyle={styles.footnote}
-                info="Open it on this phone and you’re in. The link works once and expires in 15 minutes."
-              />
-            </Card>
-
-            <Card padded>
+            <SectionHeader title="Sign in" />
+            <Card padded style={styles.card}>
+              <View style={styles.signInHead}>
+                <IconCircle icon="mail" size={layout.avatarSize} color={colors.accent} bg={colors.accentMuted} />
+                <View style={styles.signInText}>
+                  <Text style={styles.signInTitle}>Check your inbox</Text>
+                  <Text style={styles.signInSub} numberOfLines={1}>Link sent to {sentTo}</Text>
+                </View>
+              </View>
               {/* The link only works on the phone with the app installed, so the email
                   also prints a code — this is the way in when the mail was opened on a laptop. */}
-              <Text style={styles.blockLabel}>Opened the email somewhere else?</Text>
               <Input
                 value={code}
                 onChangeText={(t) => { setCode(t); setError(null); }}
-                placeholder="Paste the code from the email"
+                placeholder="Or paste the code from the email"
                 icon="key"
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -377,38 +347,30 @@ export default function AccountScreen() {
                 disabled={code.trim().length === 0}
                 style={styles.cta}
               />
-              <SecondaryButton
-                label="Use a different email"
-                onPress={useDifferentEmail}
-                style={styles.secondaryCta}
-              />
+              <SecondaryButton label="Use a different email" onPress={useDifferentEmail} style={styles.secondaryCta} />
+              <Text style={styles.signInHint}>The link works once, on this phone, for 15 minutes.</Text>
             </Card>
             {error && <Text style={styles.error}>{error}</Text>}
-            {backupCard}
+
+            <SectionHeader title="Your data" />
+            <Card clip style={styles.card}>{backupRow}</Card>
           </>
         ) : (
           <>
-            <Card padded style={styles.heroCard}>
-              <IconCircle icon="cloud" size={56} iconSize={20} color={colors.accent} bg={colors.accentMuted} />
-              <InfoLabel
-                center
-                label="Sign in to keep your place"
-                labelStyle={styles.heroTitle}
-                accessibilityLabel="About signing in"
-                info={
-                  <>
-                    <Text style={[styles.note, styles.infoLine]}>Optional, stores only your email and who you're linked with, never your transactions.</Text>
-                    <Text style={[styles.noteWarn, styles.infoLine]}>Doesn't back anything up on its own, use Backup &amp; restore for that.</Text>
-                  </>
-                }
-              />
-              {/* `B-102`/`DQ-102`: collapsed from two stacked paragraphs into
-                  one line each — both facts are real constraints (what's
-                  stored, that sign-in alone doesn't back anything up), so
-                  neither is cut, just no longer restated at paragraph length. */}
-            </Card>
-
-            <Card padded>
+            <SectionHeader title="Sign in" />
+            <Card padded style={styles.card}>
+              <View style={styles.signInHead}>
+                <IconCircle icon="cloud" size={layout.avatarSize} color={colors.accent} bg={colors.accentMuted} />
+                <View style={styles.signInText}>
+                  <InfoLabel
+                    label="Keep a copy on your account"
+                    labelStyle={styles.signInTitle}
+                    accessibilityLabel="About signing in"
+                    info="Optional. Your account keeps a copy of what is on this phone, so a new phone gets it back by signing in. No password, only a link by email."
+                  />
+                  <Text style={styles.signInSub}>Optional. No password.</Text>
+                </View>
+              </View>
               <Input
                 value={email}
                 onChangeText={(t) => { setEmail(t); setError(null); }}
@@ -430,12 +392,11 @@ export default function AccountScreen() {
               />
             </Card>
             {error && <Text style={styles.error}>{error}</Text>}
-            {backupCard}
+
+            <SectionHeader title="Your data" />
+            <Card clip style={styles.card}>{backupRow}</Card>
           </>
         )}
-
-        {/* Every badge, earned and not; the card opens what each one means. */}
-        <BadgeBoard badges={badges ?? []} onOpen={() => router.push('/badges')} />
       </KeyboardForm>
 
       <SheetModal visible={showName} onClose={() => setShowName(false)} title="Your name">
@@ -463,29 +424,29 @@ export default function AccountScreen() {
   );
 }
 
+/** One hue per section, as Settings does it. */
+const TINT = { details: decor.blue, account: colors.accent, data: colors.settle } as const;
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: layout.screenPaddingH, gap: space.md },
+  // No `gap`: `SectionHeader` owns its margins, and the two add up (AGENTS.md §3).
+  content: { padding: layout.screenPaddingH },
   loading: { marginTop: space.xl },
-  heroCard: { alignItems: 'center', gap: space.sm },
-  heroTitle: { ...type.subheading, color: colors.textPrimary, textAlign: 'center' },
-  note: { ...type.body, color: colors.textSecondary, textAlign: 'center', lineHeight: 20 },
-  // Amber, not grey. This line is the correction to what people assume an account
-  // does, so it must not read as more of the same explanatory text above it.
-  noteWarn: { ...type.caption, color: colors.healthAmber, textAlign: 'center', lineHeight: 18, marginTop: space.sm },
-  profileCard: { alignItems: 'center', gap: space.xs },
-  nameRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.sm },
-  profileName: { ...type.subheading, color: colors.textPrimary },
-  cameraBadge: { position: 'absolute', right: -2, bottom: -2, width: 22, height: 22, borderRadius: 11, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.bgCard },
-  nameInputGap: { marginBottom: space.md },
-  profileEmail: { ...type.body, color: colors.textSecondary },
-  profileMeta: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginTop: space.xs },
-  blockLabel: { ...type.label, color: colors.textSecondary, marginBottom: space.sm, textTransform: 'uppercase', letterSpacing: 0.5 },
+  hero: { alignItems: 'center', paddingTop: space.sm, paddingBottom: space.sm },
+  heroName: { ...type.heading, color: colors.textPrimary, marginTop: space.md },
+  heroSub: { ...type.body, color: colors.textSecondary, marginTop: 2 },
+  cameraBadge: { position: 'absolute', right: 0, bottom: 0, width: 26, height: 26, borderRadius: 13, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.bg },
+  card: { marginBottom: space.md },
+  leaving: { marginTop: space.sm, marginBottom: space.sm },
+  meta: { ...type.caption, color: colors.textMuted, textAlign: 'center', lineHeight: 18 },
+  signInHead: { flexDirection: 'row', alignItems: 'center', gap: space.md, marginBottom: space.md },
+  signInText: { flex: 1, minWidth: 0 },
+  signInTitle: { ...type.bodySemi, color: colors.textPrimary },
+  signInSub: { ...type.caption, color: colors.textSecondary, marginTop: 2 },
+  signInHint: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginTop: space.md },
   cta: { marginTop: space.md },
   secondaryCta: { marginTop: space.sm },
-  error: { ...type.body, color: colors.expense, textAlign: 'center' },
+  error: { ...type.body, color: colors.expense, textAlign: 'center', marginBottom: space.md },
   sheetHint: { ...type.caption, color: colors.textMuted, lineHeight: 18, marginTop: space.sm, marginBottom: space.md },
-  footnoteRow: { alignItems: 'center' },
-  infoLine: { marginTop: space.xs },
-  footnote: { ...type.caption, color: colors.textMuted, lineHeight: 18, textAlign: 'center' },
+  nameInputGap: { marginBottom: space.md },
 });

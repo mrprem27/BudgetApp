@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Switch } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { monthShort } from '../../../lib/dateFormat';
 import { colors, type, space, layout } from '../../tokens';
@@ -60,7 +60,7 @@ type Props = {
  * - **Members**: one list. Each person's balance on the right, what they paid and how that
  *   compares (a bar against the biggest payer) under their name. Add sits in the section's
  *   header; "Trust everyone here" is the list's last row when it applies.
- * - **Payments to settle**: who pays whom, with Simplify as a chip in that section's header,
+ * - **Payments to settle**: who pays whom, with Simplify as a switch in that section's header,
  *   because it changes that list and nothing else.
  *
  * It was seven boxes: a balance summary repeating the header card, an Add row, a collapsed
@@ -142,15 +142,20 @@ export function MembersTab({ members, net, settlements, personMap, simplifyOn, o
           <SectionHeader
             title={`${settlements.length} ${settlements.length === 1 ? 'payment' : 'payments'} to settle`}
             right={
-              <Chip
-                size="sm"
-                label="Simplify"
-                icon="shuffle"
-                accent={colors.accent}
-                selected={simplifyOn}
-                onPress={() => onToggleSimplify(!simplifyOn)}
-                accessibilityLabel={`Simplify debts, ${simplifyOn ? 'on: fewest possible payments' : 'off: every direct debt'}`}
-              />
+              // A switch with its name, not a chip: a tinted chip read as a button that did
+              // something once, and said nothing about what (yours, 2026-10-01). The line under
+              // the list says what the current setting means.
+              <View style={styles.simplify}>
+                <Text style={styles.simplifyLabel}>Simplify</Text>
+                <Switch
+                  value={simplifyOn}
+                  onValueChange={onToggleSimplify}
+                  trackColor={{ true: colors.accent, false: colors.bgMuted }}
+                  thumbColor={colors.textPrimary}
+                  style={styles.simplifySwitch}
+                  accessibilityLabel={`Simplify debts, ${simplifyOn ? 'on: fewest possible payments' : 'off: every direct debt'}`}
+                />
+              </View>
             }
           />
           <Card clip>
@@ -168,6 +173,9 @@ export function MembersTab({ members, net, settlements, personMap, simplifyOn, o
               );
             })}
           </Card>
+          <Text style={styles.foot}>
+            {simplifyOn ? 'Simplified: the fewest payments that settle everyone.' : 'Every debt as it was made, person to person.'}
+          </Text>
         </>
       ) : (
         // One quiet line, not a 64pt illustration in the middle of a list: nothing here is missing.
@@ -194,6 +202,10 @@ const styles = StyleSheet.create({
   memberBalLabel: { ...type.caption, color: colors.textMuted, marginTop: 1 },
   foot: { ...type.caption, color: colors.textMuted, marginTop: space.sm },
   balanceRowWrap: { paddingHorizontal: space.md },
+  simplify: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
+  simplifyLabel: { ...type.caption, color: colors.textSecondary },
+  // The platform switch at header size.
+  simplifySwitch: { transform: [{ scale: 0.8 }] },
   settled: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.lg },
   settledText: { ...type.body, color: colors.textSecondary },
 });

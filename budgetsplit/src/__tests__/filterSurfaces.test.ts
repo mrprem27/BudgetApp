@@ -94,10 +94,19 @@ describe('a transaction ledger filters through one predicate', () => {
   ];
 
   it('has all three on `applyFilters`', () => {
-    for (const f of LEDGERS) {
+    // The group's filters are applied by its screen, which adds up the same rows for the row
+    // under the header; the tab renders what it is handed.
+    for (const f of [LEDGERS[0], join(ROOT, 'app', '(people)', 'group', '[id].tsx')]) {
       expect({ file: label(f), shared: readFileSync(f, 'utf8').includes('applyFilters') })
         .toEqual({ file: label(f), shared: true });
     }
+    expect(readFileSync(LEDGERS[1], 'utf8')).toMatch(/filteredTxns/);
+  });
+
+  it("the group's totals row adds up the filtered rows, not the month whatever is filtered", () => {
+    const screen = readFileSync(join(ROOT, 'app', '(people)', 'group', '[id].tsx'), 'utf8');
+    expect(screen).toMatch(/groupSpend\(filteredTxns,/);
+    expect(screen).toMatch(/label=\{filter\.label\}/);
   });
 
   it('leaves no screen matching a haystack by hand', () => {

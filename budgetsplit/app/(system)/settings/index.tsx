@@ -35,7 +35,6 @@ import { BadgeBoard } from '../../../src/components/finance/badges/BadgeBoard';
 import { useServerSession } from '../../../src/hooks/useServerSession';
 import { ErrorState } from '../../../src/components/ui/ErrorState';
 import { Card } from '../../../src/components/ui/Card';
-import { Divider } from '../../../src/components/ui/Divider';
 import { backOr } from '../../../src/lib/nav';
 
 
@@ -223,8 +222,9 @@ export default function SettingsScreen() {
       )}
 
       {/* You, in one card (`U-85`, `U-92`): your photo and name open Profile, where the name, the
-          photo, the account and every badge live; under them, one row of badges. The sign-in row
-          that sat here is Profile's now, so the line under the name says when there is one to do. */}
+          photo and the account live; directly under them every badge, earned and not, with no line
+          between (yours, 2026-10-01). The sign-in row that sat here is Profile's now, so the line
+          under the name says when there is one to do. */}
       <Card clip style={styles.profileCard}>
         <TouchableOpacity style={styles.profileRow} onPress={() => { router.push('/settings/account'); }} accessibilityRole="button" accessibilityLabel="Open profile">
           <MemberAvatar
@@ -241,9 +241,8 @@ export default function SettingsScreen() {
           </View>
           <Feather name="chevron-right" size={18} color={colors.textMuted} />
         </TouchableOpacity>
-        {(badges ?? []).length > 0 && <Divider indent="none" />}
         {/* Grey until earned, in colour once it is; opens every badge (`U-65`). */}
-        <BadgeBoard badges={badges ?? []} onOpen={() => router.push('/badges')} compact bare />
+        <BadgeBoard badges={badges ?? []} onOpen={() => router.push('/badges')} bare />
       </Card>
 
       {/* GETTING PAID — your own handle, and the code others scan to pay you.
